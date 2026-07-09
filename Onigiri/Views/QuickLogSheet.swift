@@ -6,9 +6,13 @@ import OnigiriKit
 /// One-stop logging from the Today screen: favorites up top, search below,
 /// tap a row to log it and dismiss. Long-press a row for portions.
 struct QuickLogSheet: View {
+    var initialKind: QuickActions.QuickLogKind = .all
+
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Meal.name) private var meals: [Meal]
     @Query(sort: \Food.name) private var foods: [Food]
+    @State private var kind: QuickActions.QuickLogKind = .all
+    @State private var kindLoaded = false
     @State private var searchText = ""
     @State private var errorMessage: String?
     @State private var isLogging = false
@@ -25,6 +29,7 @@ struct QuickLogSheet: View {
         let nutrients: NutrientValues
         let isFavorite: Bool
         let category: String?
+        var isMeal = false
     }
 
     private var allItems: [Item] {
@@ -37,7 +42,8 @@ struct QuickLogSheet: View {
                 sodiumMg: meal.totalSodiumMg,
                 nutrients: meal.totalNutrients,
                 isFavorite: meal.isFavorite,
-                category: meal.category
+                category: meal.category,
+                isMeal: true
             )
         }
         let foodItems = foods.map { food in
@@ -57,6 +63,11 @@ struct QuickLogSheet: View {
 
     private var filtered: [Item] {
         let matched = allItems.filter { item in
+            switch kind {
+            case .meals: if !item.isMeal { return false }
+            case .foods: if item.isMeal { return false }
+            case .all: break
+            }
             if searchText.isEmpty { return true }
             if item.name.localizedCaseInsensitiveContains(searchText) { return true }
             return item.category?.localizedCaseInsensitiveContains(searchText) ?? false
@@ -78,6 +89,15 @@ struct QuickLogSheet: View {
     var body: some View {
         NavigationStack {
             List {
+                Picker("Show", selection: $kind) {
+                    Text("All").tag(QuickActions.QuickLogKind.all)
+                    Text("Meals").tag(QuickActions.QuickLogKind.meals)
+                    Text("Foods").tag(QuickActions.QuickLogKind.foods)
+                }
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+
                 if let errorMessage {
                     Text(errorMessage)
                         .font(.footnote)
@@ -109,6 +129,12 @@ struct QuickLogSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                }
+            }
+            .task {
+                if !kindLoaded {
+                    kindLoaded = true
+                    kind = initialKind
                 }
             }
             .sheet(item: $portionTarget) { target in

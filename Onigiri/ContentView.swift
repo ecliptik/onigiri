@@ -71,6 +71,11 @@ struct ContentView: View {
         case .logMeal:
             // Land on Today with the quick-log sheet up: one tap to log.
             selectedTab = .today
+            QuickActions.shared.quickLogKind = .meals
+            QuickActions.shared.quickLogRequested = true
+        case .logFood:
+            selectedTab = .today
+            QuickActions.shared.quickLogKind = .foods
             QuickActions.shared.quickLogRequested = true
         case .scanBarcode:
             selectedTab = .foods

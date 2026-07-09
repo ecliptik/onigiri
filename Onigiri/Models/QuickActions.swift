@@ -11,13 +11,19 @@ final class QuickActions {
     enum Action: String {
         case logWater = "com.ecliptik.Onigiri.logWater"
         case logMeal = "com.ecliptik.Onigiri.logMeal"
+        case logFood = "com.ecliptik.Onigiri.logFood"
         case scanBarcode = "com.ecliptik.Onigiri.scanBarcode"
+    }
+
+    enum QuickLogKind {
+        case all, meals, foods
     }
 
     var pending: Action?
 
-    /// Signals TodayView to present the quick-log sheet.
+    /// Signals TodayView to present the quick-log sheet, pre-filtered.
     var quickLogRequested = false
+    var quickLogKind: QuickLogKind = .all
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {

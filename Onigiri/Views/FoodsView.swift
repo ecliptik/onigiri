@@ -334,13 +334,12 @@ private struct LogButton: View {
     var body: some View {
         // Tap logs one serving; long-press goes straight to the portion
         // sheet (its quick chips cover the common fractions).
-        Text("Log")
-            .font(.subheadline.weight(.semibold))
+        Image(systemName: "plus")
+            .font(.subheadline.weight(.bold))
             .foregroundStyle(.black)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 6)
-            .background(Color.ricePaper, in: .capsule)
-            .contentShape(.capsule)
+            .padding(8)
+            .background(Color.ricePaper, in: .circle)
+            .contentShape(.circle)
             .onTapGesture { action(1) }
             .onLongPressGesture(minimumDuration: 0.4) { onCustomPortion() }
             .accessibilityLabel("Log \(name)")

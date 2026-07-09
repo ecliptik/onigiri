@@ -45,8 +45,11 @@ targets:
             UIApplicationShortcutItemTitle: Log Water
             UIApplicationShortcutItemIconSymbolName: drop.fill
           - UIApplicationShortcutItemType: com.ecliptik.Onigiri.logMeal
-            UIApplicationShortcutItemTitle: Log a Meal
+            UIApplicationShortcutItemTitle: Log Meal
             UIApplicationShortcutItemIconSymbolName: fork.knife
+          - UIApplicationShortcutItemType: com.ecliptik.Onigiri.logFood
+            UIApplicationShortcutItemTitle: Log Food
+            UIApplicationShortcutItemIconSymbolName: carrot
           - UIApplicationShortcutItemType: com.ecliptik.Onigiri.scanBarcode
             UIApplicationShortcutItemTitle: Scan Barcode
             UIApplicationShortcutItemIconSymbolName: barcode.viewfinder

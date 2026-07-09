@@ -12,6 +12,7 @@ struct TodayView: View {
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @State private var showSettings = false
     @State private var showQuickLog = false
+    @State private var quickLogKind: QuickActions.QuickLogKind = .all
     @State private var quickActions = QuickActions.shared
 
     private var waterEmoji: String { waterIcon == "wave" ? "🌊" : "💧" }
@@ -66,13 +67,15 @@ struct TodayView: View {
                 SettingsView()
             }
             .sheet(isPresented: $showQuickLog, onDismiss: {
+                quickLogKind = .all
                 Task { await model.refresh() }
             }) {
-                QuickLogSheet()
+                QuickLogSheet(initialKind: quickLogKind)
             }
             .onChange(of: quickActions.quickLogRequested) { _, requested in
                 if requested {
                     quickActions.quickLogRequested = false
+                    quickLogKind = quickActions.quickLogKind
                     showQuickLog = true
                 }
             }
@@ -197,12 +200,11 @@ struct TodayView: View {
                     Button {
                         showQuickLog = true
                     } label: {
-                        Label("Log", systemImage: "plus")
-                            .font(.subheadline.weight(.semibold))
+                        Image(systemName: "plus")
+                            .font(.subheadline.weight(.bold))
                             .foregroundStyle(.black)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 6)
-                            .background(Color.ricePaper, in: .capsule)
+                            .padding(8)
+                            .background(Color.ricePaper, in: .circle)
                     }
                     .buttonStyle(.borderless)
                     .accessibilityLabel("Log food or meal")

@@ -40,9 +40,17 @@
 			<key>UIApplicationShortcutItemIconSymbolName</key>
 			<string>fork.knife</string>
 			<key>UIApplicationShortcutItemTitle</key>
-			<string>Log a Meal</string>
+			<string>Log Meal</string>
 			<key>UIApplicationShortcutItemType</key>
 			<string>com.ecliptik.Onigiri.logMeal</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>carrot</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Log Food</string>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.ecliptik.Onigiri.logFood</string>
 		</dict>
 		<dict>
 			<key>UIApplicationShortcutItemIconSymbolName</key>

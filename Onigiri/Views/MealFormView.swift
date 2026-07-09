@@ -2,11 +2,13 @@ import SwiftUI
 import SwiftData
 import OnigiriKit
 
-/// Create a one-tap meal by picking quantities of saved foods.
+/// Create or edit a one-tap meal by picking quantities of saved foods.
 struct MealFormView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Food.name) private var foods: [Food]
+
+    var meal: Meal?
 
     @State private var name = ""
     @State private var quantities: [PersistentIdentifier: Double] = [:]
@@ -51,7 +53,7 @@ struct MealFormView: View {
                     }
                 }
             }
-            .navigationTitle("New Meal")
+            .navigationTitle(meal == nil ? "New Meal" : "Edit Meal")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -60,6 +62,14 @@ struct MealFormView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || !hasItems)
+                }
+            }
+            .onAppear {
+                if let meal {
+                    name = meal.name
+                    quantities = Dictionary(uniqueKeysWithValues: meal.items.compactMap { item in
+                        item.food.map { ($0.persistentModelID, item.quantity) }
+                    })
                 }
             }
         }
@@ -73,11 +83,18 @@ struct MealFormView: View {
     }
 
     private func save() {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
         let items = foods.compactMap { food -> MealItem? in
             let quantity = quantities[food.persistentModelID] ?? 0
             return quantity > 0 ? MealItem(food: food, quantity: quantity) : nil
         }
-        context.insert(Meal(name: name.trimmingCharacters(in: .whitespaces), items: items))
+        if let meal {
+            meal.name = trimmed
+            meal.items.forEach(context.delete)
+            meal.items = items
+        } else {
+            context.insert(Meal(name: trimmed, items: items))
+        }
         PhoneSyncService.shared.push(from: context)
         dismiss()
     }

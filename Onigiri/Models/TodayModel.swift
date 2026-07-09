@@ -8,9 +8,25 @@ final class TodayModel {
     private(set) var currentWeightLb: Double?
     private(set) var averageBurnKcal: Double?
     private(set) var errorMessage: String?
+    private(set) var selectedDate = Calendar.current.startOfDay(for: .now)
 
     private let health = HealthKitService()
     private var started = false
+
+    var isToday: Bool { Calendar.current.isDateInToday(selectedDate) }
+
+    func goToPreviousDay() async {
+        guard let previous = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate) else { return }
+        selectedDate = previous
+        await refresh()
+    }
+
+    func goToNextDay() async {
+        guard !isToday,
+              let next = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate) else { return }
+        selectedDate = min(next, Calendar.current.startOfDay(for: .now))
+        await refresh()
+    }
 
     /// Expected full-day burn: 14-day average when history exists, otherwise
     /// today's accrual or a conservative floor.
@@ -62,9 +78,13 @@ final class TodayModel {
     }
 
     func refresh() async {
+        // A new calendar day rolls the view back to "today".
+        if isToday {
+            selectedDate = Calendar.current.startOfDay(for: .now)
+        }
         do {
-            async let summary = health.todaySummary()
-            async let foodLog = health.todayFoodEntries()
+            async let summary = health.daySummary(for: selectedDate)
+            async let foodLog = health.foodEntries(on: selectedDate)
             async let weight = health.latestBodyMassLb()
             async let averageBurn = health.averageDailyBurnKcal()
             self.summary = try await summary

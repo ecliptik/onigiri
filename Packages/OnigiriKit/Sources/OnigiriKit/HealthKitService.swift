@@ -63,11 +63,17 @@ public final class HealthKitService {
     // MARK: - Reads
 
     public func todaySummary(now: Date = .now) async throws -> DailyEnergySummary {
-        async let intake = sumToday(.dietaryEnergyConsumed, unit: .kilocalorie(), now: now)
-        async let active = sumToday(.activeEnergyBurned, unit: .kilocalorie(), now: now)
-        async let resting = sumToday(.basalEnergyBurned, unit: .kilocalorie(), now: now)
-        async let sodium = sumToday(.dietarySodium, unit: .gramUnit(with: .milli), now: now)
-        async let water = sumToday(.dietaryWater, unit: .fluidOunceUS(), now: now)
+        try await daySummary(for: now, now: now)
+    }
+
+    /// Totals for any calendar day — today ends at `now`, past days at midnight.
+    public func daySummary(for date: Date, now: Date = .now) async throws -> DailyEnergySummary {
+        let (start, end) = Self.dayRange(for: date, now: now)
+        async let intake = sum(.dietaryEnergyConsumed, unit: .kilocalorie(), start: start, end: end)
+        async let active = sum(.activeEnergyBurned, unit: .kilocalorie(), start: start, end: end)
+        async let resting = sum(.basalEnergyBurned, unit: .kilocalorie(), start: start, end: end)
+        async let sodium = sum(.dietarySodium, unit: .gramUnit(with: .milli), start: start, end: end)
+        async let water = sum(.dietaryWater, unit: .fluidOunceUS(), start: start, end: end)
         return try await DailyEnergySummary(
             intakeKcal: intake,
             activeBurnKcal: active,
@@ -77,12 +83,16 @@ public final class HealthKitService {
         )
     }
 
-    private func sumToday(
-        _ identifier: HKQuantityTypeIdentifier, unit: HKUnit, now: Date
+    private static func dayRange(for date: Date, now: Date) -> (start: Date, end: Date) {
+        let start = Calendar.current.startOfDay(for: date)
+        return (start, min(start.addingTimeInterval(86400), max(now, start)))
+    }
+
+    private func sum(
+        _ identifier: HKQuantityTypeIdentifier, unit: HKUnit, start: Date, end: Date
     ) async throws -> Double {
-        let startOfDay = Calendar.current.startOfDay(for: now)
         let inToday = HKQuery.predicateForSamples(
-            withStart: startOfDay, end: now, options: .strictStartDate
+            withStart: start, end: end, options: .strictStartDate
         )
         let descriptor = HKStatisticsQueryDescriptor(
             predicate: .quantitySample(type: HKQuantityType(identifier), predicate: inToday),
@@ -264,8 +274,13 @@ public final class HealthKitService {
     private var correlationCache: [UUID: HKCorrelation] = [:]
 
     public func todayFoodEntries(now: Date = .now) async throws -> [FoodLogEntry] {
-        let startOfDay = Calendar.current.startOfDay(for: now)
-        let inToday = HKQuery.predicateForSamples(withStart: startOfDay, end: now, options: .strictStartDate)
+        try await foodEntries(on: now, now: now)
+    }
+
+    /// Logged eating events for any calendar day, newest first.
+    public func foodEntries(on date: Date, now: Date = .now) async throws -> [FoodLogEntry] {
+        let (start, end) = Self.dayRange(for: date, now: now)
+        let inToday = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
         let descriptor = HKSampleQueryDescriptor(
             predicates: [.correlation(type: HKCorrelationType(.food), predicate: inToday)],
             sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)]
@@ -342,10 +357,6 @@ public final class HealthKitService {
                 .basalEnergyBurned, .kilocalorie(), 1800,
                 hoursAgo: Double(day) * 24, spanningHours: 16
             ))
-            samples.append(sample(
-                .dietaryEnergyConsumed, .kilocalorie(), 1550,
-                hoursAgo: Double(day) * 24 + 2, spanningHours: 8
-            ))
         }
         try await store.save(samples)
 
@@ -354,6 +365,14 @@ public final class HealthKitService {
                           date: now.addingTimeInterval(-6 * 3600))
         try await logFood(name: "Chicken burrito", kcal: 680, sodiumMg: 940,
                           date: now.addingTimeInterval(-2 * 3600))
+        // past days' intake as named logs so day browsing has entries
+        for day in 1...3 {
+            let dinner = now.addingTimeInterval(-Double(day) * 24 * 3600)
+            try await logFood(name: "Chicken & rice", kcal: 900, sodiumMg: 1000,
+                              date: dinner)
+            try await logFood(name: "Two eggs & toast", kcal: 650, sodiumMg: 800,
+                              date: dinner.addingTimeInterval(-6 * 3600))
+        }
     }
     #endif
 }

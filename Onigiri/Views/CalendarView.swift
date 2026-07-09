@@ -7,6 +7,7 @@ import OnigiriKit
 struct CalendarView: View {
     @State private var model = CalendarModel()
     @State private var displayedMonth = Calendar.current.startOfMonth(for: .now)
+    @State private var selectedDay = Calendar.current.startOfDay(for: .now)
     @Query private var goals: [GoalSettings]
     @Environment(\.scenePhase) private var scenePhase
 
@@ -19,6 +20,7 @@ struct CalendarView: View {
                     monthHeader
                     weekdayHeader
                     monthGrid
+                    daySummaryCard
                     summaryCard
                     if model.targetDeficitKcal == nil {
                         Text("No goal set — days earn an onigiri for any calorie deficit. Set a goal to raise the bar.")
@@ -95,12 +97,19 @@ struct CalendarView: View {
         return LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 6) {
             ForEach(Array(days.enumerated()), id: \.offset) { _, day in
                 if let day {
+                    let dayStart = calendar.startOfDay(for: day)
                     DayCell(
                         day: day,
-                        earned: model.earned.contains(calendar.startOfDay(for: day)),
+                        earned: model.earned.contains(dayStart),
                         isToday: calendar.isDateInToday(day),
-                        isFuture: day > .now
+                        isFuture: day > .now,
+                        isSelected: dayStart == selectedDay
                     )
+                    .onTapGesture {
+                        if day <= .now {
+                            selectedDay = dayStart
+                        }
+                    }
                 } else {
                     Color.clear.frame(height: 44)
                 }
@@ -118,6 +127,62 @@ struct CalendarView: View {
             days.append(calendar.date(byAdding: .day, value: dayNumber - 1, to: displayedMonth))
         }
         return days
+    }
+
+    private var daySummaryCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text(selectedDay, format: .dateTime.weekday(.wide).month(.abbreviated).day())
+                    .font(.headline)
+                Spacer()
+                if model.earned.contains(selectedDay) {
+                    Text("🍙 earned")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.green)
+                } else if calendar.isDateInToday(selectedDay) {
+                    Text("in progress")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if let totals = model.totalsByDay[selectedDay] {
+                HStack(spacing: 14) {
+                    Label {
+                        Text("\(totals.intakeKcal, format: .number.precision(.fractionLength(0))) in")
+                    } icon: {
+                        Image(systemName: "fork.knife").foregroundStyle(.orange)
+                    }
+                    Label {
+                        Text("\(totals.burnKcal, format: .number.precision(.fractionLength(0))) out")
+                    } icon: {
+                        Image(systemName: "flame.fill").foregroundStyle(.red)
+                    }
+                    Spacer()
+                    Text(deficitText(for: totals))
+                        .fontWeight(.semibold)
+                        .foregroundStyle(totals.deficitKcal > 0 ? Color.green : Color.orange)
+                }
+                .font(.subheadline)
+                .monospacedDigit()
+                if let target = model.targetDeficitKcal {
+                    Text("Daily target: \(target, format: .number.precision(.fractionLength(0))) kcal deficit")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text("No data recorded this day.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(14)
+        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
+        .animation(.snappy, value: selectedDay)
+    }
+
+    private func deficitText(for totals: DayEnergyTotals) -> String {
+        let deficit = Int(totals.deficitKcal.rounded())
+        return deficit >= 0 ? "\(deficit) deficit" : "\(-deficit) surplus"
     }
 
     private var summaryCard: some View {
@@ -155,6 +220,7 @@ private struct DayCell: View {
     let earned: Bool
     let isToday: Bool
     let isFuture: Bool
+    let isSelected: Bool
 
     var body: some View {
         VStack(spacing: 2) {
@@ -177,8 +243,13 @@ private struct DayCell: View {
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 8)
+                .fill(isSelected ? Color.ricePaper.opacity(0.45) : .clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
                 .stroke(isToday ? Color.accentColor : .clear, lineWidth: 1.5)
         )
+        .contentShape(.rect)
     }
 }
 

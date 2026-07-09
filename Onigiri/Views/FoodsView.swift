@@ -13,6 +13,7 @@ struct FoodsView: View {
     @State private var showNewFood = false
     @State private var showNewMeal = false
     @State private var editingFood: Food?
+    @State private var editingMeal: Meal?
     @State private var toast: String?
 
     private let health = HealthKitService()
@@ -33,6 +34,17 @@ struct FoodsView: View {
                                     sodiumMg: meal.totalSodiumMg
                                 )
                             }
+                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                Button {
+                                    editingMeal = meal
+                                } label: {
+                                    Label("Edit", systemImage: "pencil")
+                                }
+                                .tint(.riceToast)
+                            }
+                            .contextMenu {
+                                Button("Edit", systemImage: "pencil") { editingMeal = meal }
+                            }
                         }
                         .onDelete { offsets in
                             offsets.map { meals[$0] }.forEach(context.delete)
@@ -51,6 +63,14 @@ struct FoodsView: View {
                                 kcal: food.kcal,
                                 sodiumMg: food.sodiumMg
                             )
+                        }
+                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                            Button {
+                                editingFood = food
+                            } label: {
+                                Label("Edit", systemImage: "pencil")
+                            }
+                            .tint(.riceToast)
                         }
                         .contextMenu {
                             Button("Edit", systemImage: "pencil") { editingFood = food }
@@ -84,6 +104,7 @@ struct FoodsView: View {
             .sheet(isPresented: $showNewFood) { FoodFormView(food: nil) }
             .sheet(item: $editingFood) { FoodFormView(food: $0) }
             .sheet(isPresented: $showNewMeal) { MealFormView() }
+            .sheet(item: $editingMeal) { MealFormView(meal: $0) }
             .overlay(alignment: .bottom) {
                 if let toast {
                     Text(toast)

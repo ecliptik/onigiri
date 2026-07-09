@@ -29,7 +29,36 @@ struct TodayView: View {
                 }
                 .padding(.bottom, 24)
             }
-            .navigationTitle("Today")
+            .navigationTitle(dayTitle)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        Task { await model.goToPreviousDay() }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .accessibilityLabel("Previous day")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task { await model.goToNextDay() }
+                    } label: {
+                        Image(systemName: "chevron.right")
+                    }
+                    .disabled(model.isToday)
+                    .accessibilityLabel("Next day")
+                }
+            }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 30).onEnded { value in
+                    guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                    if value.translation.width < -60 {
+                        Task { await model.goToNextDay() }
+                    } else if value.translation.width > 60 {
+                        Task { await model.goToPreviousDay() }
+                    }
+                }
+            )
         }
         .task { await model.start() }
         .refreshable { await model.refresh() }
@@ -43,13 +72,19 @@ struct TodayView: View {
 
     // MARK: - Sections
 
+    private var dayTitle: String {
+        if model.isToday { return "Today" }
+        if Calendar.current.isDateInYesterday(model.selectedDate) { return "Yesterday" }
+        return model.selectedDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+    }
+
     private var balanceHeadline: some View {
         VStack(spacing: 4) {
             Text(model.summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
                 .font(.system(size: 60, weight: .bold, design: .rounded))
                 .foregroundStyle(model.summary.balanceKcal <= 0 ? Color.green : Color.orange)
                 .contentTransition(.numericText())
-            Text("kcal balance today")
+            Text(model.isToday ? "kcal balance today" : "kcal balance")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -62,7 +97,8 @@ struct TodayView: View {
             DailyGoalCard(
                 bankedKcal: max(0, -model.summary.balanceKcal),
                 intakeKcal: model.summary.intakeKcal,
-                plan: plan
+                plan: plan,
+                showsRemaining: model.isToday
             )
         } else {
             Text(goals.isEmpty
@@ -122,12 +158,14 @@ struct TodayView: View {
 
     private var loggedSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Logged today")
+            Text(model.isToday ? "Logged today" : "Logged")
                 .font(.headline)
                 .padding(.horizontal)
 
             if model.foodLog.isEmpty {
-                Text("Nothing logged yet — tap a food or meal in the Foods tab.")
+                Text(model.isToday
+                     ? "Nothing logged yet — tap a food or meal in the Foods tab."
+                     : "Nothing was logged this day.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal)
@@ -171,6 +209,7 @@ struct DailyGoalCard: View {
     let bankedKcal: Double
     let intakeKcal: Double
     let plan: CalorieBudget.Plan
+    var showsRemaining = true
 
     private var progress: Double {
         plan.requiredDailyDeficit > 0 ? bankedKcal / plan.requiredDailyDeficit : 1
@@ -193,14 +232,16 @@ struct DailyGoalCard: View {
                 Text("\(bankedKcal, format: .number.precision(.fractionLength(0))) of \(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal deficit banked")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                if remainingKcal >= 0 {
-                    Text("≈ \(remainingKcal, format: .number.precision(.fractionLength(0))) kcal left to eat today")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("≈ \(-remainingKcal, format: .number.precision(.fractionLength(0))) kcal over budget")
-                        .font(.subheadline)
-                        .foregroundStyle(.orange)
+                if showsRemaining {
+                    if remainingKcal >= 0 {
+                        Text("≈ \(remainingKcal, format: .number.precision(.fractionLength(0))) kcal left to eat today")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("≈ \(-remainingKcal, format: .number.precision(.fractionLength(0))) kcal over budget")
+                            .font(.subheadline)
+                            .foregroundStyle(.orange)
+                    }
                 }
                 if plan.isAggressive {
                     Label("Aggressive pace — consider a later date", systemImage: "exclamationmark.triangle.fill")

@@ -331,22 +331,11 @@ private struct LogButton: View {
     let onCustomPortion: () -> Void
 
     var body: some View {
-        Button {
-            action(1)
-        } label: {
-            Text("Log")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.black)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .background(Color.ricePaper, in: .capsule)
-        }
-        // .borderless keeps the tap target isolated inside the List row —
-        // other styles let a stray row tap trigger the button.
-        .buttonStyle(.borderless)
-        .accessibilityLabel("Log \(name)")
-        .contextMenu {
-            ForEach(Portion.quickOptions, id: \.self) { quantity in
+        // Menu-with-primaryAction: tap logs one serving, long-press opens
+        // the portion menu. (A contextMenu on the button loses to the row's
+        // own context menu; Menu owns its long-press.)
+        Menu {
+            ForEach(Portion.quickOptions.filter { $0 != 1 }, id: \.self) { quantity in
                 Button("Log ×\(Portion.label(for: quantity))") {
                     action(quantity)
                 }
@@ -354,7 +343,20 @@ private struct LogButton: View {
             Button("Custom portion…", systemImage: "slider.horizontal.3") {
                 onCustomPortion()
             }
+        } label: {
+            Text("Log")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.black)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(Color.ricePaper, in: .capsule)
+        } primaryAction: {
+            action(1)
         }
+        // .borderless keeps the tap target isolated inside the List row —
+        // other styles let a stray row tap trigger the button.
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Log \(name)")
     }
 }
 

@@ -69,7 +69,9 @@ struct ContentView: View {
                 WidgetCenter.shared.reloadAllTimelines()
             }
         case .logMeal:
-            selectedTab = .foods
+            // Land on Today with the quick-log sheet up: one tap to log.
+            selectedTab = .today
+            QuickActions.shared.quickLogRequested = true
         case .scanBarcode:
             selectedTab = .foods
             scanRequest = true

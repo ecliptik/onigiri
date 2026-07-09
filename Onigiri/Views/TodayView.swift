@@ -11,6 +11,8 @@ struct TodayView: View {
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "drop"
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @State private var showSettings = false
+    @State private var showQuickLog = false
+    @State private var quickActions = QuickActions.shared
 
     private var waterEmoji: String { waterIcon == "wave" ? "🌊" : "💧" }
 
@@ -19,9 +21,9 @@ struct TodayView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     balanceHeadline
+                    hydrationRow
                     goalCard
                     meterGrid
-                    hydrationRow
                     loggedSection
 
                     if let message = model.errorMessage {
@@ -62,6 +64,17 @@ struct TodayView: View {
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
+            }
+            .sheet(isPresented: $showQuickLog, onDismiss: {
+                Task { await model.refresh() }
+            }) {
+                QuickLogSheet()
+            }
+            .onChange(of: quickActions.quickLogRequested) { _, requested in
+                if requested {
+                    quickActions.quickLogRequested = false
+                    showQuickLog = true
+                }
             }
             .simultaneousGesture(
                 DragGesture(minimumDistance: 30).onEnded { value in
@@ -180,8 +193,7 @@ struct TodayView: View {
                 Spacer()
                 if model.isToday {
                     Button {
-                        // Reuses the quick-action route: switches to Foods.
-                        QuickActions.shared.pending = .logMeal
+                        showQuickLog = true
                     } label: {
                         Label("Log", systemImage: "plus")
                             .font(.subheadline.weight(.semibold))

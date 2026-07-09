@@ -15,6 +15,9 @@ final class QuickActions {
     }
 
     var pending: Action?
+
+    /// Signals TodayView to present the quick-log sheet.
+    var quickLogRequested = false
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {

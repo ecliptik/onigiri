@@ -49,9 +49,12 @@ struct GoalView: View {
                             Text("\(healthWeightLb, format: .number.precision(.fractionLength(1))) lb")
                         }
                     } else {
-                        TextField("Current weight (lb)", value: $manualWeightLb, format: .number)
-                            .keyboardType(.decimalPad)
-                            .focused($weightFieldFocused)
+                        LabeledContent("Weight (lb)") {
+                            TextField("0", value: $manualWeightLb, format: .number)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .focused($weightFieldFocused)
+                        }
                         Text("No weight in Apple Health yet — step on your scale, or enter it here.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -59,9 +62,12 @@ struct GoalView: View {
                 }
 
                 Section("Target") {
-                    TextField("Target weight (lb)", value: $targetWeightLb, format: .number)
-                        .keyboardType(.decimalPad)
-                        .focused($weightFieldFocused)
+                    LabeledContent("Weight (lb)") {
+                        TextField("0", value: $targetWeightLb, format: .number)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .focused($weightFieldFocused)
+                    }
                     DatePicker("By date", selection: $targetDate, in: Date.now..., displayedComponents: .date)
                 }
 

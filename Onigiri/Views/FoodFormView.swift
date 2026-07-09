@@ -50,13 +50,22 @@ struct FoodFormView: View {
 
                 Section {
                     TextField("Name", text: $name)
-                    TextField("Calories (kcal)", value: $kcal, format: .number)
-                        .keyboardType(.decimalPad)
-                        .focused($numberFieldFocused)
-                    TextField("Sodium (mg)", value: $sodiumMg, format: .number)
-                        .keyboardType(.decimalPad)
-                        .focused($numberFieldFocused)
-                    TextField("Serving (e.g. 1 cup, 8 oz)", text: $serving)
+                    LabeledContent("Calories (kcal)") {
+                        TextField("0", value: $kcal, format: .number)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .focused($numberFieldFocused)
+                    }
+                    LabeledContent("Sodium (mg)") {
+                        TextField("0", value: $sodiumMg, format: .number)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .focused($numberFieldFocused)
+                    }
+                    LabeledContent("Serving") {
+                        TextField("e.g. 1 cup, 8 oz", text: $serving)
+                            .multilineTextAlignment(.trailing)
+                    }
                 }
             }
             .navigationTitle(food == nil ? "New Food" : "Edit Food")

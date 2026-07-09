@@ -13,8 +13,9 @@ Personal iOS + watchOS calorie/sodium/water tracker. Design + roadmap: `docs/PLA
 ```sh
 xcodegen generate
 xcodebuild -project Onigiri.xcodeproj -scheme Onigiri \
-  -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
-  CODE_SIGNING_ALLOWED=NO build          # builds the watch app too (embedded)
+  -destination 'generic/platform=iOS Simulator' -derivedDataPath build build
+  # builds the watch app too (embedded). Do NOT pass CODE_SIGNING_ALLOWED=NO:
+  # it strips the HealthKit entitlement; ad-hoc simulator signing needs no team.
 cd Packages/OnigiriKit && swift test     # pure-logic tests
 ```
 

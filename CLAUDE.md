@@ -19,7 +19,15 @@ xcodebuild -project Onigiri.xcodeproj -scheme Onigiri \
 cd Packages/OnigiriKit && swift test     # pure-logic tests
 ```
 
-## Deploying to the phone
+## Deploying to devices
+
+- **Watch discovery requires Mac BLUETOOTH ON.** Two days of debugging
+  (reboots, re-pairing, trust resets, cache wipes, VPN toggles) and the watch
+  never appeared in Xcode/devicectl until the Mac's Bluetooth was enabled —
+  the Mac↔watch developer channel bootstraps over BT/AWDL. Check this FIRST.
+- Watch: build OnigiriWatch scheme at the watch destination with
+  -allowProvisioningUpdates, then `devicectl device install app` with the
+  Debug-watchos product. Watch unlocked and on wrist.
 
 - `scripts/deploy-phone.sh` builds and installs on "My iPhone" (override with
   `DEVICE_NAME=…`). Run weekly — free-team provisioning expires after 7 days.

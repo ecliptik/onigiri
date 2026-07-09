@@ -21,5 +21,20 @@ APP=build/Build/Products/Debug-iphoneos/Onigiri.app
 echo "→ Installing on ${DEVICE_NAME}"
 xcrun devicectl device install app --device "${DEVICE_NAME}" "${APP}"
 
-echo "✓ Deployed. The watch app rides along; open the Watch app on the"
-echo "  phone to update it if watchOS doesn't refresh it automatically."
+# Watch deploy (best effort): requires Mac Bluetooth ON and the watch
+# unlocked. Skipped quietly when the watch isn't reachable.
+WATCH_NAME=${WATCH_NAME:-"Micheal’s Apple Watch"}
+if xcrun devicectl list devices 2>/dev/null | grep -q "Apple Watch"; then
+  echo "→ Building for ${WATCH_NAME}"
+  xcodebuild -project Onigiri.xcodeproj -scheme OnigiriWatch \
+    -destination "platform=watchOS,name=${WATCH_NAME}" \
+    -derivedDataPath build \
+    -allowProvisioningUpdates \
+    build
+  echo "→ Installing on ${WATCH_NAME}"
+  xcrun devicectl device install app --device "${WATCH_NAME}" \
+    build/Build/Products/Debug-watchos/OnigiriWatch.app
+  echo "✓ Phone and watch deployed."
+else
+  echo "✓ Phone deployed. (Watch not reachable — is Mac Bluetooth on? — skipped.)"
+fi

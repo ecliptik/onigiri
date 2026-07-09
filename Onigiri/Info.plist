@@ -20,6 +20,8 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Onigiri uses the camera to scan food barcodes.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Onigiri reads your energy burn, weight, and nutrition history to show your daily calorie balance and goal progress.</string>
 	<key>NSHealthUpdateUsageDescription</key>

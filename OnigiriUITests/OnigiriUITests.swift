@@ -50,6 +50,39 @@ final class OnigiriUITests: XCTestCase {
         )
     }
 
+    /// Barcode → OpenFoodFacts lookup prefills the food form. Uses the
+    /// manual-entry fallback (no camera in the simulator) and live network.
+    @MainActor
+    func testBarcodeLookupPrefillsForm() throws {
+        let app = XCUIApplication()
+        app.launch()
+        grantHealthAccess(in: app, timeout: 10)
+
+        app.tabBars.buttons["Foods"].tap()
+        app.navigationBars["Foods"].buttons.element(boundBy: 0).tap()
+        let addFood = app.buttons["Add Food"]
+        XCTAssertTrue(addFood.waitForExistence(timeout: 5), "Add Food menu item")
+        addFood.tap()
+
+        let scan = app.buttons["Scan barcode"]
+        XCTAssertTrue(scan.waitForExistence(timeout: 5), "Scan button in food form")
+        scan.tap()
+
+        let field = app.textFields["Barcode"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "Manual barcode fallback field")
+        field.tap()
+        field.typeText("3017620422003")
+        app.buttons["Look Up"].tap()
+
+        let nameField = app.textFields["Name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 10))
+        let filled = expectation(
+            for: NSPredicate(format: "value CONTAINS[c] 'nutella'"),
+            evaluatedWith: nameField
+        )
+        wait(for: [filled], timeout: 25)
+    }
+
     /// Adds the Onigiri medium widget to the simulator home screen by driving
     /// springboard. Mutates home-screen state — opt in via ADD_WIDGET=1.
     @MainActor

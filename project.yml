@@ -38,6 +38,7 @@ targets:
         UILaunchScreen: {}
         NSHealthShareUsageDescription: Onigiri reads your energy burn, weight, and nutrition history to show your daily calorie balance and goal progress.
         NSHealthUpdateUsageDescription: Onigiri saves the food, sodium, and water you log to Apple Health.
+        NSCameraUsageDescription: Onigiri uses the camera to scan food barcodes.
     entitlements:
       path: Onigiri/Onigiri.entitlements
       properties:

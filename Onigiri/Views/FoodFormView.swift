@@ -2,7 +2,8 @@ import SwiftUI
 import SwiftData
 import OnigiriKit
 
-/// Create or edit a saved food.
+/// Create or edit a saved food, with barcode scanning to prefill from
+/// OpenFoodFacts.
 struct FoodFormView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -13,16 +14,45 @@ struct FoodFormView: View {
     @State private var kcal: Double?
     @State private var sodiumMg: Double?
     @State private var serving = ""
+    @State private var barcode: String?
+
+    @State private var showScanner = false
+    @State private var isLookingUp = false
+    @State private var lookupMessage: String?
 
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Name", text: $name)
-                TextField("Calories (kcal)", value: $kcal, format: .number)
-                    .keyboardType(.decimalPad)
-                TextField("Sodium (mg)", value: $sodiumMg, format: .number)
-                    .keyboardType(.decimalPad)
-                TextField("Serving (e.g. 1 cup, 8 oz)", text: $serving)
+                Section {
+                    Button {
+                        showScanner = true
+                    } label: {
+                        Label("Scan barcode", systemImage: "barcode.viewfinder")
+                    }
+                    .disabled(isLookingUp)
+
+                    if isLookingUp {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("Looking up product…")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if let lookupMessage {
+                        Text(lookupMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    }
+                }
+
+                Section {
+                    TextField("Name", text: $name)
+                    TextField("Calories (kcal)", value: $kcal, format: .number)
+                        .keyboardType(.decimalPad)
+                    TextField("Sodium (mg)", value: $sodiumMg, format: .number)
+                        .keyboardType(.decimalPad)
+                    TextField("Serving (e.g. 1 cup, 8 oz)", text: $serving)
+                }
             }
             .navigationTitle(food == nil ? "New Food" : "Edit Food")
             .navigationBarTitleDisplayMode(.inline)
@@ -35,15 +65,40 @@ struct FoodFormView: View {
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || kcal == nil)
                 }
             }
+            .sheet(isPresented: $showScanner) {
+                BarcodeScannerSheet { code in
+                    Task { await lookup(code) }
+                }
+            }
             .onAppear {
                 if let food {
                     name = food.name
                     kcal = food.kcal
                     sodiumMg = food.sodiumMg
                     serving = food.servingDescription
+                    barcode = food.barcode
                 }
             }
         }
+    }
+
+    private func lookup(_ code: String) async {
+        isLookingUp = true
+        lookupMessage = nil
+        do {
+            let product = try await OpenFoodFactsClient().product(barcode: code)
+            name = product.name
+            kcal = product.kcal
+            sodiumMg = product.sodiumMg
+            serving = product.servingDescription
+            barcode = product.barcode
+            if product.kcal == nil {
+                lookupMessage = "Found it, but no calorie data — check the label."
+            }
+        } catch {
+            lookupMessage = error.localizedDescription
+        }
+        isLookingUp = false
     }
 
     private func save() {
@@ -53,14 +108,17 @@ struct FoodFormView: View {
             food.kcal = kcal ?? 0
             food.sodiumMg = sodiumMg ?? 0
             food.servingDescription = serving
+            food.barcode = barcode
         } else {
             context.insert(Food(
                 name: trimmed,
                 kcal: kcal ?? 0,
                 sodiumMg: sodiumMg ?? 0,
-                servingDescription: serving
+                servingDescription: serving,
+                barcode: barcode
             ))
         }
+        PhoneSyncService.shared.push(from: context)
         dismiss()
     }
 }

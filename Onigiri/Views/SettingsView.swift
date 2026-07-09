@@ -30,7 +30,7 @@ struct SettingsView: View {
                             Text("\(sodiumLimitMg, format: .number.precision(.fractionLength(0))) mg")
                         }
                     }
-                    Text("Today's sodium turns yellow within 300 mg of the limit and red above it. The FDA guideline is 2,300 mg.")
+                    Text("The FDA guideline is 2,300mg sodium for adults.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -48,7 +48,7 @@ struct SettingsView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                    Text("Foods, meals, goal, and water settings as JSON. Daily logs live in Apple Health — export those from the Health app.")
+                    Text("Export or import Onigiri Foods, Meals, Goals, and Settings.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

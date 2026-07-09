@@ -12,6 +12,7 @@ struct QuickLogSheet: View {
     @State private var searchText = ""
     @State private var errorMessage: String?
     @State private var isLogging = false
+    @State private var portionTarget: PortionTarget?
 
     private let health = HealthKitService()
 
@@ -110,39 +111,48 @@ struct QuickLogSheet: View {
                     Button("Cancel") { dismiss() }
                 }
             }
+            .sheet(item: $portionTarget) { target in
+                PortionSheet(target: target) { quantity in
+                    log(
+                        Item(id: target.name, name: target.name, detail: target.serving,
+                             kcal: target.kcal, sodiumMg: target.sodiumMg,
+                             nutrients: target.nutrients, isFavorite: false, category: nil),
+                        quantity: quantity
+                    )
+                }
+                .presentationDetents([.medium])
+            }
         }
     }
 
     private func row(_ item: Item) -> some View {
-        Button {
+        LibraryRow(
+            name: item.name,
+            detail: item.detail,
+            kcal: item.kcal,
+            sodiumMg: item.sodiumMg,
+            isFavorite: item.isFavorite
+        )
+        .contentShape(.rect)
+        .onTapGesture {
             log(item, quantity: 1)
-        } label: {
-            LibraryRow(
-                name: item.name,
-                detail: item.detail,
-                kcal: item.kcal,
-                sodiumMg: item.sodiumMg,
-                isFavorite: item.isFavorite
+        }
+        .onLongPressGesture(minimumDuration: 0.4) {
+            portionTarget = PortionTarget(
+                name: item.name, kcal: item.kcal, sodiumMg: item.sodiumMg,
+                nutrients: item.nutrients, serving: item.detail
             )
         }
-        .disabled(isLogging)
-        .contextMenu {
-            ForEach(Portion.quickOptions, id: \.self) { quantity in
-                Button("Log ×\(Portion.label(for: quantity))") {
-                    log(item, quantity: quantity)
-                }
-            }
-        }
+        .accessibilityAddTraits(.isButton)
     }
 
     private func log(_ item: Item, quantity: Double) {
         guard !isLogging else { return }
         isLogging = true
-        let displayName = quantity == 1 ? item.name : "\(item.name) ×\(Portion.label(for: quantity))"
         Task {
             do {
                 try await health.logFood(
-                    name: displayName,
+                    name: item.name,
                     kcal: item.kcal * quantity,
                     sodiumMg: item.sodiumMg * quantity,
                     nutrients: item.nutrients.scaled(by: quantity)

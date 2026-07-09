@@ -252,17 +252,18 @@ struct FoodsView: View {
         name: String, kcal: Double, sodiumMg: Double,
         nutrients: NutrientValues, quantity: Double = 1
     ) {
-        let displayName = quantity == 1 ? name : "\(name) ×\(Portion.label(for: quantity))"
+        // The log keeps the plain food name; the portion only scales values.
         Task {
             do {
                 let id = try await health.logFood(
-                    name: displayName,
+                    name: name,
                     kcal: kcal * quantity,
                     sodiumMg: sodiumMg * quantity,
                     nutrients: nutrients.scaled(by: quantity)
                 )
                 undoLogID = id
-                showToast("Logged \(displayName) ✓", clearsUndo: true)
+                let suffix = quantity == 1 ? "" : " ×\(Portion.label(for: quantity))"
+                showToast("Logged \(name)\(suffix) ✓", clearsUndo: true)
                 WidgetCenter.shared.reloadAllTimelines()
             } catch {
                 undoLogID = nil
@@ -331,32 +332,19 @@ private struct LogButton: View {
     let onCustomPortion: () -> Void
 
     var body: some View {
-        // Menu-with-primaryAction: tap logs one serving, long-press opens
-        // the portion menu. (A contextMenu on the button loses to the row's
-        // own context menu; Menu owns its long-press.)
-        Menu {
-            ForEach(Portion.quickOptions.filter { $0 != 1 }, id: \.self) { quantity in
-                Button("Log ×\(Portion.label(for: quantity))") {
-                    action(quantity)
-                }
-            }
-            Button("Custom portion…", systemImage: "slider.horizontal.3") {
-                onCustomPortion()
-            }
-        } label: {
-            Text("Log")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.black)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .background(Color.ricePaper, in: .capsule)
-        } primaryAction: {
-            action(1)
-        }
-        // .borderless keeps the tap target isolated inside the List row —
-        // other styles let a stray row tap trigger the button.
-        .buttonStyle(.borderless)
-        .accessibilityLabel("Log \(name)")
+        // Tap logs one serving; long-press goes straight to the portion
+        // sheet (its quick chips cover the common fractions).
+        Text("Log")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.black)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(Color.ricePaper, in: .capsule)
+            .contentShape(.capsule)
+            .onTapGesture { action(1) }
+            .onLongPressGesture(minimumDuration: 0.4) { onCustomPortion() }
+            .accessibilityLabel("Log \(name)")
+            .accessibilityAddTraits(.isButton)
     }
 }
 
@@ -396,15 +384,6 @@ struct PortionSheet: View {
                         Text("\(target.kcal * quantity, format: .number.precision(.fractionLength(0))) kcal • \(target.sodiumMg * quantity, format: .number.precision(.fractionLength(0))) mg Na")
                             .monospacedDigit()
                     }
-                    Button {
-                        onLog(quantity)
-                        dismiss()
-                    } label: {
-                        Text("Log \(target.name) ×\(Portion.label(for: quantity))")
-                            .fontWeight(.semibold)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .disabled(quantity <= 0)
                 }
             }
             .navigationTitle("Portion")
@@ -412,6 +391,14 @@ struct PortionSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Log") {
+                        onLog(quantity)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(quantity <= 0)
                 }
             }
         }

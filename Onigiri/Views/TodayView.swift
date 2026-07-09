@@ -175,6 +175,8 @@ struct TodayView: View {
 
             Label {
                 Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(waterGoalOz, format: .number.precision(.fractionLength(0))) oz water")
+                    .foregroundStyle(model.summary.waterOz >= waterGoalOz ? Color.green : Color.secondary)
+                    .fontWeight(model.summary.waterOz >= waterGoalOz ? .medium : .regular)
             } icon: {
                 Text(waterEmoji)
             }
@@ -188,7 +190,7 @@ struct TodayView: View {
     private var loggedSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Logged")
+                Text("Log")
                     .font(.headline)
                 Spacer()
                 if model.isToday {

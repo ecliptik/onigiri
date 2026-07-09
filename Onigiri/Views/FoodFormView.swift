@@ -72,8 +72,15 @@ struct FoodFormView: View {
                 // iOS 26). The sheet's Cancel/Save stay reachable regardless.
                 if numberFieldFocused {
                     ToolbarItem(placement: .principal) {
-                        Button("Done") { numberFieldFocused = false }
-                            .fontWeight(.semibold)
+                        Button {
+                            numberFieldFocused = false
+                        } label: {
+                            Text("Done")
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.black)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.ricePaper)
                     }
                 }
             }

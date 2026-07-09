@@ -24,6 +24,7 @@ struct ContentView: View {
                 CalendarView()
             }
         }
+        .tint(.riceToast)
         .task {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--seed-sample-data") {

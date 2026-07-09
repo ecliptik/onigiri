@@ -101,8 +101,15 @@ struct GoalView: View {
                 // reliably render on iOS 26, so this lives in the nav bar.)
                 if weightFieldFocused {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button("Done") { weightFieldFocused = false }
-                            .fontWeight(.semibold)
+                        Button {
+                            weightFieldFocused = false
+                        } label: {
+                            Text("Done")
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.black)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.ricePaper)
                     }
                 }
             }

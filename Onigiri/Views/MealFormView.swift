@@ -78,6 +78,7 @@ struct MealFormView: View {
             return quantity > 0 ? MealItem(food: food, quantity: quantity) : nil
         }
         context.insert(Meal(name: name.trimmingCharacters(in: .whitespaces), items: items))
+        PhoneSyncService.shared.push(from: context)
         dismiss()
     }
 }

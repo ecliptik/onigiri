@@ -14,11 +14,21 @@ struct OnigiriWatchWidgetsBundle: WidgetBundle {
 
 struct WatchEntry: TimelineEntry {
     let date: Date
-    let balanceKcal: Double
-    let waterOz: Double
+    let state: DailyPlanLoader.State
     let waterGoalOz: Double
 
-    static let placeholder = WatchEntry(date: .now, balanceKcal: -225, waterOz: 36, waterGoalOz: 64)
+    static let placeholder = WatchEntry(
+        date: .now,
+        state: DailyPlanLoader.State(
+            summary: DailyEnergySummary(
+                intakeKcal: 1280, activeBurnKcal: 385, restingBurnKcal: 1120,
+                sodiumMg: 1780, waterOz: 36
+            ),
+            deficitTargetKcal: 583,
+            gaugeProgress: 0.38
+        ),
+        waterGoalOz: 64
+    )
 }
 
 struct WatchProvider: TimelineProvider {
@@ -39,14 +49,9 @@ struct WatchProvider: TimelineProvider {
 
     @MainActor
     private func load() async -> WatchEntry {
-        let summary = (try? await HealthKitService().todaySummary()) ?? .zero
-        // Water goal syncs from the phone in a later phase; 64 oz until then.
-        return WatchEntry(
-            date: .now,
-            balanceKcal: summary.balanceKcal,
-            waterOz: summary.waterOz,
-            waterGoalOz: 64
-        )
+        // Goal and water settings sync from the phone into the shared defaults.
+        let state = await DailyPlanLoader.load(goal: WatchSync.loadGoal())
+        return WatchEntry(date: .now, state: state, waterGoalOz: SharedStore.waterGoalOz)
     }
 }
 
@@ -59,7 +64,7 @@ struct BalanceComplication: Widget {
                 .containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("Calorie Balance")
-        .description("Today's calorie balance.")
+        .description("Today's calorie balance and goal progress.")
         .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }
@@ -68,37 +73,43 @@ struct BalanceComplicationView: View {
     @Environment(\.widgetFamily) private var family
     let entry: WatchEntry
 
+    private var balance: Double { entry.state.summary.balanceKcal }
+
     var body: some View {
         switch family {
         case .accessoryInline:
-            Text("🍙 \(entry.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))) kcal")
+            Text("🍙 \(balance, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))) kcal")
         case .accessoryRectangular:
-            VStack(alignment: .leading, spacing: 1) {
-                Text("🍙 Onigiri")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Text("\(entry.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))) kcal")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(entry.balanceKcal <= 0 ? Color.green : Color.orange)
-                Text("\(entry.waterOz, format: .number.precision(.fractionLength(0))) oz water")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                OnigiriGauge(progress: entry.state.gaugeProgress)
+                    .frame(width: 36, height: 36)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("\(balance, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))) kcal")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(balance <= 0 ? Color.green : Color.orange)
+                    if let target = entry.state.deficitTargetKcal, target > 0 {
+                        Text("\(Int(entry.state.gaugeProgress * 100))% of daily goal")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("\(entry.state.summary.waterOz, format: .number.precision(.fractionLength(0))) oz water")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
             }
         default:
-            ZStack {
-                Circle()
-                    .stroke(.quaternary, lineWidth: 4)
-                VStack(spacing: 0) {
-                    Text("🍙")
-                        .font(.system(size: 13))
-                    Text(entry.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundStyle(entry.balanceKcal <= 0 ? Color.green : Color.orange)
-                        .minimumScaleFactor(0.6)
-                        .lineLimit(1)
-                }
-                .padding(4)
+            Gauge(value: entry.state.gaugeProgress) {
+                Text("🍙")
+                    .font(.system(size: 12))
+            } currentValueLabel: {
+                Text(balance, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(balance <= 0 ? Color.green : Color.orange)
+                    .minimumScaleFactor(0.6)
             }
+            .gaugeStyle(.accessoryCircular)
+            .tint(.green)
         }
     }
 }
@@ -121,15 +132,17 @@ struct WaterComplicationView: View {
     @Environment(\.widgetFamily) private var family
     let entry: WatchEntry
 
+    private var waterOz: Double { entry.state.summary.waterOz }
+
     var body: some View {
         switch family {
         case .accessoryInline:
-            Text("💧 \(entry.waterOz, format: .number.precision(.fractionLength(0))) of \(entry.waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
+            Text("💧 \(waterOz, format: .number.precision(.fractionLength(0))) of \(entry.waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
         default:
-            Gauge(value: min(entry.waterOz, entry.waterGoalOz), in: 0...entry.waterGoalOz) {
+            Gauge(value: min(waterOz, entry.waterGoalOz), in: 0...max(1, entry.waterGoalOz)) {
                 Image(systemName: "drop.fill")
             } currentValueLabel: {
-                Text(entry.waterOz, format: .number.precision(.fractionLength(0)))
+                Text(waterOz, format: .number.precision(.fractionLength(0)))
             }
             .gaugeStyle(.accessoryCircular)
             .tint(.blue)

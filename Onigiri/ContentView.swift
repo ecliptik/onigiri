@@ -4,6 +4,7 @@ import OnigiriKit
 
 struct ContentView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         TabView {
@@ -26,6 +27,14 @@ struct ContentView: View {
                 DebugSeeder.seedLibraryIfEmpty(context: context)
             }
             #endif
+            PhoneSyncService.shared.activate {
+                PhoneSyncService.shared.push(from: context)
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                PhoneSyncService.shared.push(from: context)
+            }
         }
     }
 }

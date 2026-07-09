@@ -66,6 +66,6 @@ VisionKit `DataScannerViewController` → OpenFoodFacts REST lookup → prefill 
 - [x] **Phase 4 — Water**: quick-add serving button, daily goal ring, per-serving log with delete, settings sheet (serving size + goal in @AppStorage)
 - [x] **Phase 5 — Goal**: weight trend chart (Swift Charts: raw weigh-ins + 7-day moving average + target line) with least-squares projected finish date
 - [x] **Phase 6 — Widgets**: iPhone home-screen widgets (small gauge; medium meter with interactive add-water + configurable add-meal buttons via AppIntents) and watch complications (balance circular/rectangular/inline, water ring). Library/settings moved to an App Group + shared SwiftData store in OnigiriKit. *Watch complications show HealthKit data only until Phase 7 syncs goal/water settings; water ring uses the 64 oz default on watch.*
-- [ ] **Phase 7 — Watch app**: meter view, one-tap water + meals, library sync via WatchConnectivity
+- [x] **Phase 7 — Watch app**: onigiri gauge + balance home (🍙 logo in title and gauge), one-tap water and synced-meal logging with haptics, WatchConnectivity sync of meals/goal/water settings (phone pushes application context on foreground and after edits; watch persists to shared defaults so complications use synced goal + water goal)
 - [ ] **Phase 8 — Barcode**: VisionKit scanner + OpenFoodFacts
 - [ ] **Phase 9 — Polish**: on-device deployment, weekly re-deploy script

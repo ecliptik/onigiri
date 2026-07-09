@@ -28,6 +28,10 @@ cd Packages/OnigiriKit && swift test     # pure-logic tests
 - Pass env vars to UI tests via `TEST_RUNNER_<NAME>=… xcodebuild test …`.
 - `testAddWidgetToHomeScreen` (opt-in via `TEST_RUNNER_ADD_WIDGET=1`) installs the
   widget on the simulator home screen.
+- The iPhone and Watch sims are PAIRED and share Health data — erase BOTH before
+  running the flow test, or seeded totals will be off (`simctl erase <both udids>`).
+- Watch-window clicks need the window focused first (click its title bar); clicks
+  silently stop landing after sheets open — relaunch the watch app to recover.
 
 ## Conventions
 

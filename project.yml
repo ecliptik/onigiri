@@ -91,6 +91,8 @@ targets:
       path: OnigiriWatch/OnigiriWatch.entitlements
       properties:
         com.apple.developer.healthkit: true
+        com.apple.security.application-groups:
+          - group.com.ecliptik.Onigiri
 
   OnigiriWatchWidgets:
     type: app-extension
@@ -111,6 +113,8 @@ targets:
       path: OnigiriWatchWidgets/OnigiriWatchWidgets.entitlements
       properties:
         com.apple.developer.healthkit: true
+        com.apple.security.application-groups:
+          - group.com.ecliptik.Onigiri
 
   OnigiriUITests:
     type: bundle.ui-testing

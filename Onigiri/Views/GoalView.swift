@@ -215,6 +215,7 @@ struct GoalView: View {
             ))
         }
         savedToast = true
+        PhoneSyncService.shared.push(from: context)
         Task {
             try? await Task.sleep(for: .seconds(2))
             savedToast = false

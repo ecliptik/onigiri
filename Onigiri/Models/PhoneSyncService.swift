@@ -1,0 +1,69 @@
+import Foundation
+import SwiftData
+import WatchConnectivity
+import OnigiriKit
+
+/// Pushes the library + settings to the watch as the WatchConnectivity
+/// application context (latest-wins; delivered when the watch is reachable).
+final class PhoneSyncService: NSObject, WCSessionDelegate {
+    static let shared = PhoneSyncService()
+
+    private var onActivate: (@MainActor () -> Void)?
+
+    func activate(onActivate: @escaping @MainActor () -> Void) {
+        guard WCSession.isSupported() else { return }
+        self.onActivate = onActivate
+        let session = WCSession.default
+        session.delegate = self
+        if session.activationState == .activated {
+            Task { @MainActor in onActivate() }
+        } else {
+            session.activate()
+        }
+    }
+
+    /// Snapshot meals, goal, and water settings, and send them to the watch.
+    @MainActor
+    func push(from context: ModelContext) {
+        guard WCSession.isSupported(),
+              WCSession.default.activationState == .activated,
+              WCSession.default.isPaired,
+              WCSession.default.isWatchAppInstalled
+        else { return }
+
+        let meals = ((try? context.fetch(FetchDescriptor<Meal>(sortBy: [SortDescriptor(\.name)]))) ?? [])
+            .map { SyncedMeal(id: $0.uuid, name: $0.name, kcal: $0.totalKcal, sodiumMg: $0.totalSodiumMg) }
+        let goal = ((try? context.fetch(FetchDescriptor<GoalSettings>())) ?? []).first
+            .map { SyncedGoal(
+                targetWeightLb: $0.targetWeightLb,
+                targetDate: $0.targetDate,
+                fallbackCurrentWeightLb: $0.fallbackCurrentWeightLb
+            ) }
+        let payload = WatchSync.makeContext(
+            meals: meals,
+            goal: goal,
+            waterServingOz: SharedStore.waterServingOz,
+            waterGoalOz: SharedStore.waterGoalOz
+        )
+        try? WCSession.default.updateApplicationContext(payload)
+    }
+
+    // MARK: - WCSessionDelegate
+
+    nonisolated func session(
+        _ session: WCSession,
+        activationDidCompleteWith activationState: WCSessionActivationState,
+        error: Error?
+    ) {
+        guard activationState == .activated else { return }
+        Task { @MainActor in
+            self.onActivate?()
+        }
+    }
+
+    nonisolated func sessionDidBecomeInactive(_ session: WCSession) {}
+
+    nonisolated func sessionDidDeactivate(_ session: WCSession) {
+        session.activate()
+    }
+}

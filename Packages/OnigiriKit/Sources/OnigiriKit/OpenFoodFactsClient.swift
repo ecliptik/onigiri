@@ -7,6 +7,7 @@ public struct ScannedProduct: Sendable, Equatable {
     public let kcal: Double?
     public let sodiumMg: Double?
     public let servingDescription: String
+    public let nutrients: NutrientValues
 }
 
 public enum OpenFoodFactsError: Error, LocalizedError {
@@ -65,16 +66,31 @@ public struct OpenFoodFactsClient: Sendable {
         let kcal: Double?
         let sodiumMg: Double?
         let servingDescription: String
+        let nutrients: NutrientValues
         if let perServing = nutriments?.energyKcalServing {
             kcal = perServing
             sodiumMg = sodiumGrams(nutriments?.sodiumServing, salt: nutriments?.saltServing)
                 .map { $0 * 1000 }
             servingDescription = product.servingSize ?? "1 serving"
+            nutrients = NutrientValues(
+                fatG: nutriments?.fatServing,
+                carbsG: nutriments?.carbsServing,
+                proteinG: nutriments?.proteinsServing,
+                fiberG: nutriments?.fiberServing,
+                sugarG: nutriments?.sugarsServing
+            )
         } else {
             kcal = nutriments?.energyKcal100g
             sodiumMg = sodiumGrams(nutriments?.sodium100g, salt: nutriments?.salt100g)
                 .map { $0 * 1000 }
             servingDescription = "per 100 g"
+            nutrients = NutrientValues(
+                fatG: nutriments?.fat100g,
+                carbsG: nutriments?.carbs100g,
+                proteinG: nutriments?.proteins100g,
+                fiberG: nutriments?.fiber100g,
+                sugarG: nutriments?.sugars100g
+            )
         }
 
         return ScannedProduct(
@@ -82,7 +98,8 @@ public struct OpenFoodFactsClient: Sendable {
             name: name,
             kcal: kcal,
             sodiumMg: sodiumMg,
-            servingDescription: servingDescription
+            servingDescription: servingDescription,
+            nutrients: nutrients
         )
     }
 }
@@ -115,6 +132,16 @@ private struct OFFNutriments: Decodable {
     let sodiumServing: Double?
     let salt100g: Double?
     let saltServing: Double?
+    let fat100g: Double?
+    let fatServing: Double?
+    let carbs100g: Double?
+    let carbsServing: Double?
+    let proteins100g: Double?
+    let proteinsServing: Double?
+    let fiber100g: Double?
+    let fiberServing: Double?
+    let sugars100g: Double?
+    let sugarsServing: Double?
 
     enum CodingKeys: String, CodingKey {
         case energyKcal100g = "energy-kcal_100g"
@@ -123,6 +150,16 @@ private struct OFFNutriments: Decodable {
         case sodiumServing = "sodium_serving"
         case salt100g = "salt_100g"
         case saltServing = "salt_serving"
+        case fat100g = "fat_100g"
+        case fatServing = "fat_serving"
+        case carbs100g = "carbohydrates_100g"
+        case carbsServing = "carbohydrates_serving"
+        case proteins100g = "proteins_100g"
+        case proteinsServing = "proteins_serving"
+        case fiber100g = "fiber_100g"
+        case fiberServing = "fiber_serving"
+        case sugars100g = "sugars_100g"
+        case sugarsServing = "sugars_serving"
     }
 
     init(from decoder: Decoder) throws {
@@ -139,5 +176,15 @@ private struct OFFNutriments: Decodable {
         sodiumServing = flexibleDouble(.sodiumServing)
         salt100g = flexibleDouble(.salt100g)
         saltServing = flexibleDouble(.saltServing)
+        fat100g = flexibleDouble(.fat100g)
+        fatServing = flexibleDouble(.fatServing)
+        carbs100g = flexibleDouble(.carbs100g)
+        carbsServing = flexibleDouble(.carbsServing)
+        proteins100g = flexibleDouble(.proteins100g)
+        proteinsServing = flexibleDouble(.proteinsServing)
+        fiber100g = flexibleDouble(.fiber100g)
+        fiberServing = flexibleDouble(.fiberServing)
+        sugars100g = flexibleDouble(.sugars100g)
+        sugarsServing = flexibleDouble(.sugarsServing)
     }
 }

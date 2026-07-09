@@ -324,14 +324,12 @@ final class OnigiriUITests: XCTestCase {
         app.launch()
         grantHealthAccess(in: app, timeout: 10)
 
-        app.tabBars.buttons["Goal"].tap()
-        // The Data section is at the bottom of a lazy Form — scroll to it.
+        // Data tools live in Settings (gear on the Today tab).
+        app.tabBars.buttons["Today"].tap()
+        let gear = app.buttons["Settings"]
+        XCTAssertTrue(gear.waitForExistence(timeout: 10), "Settings gear")
+        gear.tap()
         let export = app.buttons["Export library…"]
-        var scrolls = 0
-        while !export.exists && scrolls < 6 {
-            app.swipeUp()
-            scrolls += 1
-        }
         XCTAssertTrue(export.waitForExistence(timeout: 10), "Export button")
         export.tap()
 
@@ -358,7 +356,20 @@ final class OnigiriUITests: XCTestCase {
         let fileText = app.staticTexts.matching(
             NSPredicate(format: "label BEGINSWITH 'onigiri-library'")
         ).firstMatch
-        if fileCell.waitForExistence(timeout: 10) {
+        if !fileCell.waitForExistence(timeout: 6) {
+            // Fresh device: Recents is empty — navigate Browse → On My iPhone.
+            let browse = app.buttons["Browse"]
+            if browse.exists {
+                browse.tap()
+                Thread.sleep(forTimeInterval: 1)
+                browse.tap()
+            }
+            let onMyIphone = app.staticTexts["On My iPhone"]
+            if onMyIphone.waitForExistence(timeout: 4) {
+                onMyIphone.tap()
+            }
+        }
+        if fileCell.waitForExistence(timeout: 6) {
             fileCell.tap()
         } else {
             XCTAssertTrue(fileText.waitForExistence(timeout: 5), "Exported file in picker")

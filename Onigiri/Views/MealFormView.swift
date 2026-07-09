@@ -12,6 +12,8 @@ struct MealFormView: View {
 
     @State private var name = ""
     @State private var quantities: [PersistentIdentifier: Double] = [:]
+    @State private var category: String?
+    @State private var isFavorite = false
 
     private var totalKcal: Double {
         foods.reduce(0) { $0 + $1.kcal * (quantities[$1.persistentModelID] ?? 0) }
@@ -25,6 +27,13 @@ struct MealFormView: View {
         NavigationStack {
             Form {
                 TextField("Meal name", text: $name)
+                Picker("Category", selection: $category) {
+                    Text("None").tag(String?.none)
+                    ForEach(FoodCategory.allCases) { option in
+                        Text(option.rawValue).tag(String?.some(option.rawValue))
+                    }
+                }
+                Toggle("Favorite", isOn: $isFavorite)
 
                 Section("Foods") {
                     ForEach(foods) { food in
@@ -67,6 +76,8 @@ struct MealFormView: View {
             .onAppear {
                 if let meal {
                     name = meal.name
+                    category = meal.category
+                    isFavorite = meal.isFavorite
                     quantities = Dictionary(uniqueKeysWithValues: meal.items.compactMap { item in
                         item.food.map { ($0.persistentModelID, item.quantity) }
                     })
@@ -90,10 +101,12 @@ struct MealFormView: View {
         }
         if let meal {
             meal.name = trimmed
+            meal.category = category
+            meal.isFavorite = isFavorite
             meal.items.forEach(context.delete)
             meal.items = items
         } else {
-            context.insert(Meal(name: trimmed, items: items))
+            context.insert(Meal(name: trimmed, items: items, isFavorite: isFavorite, category: category))
         }
         PhoneSyncService.shared.push(from: context)
         dismiss()

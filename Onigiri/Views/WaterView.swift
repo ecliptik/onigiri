@@ -5,6 +5,9 @@ import OnigiriKit
 struct WaterView: View {
     @AppStorage(SharedStore.waterServingKey, store: SharedStore.defaults) private var servingOz = 12.0
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var goalOz = 64.0
+    @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "drop"
+
+    private var waterEmoji: String { waterIcon == "wave" ? "🌊" : "💧" }
 
     @State private var model = WaterModel()
     @State private var showSettings = false
@@ -78,10 +81,14 @@ struct WaterView: View {
             Button {
                 Task { await model.add(oz: servingOz) }
             } label: {
-                Label("Add \(servingOz, format: .number.precision(.fractionLength(0))) oz", systemImage: "drop.fill")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
+                Label {
+                    Text("Add \(servingOz, format: .number.precision(.fractionLength(0))) oz")
+                } icon: {
+                    Text(waterEmoji)
+                }
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
             }
             .buttonStyle(.borderedProminent)
             .tint(.blue)
@@ -115,8 +122,7 @@ struct WaterView: View {
 
             ForEach(model.entries) { entry in
                 HStack {
-                    Image(systemName: "drop.fill")
-                        .foregroundStyle(.blue)
+                    Text(waterEmoji)
                     Text(entry.date, style: .time)
                         .foregroundStyle(.secondary)
                     Spacer()

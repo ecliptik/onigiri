@@ -15,12 +15,15 @@ enum LibraryTransfer {
             exportedAt: .now,
             foods: foods.map {
                 .init(name: $0.name, kcal: $0.kcal, sodiumMg: $0.sodiumMg,
-                      servingDescription: $0.servingDescription, barcode: $0.barcode)
+                      servingDescription: $0.servingDescription, barcode: $0.barcode,
+                      nutrients: $0.nutrients.isEmpty ? nil : $0.nutrients,
+                      isFavorite: $0.isFavorite ? true : nil,
+                      category: $0.category)
             },
             meals: meals.map { meal in
                 .init(name: meal.name, items: meal.items.compactMap { item in
                     item.food.map { .init(foodName: $0.name, quantity: item.quantity) }
-                })
+                }, isFavorite: meal.isFavorite ? true : nil, category: meal.category)
             },
             goal: goal.map {
                 .init(targetWeightLb: $0.targetWeightLb, targetDate: $0.targetDate,
@@ -47,7 +50,10 @@ enum LibraryTransfer {
         for item in export.foods where foodsByName[item.name.lowercased()] == nil {
             let food = Food(
                 name: item.name, kcal: item.kcal, sodiumMg: item.sodiumMg,
-                servingDescription: item.servingDescription, barcode: item.barcode
+                servingDescription: item.servingDescription, barcode: item.barcode,
+                nutrients: item.nutrients ?? NutrientValues(),
+                isFavorite: item.isFavorite ?? false,
+                category: item.category
             )
             context.insert(food)
             foodsByName[item.name.lowercased()] = food
@@ -61,7 +67,10 @@ enum LibraryTransfer {
                 foodsByName[ref.foodName.lowercased()].map { MealItem(food: $0, quantity: ref.quantity) }
             }
             guard !items.isEmpty else { continue }
-            context.insert(Meal(name: mealDef.name, items: items))
+            context.insert(Meal(
+                name: mealDef.name, items: items,
+                isFavorite: mealDef.isFavorite ?? false, category: mealDef.category
+            ))
             addedMeals += 1
         }
 

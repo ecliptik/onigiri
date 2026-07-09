@@ -9,17 +9,22 @@ enum DebugSeeder {
     static func seedLibraryIfEmpty(context: ModelContext) {
         let foodCount = (try? context.fetchCount(FetchDescriptor<Food>())) ?? 0
         if foodCount == 0 {
-            let chicken = Food(name: "Chicken breast", kcal: 280, sodiumMg: 540, servingDescription: "8 oz")
-            let rice = Food(name: "Rice bowl", kcal: 320, sodiumMg: 10, servingDescription: "1 bowl")
-            let eggs = Food(name: "Two eggs", kcal: 156, sodiumMg: 124, servingDescription: "2 large")
-            let shake = Food(name: "Protein shake", kcal: 180, sodiumMg: 230, servingDescription: "12 oz")
+            let chicken = Food(name: "Chicken breast", kcal: 280, sodiumMg: 540, servingDescription: "8 oz",
+                               nutrients: NutrientValues(fatG: 6, carbsG: 0, proteinG: 52), category: "Dinner")
+            let rice = Food(name: "Rice bowl", kcal: 320, sodiumMg: 10, servingDescription: "1 bowl",
+                            nutrients: NutrientValues(fatG: 0.6, carbsG: 70, proteinG: 6, fiberG: 1), category: "Dinner")
+            let eggs = Food(name: "Two eggs", kcal: 156, sodiumMg: 124, servingDescription: "2 large",
+                            nutrients: NutrientValues(fatG: 10.6, carbsG: 1.1, proteinG: 12.6), category: "Breakfast")
+            let shake = Food(name: "Protein shake", kcal: 180, sodiumMg: 230, servingDescription: "12 oz",
+                             nutrients: NutrientValues(fatG: 3, carbsG: 9, proteinG: 30, sugarG: 2),
+                             isFavorite: true, category: "Snack")
             for food in [chicken, rice, eggs, shake] {
                 context.insert(food)
             }
             context.insert(Meal(name: "Chicken & rice", items: [
                 MealItem(food: chicken),
                 MealItem(food: rice),
-            ]))
+            ], category: "Dinner"))
         }
 
         let goalCount = (try? context.fetchCount(FetchDescriptor<GoalSettings>())) ?? 0

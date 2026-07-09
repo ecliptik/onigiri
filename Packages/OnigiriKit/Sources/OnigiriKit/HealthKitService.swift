@@ -19,6 +19,11 @@ public final class HealthKitService {
         HKQuantityType(.dietaryEnergyConsumed),
         HKQuantityType(.dietarySodium),
         HKQuantityType(.dietaryWater),
+        HKQuantityType(.dietaryFatTotal),
+        HKQuantityType(.dietaryCarbohydrates),
+        HKQuantityType(.dietaryProtein),
+        HKQuantityType(.dietaryFiber),
+        HKQuantityType(.dietarySugar),
     ]
 
     private static let readTypes: Set<HKObjectType> = [
@@ -242,9 +247,16 @@ public final class HealthKitService {
 
     // MARK: - Food log (writes)
 
-    /// Log an eating event as an HKCorrelation(.food) wrapping energy and
-    /// sodium samples, named via metadata so the log can be listed later.
-    public func logFood(name: String, kcal: Double, sodiumMg: Double, date: Date = .now) async throws {
+    /// Log an eating event as an HKCorrelation(.food) wrapping energy,
+    /// sodium, and any known extended nutrients, named via metadata so the
+    /// log can be listed later.
+    public func logFood(
+        name: String,
+        kcal: Double,
+        sodiumMg: Double,
+        nutrients: NutrientValues = NutrientValues(),
+        date: Date = .now
+    ) async throws {
         let metadata: [String: Any] = [HKMetadataKeyFoodType: name]
         var objects: Set<HKSample> = [
             HKQuantitySample(
@@ -253,13 +265,20 @@ public final class HealthKitService {
                 start: date, end: date
             )
         ]
-        if sodiumMg > 0 {
+        func insert(_ identifier: HKQuantityTypeIdentifier, _ unit: HKUnit, _ value: Double?) {
+            guard let value, value > 0 else { return }
             objects.insert(HKQuantitySample(
-                type: HKQuantityType(.dietarySodium),
-                quantity: HKQuantity(unit: .gramUnit(with: .milli), doubleValue: sodiumMg),
+                type: HKQuantityType(identifier),
+                quantity: HKQuantity(unit: unit, doubleValue: value),
                 start: date, end: date
             ))
         }
+        insert(.dietarySodium, .gramUnit(with: .milli), sodiumMg)
+        insert(.dietaryFatTotal, .gram(), nutrients.fatG)
+        insert(.dietaryCarbohydrates, .gram(), nutrients.carbsG)
+        insert(.dietaryProtein, .gram(), nutrients.proteinG)
+        insert(.dietaryFiber, .gram(), nutrients.fiberG)
+        insert(.dietarySugar, .gram(), nutrients.sugarG)
         let correlation = HKCorrelation(
             type: HKCorrelationType(.food),
             start: date, end: date,

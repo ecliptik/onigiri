@@ -4,7 +4,8 @@ import WidgetKit
 import OnigiriKit
 
 /// The library: saved foods and one-tap meals. Tapping a row logs it to
-/// HealthKit immediately — the fast path for recurring meals.
+/// HealthKit immediately — the fast path for recurring meals. Searchable,
+/// filterable by category, with favorites floating to the top.
 struct FoodsView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Meal.name) private var meals: [Meal]
@@ -19,23 +20,51 @@ struct FoodsView: View {
     @State private var editingFood: Food?
     @State private var editingMeal: Meal?
     @State private var toast: String?
+    @State private var searchText = ""
+    @State private var categoryFilter: FoodCategory?
 
     private let health = HealthKitService()
+
+    private var filteredMeals: [Meal] {
+        meals
+            .filter { matches(name: $0.name, category: $0.category) }
+            .sorted { lhs, rhs in
+                if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+    }
+
+    private var filteredFoods: [Food] {
+        foods
+            .filter { matches(name: $0.name, category: $0.category) }
+            .sorted { lhs, rhs in
+                if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+    }
+
+    private func matches(name: String, category: String?) -> Bool {
+        if let filter = categoryFilter, category != filter.rawValue { return false }
+        if searchText.isEmpty { return true }
+        return name.localizedCaseInsensitiveContains(searchText)
+    }
 
     var body: some View {
         NavigationStack {
             List {
-                if !meals.isEmpty {
+                if !filteredMeals.isEmpty {
                     Section("Meals — tap to log") {
-                        ForEach(meals) { meal in
+                        ForEach(filteredMeals) { meal in
                             Button {
-                                log(name: meal.name, kcal: meal.totalKcal, sodiumMg: meal.totalSodiumMg)
+                                log(name: meal.name, kcal: meal.totalKcal,
+                                    sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients)
                             } label: {
                                 LibraryRow(
                                     name: meal.name,
                                     detail: meal.items.compactMap(\.food?.name).joined(separator: ", "),
                                     kcal: meal.totalKcal,
-                                    sodiumMg: meal.totalSodiumMg
+                                    sodiumMg: meal.totalSodiumMg,
+                                    isFavorite: meal.isFavorite
                                 )
                             }
                             .swipeActions(edge: .leading, allowsFullSwipe: true) {
@@ -45,27 +74,39 @@ struct FoodsView: View {
                                     Label("Edit", systemImage: "pencil")
                                 }
                                 .tint(.riceToast)
+                                Button {
+                                    meal.isFavorite.toggle()
+                                } label: {
+                                    Label("Favorite", systemImage: meal.isFavorite ? "star.slash" : "star.fill")
+                                }
+                                .tint(.yellow)
                             }
                             .contextMenu {
                                 Button("Edit", systemImage: "pencil") { editingMeal = meal }
+                                Button(meal.isFavorite ? "Unfavorite" : "Favorite",
+                                       systemImage: meal.isFavorite ? "star.slash" : "star.fill") {
+                                    meal.isFavorite.toggle()
+                                }
                             }
                         }
                         .onDelete { offsets in
-                            offsets.map { meals[$0] }.forEach(context.delete)
+                            offsets.map { filteredMeals[$0] }.forEach(context.delete)
                         }
                     }
                 }
 
-                Section(foods.isEmpty ? "Foods" : "Foods — tap to log") {
-                    ForEach(foods) { food in
+                Section(filteredFoods.isEmpty ? "Foods" : "Foods — tap to log") {
+                    ForEach(filteredFoods) { food in
                         Button {
-                            log(name: food.name, kcal: food.kcal, sodiumMg: food.sodiumMg)
+                            log(name: food.name, kcal: food.kcal,
+                                sodiumMg: food.sodiumMg, nutrients: food.nutrients)
                         } label: {
                             LibraryRow(
                                 name: food.name,
                                 detail: food.servingDescription,
                                 kcal: food.kcal,
-                                sodiumMg: food.sodiumMg
+                                sodiumMg: food.sodiumMg,
+                                isFavorite: food.isFavorite
                             )
                         }
                         .swipeActions(edge: .leading, allowsFullSwipe: true) {
@@ -75,13 +116,23 @@ struct FoodsView: View {
                                 Label("Edit", systemImage: "pencil")
                             }
                             .tint(.riceToast)
+                            Button {
+                                food.isFavorite.toggle()
+                            } label: {
+                                Label("Favorite", systemImage: food.isFavorite ? "star.slash" : "star.fill")
+                            }
+                            .tint(.yellow)
                         }
                         .contextMenu {
                             Button("Edit", systemImage: "pencil") { editingFood = food }
+                            Button(food.isFavorite ? "Unfavorite" : "Favorite",
+                                   systemImage: food.isFavorite ? "star.slash" : "star.fill") {
+                                food.isFavorite.toggle()
+                            }
                         }
                     }
                     .onDelete { offsets in
-                        offsets.map { foods[$0] }.forEach(context.delete)
+                        offsets.map { filteredFoods[$0] }.forEach(context.delete)
                     }
 
                     if foods.isEmpty {
@@ -90,11 +141,29 @@ struct FoodsView: View {
                             systemImage: "fork.knife",
                             description: Text("Add a food once — calories and sodium off the label — then log it any day with a tap.")
                         )
+                    } else if filteredFoods.isEmpty && filteredMeals.isEmpty {
+                        ContentUnavailableView.search(text: searchText)
                     }
                 }
             }
             .navigationTitle("Foods")
+            .searchable(text: $searchText, prompt: "Search foods and meals")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        Picker("Category", selection: $categoryFilter) {
+                            Text("All").tag(FoodCategory?.none)
+                            ForEach(FoodCategory.allCases) { option in
+                                Text(option.rawValue).tag(FoodCategory?.some(option))
+                            }
+                        }
+                    } label: {
+                        Image(systemName: categoryFilter == nil
+                              ? "line.3.horizontal.decrease.circle"
+                              : "line.3.horizontal.decrease.circle.fill")
+                    }
+                    .accessibilityLabel("Filter by category")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button("Add Food", systemImage: "carrot") { showNewFood = true }
@@ -137,10 +206,10 @@ struct FoodsView: View {
         }
     }
 
-    private func log(name: String, kcal: Double, sodiumMg: Double) {
+    private func log(name: String, kcal: Double, sodiumMg: Double, nutrients: NutrientValues) {
         Task {
             do {
-                try await health.logFood(name: name, kcal: kcal, sodiumMg: sodiumMg)
+                try await health.logFood(name: name, kcal: kcal, sodiumMg: sodiumMg, nutrients: nutrients)
                 showToast("Logged \(name) ✓")
                 WidgetCenter.shared.reloadAllTimelines()
             } catch {
@@ -163,12 +232,20 @@ struct LibraryRow: View {
     let detail: String
     let kcal: Double
     let sodiumMg: Double
+    var isFavorite = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(name)
-                    .foregroundStyle(.primary)
+                HStack(spacing: 4) {
+                    if isFavorite {
+                        Image(systemName: "star.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.yellow)
+                    }
+                    Text(name)
+                        .foregroundStyle(.primary)
+                }
                 if !detail.isEmpty {
                     Text(detail)
                         .font(.caption)

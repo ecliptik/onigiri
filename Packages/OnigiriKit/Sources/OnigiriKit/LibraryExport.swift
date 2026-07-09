@@ -11,13 +11,28 @@ public struct LibraryExport: Codable, Sendable, Equatable {
         public var sodiumMg: Double
         public var servingDescription: String
         public var barcode: String?
+        public var nutrients: NutrientValues?
+        public var isFavorite: Bool?
+        public var category: String?
 
-        public init(name: String, kcal: Double, sodiumMg: Double, servingDescription: String, barcode: String?) {
+        public init(
+            name: String,
+            kcal: Double,
+            sodiumMg: Double,
+            servingDescription: String,
+            barcode: String?,
+            nutrients: NutrientValues? = nil,
+            isFavorite: Bool? = nil,
+            category: String? = nil
+        ) {
             self.name = name
             self.kcal = kcal
             self.sodiumMg = sodiumMg
             self.servingDescription = servingDescription
             self.barcode = barcode
+            self.nutrients = nutrients
+            self.isFavorite = isFavorite
+            self.category = category
         }
     }
 
@@ -34,10 +49,14 @@ public struct LibraryExport: Codable, Sendable, Equatable {
     public struct MealDef: Codable, Sendable, Equatable {
         public var name: String
         public var items: [MealItemRef]
+        public var isFavorite: Bool?
+        public var category: String?
 
-        public init(name: String, items: [MealItemRef]) {
+        public init(name: String, items: [MealItemRef], isFavorite: Bool? = nil, category: String? = nil) {
             self.name = name
             self.items = items
+            self.isFavorite = isFavorite
+            self.category = category
         }
     }
 

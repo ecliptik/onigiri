@@ -17,6 +17,13 @@ struct FoodFormView: View {
     @State private var sodiumMg: Double?
     @State private var serving = ""
     @State private var barcode: String?
+    @State private var fatG: Double?
+    @State private var carbsG: Double?
+    @State private var proteinG: Double?
+    @State private var fiberG: Double?
+    @State private var sugarG: Double?
+    @State private var category: String?
+    @State private var isFavorite = false
 
     @State private var showScanner = false
     @State private var isLookingUp = false
@@ -67,6 +74,24 @@ struct FoodFormView: View {
                             .multilineTextAlignment(.trailing)
                     }
                 }
+
+                Section {
+                    Picker("Category", selection: $category) {
+                        Text("None").tag(String?.none)
+                        ForEach(FoodCategory.allCases) { option in
+                            Text(option.rawValue).tag(String?.some(option.rawValue))
+                        }
+                    }
+                    Toggle("Favorite", isOn: $isFavorite)
+                }
+
+                Section("More nutrients (g)") {
+                    nutrientRow("Fat", value: $fatG)
+                    nutrientRow("Carbs", value: $carbsG)
+                    nutrientRow("Protein", value: $proteinG)
+                    nutrientRow("Fiber", value: $fiberG)
+                    nutrientRow("Sugar", value: $sugarG)
+                }
             }
             .navigationTitle(food == nil ? "New Food" : "Edit Food")
             .navigationBarTitleDisplayMode(.inline)
@@ -108,11 +133,31 @@ struct FoodFormView: View {
                     sodiumMg = food.sodiumMg
                     serving = food.servingDescription
                     barcode = food.barcode
+                    fatG = food.fatG
+                    carbsG = food.carbsG
+                    proteinG = food.proteinG
+                    fiberG = food.fiberG
+                    sugarG = food.sugarG
+                    category = food.category
+                    isFavorite = food.isFavorite
                 } else if startScanning {
                     showScanner = true
                 }
             }
         }
+    }
+
+    private func nutrientRow(_ label: String, value: Binding<Double?>) -> some View {
+        LabeledContent(label) {
+            TextField("—", value: value, format: .number)
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+                .focused($numberFieldFocused)
+        }
+    }
+
+    private var formNutrients: NutrientValues {
+        NutrientValues(fatG: fatG, carbsG: carbsG, proteinG: proteinG, fiberG: fiberG, sugarG: sugarG)
     }
 
     private func lookup(_ code: String) async {
@@ -125,6 +170,11 @@ struct FoodFormView: View {
             sodiumMg = product.sodiumMg
             serving = product.servingDescription
             barcode = product.barcode
+            fatG = product.nutrients.fatG
+            carbsG = product.nutrients.carbsG
+            proteinG = product.nutrients.proteinG
+            fiberG = product.nutrients.fiberG
+            sugarG = product.nutrients.sugarG
             if product.kcal == nil {
                 lookupMessage = "Found it, but no calorie data — check the label."
             }
@@ -142,13 +192,19 @@ struct FoodFormView: View {
             food.sodiumMg = sodiumMg ?? 0
             food.servingDescription = serving
             food.barcode = barcode
+            food.nutrients = formNutrients
+            food.category = category
+            food.isFavorite = isFavorite
         } else {
             context.insert(Food(
                 name: trimmed,
                 kcal: kcal ?? 0,
                 sodiumMg: sodiumMg ?? 0,
                 servingDescription: serving,
-                barcode: barcode
+                barcode: barcode,
+                nutrients: formNutrients,
+                isFavorite: isFavorite,
+                category: category
             ))
         }
         PhoneSyncService.shared.push(from: context)

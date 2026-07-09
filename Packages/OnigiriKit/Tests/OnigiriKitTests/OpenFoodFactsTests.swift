@@ -10,13 +10,32 @@ struct OpenFoodFactsTests {
         {"status":1,"product":{"product_name":"Granola Bar","brands":"Acme",
         "serving_size":"1 bar (40 g)",
         "nutriments":{"energy-kcal_100g":450,"energy-kcal_serving":180,
-        "sodium_100g":0.25,"sodium_serving":0.1}}}
+        "sodium_100g":0.25,"sodium_serving":0.1,
+        "fat_100g":20,"fat_serving":8,"proteins_serving":4.5,
+        "carbohydrates_serving":22,"fiber_serving":3,"sugars_serving":9}}}
         """
         let product = try OpenFoodFactsClient.parse(data: data(json), barcode: "123")
         #expect(product.name == "Granola Bar (Acme)")
         #expect(product.kcal == 180)
         #expect(product.sodiumMg == 100)
         #expect(product.servingDescription == "1 bar (40 g)")
+        #expect(product.nutrients.fatG == 8)
+        #expect(product.nutrients.proteinG == 4.5)
+        #expect(product.nutrients.carbsG == 22)
+        #expect(product.nutrients.fiberG == 3)
+        #expect(product.nutrients.sugarG == 9)
+    }
+
+    @Test func nutrientsFallBackToPer100g() throws {
+        let json = """
+        {"status":1,"product":{"product_name":"Oats",
+        "nutriments":{"energy-kcal_100g":380,"fat_100g":7,"proteins_100g":13,
+        "carbohydrates_100g":60,"fiber_100g":10,"sugars_100g":1}}}
+        """
+        let product = try OpenFoodFactsClient.parse(data: data(json), barcode: "123")
+        #expect(product.nutrients.fatG == 7)
+        #expect(product.nutrients.fiberG == 10)
+        #expect(product.servingDescription == "per 100 g")
     }
 
     @Test func fallsBackToPer100g() throws {

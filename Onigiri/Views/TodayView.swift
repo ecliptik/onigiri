@@ -8,6 +8,10 @@ struct TodayView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Query private var goals: [GoalSettings]
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
+    @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "drop"
+    @State private var showSettings = false
+
+    private var waterEmoji: String { waterIcon == "wave" ? "🌊" : "💧" }
 
     var body: some View {
         NavigationStack {
@@ -39,7 +43,13 @@ struct TodayView: View {
                     }
                     .accessibilityLabel("Previous day")
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("Settings")
                     Button {
                         Task { await model.goToNextDay() }
                     } label: {
@@ -48,6 +58,9 @@ struct TodayView: View {
                     .disabled(model.isToday)
                     .accessibilityLabel("Next day")
                 }
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
             }
             .simultaneousGesture(
                 DragGesture(minimumDistance: 30).onEnded { value in
@@ -147,7 +160,7 @@ struct TodayView: View {
             Label {
                 Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(waterGoalOz, format: .number.precision(.fractionLength(0))) oz water")
             } icon: {
-                Image(systemName: "drop.fill").foregroundStyle(.blue)
+                Text(waterEmoji)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

@@ -9,14 +9,52 @@ public final class Food {
     public var servingDescription: String
     public var barcode: String?
     public var createdAt: Date
+    // Extended nutrients (grams), optional.
+    public var fatG: Double?
+    public var carbsG: Double?
+    public var proteinG: Double?
+    public var fiberG: Double?
+    public var sugarG: Double?
+    // Library organization.
+    public var isFavorite: Bool = false
+    public var category: String?
 
-    public init(name: String, kcal: Double, sodiumMg: Double, servingDescription: String = "", barcode: String? = nil) {
+    public init(
+        name: String,
+        kcal: Double,
+        sodiumMg: Double,
+        servingDescription: String = "",
+        barcode: String? = nil,
+        nutrients: NutrientValues = NutrientValues(),
+        isFavorite: Bool = false,
+        category: String? = nil
+    ) {
         self.name = name
         self.kcal = kcal
         self.sodiumMg = sodiumMg
         self.servingDescription = servingDescription
         self.barcode = barcode
         self.createdAt = .now
+        self.fatG = nutrients.fatG
+        self.carbsG = nutrients.carbsG
+        self.proteinG = nutrients.proteinG
+        self.fiberG = nutrients.fiberG
+        self.sugarG = nutrients.sugarG
+        self.isFavorite = isFavorite
+        self.category = category
+    }
+
+    public var nutrients: NutrientValues {
+        get {
+            NutrientValues(fatG: fatG, carbsG: carbsG, proteinG: proteinG, fiberG: fiberG, sugarG: sugarG)
+        }
+        set {
+            fatG = newValue.fatG
+            carbsG = newValue.carbsG
+            proteinG = newValue.proteinG
+            fiberG = newValue.fiberG
+            sugarG = newValue.sugarG
+        }
     }
 }
 
@@ -41,16 +79,25 @@ public final class Meal {
     public var name: String
     @Relationship(deleteRule: .cascade) public var items: [MealItem]
     public var createdAt: Date
+    public var isFavorite: Bool = false
+    public var category: String?
 
-    public init(name: String, items: [MealItem]) {
+    public init(name: String, items: [MealItem], isFavorite: Bool = false, category: String? = nil) {
         self.uuid = UUID()
         self.name = name
         self.items = items
         self.createdAt = .now
+        self.isFavorite = isFavorite
+        self.category = category
     }
 
     public var totalKcal: Double { items.reduce(0) { $0 + $1.kcal } }
     public var totalSodiumMg: Double { items.reduce(0) { $0 + $1.sodiumMg } }
+    public var totalNutrients: NutrientValues {
+        items.reduce(NutrientValues()) { partial, item in
+            partial + (item.food?.nutrients.scaled(by: item.quantity) ?? NutrientValues())
+        }
+    }
 }
 
 @Model
@@ -77,6 +124,12 @@ public enum SharedStore {
 
     public static let waterServingKey = "waterServingOz"
     public static let waterGoalKey = "waterGoalOz"
+    public static let waterIconKey = "waterIcon"
+
+    /// "drop" (💧, default) or "wave" (🌊) — user-selectable in Settings.
+    public static var waterEmoji: String {
+        defaults.string(forKey: waterIconKey) == "wave" ? "🌊" : "💧"
+    }
 
     public static var defaults: UserDefaults {
         UserDefaults(suiteName: appGroupID) ?? .standard

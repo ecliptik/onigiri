@@ -171,35 +171,33 @@ struct TodayView: View {
 
     private var loggedSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Logged")
-                .font(.headline)
-                .padding(.horizontal)
-
-            if model.foodLog.isEmpty {
+            HStack {
+                Text("Logged")
+                    .font(.headline)
+                Spacer()
                 if model.isToday {
-                    Text("Nothing Logged")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal)
                     Button {
                         // Reuses the quick-action route: switches to Foods.
                         QuickActions.shared.pending = .logMeal
                     } label: {
-                        Label("Log food or meal", systemImage: "fork.knife")
-                            .fontWeight(.semibold)
+                        Label("Log", systemImage: "plus")
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.black)
-                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 14)
                             .padding(.vertical, 6)
+                            .background(Color.ricePaper, in: .capsule)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.ricePaper)
-                    .padding(.horizontal)
-                } else {
-                    Text("Nothing was logged this day.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal)
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Log food or meal")
                 }
+            }
+            .padding(.horizontal)
+
+            if model.foodLog.isEmpty {
+                Text(model.isToday ? "Nothing Logged" : "Nothing was logged this day.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
             }
 
             ForEach(model.foodLog) { entry in

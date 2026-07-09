@@ -26,11 +26,11 @@ final class OnigiriUITests: XCTestCase {
         )
         XCTAssertTrue(app.staticTexts["Two eggs & toast"].exists)
 
-        // One-tap logging from the Foods library.
+        // Deliberate logging via the row's Log button (row taps open Edit).
         app.tabBars.buttons["Foods"].tap()
-        let shake = app.staticTexts["Protein shake"]
-        XCTAssertTrue(shake.waitForExistence(timeout: 10), "Seeded library should list foods")
-        shake.tap()
+        let logShake = app.buttons["Log Protein shake"]
+        XCTAssertTrue(logShake.waitForExistence(timeout: 10), "Seeded library should list foods")
+        logShake.tap()
 
         app.tabBars.buttons["Today"].tap()
         XCTAssertTrue(
@@ -87,7 +87,9 @@ final class OnigiriUITests: XCTestCase {
         grantHealthAccess(in: app, timeout: 10)
 
         app.tabBars.buttons["Foods"].tap()
-        app.navigationBars["Foods"].buttons.element(boundBy: 0).tap()
+        let addMenu = app.buttons["Add"]
+        XCTAssertTrue(addMenu.waitForExistence(timeout: 10), "Add menu")
+        addMenu.tap()
         let addFood = app.buttons["Add Food"]
         XCTAssertTrue(addFood.waitForExistence(timeout: 5), "Add Food menu item")
         addFood.tap()

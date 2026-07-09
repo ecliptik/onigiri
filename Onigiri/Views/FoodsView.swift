@@ -20,6 +20,7 @@ struct FoodsView: View {
     @State private var editingFood: Food?
     @State private var editingMeal: Meal?
     @State private var toast: String?
+    @State private var undoLogID: UUID?
     @State private var searchText = ""
     @State private var categoryFilter: FoodCategory?
 
@@ -53,12 +54,9 @@ struct FoodsView: View {
         NavigationStack {
             List {
                 if !filteredMeals.isEmpty {
-                    Section("Meals — tap to log") {
+                    Section("Meals") {
                         ForEach(filteredMeals) { meal in
-                            Button {
-                                log(name: meal.name, kcal: meal.totalKcal,
-                                    sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients)
-                            } label: {
+                            HStack(spacing: 10) {
                                 LibraryRow(
                                     name: meal.name,
                                     detail: meal.items.compactMap(\.food?.name).joined(separator: ", "),
@@ -66,7 +64,13 @@ struct FoodsView: View {
                                     sodiumMg: meal.totalSodiumMg,
                                     isFavorite: meal.isFavorite
                                 )
+                                LogButton(name: meal.name) {
+                                    log(name: meal.name, kcal: meal.totalKcal,
+                                        sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients)
+                                }
                             }
+                            .contentShape(.rect)
+                            .onTapGesture { editingMeal = meal }
                             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                                 Button {
                                     editingMeal = meal
@@ -95,12 +99,9 @@ struct FoodsView: View {
                     }
                 }
 
-                Section(filteredFoods.isEmpty ? "Foods" : "Foods — tap to log") {
+                Section("Foods") {
                     ForEach(filteredFoods) { food in
-                        Button {
-                            log(name: food.name, kcal: food.kcal,
-                                sodiumMg: food.sodiumMg, nutrients: food.nutrients)
-                        } label: {
+                        HStack(spacing: 10) {
                             LibraryRow(
                                 name: food.name,
                                 detail: food.servingDescription,
@@ -108,7 +109,13 @@ struct FoodsView: View {
                                 sodiumMg: food.sodiumMg,
                                 isFavorite: food.isFavorite
                             )
+                            LogButton(name: food.name) {
+                                log(name: food.name, kcal: food.kcal,
+                                    sodiumMg: food.sodiumMg, nutrients: food.nutrients)
+                            }
                         }
+                        .contentShape(.rect)
+                        .onTapGesture { editingFood = food }
                         .swipeActions(edge: .leading, allowsFullSwipe: true) {
                             Button {
                                 editingFood = food
@@ -172,6 +179,7 @@ struct FoodsView: View {
                     } label: {
                         Image(systemName: "plus")
                     }
+                    .accessibilityLabel("Add")
                 }
             }
             .sheet(isPresented: $showNewFood) { FoodFormView(food: nil) }
@@ -193,13 +201,22 @@ struct FoodsView: View {
             }
             .overlay(alignment: .bottom) {
                 if let toast {
-                    Text(toast)
-                        .font(.subheadline.weight(.medium))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(.regularMaterial, in: .capsule)
-                        .padding(.bottom, 8)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    HStack(spacing: 12) {
+                        Text(toast)
+                            .font(.subheadline.weight(.medium))
+                        if let undoID = undoLogID {
+                            Button("Undo") {
+                                undo(undoID)
+                            }
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.riceToast)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: .capsule)
+                    .padding(.bottom, 8)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .animation(.snappy, value: toast)
@@ -209,21 +226,62 @@ struct FoodsView: View {
     private func log(name: String, kcal: Double, sodiumMg: Double, nutrients: NutrientValues) {
         Task {
             do {
-                try await health.logFood(name: name, kcal: kcal, sodiumMg: sodiumMg, nutrients: nutrients)
-                showToast("Logged \(name) ✓")
+                let id = try await health.logFood(name: name, kcal: kcal, sodiumMg: sodiumMg, nutrients: nutrients)
+                undoLogID = id
+                showToast("Logged \(name) ✓", clearsUndo: true)
                 WidgetCenter.shared.reloadAllTimelines()
             } catch {
+                undoLogID = nil
                 showToast("Couldn't log: \(error.localizedDescription)")
             }
         }
     }
 
-    private func showToast(_ message: String) {
+    private func undo(_ id: UUID) {
+        undoLogID = nil
+        Task {
+            do {
+                try await health.deleteFoodEntry(id: id)
+                showToast("Removed ✓")
+                WidgetCenter.shared.reloadAllTimelines()
+            } catch {
+                showToast("Couldn't undo: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func showToast(_ message: String, clearsUndo: Bool = false) {
         toast = message
         Task {
-            try? await Task.sleep(for: .seconds(2))
-            if toast == message { toast = nil }
+            // Leave the undo toast up longer so it's actually reachable.
+            try? await Task.sleep(for: .seconds(clearsUndo ? 5 : 2))
+            if toast == message {
+                toast = nil
+                if clearsUndo { undoLogID = nil }
+            }
         }
+    }
+}
+
+/// The deliberate tap target for logging — a small rice-paper capsule so a
+/// stray row tap can't log by accident.
+private struct LogButton: View {
+    let name: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text("Log")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.black)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(Color.ricePaper, in: .capsule)
+        }
+        // .borderless keeps the tap target isolated inside the List row —
+        // other styles let a stray row tap trigger the button.
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Log \(name)")
     }
 }
 

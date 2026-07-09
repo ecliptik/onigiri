@@ -249,14 +249,15 @@ public final class HealthKitService {
 
     /// Log an eating event as an HKCorrelation(.food) wrapping energy,
     /// sodium, and any known extended nutrients, named via metadata so the
-    /// log can be listed later.
+    /// log can be listed later. Returns the correlation UUID for undo.
+    @discardableResult
     public func logFood(
         name: String,
         kcal: Double,
         sodiumMg: Double,
         nutrients: NutrientValues = NutrientValues(),
         date: Date = .now
-    ) async throws {
+    ) async throws -> UUID {
         let metadata: [String: Any] = [HKMetadataKeyFoodType: name]
         var objects: Set<HKSample> = [
             HKQuantitySample(
@@ -286,6 +287,9 @@ public final class HealthKitService {
             metadata: metadata
         )
         try await store.save(correlation)
+        // Cache so deleteFoodEntry(id:) can undo without a re-query.
+        correlationCache[correlation.uuid] = correlation
+        return correlation.uuid
     }
 
     /// Today's logged eating events, newest first. Caches the underlying

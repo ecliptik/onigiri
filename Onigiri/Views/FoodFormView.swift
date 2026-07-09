@@ -26,6 +26,7 @@ struct FoodFormView: View {
     @State private var isFavorite = false
 
     @State private var showScanner = false
+    @State private var showSearch = false
     @State private var isLookingUp = false
     @State private var lookupMessage: String?
     @FocusState private var numberFieldFocused: Bool
@@ -38,6 +39,13 @@ struct FoodFormView: View {
                         showScanner = true
                     } label: {
                         Label("Scan barcode", systemImage: "barcode.viewfinder")
+                    }
+                    .disabled(isLookingUp)
+
+                    Button {
+                        showSearch = true
+                    } label: {
+                        Label("Search database", systemImage: "magnifyingglass")
                     }
                     .disabled(isLookingUp)
 
@@ -126,6 +134,11 @@ struct FoodFormView: View {
                     Task { await lookup(code) }
                 }
             }
+            .sheet(isPresented: $showSearch) {
+                FoodSearchSheet(initialQuery: name) { product in
+                    apply(product)
+                }
+            }
             .onAppear {
                 if let food {
                     name = food.name
@@ -165,23 +178,27 @@ struct FoodFormView: View {
         lookupMessage = nil
         do {
             let product = try await OpenFoodFactsClient().product(barcode: code)
-            name = product.name
-            kcal = product.kcal
-            sodiumMg = product.sodiumMg
-            serving = product.servingDescription
-            barcode = product.barcode
-            fatG = product.nutrients.fatG
-            carbsG = product.nutrients.carbsG
-            proteinG = product.nutrients.proteinG
-            fiberG = product.nutrients.fiberG
-            sugarG = product.nutrients.sugarG
-            if product.kcal == nil {
-                lookupMessage = "Found it, but no calorie data — check the label."
-            }
+            apply(product)
         } catch {
             lookupMessage = error.localizedDescription
         }
         isLookingUp = false
+    }
+
+    private func apply(_ product: ScannedProduct) {
+        name = product.name
+        kcal = product.kcal
+        sodiumMg = product.sodiumMg
+        serving = product.servingDescription
+        barcode = product.barcode.isEmpty ? nil : product.barcode
+        fatG = product.nutrients.fatG
+        carbsG = product.nutrients.carbsG
+        proteinG = product.nutrients.proteinG
+        fiberG = product.nutrients.fiberG
+        sugarG = product.nutrients.sugarG
+        lookupMessage = product.kcal == nil
+            ? "Found it, but no calorie data — check the label."
+            : nil
     }
 
     private func save() {

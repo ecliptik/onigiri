@@ -78,6 +78,26 @@ struct OpenFoodFactsTests {
         }
     }
 
+    @Test func parsesSearchResults() throws {
+        let json = """
+        {"products":[
+          {"code":"111","product_name":"Blueberries","nutriments":{"energy-kcal_100g":57,"sugars_100g":10,"fiber_100g":2.4}},
+          {"code":222,"product_name":"Blueberry Muffin","brands":"Bakery","nutriments":{"energy-kcal_serving":420,"fat_serving":18},"serving_size":"1 muffin"},
+          {"code":"333","product_name":""}
+        ]}
+        """
+        let results = try OpenFoodFactsClient.parseSearch(data: data(json))
+        #expect(results.count == 2)
+        #expect(results[0].name == "Blueberries")
+        #expect(results[0].barcode == "111")
+        #expect(results[0].kcal == 57)
+        #expect(results[0].nutrients.fiberG == 2.4)
+        #expect(results[1].name == "Blueberry Muffin (Bakery)")
+        #expect(results[1].barcode == "222")
+        #expect(results[1].kcal == 420)
+        #expect(results[1].servingDescription == "1 muffin")
+    }
+
     @Test func skipsBrandWhenAlreadyInName() throws {
         let json = """
         {"status":1,"product":{"product_name":"Nutella","brands":"Nutella,Ferrero",

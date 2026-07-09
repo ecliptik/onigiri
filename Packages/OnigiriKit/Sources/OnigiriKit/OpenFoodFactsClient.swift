@@ -28,18 +28,41 @@ public enum OpenFoodFactsError: Error, LocalizedError {
 public struct OpenFoodFactsClient: Sendable {
     public init() {}
 
+    private static let fields = "code,product_name,brands,serving_size,nutriments"
+
     public func product(barcode: String) async throws -> ScannedProduct {
-        let fields = "product_name,brands,serving_size,nutriments"
-        guard let url = URL(string: "https://world.openfoodfacts.org/api/v2/product/\(barcode).json?fields=\(fields)") else {
+        guard let url = URL(string: "https://world.openfoodfacts.org/api/v2/product/\(barcode).json?fields=\(Self.fields)") else {
             throw OpenFoodFactsError.badResponse
         }
+        let data = try await fetch(url)
+        return try Self.parse(data: data, barcode: barcode)
+    }
+
+    /// Free-text search of the same database — for foods without barcodes
+    /// (produce, home cooking staples).
+    public func search(query: String, limit: Int = 20) async throws -> [ScannedProduct] {
+        var components = URLComponents(string: "https://world.openfoodfacts.org/cgi/search.pl")!
+        components.queryItems = [
+            .init(name: "search_terms", value: query),
+            .init(name: "search_simple", value: "1"),
+            .init(name: "action", value: "process"),
+            .init(name: "json", value: "1"),
+            .init(name: "page_size", value: String(limit)),
+            .init(name: "fields", value: Self.fields),
+        ]
+        guard let url = components.url else { throw OpenFoodFactsError.badResponse }
+        let data = try await fetch(url)
+        return try Self.parseSearch(data: data)
+    }
+
+    private func fetch(_ url: URL) async throws -> Data {
         var request = URLRequest(url: url)
         request.setValue("Onigiri/0.1 (personal calorie tracker)", forHTTPHeaderField: "User-Agent")
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw OpenFoodFactsError.badResponse }
         guard http.statusCode != 404 else { throw OpenFoodFactsError.notFound }
         guard http.statusCode == 200 else { throw OpenFoodFactsError.badResponse }
-        return try Self.parse(data: data, barcode: barcode)
+        return data
     }
 
     static func parse(data: Data, barcode: String) throws -> ScannedProduct {
@@ -47,7 +70,18 @@ public struct OpenFoodFactsClient: Sendable {
         guard decoded.status == 1, let product = decoded.product else {
             throw OpenFoodFactsError.notFound
         }
+        return convert(product, barcode: barcode)
+    }
 
+    static func parseSearch(data: Data) throws -> [ScannedProduct] {
+        let decoded = try JSONDecoder().decode(SearchResponse.self, from: data)
+        return decoded.products.compactMap { product in
+            guard product.productName?.isEmpty == false else { return nil }
+            return convert(product, barcode: product.code ?? "")
+        }
+    }
+
+    private static func convert(_ product: OFFProduct, barcode: String) -> ScannedProduct {
         var name = product.productName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if name.isEmpty { name = "Scanned item \(barcode)" }
         if let brands = product.brands?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -111,17 +145,39 @@ private struct ProductResponse: Decodable {
     let product: OFFProduct?
 }
 
+private struct SearchResponse: Decodable {
+    let products: [OFFProduct]
+}
+
 private struct OFFProduct: Decodable {
+    let code: String?
     let productName: String?
     let brands: String?
     let servingSize: String?
     let nutriments: OFFNutriments?
 
     enum CodingKeys: String, CodingKey {
+        case code
         case productName = "product_name"
         case brands
         case servingSize = "serving_size"
         case nutriments
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // code is usually a string but occasionally a number.
+        if let text = try? container.decode(String.self, forKey: .code) {
+            code = text
+        } else if let number = try? container.decode(Int.self, forKey: .code) {
+            code = String(number)
+        } else {
+            code = nil
+        }
+        productName = try? container.decode(String.self, forKey: .productName)
+        brands = try? container.decode(String.self, forKey: .brands)
+        servingSize = try? container.decode(String.self, forKey: .servingSize)
+        nutriments = try? container.decode(OFFNutriments.self, forKey: .nutriments)
     }
 }
 

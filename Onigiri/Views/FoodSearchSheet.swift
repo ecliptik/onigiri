@@ -2,15 +2,18 @@ import SwiftUI
 import OnigiriKit
 
 /// Free-text search of OpenFoodFacts — for foods without barcodes.
+/// Picking a result fetches the full product (nutrition included).
 struct FoodSearchSheet: View {
     var initialQuery = ""
     let onPick: (ScannedProduct) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
-    @State private var results: [ScannedProduct] = []
+    @State private var results: [OpenFoodFactsClient.SearchResult] = []
     @State private var isSearching = false
+    @State private var fetchingCode: String?
     @State private var message: String?
+    @FocusState private var searchFocused: Bool
 
     private let client = OpenFoodFactsClient()
 
@@ -29,29 +32,33 @@ struct FoodSearchSheet: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-                ForEach(Array(results.enumerated()), id: \.offset) { _, product in
+                ForEach(results) { result in
                     Button {
-                        onPick(product)
-                        dismiss()
+                        pick(result)
                     } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(product.name)
-                                .foregroundStyle(.primary)
-                            HStack(spacing: 6) {
-                                if let kcal = product.kcal {
-                                    Text("\(kcal, format: .number.precision(.fractionLength(0))) kcal")
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(result.name)
+                                    .foregroundStyle(.primary)
+                                if let brand = result.brand, !brand.isEmpty {
+                                    Text(brand)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
                                 }
-                                Text(product.servingDescription)
                             }
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            Spacer()
+                            if fetchingCode == result.barcode {
+                                ProgressView()
+                            }
                         }
                     }
+                    .disabled(fetchingCode != nil)
                 }
             }
             .navigationTitle("Search Database")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $query, prompt: "e.g. blueberries")
+            .searchFocused($searchFocused)
             .onSubmit(of: .search) {
                 Task { await search() }
             }
@@ -65,6 +72,9 @@ struct FoodSearchSheet: View {
                     query = initialQuery
                     await search()
                 }
+                // Focus after the sheet's presentation animation settles.
+                try? await Task.sleep(for: .milliseconds(350))
+                searchFocused = true
             }
         }
     }
@@ -84,5 +94,28 @@ struct FoodSearchSheet: View {
             message = "Search failed: \(error.localizedDescription)"
         }
         isSearching = false
+    }
+
+    private func pick(_ result: OpenFoodFactsClient.SearchResult) {
+        fetchingCode = result.barcode
+        Task {
+            defer { fetchingCode = nil }
+            do {
+                let product = try await client.product(barcode: result.barcode)
+                onPick(product)
+                dismiss()
+            } catch {
+                // Fall back to what the search hit had — better than nothing.
+                onPick(ScannedProduct(
+                    barcode: result.barcode,
+                    name: result.brand.map { "\(result.name) (\($0))" } ?? result.name,
+                    kcal: nil,
+                    sodiumMg: nil,
+                    servingDescription: "",
+                    nutrients: NutrientValues()
+                ))
+                dismiss()
+            }
+        }
     }
 }

@@ -8,6 +8,22 @@ public struct ScannedProduct: Sendable, Equatable {
     public let sodiumMg: Double?
     public let servingDescription: String
     public let nutrients: NutrientValues
+
+    public init(
+        barcode: String,
+        name: String,
+        kcal: Double?,
+        sodiumMg: Double?,
+        servingDescription: String,
+        nutrients: NutrientValues
+    ) {
+        self.barcode = barcode
+        self.name = name
+        self.kcal = kcal
+        self.sodiumMg = sodiumMg
+        self.servingDescription = servingDescription
+        self.nutrients = nutrients
+    }
 }
 
 public enum OpenFoodFactsError: Error, LocalizedError {
@@ -38,17 +54,30 @@ public struct OpenFoodFactsClient: Sendable {
         return try Self.parse(data: data, barcode: barcode)
     }
 
+    /// A lightweight text-search hit; full nutrition comes from a follow-up
+    /// product(barcode:) call when the user picks one.
+    public struct SearchResult: Sendable, Equatable, Identifiable {
+        public var id: String { barcode }
+        public let barcode: String
+        public let name: String
+        public let brand: String?
+
+        public init(barcode: String, name: String, brand: String?) {
+            self.barcode = barcode
+            self.name = name
+            self.brand = brand
+        }
+    }
+
     /// Free-text search of the same database — for foods without barcodes
-    /// (produce, home cooking staples).
-    public func search(query: String, limit: Int = 20) async throws -> [ScannedProduct] {
-        var components = URLComponents(string: "https://world.openfoodfacts.org/cgi/search.pl")!
+    /// (produce, home cooking staples). Uses the CDN-backed
+    /// search.openfoodfacts.org service (the legacy cgi endpoint throttles
+    /// with 503s).
+    public func search(query: String, limit: Int = 20) async throws -> [SearchResult] {
+        var components = URLComponents(string: "https://search.openfoodfacts.org/search")!
         components.queryItems = [
-            .init(name: "search_terms", value: query),
-            .init(name: "search_simple", value: "1"),
-            .init(name: "action", value: "process"),
-            .init(name: "json", value: "1"),
+            .init(name: "q", value: query),
             .init(name: "page_size", value: String(limit)),
-            .init(name: "fields", value: Self.fields),
         ]
         guard let url = components.url else { throw OpenFoodFactsError.badResponse }
         let data = try await fetch(url)
@@ -73,11 +102,13 @@ public struct OpenFoodFactsClient: Sendable {
         return convert(product, barcode: barcode)
     }
 
-    static func parseSearch(data: Data) throws -> [ScannedProduct] {
+    static func parseSearch(data: Data) throws -> [SearchResult] {
         let decoded = try JSONDecoder().decode(SearchResponse.self, from: data)
-        return decoded.products.compactMap { product in
-            guard product.productName?.isEmpty == false else { return nil }
-            return convert(product, barcode: product.code ?? "")
+        return decoded.hits.compactMap { hit in
+            guard let code = hit.code, !code.isEmpty,
+                  let name = hit.productName ?? hit.genericName,
+                  !name.isEmpty else { return nil }
+            return SearchResult(barcode: code, name: name, brand: hit.brands?.first)
         }
     }
 
@@ -146,22 +177,20 @@ private struct ProductResponse: Decodable {
 }
 
 private struct SearchResponse: Decodable {
-    let products: [OFFProduct]
+    let hits: [SearchHit]
 }
 
-private struct OFFProduct: Decodable {
+private struct SearchHit: Decodable {
     let code: String?
     let productName: String?
-    let brands: String?
-    let servingSize: String?
-    let nutriments: OFFNutriments?
+    let genericName: String?
+    let brands: [String]?
 
     enum CodingKeys: String, CodingKey {
         case code
         case productName = "product_name"
+        case genericName = "generic_name"
         case brands
-        case servingSize = "serving_size"
-        case nutriments
     }
 
     init(from decoder: Decoder) throws {
@@ -175,9 +204,29 @@ private struct OFFProduct: Decodable {
             code = nil
         }
         productName = try? container.decode(String.self, forKey: .productName)
-        brands = try? container.decode(String.self, forKey: .brands)
-        servingSize = try? container.decode(String.self, forKey: .servingSize)
-        nutriments = try? container.decode(OFFNutriments.self, forKey: .nutriments)
+        genericName = try? container.decode(String.self, forKey: .genericName)
+        // brands is an array in search-a-licious, a string in v2.
+        if let list = try? container.decode([String].self, forKey: .brands) {
+            brands = list
+        } else if let single = try? container.decode(String.self, forKey: .brands) {
+            brands = single.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        } else {
+            brands = nil
+        }
+    }
+}
+
+private struct OFFProduct: Decodable {
+    let productName: String?
+    let brands: String?
+    let servingSize: String?
+    let nutriments: OFFNutriments?
+
+    enum CodingKeys: String, CodingKey {
+        case productName = "product_name"
+        case brands
+        case servingSize = "serving_size"
+        case nutriments
     }
 }
 

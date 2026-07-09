@@ -1,0 +1,77 @@
+name: Onigiri
+options:
+  bundleIdPrefix: com.ecliptik
+  deploymentTarget:
+    iOS: "26.0"
+    watchOS: "26.0"
+  createIntermediateGroups: true
+
+packages:
+  OnigiriKit:
+    path: Packages/OnigiriKit
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    CODE_SIGN_STYLE: Automatic
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: 0.1.0
+
+targets:
+  Onigiri:
+    type: application
+    platform: iOS
+    sources: [Onigiri]
+    dependencies:
+      - package: OnigiriKit
+      - target: OnigiriWatch
+    info:
+      path: Onigiri/Info.plist
+      properties:
+        CFBundleDisplayName: Onigiri
+        UILaunchScreen: {}
+        NSHealthShareUsageDescription: Onigiri reads your energy burn, weight, and nutrition history to show your daily calorie balance and goal progress.
+        NSHealthUpdateUsageDescription: Onigiri saves the food, sodium, and water you log to Apple Health.
+    entitlements:
+      path: Onigiri/Onigiri.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+
+  OnigiriWatch:
+    type: application
+    platform: watchOS
+    sources: [OnigiriWatch]
+    dependencies:
+      - package: OnigiriKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ecliptik.Onigiri.watchkitapp
+    info:
+      path: OnigiriWatch/Info.plist
+      properties:
+        CFBundleDisplayName: Onigiri
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: com.ecliptik.Onigiri
+        WKRunsIndependentlyOfCompanionApp: true
+        NSHealthShareUsageDescription: Onigiri reads your energy burn and nutrition history to show your daily calorie balance.
+        NSHealthUpdateUsageDescription: Onigiri saves the food, sodium, and water you log to Apple Health.
+    entitlements:
+      path: OnigiriWatch/OnigiriWatch.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+
+schemes:
+  Onigiri:
+    build:
+      targets:
+        Onigiri: all
+    run:
+      config: Debug
+  OnigiriWatch:
+    build:
+      targets:
+        OnigiriWatch: all
+    run:
+      config: Debug

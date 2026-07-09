@@ -19,6 +19,12 @@ xcodebuild -project Onigiri.xcodeproj -scheme Onigiri \
 cd Packages/OnigiriKit && swift test     # pure-logic tests
 ```
 
+## Deploying to the phone
+
+- `scripts/deploy-phone.sh` builds and installs on "My iPhone" (override with
+  `DEVICE_NAME=…`). Run weekly — free-team provisioning expires after 7 days.
+  Works over the network tunnel; phone must be unlocked.
+
 ## Simulator automation notes
 
 - XCUITest can drive springboard (`XCUIApplication(bundleIdentifier: "com.apple.springboard")`)

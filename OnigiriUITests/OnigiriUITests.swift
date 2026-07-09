@@ -263,6 +263,131 @@ final class OnigiriUITests: XCTestCase {
         XCUIDevice.shared.press(.home)
     }
 
+    /// Long-press the app icon → Log Water quick action → app opens on the
+    /// Water tab. Opt in via QUICK_ACTION=1 (drives springboard).
+    @MainActor
+    func testQuickActionLogWater() throws {
+        guard ProcessInfo.processInfo.environment["QUICK_ACTION"] == "1" else {
+            throw XCTSkip("Set QUICK_ACTION=1 to run the quick-action test")
+        }
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        springboard.activate()
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 1)
+
+        // Find the app icon (not a widget): long-press until the menu shows
+        // our quick actions. Menu items may surface as buttons, cells, or
+        // static texts depending on the springboard version.
+        // Widgets are also icons labeled "Onigiri", and the app icon may sit
+        // on a later page — hunt across pages for the icon whose long-press
+        // menu contains our quick action.
+        let logWater = springboard.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == 'Log Water'")).firstMatch
+        let candidates = springboard.icons.matching(
+            NSPredicate(format: "label == 'Onigiri'")
+        )
+        var opened = false
+        pageLoop: for _ in 0..<3 {
+            for index in 0..<min(candidates.count, 4) {
+                let candidate = candidates.element(boundBy: index)
+                guard candidate.exists, candidate.isHittable else { continue }
+                candidate.press(forDuration: 1.6)
+                if logWater.waitForExistence(timeout: 4) {
+                    opened = true
+                    break pageLoop
+                }
+                XCUIDevice.shared.press(.home)
+                Thread.sleep(forTimeInterval: 1)
+            }
+            springboard.swipeLeft()
+            Thread.sleep(forTimeInterval: 1)
+        }
+        XCTAssertTrue(opened, "Quick-action menu with Log Water should appear")
+        logWater.tap()
+
+        let app = XCUIApplication()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10), "App should open")
+        XCTAssertTrue(
+            app.buttons["Add 12 oz"].waitForExistence(timeout: 10),
+            "Quick action should land on the Water tab"
+        )
+    }
+
+    /// Export the library to Files, then import it back; both paths surface
+    /// a confirmation message. Opt in via EXPORT_IMPORT=1.
+    @MainActor
+    func testExportImportRoundTrip() throws {
+        guard ProcessInfo.processInfo.environment["EXPORT_IMPORT"] == "1" else {
+            throw XCTSkip("Set EXPORT_IMPORT=1 to run the export/import test")
+        }
+        let app = XCUIApplication()
+        app.launch()
+        grantHealthAccess(in: app, timeout: 10)
+
+        app.tabBars.buttons["Goal"].tap()
+        // The Data section is at the bottom of a lazy Form — scroll to it.
+        let export = app.buttons["Export library…"]
+        var scrolls = 0
+        while !export.exists && scrolls < 6 {
+            app.swipeUp()
+            scrolls += 1
+        }
+        XCTAssertTrue(export.waitForExistence(timeout: 10), "Export button")
+        export.tap()
+
+        // System document "save" browser: confirm with Move/Save.
+        let saveButton = app.buttons["Move"].exists ? app.buttons["Move"] : app.buttons["Save"]
+        XCTAssertTrue(saveButton.waitForExistence(timeout: 10), "Document save confirm")
+        saveButton.tap()
+        // Overwrite if a previous export exists.
+        let replace = app.buttons["Replace"]
+        if replace.waitForExistence(timeout: 3) {
+            replace.tap()
+        }
+        XCTAssertTrue(
+            app.staticTexts["Library exported ✓"].waitForExistence(timeout: 10),
+            "Export confirmation"
+        )
+
+        app.buttons["Import library…"].tap()
+        // Document picker (open mode): pick the file we just saved. Files
+        // render as collection cells; tap the cell, not its text label.
+        let fileCell = app.cells.matching(
+            NSPredicate(format: "label CONTAINS[c] 'onigiri-library'")
+        ).firstMatch
+        let fileText = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH 'onigiri-library'")
+        ).firstMatch
+        if fileCell.waitForExistence(timeout: 10) {
+            fileCell.tap()
+        } else {
+            XCTAssertTrue(fileText.waitForExistence(timeout: 5), "Exported file in picker")
+            fileText.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
+        Thread.sleep(forTimeInterval: 2)
+
+        // The picker dismisses back into the Form; the message lives in the
+        // Data section which may need re-scrolling into view.
+        let confirmation = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH 'Imported'")
+        ).firstMatch
+        var confirmScrolls = 0
+        while !confirmation.exists && confirmScrolls < 6 {
+            app.swipeUp()
+            confirmScrolls += 1
+        }
+        if !confirmation.exists {
+            // Surface whatever message actually rendered (e.g. an error).
+            let anyMessage = app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS[c] 'import' OR label CONTAINS[c] 'export'")
+            ).firstMatch
+            if anyMessage.exists {
+                XCTFail("Rendered message was: \(anyMessage.label)")
+            }
+        }
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 10), "Import summary message")
+    }
+
     /// One-off: grants whatever Health sheet is pending, without seeding.
     @MainActor
     func testGrantPendingAccess() throws {

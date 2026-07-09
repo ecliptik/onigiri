@@ -22,17 +22,20 @@ echo "→ Installing on ${DEVICE_NAME}"
 xcrun devicectl device install app --device "${DEVICE_NAME}" "${APP}"
 
 # Watch deploy (best effort): requires Mac Bluetooth ON and the watch
-# unlocked. Skipped quietly when the watch isn't reachable.
-WATCH_NAME=${WATCH_NAME:-"Micheal’s Apple Watch"}
+# unlocked/on wrist. Skipped quietly when the watch isn't reachable.
+# IDs beat the name (curly apostrophe): xcodebuild wants the hardware
+# UDID, devicectl wants the CoreDevice identifier.
+WATCH_BUILD_ID=${WATCH_BUILD_ID:-"WATCH_HARDWARE_UDID"}
+WATCH_INSTALL_ID=${WATCH_INSTALL_ID:-"WATCH_COREDEVICE_ID"}
 if xcrun devicectl list devices 2>/dev/null | grep -q "Apple Watch"; then
-  echo "→ Building for ${WATCH_NAME}"
+  echo "→ Building for the watch"
   xcodebuild -project Onigiri.xcodeproj -scheme OnigiriWatch \
-    -destination "platform=watchOS,name=${WATCH_NAME}" \
+    -destination "platform=watchOS,id=${WATCH_BUILD_ID}" \
     -derivedDataPath build \
     -allowProvisioningUpdates \
     build
-  echo "→ Installing on ${WATCH_NAME}"
-  xcrun devicectl device install app --device "${WATCH_NAME}" \
+  echo "→ Installing on the watch"
+  xcrun devicectl device install app --device "${WATCH_INSTALL_ID}" \
     build/Build/Products/Debug-watchos/OnigiriWatch.app
   echo "✓ Phone and watch deployed."
 else

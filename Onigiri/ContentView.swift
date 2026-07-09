@@ -13,11 +13,7 @@ struct ContentView: View {
                 FoodsView()
             }
             Tab("Water", systemImage: "drop.fill") {
-                PlaceholderView(
-                    title: "Water",
-                    systemImage: "drop.fill",
-                    detail: "Quick-add servings toward your daily water goal."
-                )
+                WaterView()
             }
             Tab("Goal", systemImage: "chart.line.downtrend.xyaxis") {
                 GoalView()
@@ -29,19 +25,6 @@ struct ContentView: View {
                 DebugSeeder.seedLibraryIfEmpty(context: context)
             }
             #endif
-        }
-    }
-}
-
-struct PlaceholderView: View {
-    let title: String
-    let systemImage: String
-    let detail: String
-
-    var body: some View {
-        NavigationStack {
-            ContentUnavailableView(title, systemImage: systemImage, description: Text(detail))
-                .navigationTitle(title)
         }
     }
 }

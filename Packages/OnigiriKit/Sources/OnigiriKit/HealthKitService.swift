@@ -154,6 +154,61 @@ public final class HealthKitService {
         return totals
     }
 
+    /// Weigh-ins over the trailing `days`, date-ascending, in pounds.
+    public func bodyMassHistory(days: Int = 90, now: Date = .now) async throws -> [WeightTrend.Point] {
+        guard let start = Calendar.current.date(byAdding: .day, value: -days, to: now) else { return [] }
+        let inRange = HKQuery.predicateForSamples(withStart: start, end: now, options: [])
+        let descriptor = HKSampleQueryDescriptor(
+            predicates: [.quantitySample(type: HKQuantityType(.bodyMass), predicate: inRange)],
+            sortDescriptors: [SortDescriptor(\.startDate)]
+        )
+        do {
+            return try await descriptor.result(for: store).map {
+                WeightTrend.Point(date: $0.startDate, weightLb: $0.quantity.doubleValue(for: .pound()))
+            }
+        } catch let error as HKError where error.code == .errorAuthorizationNotDetermined {
+            return []
+        }
+    }
+
+    // MARK: - Water log
+
+    private var waterSampleCache: [UUID: HKQuantitySample] = [:]
+
+    public func logWater(oz: Double, date: Date = .now) async throws {
+        let sample = HKQuantitySample(
+            type: HKQuantityType(.dietaryWater),
+            quantity: HKQuantity(unit: .fluidOunceUS(), doubleValue: oz),
+            start: date, end: date
+        )
+        try await store.save(sample)
+    }
+
+    /// Today's water servings from all sources, newest first.
+    public func todayWaterEntries(now: Date = .now) async throws -> [WaterLogEntry] {
+        let startOfDay = Calendar.current.startOfDay(for: now)
+        let inToday = HKQuery.predicateForSamples(withStart: startOfDay, end: now, options: .strictStartDate)
+        let descriptor = HKSampleQueryDescriptor(
+            predicates: [.quantitySample(type: HKQuantityType(.dietaryWater), predicate: inToday)],
+            sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)]
+        )
+        let samples: [HKQuantitySample]
+        do {
+            samples = try await descriptor.result(for: store)
+        } catch let error as HKError where error.code == .errorAuthorizationNotDetermined {
+            return []
+        }
+        waterSampleCache = Dictionary(uniqueKeysWithValues: samples.map { ($0.uuid, $0) })
+        return samples.map {
+            WaterLogEntry(id: $0.uuid, oz: $0.quantity.doubleValue(for: .fluidOunceUS()), date: $0.startDate)
+        }
+    }
+
+    public func deleteWaterEntry(id: UUID) async throws {
+        guard let sample = waterSampleCache.removeValue(forKey: id) else { return }
+        try await store.delete(sample)
+    }
+
     // MARK: - Food log (writes)
 
     /// Log an eating event as an HKCorrelation(.food) wrapping energy and
@@ -245,9 +300,16 @@ public final class HealthKitService {
             // two glasses of water
             sample(.dietaryWater, .fluidOunceUS(), 12, hoursAgo: 5),
             sample(.dietaryWater, .fluidOunceUS(), 12, hoursAgo: 1),
-            // this morning's weigh-in
-            sample(.bodyMass, .pound(), 200, hoursAgo: 12),
         ]
+        // a month of daily weigh-ins drifting 202 → 200 lb with scale noise
+        let wobble: [Double] = [0.4, -0.3, 0.6, -0.5, 0.1, 0.3, -0.4]
+        for day in 0...30 {
+            let trend = 202.0 - (Double(day) / 30.0) * 2.0
+            samples.append(sample(
+                .bodyMass, .pound(), trend + wobble[day % wobble.count],
+                hoursAgo: Double(30 - day) * 24 + 12
+            ))
+        }
         // three full days of burn history so the 14-day average has data
         for day in 1...3 {
             samples.append(sample(

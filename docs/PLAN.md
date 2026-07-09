@@ -63,8 +63,9 @@ VisionKit `DataScannerViewController` → OpenFoodFacts REST lookup → prefill 
 - [x] **Phase 1 — Scaffold**: XcodeGen project; iOS + watch apps boot in simulators
 - [x] **Phase 2 — Meter**: HealthKit authorization + read pipeline; home-screen calorie meter (intake, burn, balance)
 - [x] **Phase 3 — Food**: food library CRUD, logging with sodium, one-tap meals. *Pulled forward from Phase 5: goal settings (target weight/date), deficit budget, and the onigiri daily-goal gauge on Today. Also: app icon (🍙), XCUITest end-to-end flow.*
-- [ ] **Phase 4 — Water**: quick-add serving, daily goal ring
-- [ ] **Phase 5 — Goal**: weight trend chart (Swift Charts) + projected finish date
-- [ ] **Phase 6 — Watch**: meter view, one-tap water + meals, complication, library sync
-- [ ] **Phase 7 — Barcode**: VisionKit scanner + OpenFoodFacts
-- [ ] **Phase 8 — Polish**: iPhone home-screen widget, on-device deployment, weekly re-deploy script
+- [x] **Phase 4 — Water**: quick-add serving button, daily goal ring, per-serving log with delete, settings sheet (serving size + goal in @AppStorage)
+- [x] **Phase 5 — Goal**: weight trend chart (Swift Charts: raw weigh-ins + 7-day moving average + target line) with least-squares projected finish date
+- [ ] **Phase 6 — Widgets**: iPhone home-screen + watch widgets with interactive quick-add (meal/water) via AppIntents
+- [ ] **Phase 7 — Watch app**: meter view, one-tap water + meals, library sync via WatchConnectivity
+- [ ] **Phase 8 — Barcode**: VisionKit scanner + OpenFoodFacts
+- [ ] **Phase 9 — Polish**: on-device deployment, weekly re-deploy script

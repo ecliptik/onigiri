@@ -37,6 +37,17 @@ final class OnigiriUITests: XCTestCase {
             app.staticTexts["Protein shake"].waitForExistence(timeout: 10),
             "Tapped food should appear in the Logged today list"
         )
+
+        // Water quick-add: seeded 24 oz + one 12 oz serving = 36.
+        app.tabBars.buttons["Water"].tap()
+        let addWater = app.buttons["Add 12 oz"]
+        XCTAssertTrue(addWater.waitForExistence(timeout: 10), "Water quick-add should render")
+        XCTAssertTrue(app.staticTexts["24"].waitForExistence(timeout: 10), "Seeded water total should show")
+        addWater.tap()
+        XCTAssertTrue(
+            app.staticTexts["36"].waitForExistence(timeout: 10),
+            "Ring total should update after quick-add"
+        )
     }
 
     /// One-off: grants whatever Health sheet is pending, without seeding.

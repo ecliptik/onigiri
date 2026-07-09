@@ -7,6 +7,7 @@ struct TodayView: View {
     @State private var model = TodayModel()
     @Environment(\.scenePhase) private var scenePhase
     @Query private var goals: [GoalSettings]
+    @AppStorage("waterGoalOz") private var waterGoalOz = 64.0
 
     var body: some View {
         NavigationStack {
@@ -108,7 +109,7 @@ struct TodayView: View {
             .frame(maxWidth: .infinity)
 
             Label {
-                Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) oz water")
+                Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(waterGoalOz, format: .number.precision(.fractionLength(0))) oz water")
             } icon: {
                 Image(systemName: "drop.fill").foregroundStyle(.blue)
             }

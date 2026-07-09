@@ -56,20 +56,14 @@ final class GoalSettings {
     var targetDate: Date
     /// Manual fallback when Apple Health has no weight samples yet.
     var fallbackCurrentWeightLb: Double?
-    var waterServingOz: Double
-    var waterGoalOz: Double
 
     init(
         targetWeightLb: Double,
         targetDate: Date,
-        fallbackCurrentWeightLb: Double? = nil,
-        waterServingOz: Double = 12,
-        waterGoalOz: Double = 64
+        fallbackCurrentWeightLb: Double? = nil
     ) {
         self.targetWeightLb = targetWeightLb
         self.targetDate = targetDate
         self.fallbackCurrentWeightLb = fallbackCurrentWeightLb
-        self.waterServingOz = waterServingOz
-        self.waterGoalOz = waterGoalOz
     }
 }

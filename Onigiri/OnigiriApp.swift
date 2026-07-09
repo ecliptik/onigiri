@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 @main
 struct OnigiriApp: App {
@@ -6,5 +7,6 @@ struct OnigiriApp: App {
         WindowGroup {
             ContentView()
         }
+        .modelContainer(for: [Food.self, Meal.self, GoalSettings.self])
     }
 }

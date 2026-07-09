@@ -1,17 +1,16 @@
 import SwiftUI
+import SwiftData
 
 struct ContentView: View {
+    @Environment(\.modelContext) private var context
+
     var body: some View {
         TabView {
             Tab("Today", systemImage: "gauge.with.needle") {
                 TodayView()
             }
             Tab("Foods", systemImage: "fork.knife") {
-                PlaceholderView(
-                    title: "Foods",
-                    systemImage: "fork.knife",
-                    detail: "Your saved foods and one-tap meals will live here."
-                )
+                FoodsView()
             }
             Tab("Water", systemImage: "drop.fill") {
                 PlaceholderView(
@@ -21,12 +20,15 @@ struct ContentView: View {
                 )
             }
             Tab("Goal", systemImage: "chart.line.downtrend.xyaxis") {
-                PlaceholderView(
-                    title: "Goal",
-                    systemImage: "chart.line.downtrend.xyaxis",
-                    detail: "Target weight, daily budget, and your weight trend."
-                )
+                GoalView()
             }
+        }
+        .task {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--seed-sample-data") {
+                DebugSeeder.seedLibraryIfEmpty(context: context)
+            }
+            #endif
         }
     }
 }
@@ -46,4 +48,5 @@ struct PlaceholderView: View {
 
 #Preview {
     ContentView()
+        .modelContainer(for: [Food.self, Meal.self, GoalSettings.self], inMemory: true)
 }

@@ -48,6 +48,14 @@ final class OnigiriUITests: XCTestCase {
             app.staticTexts["36"].waitForExistence(timeout: 10),
             "Ring total should update after quick-add"
         )
+
+        // Streak calendar: the three seeded history days each earned an
+        // onigiri (750 kcal deficit vs ~618 target), so the streak is 3.
+        app.tabBars.buttons["Calendar"].tap()
+        XCTAssertTrue(
+            app.staticTexts["3 days"].waitForExistence(timeout: 10),
+            "Seeded history should produce a 3-day streak"
+        )
     }
 
     /// Barcode → OpenFoodFacts lookup prefills the food form. Uses the

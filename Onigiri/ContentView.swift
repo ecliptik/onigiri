@@ -20,6 +20,9 @@ struct ContentView: View {
             Tab("Goal", systemImage: "chart.line.downtrend.xyaxis") {
                 GoalView()
             }
+            Tab("Calendar", systemImage: "calendar") {
+                CalendarView()
+            }
         }
         .task {
             #if DEBUG

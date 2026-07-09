@@ -171,6 +171,27 @@ public final class HealthKitService {
         }
     }
 
+    /// Per-day intake and burn totals over the trailing `days` (plus today),
+    /// for the streak calendar. Days with no data at all are omitted.
+    public func dailyEnergyTotals(days: Int = 92, now: Date = .now) async throws -> [DayEnergyTotals] {
+        let calendar = Calendar.current
+        guard let start = calendar.date(byAdding: .day, value: -days, to: calendar.startOfDay(for: now)) else {
+            return []
+        }
+        async let intakeTotals = dailyTotals(.dietaryEnergyConsumed, start: start, end: now)
+        async let activeTotals = dailyTotals(.activeEnergyBurned, start: start, end: now)
+        async let basalTotals = dailyTotals(.basalEnergyBurned, start: start, end: now)
+        let (intake, active, basal) = try await (intakeTotals, activeTotals, basalTotals)
+        let allDays = Set(intake.keys).union(active.keys).union(basal.keys)
+        return allDays.sorted().map { day in
+            DayEnergyTotals(
+                day: day,
+                intakeKcal: intake[day] ?? 0,
+                burnKcal: (active[day] ?? 0) + (basal[day] ?? 0)
+            )
+        }
+    }
+
     // MARK: - Water log
 
     private var waterSampleCache: [UUID: HKQuantitySample] = [:]
@@ -310,7 +331,8 @@ public final class HealthKitService {
                 hoursAgo: Double(30 - day) * 24 + 12
             ))
         }
-        // three full days of burn history so the 14-day average has data
+        // three full days of history so the 14-day average has data and the
+        // streak calendar has earned days (2300 burn − 1550 eaten = 750 deficit)
         for day in 1...3 {
             samples.append(sample(
                 .activeEnergyBurned, .kilocalorie(), 500,
@@ -319,6 +341,10 @@ public final class HealthKitService {
             samples.append(sample(
                 .basalEnergyBurned, .kilocalorie(), 1800,
                 hoursAgo: Double(day) * 24, spanningHours: 16
+            ))
+            samples.append(sample(
+                .dietaryEnergyConsumed, .kilocalorie(), 1550,
+                hoursAgo: Double(day) * 24 + 2, spanningHours: 8
             ))
         }
         try await store.save(samples)

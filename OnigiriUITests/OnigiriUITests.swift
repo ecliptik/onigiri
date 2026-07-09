@@ -58,6 +58,26 @@ final class OnigiriUITests: XCTestCase {
         )
     }
 
+    /// The decimal pad has no return key; the Goal tab shows a nav-bar Done
+    /// while a weight field is focused, and tapping it dismisses the keyboard.
+    @MainActor
+    func testGoalKeyboardDoneDismisses() throws {
+        let app = XCUIApplication()
+        app.launch()
+        grantHealthAccess(in: app, timeout: 10)
+
+        app.tabBars.buttons["Goal"].tap()
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "Weight field should exist")
+        field.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "Keyboard should appear")
+
+        let done = app.buttons["Done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5), "Done should appear while editing")
+        done.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5), "Keyboard should dismiss")
+    }
+
     /// Barcode → OpenFoodFacts lookup prefills the food form. Uses the
     /// manual-entry fallback (no camera in the simulator) and live network.
     @MainActor

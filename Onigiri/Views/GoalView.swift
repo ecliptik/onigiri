@@ -17,6 +17,7 @@ struct GoalView: View {
     @State private var weightHistory: [WeightTrend.Point] = []
     @State private var loaded = false
     @State private var savedToast = false
+    @FocusState private var weightFieldFocused: Bool
 
     private let health = HealthKitService()
 
@@ -46,6 +47,7 @@ struct GoalView: View {
                     } else {
                         TextField("Current weight (lb)", value: $manualWeightLb, format: .number)
                             .keyboardType(.decimalPad)
+                            .focused($weightFieldFocused)
                         Text("No weight in Apple Health yet — step on your scale, or enter it here.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -55,6 +57,7 @@ struct GoalView: View {
                 Section("Target") {
                     TextField("Target weight (lb)", value: $targetWeightLb, format: .number)
                         .keyboardType(.decimalPad)
+                        .focused($weightFieldFocused)
                     DatePicker("By date", selection: $targetDate, in: Date.now..., displayedComponents: .date)
                 }
 
@@ -91,6 +94,18 @@ struct GoalView: View {
                 }
             }
             .navigationTitle("Goal")
+            .scrollDismissesKeyboard(.interactively)
+            .toolbar {
+                // Decimal pads have no return key; surface a Done while
+                // editing. (The keyboard-accessory toolbar placement doesn't
+                // reliably render on iOS 26, so this lives in the nav bar.)
+                if weightFieldFocused {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") { weightFieldFocused = false }
+                            .fontWeight(.semibold)
+                    }
+                }
+            }
             .overlay(alignment: .bottom) {
                 if savedToast {
                     Text("Goal saved ✓")
@@ -214,6 +229,7 @@ struct GoalView: View {
                 fallbackCurrentWeightLb: healthWeightLb == nil ? manualWeightLb : nil
             ))
         }
+        weightFieldFocused = false
         savedToast = true
         PhoneSyncService.shared.push(from: context)
         Task {

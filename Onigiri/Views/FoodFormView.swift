@@ -19,6 +19,7 @@ struct FoodFormView: View {
     @State private var showScanner = false
     @State private var isLookingUp = false
     @State private var lookupMessage: String?
+    @FocusState private var numberFieldFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -49,8 +50,10 @@ struct FoodFormView: View {
                     TextField("Name", text: $name)
                     TextField("Calories (kcal)", value: $kcal, format: .number)
                         .keyboardType(.decimalPad)
+                        .focused($numberFieldFocused)
                     TextField("Sodium (mg)", value: $sodiumMg, format: .number)
                         .keyboardType(.decimalPad)
+                        .focused($numberFieldFocused)
                     TextField("Serving (e.g. 1 cup, 8 oz)", text: $serving)
                 }
             }
@@ -64,7 +67,17 @@ struct FoodFormView: View {
                     Button("Save") { save() }
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || kcal == nil)
                 }
+                // Decimal pads have no return key; surface a Done while
+                // editing (keyboard-accessory placement is unreliable on
+                // iOS 26). The sheet's Cancel/Save stay reachable regardless.
+                if numberFieldFocused {
+                    ToolbarItem(placement: .principal) {
+                        Button("Done") { numberFieldFocused = false }
+                            .fontWeight(.semibold)
+                    }
+                }
             }
+            .scrollDismissesKeyboard(.interactively)
             .sheet(isPresented: $showScanner) {
                 BarcodeScannerSheet { code in
                     Task { await lookup(code) }

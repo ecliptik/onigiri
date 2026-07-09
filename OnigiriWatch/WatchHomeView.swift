@@ -11,33 +11,18 @@ struct WatchHomeView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 8) {
-                    OnigiriGauge(progress: model.state.gaugeProgress)
-                        .frame(width: 62, height: 62)
-
-                    Text(model.state.summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
-                        .foregroundStyle(model.state.summary.balanceKcal <= 0 ? Color.green : Color.orange)
-                    Text(subtitle)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    Label {
-                        Text("\(model.state.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(model.waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
-                    } icon: {
-                        Image(systemName: "drop.fill").foregroundStyle(.blue)
+                VStack(spacing: 10) {
+                    // Gauge and balance share a line so both buttons fit on
+                    // one screen without scrolling.
+                    HStack(spacing: 10) {
+                        OnigiriGauge(progress: model.state.gaugeProgress)
+                            .frame(width: 44, height: 44)
+                        Text(model.state.summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
+                            .font(.system(size: 32, weight: .bold, design: .rounded))
+                            .foregroundStyle(model.state.summary.balanceKcal <= 0 ? Color.green : Color.orange)
+                            .minimumScaleFactor(0.6)
+                            .lineLimit(1)
                     }
-                    .font(.footnote)
-
-                    Button {
-                        Task { await model.logWater() }
-                    } label: {
-                        Label("Add \(model.waterServingOz, format: .number.precision(.fractionLength(0))) oz", systemImage: "drop.fill")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.blue)
 
                     Button {
                         showMeals = true
@@ -48,6 +33,16 @@ struct WatchHomeView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.orange)
+
+                    Button {
+                        Task { await model.logWater() }
+                    } label: {
+                        Label("Add \(model.waterServingOz, format: .number.precision(.fractionLength(0))) oz", systemImage: "drop.fill")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
                 }
                 .padding(.horizontal, 4)
             }
@@ -65,12 +60,6 @@ struct WatchHomeView: View {
         }
     }
 
-    private var subtitle: String {
-        if let target = model.state.deficitTargetKcal, target > 0 {
-            return "\(Int(model.state.gaugeProgress * 100))% of daily goal"
-        }
-        return "kcal balance"
-    }
 }
 
 /// Synced meals, one tap to log.

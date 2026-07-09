@@ -313,6 +313,31 @@ final class OnigiriUITests: XCTestCase {
             app.buttons["Add 12 oz"].waitForExistence(timeout: 10),
             "Quick action should land on the Water tab"
         )
+
+        // Warm path: with the app still running, the shortcut goes through
+        // the scene delegate instead of launch options.
+        app.tabBars.buttons["Today"].tap()
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 2)
+        var warmOpened = false
+        for index in 0..<min(candidates.count, 4) {
+            let candidate = candidates.element(boundBy: index)
+            guard candidate.exists, candidate.isHittable else { continue }
+            candidate.press(forDuration: 1.6)
+            if logWater.waitForExistence(timeout: 4) {
+                warmOpened = true
+                break
+            }
+            XCUIDevice.shared.press(.home)
+            Thread.sleep(forTimeInterval: 1)
+        }
+        XCTAssertTrue(warmOpened, "Quick-action menu (warm)")
+        logWater.tap()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10), "App should resume")
+        XCTAssertTrue(
+            app.buttons["Add 12 oz"].waitForExistence(timeout: 10),
+            "Warm quick action should land on the Water tab too"
+        )
     }
 
     /// Export the library to Files, then import it back; both paths surface

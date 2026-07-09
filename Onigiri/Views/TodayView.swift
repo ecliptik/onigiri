@@ -10,10 +10,22 @@ struct TodayView: View {
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "drop"
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
-    @State private var showSettings = false
-    @State private var showQuickLog = false
-    @State private var quickLogKind: QuickActions.QuickLogKind = .all
+    @State private var activeSheet: TodaySheet?
     @State private var quickActions = QuickActions.shared
+
+    /// One sheet slot: multiple .sheet modifiers chained on the same view
+    /// compete and only one reliably presents.
+    private enum TodaySheet: Identifiable {
+        case settings
+        case quickLog(QuickActions.QuickLogKind)
+
+        var id: String {
+            switch self {
+            case .settings: "settings"
+            case .quickLog: "quickLog"
+            }
+        }
+    }
 
     private var waterEmoji: String { waterIcon == "wave" ? "🌊" : "💧" }
 
@@ -49,7 +61,7 @@ struct TodayView: View {
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
-                        showSettings = true
+                        activeSheet = .settings
                     } label: {
                         Image(systemName: "gearshape")
                     }
@@ -63,20 +75,20 @@ struct TodayView: View {
                     .accessibilityLabel("Next day")
                 }
             }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
-            }
-            .sheet(isPresented: $showQuickLog, onDismiss: {
-                quickLogKind = .all
+            .sheet(item: $activeSheet, onDismiss: {
                 Task { await model.refresh() }
-            }) {
-                QuickLogSheet(initialKind: quickLogKind)
+            }) { sheet in
+                switch sheet {
+                case .settings:
+                    SettingsView()
+                case .quickLog(let kind):
+                    QuickLogSheet(initialKind: kind)
+                }
             }
             .onChange(of: quickActions.quickLogRequested) { _, requested in
                 if requested {
                     quickActions.quickLogRequested = false
-                    quickLogKind = quickActions.quickLogKind
-                    showQuickLog = true
+                    activeSheet = .quickLog(quickActions.quickLogKind)
                 }
             }
             .simultaneousGesture(
@@ -198,7 +210,7 @@ struct TodayView: View {
                 Spacer()
                 if model.isToday {
                     Button {
-                        showQuickLog = true
+                        activeSheet = .quickLog(.all)
                     } label: {
                         Image(systemName: "plus")
                             .font(.subheadline.weight(.bold))

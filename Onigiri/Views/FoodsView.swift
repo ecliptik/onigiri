@@ -81,6 +81,8 @@ struct FoodsView: View {
                             }
                             .contentShape(.rect)
                             .onTapGesture { editingMeal = meal }
+                            // No row contextMenu: its long-press recognizer
+                            // would swallow the Log button's portion gesture.
                             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                                 Button {
                                     editingMeal = meal
@@ -94,13 +96,6 @@ struct FoodsView: View {
                                     Label("Favorite", systemImage: meal.isFavorite ? "star.slash" : "star.fill")
                                 }
                                 .tint(.yellow)
-                            }
-                            .contextMenu {
-                                Button("Edit", systemImage: "pencil") { editingMeal = meal }
-                                Button(meal.isFavorite ? "Unfavorite" : "Favorite",
-                                       systemImage: meal.isFavorite ? "star.slash" : "star.fill") {
-                                    meal.isFavorite.toggle()
-                                }
                             }
                         }
                         .onDelete { offsets in
@@ -133,6 +128,8 @@ struct FoodsView: View {
                         }
                         .contentShape(.rect)
                         .onTapGesture { editingFood = food }
+                        // No row contextMenu: its long-press recognizer
+                        // would swallow the Log button's portion gesture.
                         .swipeActions(edge: .leading, allowsFullSwipe: true) {
                             Button {
                                 editingFood = food
@@ -146,13 +143,6 @@ struct FoodsView: View {
                                 Label("Favorite", systemImage: food.isFavorite ? "star.slash" : "star.fill")
                             }
                             .tint(.yellow)
-                        }
-                        .contextMenu {
-                            Button("Edit", systemImage: "pencil") { editingFood = food }
-                            Button(food.isFavorite ? "Unfavorite" : "Favorite",
-                                   systemImage: food.isFavorite ? "star.slash" : "star.fill") {
-                                food.isFavorite.toggle()
-                            }
                         }
                     }
                     .onDelete { offsets in

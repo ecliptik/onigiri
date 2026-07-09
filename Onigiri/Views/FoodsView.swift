@@ -23,6 +23,7 @@ struct FoodsView: View {
     @State private var undoLogID: UUID?
     @State private var searchText = ""
     @State private var categoryFilter: FoodCategory?
+    @State private var portionTarget: PortionTarget?
 
     private let health = HealthKitService()
 
@@ -47,7 +48,9 @@ struct FoodsView: View {
     private func matches(name: String, category: String?) -> Bool {
         if let filter = categoryFilter, category != filter.rawValue { return false }
         if searchText.isEmpty { return true }
-        return name.localizedCaseInsensitiveContains(searchText)
+        if name.localizedCaseInsensitiveContains(searchText) { return true }
+        // Matching the category text too lets "snack" pull up all snacks.
+        return category?.localizedCaseInsensitiveContains(searchText) ?? false
     }
 
     var body: some View {
@@ -64,9 +67,16 @@ struct FoodsView: View {
                                     sodiumMg: meal.totalSodiumMg,
                                     isFavorite: meal.isFavorite
                                 )
-                                LogButton(name: meal.name) {
+                                LogButton(name: meal.name) { quantity in
                                     log(name: meal.name, kcal: meal.totalKcal,
-                                        sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients)
+                                        sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
+                                        quantity: quantity)
+                                } onCustomPortion: {
+                                    portionTarget = PortionTarget(
+                                        name: meal.name, kcal: meal.totalKcal,
+                                        sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
+                                        serving: "1 meal"
+                                    )
                                 }
                             }
                             .contentShape(.rect)
@@ -109,9 +119,16 @@ struct FoodsView: View {
                                 sodiumMg: food.sodiumMg,
                                 isFavorite: food.isFavorite
                             )
-                            LogButton(name: food.name) {
+                            LogButton(name: food.name) { quantity in
                                 log(name: food.name, kcal: food.kcal,
-                                    sodiumMg: food.sodiumMg, nutrients: food.nutrients)
+                                    sodiumMg: food.sodiumMg, nutrients: food.nutrients,
+                                    quantity: quantity)
+                            } onCustomPortion: {
+                                portionTarget = PortionTarget(
+                                    name: food.name, kcal: food.kcal,
+                                    sodiumMg: food.sodiumMg, nutrients: food.nutrients,
+                                    serving: food.servingDescription
+                                )
                             }
                         }
                         .contentShape(.rect)
@@ -187,6 +204,14 @@ struct FoodsView: View {
             .sheet(item: $editingFood) { FoodFormView(food: $0) }
             .sheet(isPresented: $showNewMeal) { MealFormView() }
             .sheet(item: $editingMeal) { MealFormView(meal: $0) }
+            .sheet(item: $portionTarget) { target in
+                PortionSheet(target: target) { quantity in
+                    log(name: target.name, kcal: target.kcal,
+                        sodiumMg: target.sodiumMg, nutrients: target.nutrients,
+                        quantity: quantity)
+                }
+                .presentationDetents([.medium])
+            }
             .task {
                 if scanRequest {
                     scanRequest = false
@@ -223,12 +248,21 @@ struct FoodsView: View {
         }
     }
 
-    private func log(name: String, kcal: Double, sodiumMg: Double, nutrients: NutrientValues) {
+    private func log(
+        name: String, kcal: Double, sodiumMg: Double,
+        nutrients: NutrientValues, quantity: Double = 1
+    ) {
+        let displayName = quantity == 1 ? name : "\(name) ×\(Portion.label(for: quantity))"
         Task {
             do {
-                let id = try await health.logFood(name: name, kcal: kcal, sodiumMg: sodiumMg, nutrients: nutrients)
+                let id = try await health.logFood(
+                    name: displayName,
+                    kcal: kcal * quantity,
+                    sodiumMg: sodiumMg * quantity,
+                    nutrients: nutrients.scaled(by: quantity)
+                )
                 undoLogID = id
-                showToast("Logged \(name) ✓", clearsUndo: true)
+                showToast("Logged \(displayName) ✓", clearsUndo: true)
                 WidgetCenter.shared.reloadAllTimelines()
             } catch {
                 undoLogID = nil
@@ -263,14 +297,43 @@ struct FoodsView: View {
     }
 }
 
+/// Portion helpers shared by the quick menu and the custom sheet.
+enum Portion {
+    static let quickOptions: [Double] = [0.25, 0.5, 0.75, 1, 1.5, 2]
+
+    static func label(for quantity: Double) -> String {
+        switch quantity {
+        case 0.25: "¼"
+        case 0.5: "½"
+        case 0.75: "¾"
+        case 1.5: "1½"
+        default: quantity.formatted(.number.precision(.fractionLength(0...2)))
+        }
+    }
+}
+
+/// What the custom-portion sheet is scaling.
+struct PortionTarget: Identifiable {
+    var id: String { name }
+    let name: String
+    let kcal: Double
+    let sodiumMg: Double
+    let nutrients: NutrientValues
+    let serving: String
+}
+
 /// The deliberate tap target for logging — a small rice-paper capsule so a
-/// stray row tap can't log by accident.
+/// stray row tap can't log by accident. Tap logs one serving; long-press
+/// offers portions (½, ¼, 2×, custom…).
 private struct LogButton: View {
     let name: String
-    let action: () -> Void
+    let action: (Double) -> Void
+    let onCustomPortion: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            action(1)
+        } label: {
             Text("Log")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.black)
@@ -282,6 +345,74 @@ private struct LogButton: View {
         // other styles let a stray row tap trigger the button.
         .buttonStyle(.borderless)
         .accessibilityLabel("Log \(name)")
+        .contextMenu {
+            ForEach(Portion.quickOptions, id: \.self) { quantity in
+                Button("Log ×\(Portion.label(for: quantity))") {
+                    action(quantity)
+                }
+            }
+            Button("Custom portion…", systemImage: "slider.horizontal.3") {
+                onCustomPortion()
+            }
+        }
+    }
+}
+
+/// Pick an arbitrary portion multiplier with a live preview.
+struct PortionSheet: View {
+    let target: PortionTarget
+    let onLog: (Double) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var quantity = 1.0
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    HStack {
+                        ForEach(Portion.quickOptions, id: \.self) { option in
+                            Button(Portion.label(for: option)) {
+                                quantity = option
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(quantity == option ? .riceToast : .secondary)
+                        }
+                    }
+                    LabeledContent("Servings") {
+                        TextField("1", value: $quantity, format: .number)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    if !target.serving.isEmpty {
+                        LabeledContent("One serving") {
+                            Text(target.serving)
+                        }
+                    }
+                }
+                Section {
+                    LabeledContent("Will log") {
+                        Text("\(target.kcal * quantity, format: .number.precision(.fractionLength(0))) kcal • \(target.sodiumMg * quantity, format: .number.precision(.fractionLength(0))) mg Na")
+                            .monospacedDigit()
+                    }
+                    Button {
+                        onLog(quantity)
+                        dismiss()
+                    } label: {
+                        Text("Log \(target.name) ×\(Portion.label(for: quantity))")
+                            .fontWeight(.semibold)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(quantity <= 0)
+                }
+            }
+            .navigationTitle("Portion")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
     }
 }
 

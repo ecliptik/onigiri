@@ -7,6 +7,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "drop"
+    @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
 
     @State private var showExporter = false
     @State private var showImporter = false
@@ -21,6 +22,17 @@ struct SettingsView: View {
                         Text("💧 Droplet").tag("drop")
                         Text("🌊 Great Wave").tag("wave")
                     }
+                }
+
+                Section("Sodium") {
+                    Stepper(value: $sodiumLimitMg, in: 500...6000, step: 100) {
+                        LabeledContent("Daily limit") {
+                            Text("\(sodiumLimitMg, format: .number.precision(.fractionLength(0))) mg")
+                        }
+                    }
+                    Text("Today's sodium turns yellow within 300 mg of the limit and red above it. The FDA guideline is 2,300 mg.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Data") {

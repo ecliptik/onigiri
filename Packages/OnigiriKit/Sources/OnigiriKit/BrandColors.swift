@@ -18,4 +18,12 @@ public extension Color {
     // watchOS renders on black; use the bright variant.
     static let riceToast = Color(red: 0.89, green: 0.70, blue: 0.42)
     #endif
+
+    /// Traffic-light color for a sodium total against the daily limit:
+    /// green when comfortably under, toast yellow within 300 mg, red over.
+    static func sodiumStatus(mg: Double, limitMg: Double) -> Color {
+        if mg > limitMg { return .red }
+        if mg >= limitMg - 300 { return .riceToast }
+        return .green
+    }
 }

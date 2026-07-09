@@ -125,6 +125,13 @@ public enum SharedStore {
     public static let waterServingKey = "waterServingOz"
     public static let waterGoalKey = "waterGoalOz"
     public static let waterIconKey = "waterIcon"
+    public static let sodiumLimitKey = "sodiumLimitMg"
+
+    /// Daily sodium limit in mg (FDA guideline 2,300 by default).
+    public static var sodiumLimitMg: Double {
+        let value = defaults.double(forKey: sodiumLimitKey)
+        return value > 0 ? value : 2300
+    }
 
     /// "drop" (💧, default) or "wave" (🌊) — user-selectable in Settings.
     public static var waterEmoji: String {

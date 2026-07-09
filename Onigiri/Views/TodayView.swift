@@ -9,6 +9,7 @@ struct TodayView: View {
     @Query private var goals: [GoalSettings]
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "drop"
+    @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @State private var showSettings = false
 
     private var waterEmoji: String { waterIcon == "wave" ? "🌊" : "💧" }
@@ -152,6 +153,8 @@ struct TodayView: View {
         HStack(spacing: 12) {
             Label {
                 Text("\(model.summary.sodiumMg, format: .number.precision(.fractionLength(0))) mg sodium")
+                    .foregroundStyle(Color.sodiumStatus(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg))
+                    .fontWeight(.medium)
             } icon: {
                 Image(systemName: "aqi.medium").foregroundStyle(.gray)
             }

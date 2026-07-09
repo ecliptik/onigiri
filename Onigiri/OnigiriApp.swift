@@ -4,6 +4,8 @@ import OnigiriKit
 
 @main
 struct OnigiriApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     /// Shared App Group container so the widget extension sees the library.
     private static let container: ModelContainer = {
         do {

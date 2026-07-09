@@ -35,6 +35,13 @@ public struct SyncPayload: Sendable {
     public let goal: SyncedGoal?
     public let waterServingOz: Double?
     public let waterGoalOz: Double?
+
+    public init(meals: [SyncedMeal], goal: SyncedGoal?, waterServingOz: Double?, waterGoalOz: Double?) {
+        self.meals = meals
+        self.goal = goal
+        self.waterServingOz = waterServingOz
+        self.waterGoalOz = waterGoalOz
+    }
 }
 
 /// Encoding/decoding of the phone→watch application context, and watch-side

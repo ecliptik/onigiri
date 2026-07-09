@@ -53,6 +53,7 @@ struct MeterWidgetView: View {
                     .font(.system(size: 34, weight: .bold, design: .rounded))
                     .foregroundStyle(summary.balanceKcal <= 0 ? Color.green : Color.orange)
                     .minimumScaleFactor(0.6)
+                    .invalidatableContent()
                 Text("kcal balance")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -70,6 +71,7 @@ struct MeterWidgetView: View {
                         Text("\(summary.waterOz, format: .number.precision(.fractionLength(0)))/\(entry.snapshot.waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .invalidatableContent()
                     }
                 }
             }

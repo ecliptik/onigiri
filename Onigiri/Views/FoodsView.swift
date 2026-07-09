@@ -10,7 +10,11 @@ struct FoodsView: View {
     @Query(sort: \Meal.name) private var meals: [Meal]
     @Query(sort: \Food.name) private var foods: [Food]
 
+    /// Set by the "Scan Barcode" quick action: open a new-food form scanning.
+    @Binding var scanRequest: Bool
+
     @State private var showNewFood = false
+    @State private var showScanFood = false
     @State private var showNewMeal = false
     @State private var editingFood: Food?
     @State private var editingMeal: Meal?
@@ -102,9 +106,22 @@ struct FoodsView: View {
                 }
             }
             .sheet(isPresented: $showNewFood) { FoodFormView(food: nil) }
+            .sheet(isPresented: $showScanFood) { FoodFormView(food: nil, startScanning: true) }
             .sheet(item: $editingFood) { FoodFormView(food: $0) }
             .sheet(isPresented: $showNewMeal) { MealFormView() }
             .sheet(item: $editingMeal) { MealFormView(meal: $0) }
+            .task {
+                if scanRequest {
+                    scanRequest = false
+                    showScanFood = true
+                }
+            }
+            .onChange(of: scanRequest) { _, requested in
+                if requested {
+                    scanRequest = false
+                    showScanFood = true
+                }
+            }
             .overlay(alignment: .bottom) {
                 if let toast {
                     Text(toast)

@@ -22,15 +22,11 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         }
     }
 
-    /// Snapshot meals, goal, and water settings, and send them to the watch.
+    /// Snapshot meals, goal, and water settings; mirror them into the App
+    /// Group defaults (the widget extension reads that — keeps SwiftData out
+    /// of its memory-capped process), and send them to the watch if paired.
     @MainActor
     func push(from context: ModelContext) {
-        guard WCSession.isSupported(),
-              WCSession.default.activationState == .activated,
-              WCSession.default.isPaired,
-              WCSession.default.isWatchAppInstalled
-        else { return }
-
         let meals = ((try? context.fetch(FetchDescriptor<Meal>(sortBy: [SortDescriptor(\.name)]))) ?? [])
             .map { SyncedMeal(id: $0.uuid, name: $0.name, kcal: $0.totalKcal, sodiumMg: $0.totalSodiumMg) }
         let goal = ((try? context.fetch(FetchDescriptor<GoalSettings>())) ?? []).first
@@ -39,13 +35,25 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
                 targetDate: $0.targetDate,
                 fallbackCurrentWeightLb: $0.fallbackCurrentWeightLb
             ) }
-        let payload = WatchSync.makeContext(
+
+        WatchSync.store(SyncPayload(
             meals: meals,
             goal: goal,
             waterServingOz: SharedStore.waterServingOz,
             waterGoalOz: SharedStore.waterGoalOz
-        )
-        try? WCSession.default.updateApplicationContext(payload)
+        ))
+
+        guard WCSession.isSupported(),
+              WCSession.default.activationState == .activated,
+              WCSession.default.isPaired,
+              WCSession.default.isWatchAppInstalled
+        else { return }
+        try? WCSession.default.updateApplicationContext(WatchSync.makeContext(
+            meals: meals,
+            goal: goal,
+            waterServingOz: SharedStore.waterServingOz,
+            waterGoalOz: SharedStore.waterGoalOz
+        ))
     }
 
     // MARK: - WCSessionDelegate

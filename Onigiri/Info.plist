@@ -26,6 +26,33 @@
 	<string>Onigiri reads your energy burn, weight, and nutrition history to show your daily calorie balance and goal progress.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Onigiri saves the food, sodium, and water you log to Apple Health.</string>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>drop.fill</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Log Water</string>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.ecliptik.Onigiri.logWater</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>fork.knife</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Log a Meal</string>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.ecliptik.Onigiri.logMeal</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>barcode.viewfinder</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Scan Barcode</string>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.ecliptik.Onigiri.scanBarcode</string>
+		</dict>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 </dict>

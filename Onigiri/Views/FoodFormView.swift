@@ -9,6 +9,8 @@ struct FoodFormView: View {
     @Environment(\.dismiss) private var dismiss
 
     let food: Food?
+    /// Open the barcode scanner immediately (quick-action entry point).
+    var startScanning = false
 
     @State private var name = ""
     @State private var kcal: Double?
@@ -97,6 +99,8 @@ struct FoodFormView: View {
                     sodiumMg = food.sodiumMg
                     serving = food.servingDescription
                     barcode = food.barcode
+                } else if startScanning {
+                    showScanner = true
                 }
             }
         }

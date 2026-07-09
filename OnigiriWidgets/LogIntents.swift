@@ -1,5 +1,4 @@
 import AppIntents
-import SwiftData
 import WidgetKit
 import OnigiriKit
 
@@ -30,15 +29,13 @@ struct LogMealIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        let container = try SharedStore.modelContainer()
-        let meals = try container.mainContext.fetch(FetchDescriptor<Meal>())
-        guard let match = meals.first(where: { $0.uuid.uuidString == meal.id }) else {
+        guard let match = WatchSync.loadMeals().first(where: { $0.id.uuidString == meal.id }) else {
             return .result()
         }
         try await HealthKitService().logFood(
             name: match.name,
-            kcal: match.totalKcal,
-            sodiumMg: match.totalSodiumMg
+            kcal: match.kcal,
+            sodiumMg: match.sodiumMg
         )
         WidgetCenter.shared.reloadAllTimelines()
         return .result()
@@ -47,8 +44,8 @@ struct LogMealIntent: AppIntent {
 
 /// Widget configuration: which saved meal the quick-log button targets.
 struct MeterWidgetConfiguration: WidgetConfigurationIntent {
-    static let title: LocalizedStringResource = "Configure Onigiri"
+    static let title: LocalizedStringResource = "Onigiri"
     static let description = IntentDescription("Choose the meal for the quick-log button.")
 
-    @Parameter(title: "Meal button") var meal: MealEntity?
+    @Parameter(title: "Meal") var meal: MealEntity?
 }

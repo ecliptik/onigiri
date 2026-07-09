@@ -1,8 +1,9 @@
 import AppIntents
-import SwiftData
 import OnigiriKit
 
 /// A saved meal, exposed to widget configuration ("Edit Widget" → pick meal).
+/// Reads the lightweight mirror in the App Group defaults — the widget
+/// process is memory-capped, so no SwiftData here.
 struct MealEntity: AppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "Meal"
     static let defaultQuery = MealEntityQuery()
@@ -20,24 +21,17 @@ struct MealEntity: AppEntity {
 }
 
 struct MealEntityQuery: EntityQuery {
-    @MainActor
     func entities(for identifiers: [String]) async throws -> [MealEntity] {
-        try allMeals().filter { identifiers.contains($0.id) }
+        allMeals().filter { identifiers.contains($0.id) }
     }
 
-    @MainActor
     func suggestedEntities() async throws -> [MealEntity] {
-        try allMeals()
+        allMeals()
     }
 
-    @MainActor
-    private func allMeals() throws -> [MealEntity] {
-        let container = try SharedStore.modelContainer()
-        let meals = try container.mainContext.fetch(
-            FetchDescriptor<Meal>(sortBy: [SortDescriptor(\.name)])
-        )
-        return meals.map {
-            MealEntity(id: $0.uuid.uuidString, name: $0.name, kcal: $0.totalKcal)
+    private func allMeals() -> [MealEntity] {
+        WatchSync.loadMeals().map {
+            MealEntity(id: $0.id.uuidString, name: $0.name, kcal: $0.kcal)
         }
     }
 }

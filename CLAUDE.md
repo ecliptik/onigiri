@@ -19,6 +19,16 @@ xcodebuild -project Onigiri.xcodeproj -scheme Onigiri \
 cd Packages/OnigiriKit && swift test     # pure-logic tests
 ```
 
+## Simulator automation notes
+
+- XCUITest can drive springboard (`XCUIApplication(bundleIdentifier: "com.apple.springboard")`)
+  for home-screen/widget-gallery flows; coordinate clicking via osascript/cliclick is
+  unreliable for small controls. Health permission sheets have stable `UIA.Health.*`
+  accessibility identifiers.
+- Pass env vars to UI tests via `TEST_RUNNER_<NAME>=… xcodebuild test …`.
+- `testAddWidgetToHomeScreen` (opt-in via `TEST_RUNNER_ADD_WIDGET=1`) installs the
+  widget on the simulator home screen.
+
 ## Conventions
 
 - Shared models/logic go in `Packages/OnigiriKit`, pure and unit-tested where possible.

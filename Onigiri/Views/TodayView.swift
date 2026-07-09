@@ -7,7 +7,7 @@ struct TodayView: View {
     @State private var model = TodayModel()
     @Environment(\.scenePhase) private var scenePhase
     @Query private var goals: [GoalSettings]
-    @AppStorage("waterGoalOz") private var waterGoalOz = 64.0
+    @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
 
     var body: some View {
         NavigationStack {

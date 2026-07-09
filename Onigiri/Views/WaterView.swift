@@ -3,8 +3,8 @@ import OnigiriKit
 
 /// Water tracking: progress ring toward the daily goal, one-tap serving add.
 struct WaterView: View {
-    @AppStorage("waterServingOz") private var servingOz = 12.0
-    @AppStorage("waterGoalOz") private var goalOz = 64.0
+    @AppStorage(SharedStore.waterServingKey, store: SharedStore.defaults) private var servingOz = 12.0
+    @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var goalOz = 64.0
 
     @State private var model = WaterModel()
     @State private var showSettings = false

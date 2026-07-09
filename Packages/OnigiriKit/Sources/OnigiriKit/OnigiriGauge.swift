@@ -2,11 +2,15 @@ import SwiftUI
 
 /// The onigiri fills bottom-up as today's banked deficit approaches the
 /// daily goal.
-struct OnigiriGauge: View {
+public struct OnigiriGauge: View {
     /// 0...1 fraction of the daily deficit goal achieved.
-    let progress: Double
+    public let progress: Double
 
-    var body: some View {
+    public init(progress: Double) {
+        self.progress = progress
+    }
+
+    public var body: some View {
         GeometryReader { geo in
             let emoji = Text("🍙")
                 .font(.system(size: min(geo.size.width, geo.size.height) * 0.85))

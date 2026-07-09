@@ -1,4 +1,5 @@
 import Foundation
+import WidgetKit
 import OnigiriKit
 
 @Observable
@@ -23,6 +24,7 @@ final class WaterModel {
         do {
             try await health.logWater(oz: oz)
             await refresh()
+            WidgetCenter.shared.reloadAllTimelines()
         } catch {
             errorMessage = "Couldn't log water: \(error.localizedDescription)"
         }
@@ -32,6 +34,7 @@ final class WaterModel {
         do {
             try await health.deleteWaterEntry(id: entry.id)
             await refresh()
+            WidgetCenter.shared.reloadAllTimelines()
         } catch {
             errorMessage = "Couldn't delete that entry — Onigiri can only remove water it logged itself."
         }

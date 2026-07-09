@@ -1,0 +1,57 @@
+import WidgetKit
+import SwiftUI
+import OnigiriKit
+
+/// Small home-screen widget: the onigiri gauge with the balance number.
+struct GaugeWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "OnigiriGauge", provider: GaugeProvider()) { entry in
+            GaugeWidgetView(entry: entry)
+                .containerBackground(.fill.tertiary, for: .widget)
+        }
+        .configurationDisplayName("Onigiri Gauge")
+        .description("Daily goal progress at a glance.")
+        .supportedFamilies([.systemSmall])
+    }
+}
+
+struct GaugeEntry: TimelineEntry {
+    let date: Date
+    let snapshot: DaySnapshot
+}
+
+struct GaugeProvider: TimelineProvider {
+    func placeholder(in context: Context) -> GaugeEntry {
+        GaugeEntry(date: .now, snapshot: .placeholder)
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (GaugeEntry) -> Void) {
+        Task { @MainActor in
+            completion(GaugeEntry(date: .now, snapshot: await SnapshotLoader.load()))
+        }
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<GaugeEntry>) -> Void) {
+        Task { @MainActor in
+            let entry = GaugeEntry(date: .now, snapshot: await SnapshotLoader.load())
+            completion(Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(30 * 60))))
+        }
+    }
+}
+
+struct GaugeWidgetView: View {
+    let entry: GaugeEntry
+
+    var body: some View {
+        VStack(spacing: 4) {
+            OnigiriGauge(progress: entry.snapshot.gaugeProgress)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Text(entry.snapshot.summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
+                .font(.system(.title3, design: .rounded).weight(.bold))
+                .foregroundStyle(entry.snapshot.summary.balanceKcal <= 0 ? Color.green : Color.orange)
+            Text("kcal balance")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+}

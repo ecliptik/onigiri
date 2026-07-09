@@ -30,6 +30,7 @@ targets:
     dependencies:
       - package: OnigiriKit
       - target: OnigiriWatch
+      - target: OnigiriWidgets
     info:
       path: Onigiri/Info.plist
       properties:
@@ -41,6 +42,30 @@ targets:
       path: Onigiri/Onigiri.entitlements
       properties:
         com.apple.developer.healthkit: true
+        com.apple.security.application-groups:
+          - group.com.ecliptik.Onigiri
+
+  OnigiriWidgets:
+    type: app-extension
+    platform: iOS
+    sources: [OnigiriWidgets]
+    dependencies:
+      - package: OnigiriKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ecliptik.Onigiri.widgets
+    info:
+      path: OnigiriWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Onigiri
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: OnigiriWidgets/OnigiriWidgets.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.security.application-groups:
+          - group.com.ecliptik.Onigiri
 
   OnigiriWatch:
     type: application
@@ -48,6 +73,7 @@ targets:
     sources: [OnigiriWatch]
     dependencies:
       - package: OnigiriKit
+      - target: OnigiriWatchWidgets
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ecliptik.Onigiri.watchkitapp
@@ -63,6 +89,26 @@ targets:
         NSHealthUpdateUsageDescription: Onigiri saves the food, sodium, and water you log to Apple Health.
     entitlements:
       path: OnigiriWatch/OnigiriWatch.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+
+  OnigiriWatchWidgets:
+    type: app-extension
+    platform: watchOS
+    sources: [OnigiriWatchWidgets]
+    dependencies:
+      - package: OnigiriKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ecliptik.Onigiri.watchkitapp.widgets
+    info:
+      path: OnigiriWatchWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Onigiri
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: OnigiriWatchWidgets/OnigiriWatchWidgets.entitlements
       properties:
         com.apple.developer.healthkit: true
 

@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import WidgetKit
 import OnigiriKit
 
 /// The library: saved foods and one-tap meals. Tapping a row logs it to
@@ -103,6 +104,7 @@ struct FoodsView: View {
             do {
                 try await health.logFood(name: name, kcal: kcal, sodiumMg: sodiumMg)
                 showToast("Logged \(name) ✓")
+                WidgetCenter.shared.reloadAllTimelines()
             } catch {
                 showToast("Couldn't log: \(error.localizedDescription)")
             }

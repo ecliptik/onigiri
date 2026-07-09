@@ -11,7 +11,8 @@ A personal calorie, sodium, and water tracker for iPhone + Apple Watch, built wi
 - **Food library** — save foods with calories + sodium (manual entry or barcode scan via OpenFoodFacts)
 - **Meals** — bundle saved foods into one-tap recurring meals
 - **Water tracking** — configurable serving size (e.g., 12 oz) and daily goal
-- **Apple Watch app** — glanceable meter, one-tap water and meal logging, watch-face complication
+- **Apple Watch app** — glanceable meter, one-tap water and meal logging, watch-face complications (balance + water)
+- **Home-screen widgets** — small onigiri gauge, and a medium meter with instant add-water and a configurable one-tap meal button (no app launch)
 
 ## Architecture at a glance
 

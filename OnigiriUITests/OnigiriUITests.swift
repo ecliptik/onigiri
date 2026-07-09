@@ -50,6 +50,67 @@ final class OnigiriUITests: XCTestCase {
         )
     }
 
+    /// Adds the Onigiri medium widget to the simulator home screen by driving
+    /// springboard. Mutates home-screen state — opt in via ADD_WIDGET=1.
+    @MainActor
+    func testAddWidgetToHomeScreen() throws {
+        guard ProcessInfo.processInfo.environment["ADD_WIDGET"] == "1" else {
+            throw XCTSkip("Set ADD_WIDGET=1 to run the widget installer")
+        }
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        springboard.activate()
+
+        // Reset to a clean home screen regardless of leftover state.
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 1)
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 1)
+
+        // Long-press an empty spot to enter jiggle mode.
+        springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+            .press(forDuration: 2)
+
+        let edit = springboard.buttons["Edit"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 5), "Jiggle-mode Edit button")
+        edit.tap()
+
+        let addWidget = springboard.buttons["Add Widget"]
+        XCTAssertTrue(addWidget.waitForExistence(timeout: 5), "Add Widget menu item")
+        addWidget.tap()
+
+        // Widget gallery: search for the app.
+        let searchField = springboard.searchFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8), "Gallery search field")
+        searchField.tap()
+        searchField.typeText("Onigiri")
+
+        let result = springboard.staticTexts["Onigiri"].firstMatch
+        XCTAssertTrue(result.waitForExistence(timeout: 8), "Onigiri in gallery results")
+        result.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        // Wait for the widget detail pager, then swipe to the medium widget.
+        let add = springboard.buttons[" Add Widget"].exists
+            ? springboard.buttons[" Add Widget"]
+            : springboard.buttons["Add Widget"]
+        XCTAssertTrue(add.waitForExistence(timeout: 8), "Add Widget confirm button")
+        // Swipe the family pager (not the whole screen) to reach the medium widget.
+        let pager = springboard.scrollViews.firstMatch
+        if pager.exists {
+            pager.swipeLeft()
+        } else {
+            springboard.swipeLeft()
+        }
+        Thread.sleep(forTimeInterval: 1)
+        add.tap()
+
+        // Exit jiggle mode and give the timeline a moment to render.
+        let done = springboard.buttons["Done"]
+        if done.waitForExistence(timeout: 5) {
+            done.tap()
+        }
+        Thread.sleep(forTimeInterval: 5)
+    }
+
     /// One-off: grants whatever Health sheet is pending, without seeding.
     @MainActor
     func testGrantPendingAccess() throws {

@@ -1,6 +1,7 @@
 #if DEBUG
 import Foundation
 import SwiftData
+import OnigiriKit
 
 /// Simulator-only: fills the library and goal with sample content so the UI
 /// can be exercised without typing. Paired with HealthKitService.seedSampleData.

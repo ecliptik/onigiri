@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import OnigiriKit
 
 /// Create a one-tap meal by picking quantities of saved foods.
 struct MealFormView: View {

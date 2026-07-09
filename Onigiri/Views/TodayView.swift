@@ -84,7 +84,7 @@ struct TodayView: View {
                 .font(.system(size: 60, weight: .bold, design: .rounded))
                 .foregroundStyle(model.summary.balanceKcal <= 0 ? Color.green : Color.orange)
                 .contentTransition(.numericText())
-            Text(model.isToday ? "kcal balance today" : "kcal balance")
+            Text("kcal balance")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -142,33 +142,51 @@ struct TodayView: View {
             } icon: {
                 Image(systemName: "aqi.medium").foregroundStyle(.gray)
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Label {
                 Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(waterGoalOz, format: .number.precision(.fractionLength(0))) oz water")
             } icon: {
                 Image(systemName: "drop.fill").foregroundStyle(.blue)
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .font(.subheadline)
         .foregroundStyle(.secondary)
-        .padding(.horizontal)
+        .padding(.horizontal, 28)
     }
 
     private var loggedSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(model.isToday ? "Logged today" : "Logged")
+            Text("Logged")
                 .font(.headline)
                 .padding(.horizontal)
 
             if model.foodLog.isEmpty {
-                Text(model.isToday
-                     ? "Nothing logged yet — tap a food or meal in the Foods tab."
-                     : "Nothing was logged this day.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                if model.isToday {
+                    Text("Nothing Logged")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal)
+                    Button {
+                        // Reuses the quick-action route: switches to Foods.
+                        QuickActions.shared.pending = .logMeal
+                    } label: {
+                        Label("Log food or meal", systemImage: "fork.knife")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.black)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.ricePaper)
                     .padding(.horizontal)
+                } else {
+                    Text("Nothing was logged this day.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal)
+                }
             }
 
             ForEach(model.foodLog) { entry in
@@ -202,6 +220,9 @@ struct TodayView: View {
                 .padding(.horizontal)
             }
         }
+        // Full width regardless of content, so the header stays left-pinned
+        // even when the day has no entries.
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -229,9 +250,11 @@ struct DailyGoalCard: View {
                         .font(.headline)
                         .foregroundStyle(progress >= 1 ? Color.green : Color.secondary)
                 }
-                Text("\(bankedKcal, format: .number.precision(.fractionLength(0))) of \(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal deficit banked")
+                Text("\(bankedKcal, format: .number.precision(.fractionLength(0))) of \(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal deficit")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                // Keep the card the same height across days: today shows the
+                // remaining budget; past days show the day's outcome.
                 if showsRemaining {
                     if remainingKcal >= 0 {
                         Text("≈ \(remainingKcal, format: .number.precision(.fractionLength(0))) kcal left to eat today")
@@ -242,6 +265,14 @@ struct DailyGoalCard: View {
                             .font(.subheadline)
                             .foregroundStyle(.orange)
                     }
+                } else if progress >= 1 {
+                    Text("🍙 earned")
+                        .font(.subheadline)
+                        .foregroundStyle(.green)
+                } else {
+                    Text("goal not met")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
                 if plan.isAggressive {
                     Label("Aggressive pace — consider a later date", systemImage: "exclamationmark.triangle.fill")

@@ -316,13 +316,21 @@ public final class HealthKitService {
     /// meter has data. Call requestDebugSeedAuthorization() first — this
     /// assumes write access to the burn/weight types is already granted.
     public func seedSampleData(now: Date = .now) async throws {
+        // All times are anchored inside calendar days so the seed behaves the
+        // same at any hour — a span crossing midnight would be apportioned
+        // across days by HealthKit statistics and skew per-day totals.
+        let calendar = Calendar.current
+        let todayStart = calendar.startOfDay(for: now)
+        let elapsedToday = max(now.timeIntervalSince(todayStart), 60)
+        func todayAt(_ fraction: Double) -> Date {
+            todayStart.addingTimeInterval(elapsedToday * fraction)
+        }
+
         func sample(
             _ id: HKQuantityTypeIdentifier, _ unit: HKUnit, _ value: Double,
-            hoursAgo: Double, spanningHours: Double = 0
+            start: Date, end: Date
         ) -> HKQuantitySample {
-            let end = now.addingTimeInterval(-hoursAgo * 3600)
-            let start = end.addingTimeInterval(-spanningHours * 3600)
-            return HKQuantitySample(
+            HKQuantitySample(
                 type: HKQuantityType(id),
                 quantity: HKQuantity(unit: unit, doubleValue: value),
                 start: start, end: end
@@ -331,47 +339,52 @@ public final class HealthKitService {
 
         var samples = [
             // energy burn accrued so far today
-            sample(.activeEnergyBurned, .kilocalorie(), 385, hoursAgo: 1, spanningHours: 5),
-            sample(.basalEnergyBurned, .kilocalorie(), 1120, hoursAgo: 0, spanningHours: 14),
+            sample(.activeEnergyBurned, .kilocalorie(), 385, start: todayAt(0.1), end: todayAt(0.6)),
+            sample(.basalEnergyBurned, .kilocalorie(), 1120, start: todayAt(0), end: todayAt(0.95)),
             // two glasses of water
-            sample(.dietaryWater, .fluidOunceUS(), 12, hoursAgo: 5),
-            sample(.dietaryWater, .fluidOunceUS(), 12, hoursAgo: 1),
+            sample(.dietaryWater, .fluidOunceUS(), 12, start: todayAt(0.4), end: todayAt(0.4)),
+            sample(.dietaryWater, .fluidOunceUS(), 12, start: todayAt(0.9), end: todayAt(0.9)),
         ]
         // a month of daily weigh-ins drifting 202 → 200 lb with scale noise
         let wobble: [Double] = [0.4, -0.3, 0.6, -0.5, 0.1, 0.3, -0.4]
         for day in 0...30 {
             let trend = 202.0 - (Double(day) / 30.0) * 2.0
+            guard let dayStart = calendar.date(byAdding: .day, value: day - 30, to: todayStart) else { continue }
+            let morning = dayStart.addingTimeInterval(7 * 3600)
             samples.append(sample(
                 .bodyMass, .pound(), trend + wobble[day % wobble.count],
-                hoursAgo: Double(30 - day) * 24 + 12
+                start: morning, end: morning
             ))
         }
         // three full days of history so the 14-day average has data and the
         // streak calendar has earned days (2300 burn − 1550 eaten = 750 deficit)
         for day in 1...3 {
+            guard let dayStart = calendar.date(byAdding: .day, value: -day, to: todayStart) else { continue }
             samples.append(sample(
                 .activeEnergyBurned, .kilocalorie(), 500,
-                hoursAgo: Double(day) * 24, spanningHours: 10
+                start: dayStart.addingTimeInterval(9 * 3600),
+                end: dayStart.addingTimeInterval(19 * 3600)
             ))
             samples.append(sample(
                 .basalEnergyBurned, .kilocalorie(), 1800,
-                hoursAgo: Double(day) * 24, spanningHours: 16
+                start: dayStart.addingTimeInterval(1 * 3600),
+                end: dayStart.addingTimeInterval(22 * 3600)
             ))
         }
         try await store.save(samples)
 
         // breakfast and lunch as named food correlations
         try await logFood(name: "Two eggs & toast", kcal: 420, sodiumMg: 610,
-                          date: now.addingTimeInterval(-6 * 3600))
+                          date: todayAt(0.25))
         try await logFood(name: "Chicken burrito", kcal: 680, sodiumMg: 940,
-                          date: now.addingTimeInterval(-2 * 3600))
+                          date: todayAt(0.75))
         // past days' intake as named logs so day browsing has entries
         for day in 1...3 {
-            let dinner = now.addingTimeInterval(-Double(day) * 24 * 3600)
-            try await logFood(name: "Chicken & rice", kcal: 900, sodiumMg: 1000,
-                              date: dinner)
+            guard let dayStart = calendar.date(byAdding: .day, value: -day, to: todayStart) else { continue }
             try await logFood(name: "Two eggs & toast", kcal: 650, sodiumMg: 800,
-                              date: dinner.addingTimeInterval(-6 * 3600))
+                              date: dayStart.addingTimeInterval(8 * 3600))
+            try await logFood(name: "Chicken & rice", kcal: 900, sodiumMg: 1000,
+                              date: dayStart.addingTimeInterval(18 * 3600))
         }
     }
     #endif

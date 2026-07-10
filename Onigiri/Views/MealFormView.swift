@@ -48,22 +48,6 @@ struct MealFormView: View {
                 Toggle("Favorite", isOn: $isFavorite)
 
                 Section("Foods") {
-                    HStack(spacing: 8) {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundStyle(.secondary)
-                        TextField("Search foods", text: $foodFilter)
-                            .autocorrectionDisabled()
-                        if !foodFilter.isEmpty {
-                            Button {
-                                foodFilter = ""
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel("Clear search")
-                        }
-                    }
                     ForEach(visibleFoods) { food in
                         Stepper(value: binding(for: food), in: 0...20, step: 1) {
                             HStack {
@@ -98,6 +82,9 @@ struct MealFormView: View {
             .compactSections()
             .navigationTitle(meal == nil ? "New Meal" : "Edit Meal")
             .navigationBarTitleDisplayMode(.inline)
+            // System search, matching Foods and the Log sheet (bottom
+            // placement on iOS 26).
+            .searchable(text: $foodFilter, prompt: "Search foods")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

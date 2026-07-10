@@ -72,8 +72,13 @@ struct QuickLogSheet: View {
             if item.name.localizedCaseInsensitiveContains(searchText) { return true }
             return item.category?.localizedCaseInsensitiveContains(searchText) ?? false
         }
+        // Favorites first, then items matching the current meal slot, then name.
+        let slot = FoodCategory.slot(for: .now).rawValue
         return matched.sorted { lhs, rhs in
             if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
+            let lhsNow = lhs.category == slot
+            let rhsNow = rhs.category == slot
+            if lhsNow != rhsNow { return lhsNow }
             return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
     }
@@ -138,15 +143,16 @@ struct QuickLogSheet: View {
                 }
             }
             .sheet(item: $portionTarget) { target in
-                PortionSheet(target: target) { quantity in
+                PortionSheet(target: target) { quantity, category in
                     log(
                         Item(id: target.name, name: target.name, detail: target.serving,
                              kcal: target.kcal, sodiumMg: target.sodiumMg,
                              nutrients: target.nutrients, isFavorite: false, category: nil),
-                        quantity: quantity
+                        quantity: quantity,
+                        category: category
                     )
                 }
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
             }
         }
     }
@@ -161,18 +167,29 @@ struct QuickLogSheet: View {
         )
         .contentShape(.rect)
         .onTapGesture {
-            log(item, quantity: 1)
+            // Meals log one-tap with their category; foods confirm the
+            // portion and meal slot in the sheet.
+            if item.isMeal {
+                log(item, quantity: 1, category: PortionTarget.category(from: item.category))
+            } else {
+                portionTarget = makePortionTarget(for: item)
+            }
         }
         .onLongPressGesture(minimumDuration: 0.4) {
-            portionTarget = PortionTarget(
-                name: item.name, kcal: item.kcal, sodiumMg: item.sodiumMg,
-                nutrients: item.nutrients, serving: item.detail
-            )
+            portionTarget = makePortionTarget(for: item)
         }
         .accessibilityAddTraits(.isButton)
     }
 
-    private func log(_ item: Item, quantity: Double) {
+    private func makePortionTarget(for item: Item) -> PortionTarget {
+        PortionTarget(
+            name: item.name, kcal: item.kcal, sodiumMg: item.sodiumMg,
+            nutrients: item.nutrients, serving: item.detail,
+            defaultCategory: PortionTarget.category(from: item.category)
+        )
+    }
+
+    private func log(_ item: Item, quantity: Double, category: FoodCategory) {
         guard !isLogging else { return }
         isLogging = true
         Task {
@@ -181,7 +198,8 @@ struct QuickLogSheet: View {
                     name: item.name,
                     kcal: item.kcal * quantity,
                     sodiumMg: item.sodiumMg * quantity,
-                    nutrients: item.nutrients.scaled(by: quantity)
+                    nutrients: item.nutrients.scaled(by: quantity),
+                    category: category
                 )
                 WidgetCenter.shared.reloadAllTimelines()
                 UINotificationFeedbackGenerator().notificationOccurred(.success)

@@ -27,16 +27,22 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Two eggs & toast"].exists)
 
         // Deliberate logging via the row's Log button (row taps open Edit).
+        // Foods confirm through the portion sheet: pick a slot and Log.
         app.tabBars.buttons["Foods"].tap()
         let logShake = app.buttons["Log Protein shake"]
         XCTAssertTrue(logShake.waitForExistence(timeout: 10), "Seeded library should list foods")
         logShake.tap()
+        let confirmLog = app.buttons["Log"]
+        XCTAssertTrue(confirmLog.waitForExistence(timeout: 5), "Portion sheet should open on +")
+        app.buttons["Snack"].tap()
+        confirmLog.tap()
 
         app.tabBars.buttons["Today"].tap()
         XCTAssertTrue(
             app.staticTexts["Protein shake"].waitForExistence(timeout: 10),
-            "Tapped food should appear in the Logged today list"
+            "Logged food should appear in the Today log"
         )
+        XCTAssertTrue(app.staticTexts["Snack"].exists, "Entry should land in its meal-slot section")
 
         // Water quick-add: seeded 24 oz + one 12 oz serving = 36.
         app.tabBars.buttons["Water"].tap()

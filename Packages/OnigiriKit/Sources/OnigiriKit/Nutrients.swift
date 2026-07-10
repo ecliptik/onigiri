@@ -1,6 +1,6 @@
 import Foundation
 
-/// Meal-slot categories for organizing the food library.
+/// Meal-slot categories for organizing the food library and the daily log.
 public enum FoodCategory: String, CaseIterable, Codable, Sendable, Identifiable {
     case breakfast = "Breakfast"
     case lunch = "Lunch"
@@ -8,6 +8,19 @@ public enum FoodCategory: String, CaseIterable, Codable, Sendable, Identifiable 
     case snack = "Snack"
 
     public var id: String { rawValue }
+
+    /// The meal slot a moment of the day falls into: breakfast 5–11 AM,
+    /// lunch 11 AM–3 PM, snack 3–6 PM, dinner 6–11 PM. Late night
+    /// (11 PM–5 AM) counts as a snack.
+    public static func slot(for date: Date, calendar: Calendar = .current) -> FoodCategory {
+        switch calendar.component(.hour, from: date) {
+        case 5..<11: .breakfast
+        case 11..<15: .lunch
+        case 15..<18: .snack
+        case 18..<23: .dinner
+        default: .snack
+        }
+    }
 }
 
 /// Optional extended nutrients (grams). Calories and sodium remain the

@@ -27,22 +27,30 @@ struct FoodsView: View {
 
     private let health = HealthKitService()
 
+    /// Favorites first, then items whose category matches the current meal
+    /// slot (breakfast in the morning, dinner in the evening…), then name.
+    private static func ranked(
+        _ lhs: (isFavorite: Bool, category: String?, name: String),
+        _ rhs: (isFavorite: Bool, category: String?, name: String)
+    ) -> Bool {
+        if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
+        let slot = FoodCategory.slot(for: .now).rawValue
+        let lhsNow = lhs.category == slot
+        let rhsNow = rhs.category == slot
+        if lhsNow != rhsNow { return lhsNow }
+        return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+    }
+
     private var filteredMeals: [Meal] {
         meals
             .filter { matches(name: $0.name, category: $0.category) }
-            .sorted { lhs, rhs in
-                if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-            }
+            .sorted { Self.ranked(($0.isFavorite, $0.category, $0.name), ($1.isFavorite, $1.category, $1.name)) }
     }
 
     private var filteredFoods: [Food] {
         foods
             .filter { matches(name: $0.name, category: $0.category) }
-            .sorted { lhs, rhs in
-                if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-            }
+            .sorted { Self.ranked(($0.isFavorite, $0.category, $0.name), ($1.isFavorite, $1.category, $1.name)) }
     }
 
     private func matches(name: String, category: String?) -> Bool {
@@ -67,15 +75,18 @@ struct FoodsView: View {
                                     sodiumMg: meal.totalSodiumMg,
                                     isFavorite: meal.isFavorite
                                 )
-                                LogButton(name: meal.name) { quantity in
+                                // Meals stay one-tap: their category rides
+                                // along; long-press still offers portions.
+                                LogButton(name: meal.name) {
                                     log(name: meal.name, kcal: meal.totalKcal,
                                         sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
-                                        quantity: quantity)
+                                        category: PortionTarget.category(from: meal.category))
                                 } onCustomPortion: {
                                     portionTarget = PortionTarget(
                                         name: meal.name, kcal: meal.totalKcal,
                                         sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
-                                        serving: "1 meal"
+                                        serving: "1 meal",
+                                        defaultCategory: PortionTarget.category(from: meal.category)
                                     )
                                 }
                             }
@@ -114,16 +125,12 @@ struct FoodsView: View {
                                 sodiumMg: food.sodiumMg,
                                 isFavorite: food.isFavorite
                             )
-                            LogButton(name: food.name) { quantity in
-                                log(name: food.name, kcal: food.kcal,
-                                    sodiumMg: food.sodiumMg, nutrients: food.nutrients,
-                                    quantity: quantity)
+                            // Foods always confirm through the portion sheet
+                            // so the serving and meal slot are deliberate.
+                            LogButton(name: food.name) {
+                                portionTarget = makePortionTarget(for: food)
                             } onCustomPortion: {
-                                portionTarget = PortionTarget(
-                                    name: food.name, kcal: food.kcal,
-                                    sodiumMg: food.sodiumMg, nutrients: food.nutrients,
-                                    serving: food.servingDescription
-                                )
+                                portionTarget = makePortionTarget(for: food)
                             }
                         }
                         .contentShape(.rect)
@@ -198,12 +205,12 @@ struct FoodsView: View {
             .sheet(isPresented: $showNewMeal) { MealFormView() }
             .sheet(item: $editingMeal) { MealFormView(meal: $0) }
             .sheet(item: $portionTarget) { target in
-                PortionSheet(target: target) { quantity in
+                PortionSheet(target: target) { quantity, category in
                     log(name: target.name, kcal: target.kcal,
                         sodiumMg: target.sodiumMg, nutrients: target.nutrients,
-                        quantity: quantity)
+                        category: category, quantity: quantity)
                 }
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
             }
             .task {
                 if scanRequest {
@@ -241,9 +248,18 @@ struct FoodsView: View {
         }
     }
 
+    private func makePortionTarget(for food: Food) -> PortionTarget {
+        PortionTarget(
+            name: food.name, kcal: food.kcal,
+            sodiumMg: food.sodiumMg, nutrients: food.nutrients,
+            serving: food.servingDescription,
+            defaultCategory: PortionTarget.category(from: food.category)
+        )
+    }
+
     private func log(
         name: String, kcal: Double, sodiumMg: Double,
-        nutrients: NutrientValues, quantity: Double = 1
+        nutrients: NutrientValues, category: FoodCategory, quantity: Double = 1
     ) {
         // The log keeps the plain food name; the portion only scales values.
         Task {
@@ -252,7 +268,8 @@ struct FoodsView: View {
                     name: name,
                     kcal: kcal * quantity,
                     sodiumMg: sodiumMg * quantity,
-                    nutrients: nutrients.scaled(by: quantity)
+                    nutrients: nutrients.scaled(by: quantity),
+                    category: category
                 )
                 undoLogID = id
                 let suffix = quantity == 1 ? "" : " ×\(Portion.label(for: quantity))"
@@ -306,7 +323,8 @@ enum Portion {
     }
 }
 
-/// What the custom-portion sheet is scaling.
+/// What the custom-portion sheet is scaling, and which meal slot it
+/// defaults to (the item's own category, else the current time of day).
 struct PortionTarget: Identifiable {
     var id: String { name }
     let name: String
@@ -314,43 +332,52 @@ struct PortionTarget: Identifiable {
     let sodiumMg: Double
     let nutrients: NutrientValues
     let serving: String
+    var defaultCategory: FoodCategory = .slot(for: .now)
+
+    static func category(from stored: String?) -> FoodCategory {
+        stored.flatMap(FoodCategory.init(rawValue:)) ?? .slot(for: .now)
+    }
 }
 
 /// The deliberate tap target for logging — a small rice-paper capsule so a
-/// stray row tap can't log by accident. Tap logs one serving; long-press
-/// offers portions (½, ¼, 2×, custom…).
+/// stray row tap can't log by accident.
 private struct LogButton: View {
     let name: String
-    let action: (Double) -> Void
+    let action: () -> Void
     let onCustomPortion: () -> Void
 
     var body: some View {
-        // Tap logs one serving; long-press goes straight to the portion
-        // sheet (its quick chips cover the common fractions).
         Image(systemName: "plus")
             .font(.subheadline.weight(.bold))
             .foregroundStyle(.black)
             .padding(8)
             .background(Color.ricePaper, in: .circle)
             .contentShape(.circle)
-            .onTapGesture { action(1) }
+            .onTapGesture { action() }
             .onLongPressGesture(minimumDuration: 0.4) { onCustomPortion() }
             .accessibilityLabel("Log \(name)")
             .accessibilityAddTraits(.isButton)
     }
 }
 
-/// Pick an arbitrary portion multiplier with a live preview.
+/// Pick a portion and meal slot with a live preview before logging.
 struct PortionSheet: View {
     let target: PortionTarget
-    let onLog: (Double) -> Void
+    let onLog: (Double, FoodCategory) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var quantity = 1.0
+    @State private var category: FoodCategory
+
+    init(target: PortionTarget, onLog: @escaping (Double, FoodCategory) -> Void) {
+        self.target = target
+        self.onLog = onLog
+        _category = State(initialValue: target.defaultCategory)
+    }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section {
+                Section(target.name) {
                     HStack {
                         ForEach(Portion.quickOptions, id: \.self) { option in
                             Button(Portion.label(for: option)) {
@@ -372,13 +399,18 @@ struct PortionSheet: View {
                     }
                 }
                 Section {
+                    Picker("Meal", selection: $category) {
+                        ForEach(FoodCategory.allCases) { option in
+                            Text(option.rawValue).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                     LabeledContent("Will log") {
                         Text("\(target.kcal * quantity, format: .number.precision(.fractionLength(0))) kcal • \(target.sodiumMg * quantity, format: .number.precision(.fractionLength(0))) mg Na")
                             .monospacedDigit()
                     }
                 }
             }
-            .navigationTitle("Portion")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -386,7 +418,7 @@ struct PortionSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Log") {
-                        onLog(quantity)
+                        onLog(quantity, category)
                         dismiss()
                     }
                     .fontWeight(.semibold)

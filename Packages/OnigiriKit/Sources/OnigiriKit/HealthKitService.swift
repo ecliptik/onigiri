@@ -250,15 +250,22 @@ public final class HealthKitService {
     /// Log an eating event as an HKCorrelation(.food) wrapping energy,
     /// sodium, and any known extended nutrients, named via metadata so the
     /// log can be listed later. Returns the correlation UUID for undo.
+    /// Custom metadata key carrying the meal slot (FoodCategory rawValue).
+    public static let mealCategoryMetadataKey = "OnigiriMealCategory"
+
     @discardableResult
     public func logFood(
         name: String,
         kcal: Double,
         sodiumMg: Double,
         nutrients: NutrientValues = NutrientValues(),
+        category: FoodCategory? = nil,
         date: Date = .now
     ) async throws -> UUID {
-        let metadata: [String: Any] = [HKMetadataKeyFoodType: name]
+        var metadata: [String: Any] = [HKMetadataKeyFoodType: name]
+        if let category {
+            metadata[Self.mealCategoryMetadataKey] = category.rawValue
+        }
         var objects: Set<HKSample> = [
             HKQuantitySample(
                 type: HKQuantityType(.dietaryEnergyConsumed),
@@ -321,7 +328,9 @@ public final class HealthKitService {
                 name: correlation.metadata?[HKMetadataKeyFoodType] as? String ?? "Food",
                 kcal: correlation.total(.dietaryEnergyConsumed, unit: .kilocalorie()),
                 sodiumMg: correlation.total(.dietarySodium, unit: .gramUnit(with: .milli)),
-                date: correlation.startDate
+                date: correlation.startDate,
+                category: (correlation.metadata?[Self.mealCategoryMetadataKey] as? String)
+                    .flatMap(FoodCategory.init(rawValue:))
             )
         }
     }

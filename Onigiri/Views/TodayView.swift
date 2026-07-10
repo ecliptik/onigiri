@@ -13,6 +13,7 @@ struct TodayView: View {
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
     @State private var activeSheet: TodaySheet?
     @State private var quickActions = QuickActions.shared
+    @State private var collapsedSections: Set<FoodCategory> = []
 
     /// One sheet slot: multiple .sheet modifiers chained on the same view
     /// compete and only one reliably presents.
@@ -260,7 +261,55 @@ struct TodayView: View {
                     .padding(.horizontal)
             }
 
-            ForEach(model.foodLog) { entry in
+            ForEach(FoodCategory.allCases) { category in
+                let entries = model.foodLog.filter { $0.category == category }
+                if !entries.isEmpty {
+                    mealSection(category, entries: entries)
+                }
+            }
+        }
+        // Full width regardless of content, so the header stays left-pinned
+        // even when the day has no entries.
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// One meal-slot group: a tappable header with the slot's total that
+    /// collapses its entries to keep long days readable.
+    @ViewBuilder
+    private func mealSection(_ category: FoodCategory, entries: [FoodLogEntry]) -> some View {
+        let total = entries.reduce(0) { $0 + $1.kcal }
+        let isCollapsed = collapsedSections.contains(category)
+
+        Button {
+            withAnimation(.snappy) {
+                if isCollapsed {
+                    collapsedSections.remove(category)
+                } else {
+                    collapsedSections.insert(category)
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                Text(category.rawValue)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text("\(total, format: .number.precision(.fractionLength(0))) kcal")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal)
+        .accessibilityLabel("\(category.rawValue), \(Int(total)) kcal, \(isCollapsed ? "collapsed" : "expanded")")
+
+        if !isCollapsed {
+            ForEach(entries) { entry in
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(entry.name)
@@ -291,9 +340,6 @@ struct TodayView: View {
                 .padding(.horizontal)
             }
         }
-        // Full width regardless of content, so the header stays left-pinned
-        // even when the day has no entries.
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

@@ -23,7 +23,6 @@ struct CalendarView: View {
                     weekdayHeader
                     monthGrid
                     daySummaryCard
-                    milestonesCard
                     if model.targetDeficitKcal == nil {
                         Text("No goal set — days earn an onigiri for any calorie deficit. Set a goal to raise the bar.")
                             .font(.footnote)
@@ -240,26 +239,6 @@ struct CalendarView: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// Streak milestones — earned badges stay lit for good.
-    private var milestonesCard: some View {
-        HStack(spacing: 0) {
-            ForEach([7, 30, 100], id: \.self) { days in
-                let lit = model.bestStreak >= days
-                VStack(spacing: 2) {
-                    Text(lit ? "🏅" : "🔒")
-                        .font(.title3)
-                        .opacity(lit ? 1 : 0.4)
-                    Text("\(days)-day streak")
-                        .font(.caption)
-                        .foregroundStyle(lit ? .primary : .secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .accessibilityLabel("\(days)-day streak milestone, \(lit ? "earned" : "locked")")
-            }
-        }
-        .padding(.vertical, 14)
-        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
-    }
 }
 
 private struct DayCell: View {

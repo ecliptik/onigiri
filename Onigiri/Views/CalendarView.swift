@@ -199,20 +199,21 @@ struct CalendarView: View {
 
     private var daySummaryCard: some View {
         VStack(alignment: .leading, spacing: 6) {
+            // Constant leading anchor; the goal status is a trailing badge
+            // so nothing shifts or reflows as days change.
             HStack(spacing: 6) {
+                Text("Day Summary")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
                 if model.earned.contains(selectedDay) {
-                    Text("🍙 earned")
+                    Text("Goal met 🍙")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.green)
                 } else if calendar.isDateInToday(selectedDay) {
-                    Text("in progress")
+                    Text("In progress")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                } else {
-                    Text("Day summary")
-                        .font(.subheadline.weight(.semibold))
                 }
-                Spacer()
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)
@@ -251,7 +252,8 @@ struct CalendarView: View {
             .monospacedDigit()
 
             if let target = model.targetDeficitKcal {
-                Text("Daily target: \(target, format: .number.precision(.fractionLength(0))) kcal deficit")
+                // Same vocabulary as Today's "Daily goal" card.
+                Text("Daily goal: \(target, format: .number.precision(.fractionLength(0))) kcal deficit")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

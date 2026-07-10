@@ -239,7 +239,7 @@ struct TodayView: View {
     private var dayTitle: String {
         if model.isToday { return "Today" }
         if Calendar.current.isDateInYesterday(model.selectedDate) { return "Yesterday" }
-        return model.selectedDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        return model.selectedDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
     }
 
     /// Budget remaining for the day, when the user prefers the countdown

@@ -15,14 +15,15 @@ struct TodayView: View {
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
     @State private var activeSheet: TodaySheet?
     @State private var quickActions = QuickActions.shared
+    @State private var toastCenter = ToastCenter.shared
     // Collapsed by default: a full day is four one-line totals; expand what
     // you want to inspect.
     @State private var collapsedSections: Set<FoodCategory> = Set(FoodCategory.allCases)
-    @State private var toast: String?
     @State private var isLoggingWater = false
 
     /// One sheet slot: multiple .sheet modifiers chained on the same view
-    /// compete and only one reliably presents.
+    /// compete and only one reliably presents. The kind is part of the
+    /// identity so a "Log Food" shortcut re-presents a sheet stuck on Meals.
     private enum TodaySheet: Identifiable {
         case settings
         case quickLog(QuickActions.QuickLogKind)
@@ -30,7 +31,7 @@ struct TodayView: View {
         var id: String {
             switch self {
             case .settings: "settings"
-            case .quickLog: "quickLog"
+            case .quickLog(let kind): "quickLog-\(kind)"
             }
         }
     }
@@ -91,7 +92,10 @@ struct TodayView: View {
                 case .settings:
                     SettingsView()
                 case .quickLog(let kind):
-                    QuickLogSheet(initialKind: kind)
+                    QuickLogSheet(
+                        initialKind: kind,
+                        logDate: DayBounds.logTimestamp(for: model.selectedDate)
+                    )
                 }
             }
             .onChange(of: quickActions.quickLogRequest) { _, _ in
@@ -108,19 +112,10 @@ struct TodayView: View {
                 }
             )
         }
-        .overlay(alignment: .bottom) {
-            if let toast {
-                Text(toast)
-                    .font(.subheadline.weight(.medium))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(.regularMaterial, in: .capsule)
-                    .padding(.bottom, 8)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .animation(.snappy, value: toast)
         .task { await model.start() }
+        .onChange(of: toastCenter.mutationVersion) { _, _ in
+            Task { await model.refresh() }
+        }
         .refreshable { await model.refresh() }
         .onAppear {
             Task { await model.refresh() }
@@ -147,30 +142,16 @@ struct TodayView: View {
         .background(Color.ricePaper, in: .capsule)
     }
 
-    /// One-tap water: logs the default serving, same as the app-icon shortcut.
+    /// One-tap water: logs the default serving into the browsed day.
     private func logWaterServing() {
         guard !isLoggingWater else { return }
         isLoggingWater = true
-        let oz = SharedStore.waterServingOz
         Task {
             defer { isLoggingWater = false }
-            do {
-                try await HealthKitService().logWater(oz: oz)
-                WidgetCenter.shared.reloadAllTimelines()
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                showToast("Logged \(oz.formatted(.number.precision(.fractionLength(0)))) oz water ✓")
-                await model.refresh()
-            } catch {
-                showToast("Couldn't log water: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    private func showToast(_ message: String) {
-        toast = message
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            if toast == message { toast = nil }
+            await LogActions.logWater(
+                oz: SharedStore.waterServingOz,
+                date: DayBounds.logTimestamp(for: model.selectedDate)
+            )
         }
     }
 
@@ -297,24 +278,25 @@ struct TodayView: View {
                 Text("Log")
                     .font(.headline)
                 Spacer()
-                if model.isToday {
-                    Button {
-                        activeSheet = .quickLog(.all)
-                    } label: {
-                        logButtonLabel(foodEmoji)
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel("Log food or meal")
-
-                    Button {
-                        logWaterServing()
-                    } label: {
-                        logButtonLabel(waterEmoji)
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(isLoggingWater)
-                    .accessibilityLabel("Log \(Int(SharedStore.waterServingOz)) ounces of water")
+                // Present on past days too: forgotten meals get backfilled
+                // into the browsed day (noon timestamp, slot picked in the
+                // portion sheet).
+                Button {
+                    activeSheet = .quickLog(.all)
+                } label: {
+                    logButtonLabel(foodEmoji)
                 }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Log food or meal")
+
+                Button {
+                    logWaterServing()
+                } label: {
+                    logButtonLabel(waterEmoji)
+                }
+                .buttonStyle(.borderless)
+                .disabled(isLoggingWater)
+                .accessibilityLabel("Log \(Int(SharedStore.waterServingOz)) ounces of water")
             }
             .padding(.horizontal)
 
@@ -391,12 +373,13 @@ struct TodayView: View {
                             .monospacedDigit()
                     }
                     Button {
-                        Task { await model.delete(entry) }
+                        Task { await LogActions.deleteFoodEntry(entry) }
                     } label: {
                         Image(systemName: "trash")
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel("Delete \(entry.name)")
                 }
                 .padding(.vertical, 10)
                 .padding(.horizontal, 14)

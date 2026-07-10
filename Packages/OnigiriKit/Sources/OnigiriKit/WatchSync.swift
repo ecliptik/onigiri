@@ -1,17 +1,27 @@
 import Foundation
 
-/// A meal as it travels from iPhone to Watch: just what one-tap logging needs.
+/// A meal as it travels from iPhone to Watch: what one-tap logging needs.
+/// Category and nutrients are optional so payloads from older phones still
+/// decode — without them a watch/widget log falls back to time-of-day slot
+/// inference and kcal+sodium only.
 public struct SyncedMeal: Codable, Identifiable, Sendable, Hashable {
     public let id: UUID
     public let name: String
     public let kcal: Double
     public let sodiumMg: Double
+    public let category: String?
+    public let nutrients: NutrientValues?
 
-    public init(id: UUID, name: String, kcal: Double, sodiumMg: Double) {
+    public init(
+        id: UUID, name: String, kcal: Double, sodiumMg: Double,
+        category: String? = nil, nutrients: NutrientValues? = nil
+    ) {
         self.id = id
         self.name = name
         self.kcal = kcal
         self.sodiumMg = sodiumMg
+        self.category = category
+        self.nutrients = nutrients
     }
 }
 
@@ -29,17 +39,28 @@ public struct SyncedGoal: Codable, Sendable, Equatable {
     }
 }
 
+/// What a sync says to do with the watch's stored goal. "Absent from the
+/// context" means the phone has no goal (clear it); "present but
+/// undecodable" (version skew) must keep the last good copy, not wipe it.
+public enum GoalUpdate: Sendable, Equatable {
+    case set(SyncedGoal)
+    case clear
+    case keep
+}
+
 /// Everything one WatchConnectivity application context carries.
 public struct SyncPayload: Sendable {
-    public let meals: [SyncedMeal]
-    public let goal: SyncedGoal?
+    /// nil when the meals data was missing or failed to decode — keep the
+    /// watch's last good list.
+    public let meals: [SyncedMeal]?
+    public let goal: GoalUpdate
     public let waterServingOz: Double?
     public let waterGoalOz: Double?
     public let balanceStyle: String?
 
     public init(
-        meals: [SyncedMeal],
-        goal: SyncedGoal?,
+        meals: [SyncedMeal]?,
+        goal: GoalUpdate,
         waterServingOz: Double?,
         waterGoalOz: Double?,
         balanceStyle: String? = nil
@@ -84,14 +105,14 @@ public enum WatchSync {
     // MARK: Watch side
 
     public static func parse(_ context: [String: Any]) -> SyncPayload {
-        var meals: [SyncedMeal] = []
-        if let data = context[mealsKey] as? Data,
-           let decoded = try? JSONDecoder().decode([SyncedMeal].self, from: data) {
-            meals = decoded
-        }
-        var goal: SyncedGoal?
+        let meals: [SyncedMeal]? = (context[mealsKey] as? Data)
+            .flatMap { try? JSONDecoder().decode([SyncedMeal].self, from: $0) }
+        let goal: GoalUpdate
         if let data = context[goalKey] as? Data {
-            goal = try? JSONDecoder().decode(SyncedGoal.self, from: data)
+            goal = (try? JSONDecoder().decode(SyncedGoal.self, from: data))
+                .map(GoalUpdate.set) ?? .keep
+        } else {
+            goal = .clear
         }
         return SyncPayload(
             meals: meals,
@@ -104,13 +125,18 @@ public enum WatchSync {
 
     public static func store(_ payload: SyncPayload) {
         let defaults = SharedStore.defaults
-        if let data = try? JSONEncoder().encode(payload.meals) {
+        if let meals = payload.meals, let data = try? JSONEncoder().encode(meals) {
             defaults.set(data, forKey: mealsKey)
         }
-        if let goal = payload.goal, let data = try? JSONEncoder().encode(goal) {
-            defaults.set(data, forKey: goalKey)
-        } else if payload.goal == nil {
+        switch payload.goal {
+        case .set(let goal):
+            if let data = try? JSONEncoder().encode(goal) {
+                defaults.set(data, forKey: goalKey)
+            }
+        case .clear:
             defaults.removeObject(forKey: goalKey)
+        case .keep:
+            break
         }
         if let serving = payload.waterServingOz {
             defaults.set(serving, forKey: SharedStore.waterServingKey)

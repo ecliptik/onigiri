@@ -49,14 +49,26 @@ struct MeterWidgetView: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(summary.balanceKcal <= 0 ? Color.green : Color.orange)
-                    .minimumScaleFactor(0.6)
-                    .invalidatableContent()
-                Text("kcal balance")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                // Honor the same "Calorie display" setting as the app/watch.
+                if SharedStore.showsRemainingKcal, let remaining = entry.snapshot.remainingKcal {
+                    Text(remaining, format: .number.precision(.fractionLength(0)))
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .foregroundStyle(remaining >= 0 ? Color.green : Color.orange)
+                        .minimumScaleFactor(0.6)
+                        .invalidatableContent()
+                    Text("kcal left")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .foregroundStyle(summary.balanceKcal <= 0 ? Color.green : Color.orange)
+                        .minimumScaleFactor(0.6)
+                        .invalidatableContent()
+                    Text("kcal balance")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
 
                 Spacer(minLength: 0)
 

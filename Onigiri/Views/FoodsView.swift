@@ -19,15 +19,14 @@ struct FoodsView: View {
     @State private var showNewMeal = false
     @State private var editingFood: Food?
     @State private var editingMeal: Meal?
-    @State private var toast: String?
-    @State private var undoLogID: UUID?
+    @State private var isLogging = false
+    @State private var pendingMealDeletes: [Meal] = []
+    @State private var pendingFoodDeletes: [Food] = []
     @State private var searchText = ""
     @State private var categoryFilter: FoodCategory?
     @State private var portionTarget: PortionTarget?
     @State private var onlineSearch = OnlineFoodSearch()
     @State private var formPrefill: ProductPrefill?
-
-    private let health = HealthKitService()
 
     /// Favorites first, then items whose category matches the current meal
     /// slot (breakfast in the morning, dinner in the evening…), then name.
@@ -105,6 +104,7 @@ struct FoodsView: View {
                                 .tint(.riceToast)
                                 Button {
                                     meal.isFavorite.toggle()
+                                    PhoneSyncService.shared.push(from: context)
                                 } label: {
                                     Label("Favorite", systemImage: meal.isFavorite ? "star.slash" : "star.fill")
                                 }
@@ -112,7 +112,7 @@ struct FoodsView: View {
                             }
                         }
                         .onDelete { offsets in
-                            offsets.map { filteredMeals[$0] }.forEach(context.delete)
+                            pendingMealDeletes = offsets.map { filteredMeals[$0] }
                         }
                     }
                 }
@@ -148,6 +148,7 @@ struct FoodsView: View {
                             .tint(.riceToast)
                             Button {
                                 food.isFavorite.toggle()
+                                PhoneSyncService.shared.push(from: context)
                             } label: {
                                 Label("Favorite", systemImage: food.isFavorite ? "star.slash" : "star.fill")
                             }
@@ -155,10 +156,7 @@ struct FoodsView: View {
                         }
                     }
                     .onDelete { offsets in
-                        offsets.map { filteredFoods[$0] }.forEach(context.delete)
-                        // Drop the now food-less items from any meals that
-                        // used the deleted foods.
-                        LibraryMaintenance.repairDanglingFoodReferences(context: context)
+                        pendingFoodDeletes = offsets.map { filteredFoods[$0] }
                     }
 
                     if foods.isEmpty {
@@ -252,28 +250,58 @@ struct FoodsView: View {
                     showScanFood = true
                 }
             }
-            .overlay(alignment: .bottom) {
-                if let toast {
-                    HStack(spacing: 12) {
-                        Text(toast)
-                            .font(.subheadline.weight(.medium))
-                        if let undoID = undoLogID {
-                            Button("Undo") {
-                                undo(undoID)
-                            }
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Color.riceToast)
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(.regularMaterial, in: .capsule)
-                    .padding(.bottom, 8)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            .confirmationDialog(
+                deleteMealsTitle,
+                isPresented: .init(
+                    get: { !pendingMealDeletes.isEmpty },
+                    set: { if !$0 { pendingMealDeletes = [] } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    pendingMealDeletes.forEach(context.delete)
+                    pendingMealDeletes = []
+                    PhoneSyncService.shared.push(from: context)
                 }
             }
-            .animation(.snappy, value: toast)
+            .confirmationDialog(
+                deleteFoodsTitle,
+                isPresented: .init(
+                    get: { !pendingFoodDeletes.isEmpty },
+                    set: { if !$0 { pendingFoodDeletes = [] } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    pendingFoodDeletes.forEach(context.delete)
+                    pendingFoodDeletes = []
+                    // Drop the now food-less items from any meals that
+                    // used the deleted foods.
+                    LibraryMaintenance.repairDanglingFoodReferences(context: context)
+                    PhoneSyncService.shared.push(from: context)
+                }
+            }
         }
+    }
+
+    private var deleteMealsTitle: String {
+        pendingMealDeletes.count == 1
+            ? "Delete “\(pendingMealDeletes[0].name)”?"
+            : "Delete \(pendingMealDeletes.count) meals?"
+    }
+
+    private var deleteFoodsTitle: String {
+        let base = pendingFoodDeletes.count == 1
+            ? "Delete “\(pendingFoodDeletes[0].name)”?"
+            : "Delete \(pendingFoodDeletes.count) foods?"
+        let foodIDs = Set(pendingFoodDeletes.map(\.persistentModelID))
+        let affectedMeals = Set(meals.filter { meal in
+            meal.items.contains { item in
+                item.food.map { foodIDs.contains($0.persistentModelID) } ?? false
+            }
+        }.map(\.name))
+        guard !affectedMeals.isEmpty else { return base }
+        return base + " It will also be removed from \(affectedMeals.sorted().joined(separator: ", "))."
     }
 
     private func makePortionTarget(for food: Food) -> PortionTarget {
@@ -290,48 +318,17 @@ struct FoodsView: View {
         nutrients: NutrientValues, category: FoodCategory, quantity: Double = 1
     ) {
         // The log keeps the plain food name; the portion only scales values.
+        guard !isLogging else { return }
+        isLogging = true
         Task {
-            do {
-                let id = try await health.logFood(
-                    name: name,
-                    kcal: kcal * quantity,
-                    sodiumMg: sodiumMg * quantity,
-                    nutrients: nutrients.scaled(by: quantity),
-                    category: category
-                )
-                undoLogID = id
-                let suffix = quantity == 1 ? "" : " ×\(Portion.label(for: quantity))"
-                showToast("Logged \(name)\(suffix) ✓", clearsUndo: true)
-                WidgetCenter.shared.reloadAllTimelines()
-            } catch {
-                undoLogID = nil
-                showToast("Couldn't log: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    private func undo(_ id: UUID) {
-        undoLogID = nil
-        Task {
-            do {
-                try await health.deleteFoodEntry(id: id)
-                showToast("Removed ✓")
-                WidgetCenter.shared.reloadAllTimelines()
-            } catch {
-                showToast("Couldn't undo: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    private func showToast(_ message: String, clearsUndo: Bool = false) {
-        toast = message
-        Task {
-            // Leave the undo toast up longer so it's actually reachable.
-            try? await Task.sleep(for: .seconds(clearsUndo ? 5 : 2))
-            if toast == message {
-                toast = nil
-                if clearsUndo { undoLogID = nil }
-            }
+            defer { isLogging = false }
+            await LogActions.logFood(
+                name: name,
+                kcal: kcal * quantity,
+                sodiumMg: sodiumMg * quantity,
+                nutrients: nutrients.scaled(by: quantity),
+                category: category
+            )
         }
     }
 }
@@ -368,8 +365,9 @@ struct PortionTarget: Identifiable {
 }
 
 /// The deliberate tap target for logging — a small rice-paper capsule so a
-/// stray row tap can't log by accident.
-private struct LogButton: View {
+/// stray row tap can't log by accident. Shared by the Foods list and the
+/// quick-log sheet: rows tap to edit, this button logs.
+struct LogButton: View {
     let name: String
     let action: () -> Void
     let onCustomPortion: () -> Void

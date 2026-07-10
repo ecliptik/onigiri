@@ -33,6 +33,7 @@ struct ContentView: View {
             }
         }
         .tint(.riceToast)
+        .toastHost()
         .task {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--seed-sample-data") {
@@ -69,10 +70,11 @@ struct ContentView: View {
     private func handle(_ action: QuickActions.Action) {
         switch action {
         case .logWater:
-            selectedTab = .water
+            // Log before switching so the Water tab's on-appear refresh
+            // already sees the new serving; LogActions handles feedback.
             Task {
-                try? await HealthKitService().logWater(oz: SharedStore.waterServingOz)
-                WidgetCenter.shared.reloadAllTimelines()
+                await LogActions.logWater(oz: SharedStore.waterServingOz)
+                selectedTab = .water
             }
         case .logMeal:
             // Land on Today with the quick-log sheet up: one tap to log.

@@ -7,6 +7,9 @@ import OnigiriKit
 /// tap a row to log it and dismiss. Long-press a row for portions.
 struct QuickLogSheet: View {
     var initialKind: QuickActions.QuickLogKind = .all
+    /// Timestamp for the entries this sheet logs — Today passes the browsed
+    /// day so past days can be backfilled.
+    var logDate: Date = .now
 
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Meal.name) private var meals: [Meal]
@@ -21,8 +24,8 @@ struct QuickLogSheet: View {
     @State private var showScanner = false
     @State private var isLookingUpBarcode = false
     @State private var formPrefill: ProductPrefill?
-
-    private let health = HealthKitService()
+    @State private var editingFood: Food?
+    @State private var editingMeal: Meal?
 
     private struct Item: Identifiable {
         let id: String
@@ -33,7 +36,9 @@ struct QuickLogSheet: View {
         let nutrients: NutrientValues
         let isFavorite: Bool
         let category: String?
-        var isMeal = false
+        var food: Food?
+        var meal: Meal?
+        var isMeal: Bool { meal != nil }
     }
 
     private var allItems: [Item] {
@@ -47,7 +52,7 @@ struct QuickLogSheet: View {
                 nutrients: meal.totalNutrients,
                 isFavorite: meal.isFavorite,
                 category: meal.category,
-                isMeal: true
+                meal: meal
             )
         }
         let foodItems = foods.map { food in
@@ -59,7 +64,8 @@ struct QuickLogSheet: View {
                 sodiumMg: food.sodiumMg,
                 nutrients: food.nutrients,
                 isFavorite: food.isFavorite,
-                category: food.category
+                category: food.category,
+                food: food
             )
         }
         return mealItems + foodItems
@@ -216,11 +222,13 @@ struct QuickLogSheet: View {
             }
             .sheet(item: $formPrefill) { prefill in
                 // New foods go through the full form — reviewable, complete,
-                // and saved to the library. Save & Log finishes the log.
-                FoodFormView(food: nil, prefill: prefill.product) {
+                // and saved to the library. Its Log action finishes the log.
+                FoodFormView(food: nil, prefill: prefill.product, logDate: logDate) {
                     dismiss()
                 }
             }
+            .sheet(item: $editingFood) { FoodFormView(food: $0) }
+            .sheet(item: $editingMeal) { MealFormView(meal: $0) }
         }
     }
 
@@ -268,26 +276,34 @@ struct QuickLogSheet: View {
         }
     }
 
+    /// Same semantics as the Foods list: tapping the row opens the editor;
+    /// the + capsule logs (meals one-tap, foods confirm the portion).
     private func row(_ item: Item) -> some View {
-        LibraryRow(
-            name: item.name,
-            detail: item.detail,
-            kcal: item.kcal,
-            sodiumMg: item.sodiumMg,
-            isFavorite: item.isFavorite
-        )
-        .contentShape(.rect)
-        .onTapGesture {
-            // Meals log one-tap with their category; foods confirm the
-            // portion and meal slot in the sheet.
-            if item.isMeal {
-                log(item, quantity: 1, category: PortionTarget.category(from: item.category))
-            } else {
+        HStack(spacing: 10) {
+            LibraryRow(
+                name: item.name,
+                detail: item.detail,
+                kcal: item.kcal,
+                sodiumMg: item.sodiumMg,
+                isFavorite: item.isFavorite
+            )
+            LogButton(name: item.name) {
+                if item.isMeal {
+                    log(item, quantity: 1, category: PortionTarget.category(from: item.category))
+                } else {
+                    portionTarget = makePortionTarget(for: item)
+                }
+            } onCustomPortion: {
                 portionTarget = makePortionTarget(for: item)
             }
         }
-        .onLongPressGesture(minimumDuration: 0.4) {
-            portionTarget = makePortionTarget(for: item)
+        .contentShape(.rect)
+        .onTapGesture {
+            if let meal = item.meal {
+                editingMeal = meal
+            } else if let food = item.food {
+                editingFood = food
+            }
         }
         .accessibilityAddTraits(.isButton)
     }
@@ -304,19 +320,17 @@ struct QuickLogSheet: View {
         guard !isLogging else { return }
         isLogging = true
         Task {
-            do {
-                try await health.logFood(
-                    name: item.name,
-                    kcal: item.kcal * quantity,
-                    sodiumMg: item.sodiumMg * quantity,
-                    nutrients: item.nutrients.scaled(by: quantity),
-                    category: category
-                )
-                WidgetCenter.shared.reloadAllTimelines()
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            let logged = await LogActions.logFood(
+                name: item.name,
+                kcal: item.kcal * quantity,
+                sodiumMg: item.sodiumMg * quantity,
+                nutrients: item.nutrients.scaled(by: quantity),
+                category: category,
+                date: logDate
+            )
+            if logged {
                 dismiss()
-            } catch {
-                errorMessage = "Couldn't log: \(error.localizedDescription)"
+            } else {
                 isLogging = false
             }
         }

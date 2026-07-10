@@ -12,6 +12,9 @@ final class TodayModel {
 
     private let health = HealthKitService()
     private var started = false
+    /// Refreshes fire concurrently (task/appear/foreground/day swipes); only
+    /// the newest may publish, or a slow old day overwrites the current one.
+    private var refreshGeneration = 0
 
     var isToday: Bool { Calendar.current.isDateInToday(selectedDate) }
 
@@ -82,29 +85,26 @@ final class TodayModel {
         if isToday {
             selectedDate = Calendar.current.startOfDay(for: .now)
         }
+        refreshGeneration += 1
+        let generation = refreshGeneration
         do {
             async let summary = health.daySummary(for: selectedDate)
             async let foodLog = health.foodEntries(on: selectedDate)
             async let weight = health.latestBodyMassLb()
             async let averageBurn = health.averageDailyBurnKcal()
-            self.summary = try await summary
-            self.foodLog = try await foodLog
-            self.currentWeightLb = try await weight
-            self.averageBurnKcal = try await averageBurn
+            let (loadedSummary, loadedLog, loadedWeight, loadedBurn) =
+                try await (summary, foodLog, weight, averageBurn)
+            guard generation == refreshGeneration else { return }
+            self.summary = loadedSummary
+            self.foodLog = loadedLog
+            self.currentWeightLb = loadedWeight
+            self.averageBurnKcal = loadedBurn
             errorMessage = nil
             print("[onigiri] refresh: intake=\(self.summary.intakeKcal) burn=\(self.summary.totalBurnKcal) log=\(self.foodLog.count) weight=\(String(describing: self.currentWeightLb)) avgBurn=\(String(describing: self.averageBurnKcal))")
         } catch {
+            guard generation == refreshGeneration else { return }
             errorMessage = "Couldn't read Health data: \(error.localizedDescription)"
             print("[onigiri] refresh FAILED: \(error)")
-        }
-    }
-
-    func delete(_ entry: FoodLogEntry) async {
-        do {
-            try await health.deleteFoodEntry(id: entry.id)
-            await refresh()
-        } catch {
-            errorMessage = "Couldn't delete entry: \(error.localizedDescription)"
         }
     }
 }

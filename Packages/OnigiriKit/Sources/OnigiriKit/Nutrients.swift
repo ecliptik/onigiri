@@ -102,7 +102,7 @@ public enum MicronutrientUnit: Sendable {
 /// fields; macros (grams), cholesterol (mg), and micronutrients ride along
 /// when known. Trans fat is app-only: Apple Health has no dietary type
 /// for it.
-public struct NutrientValues: Sendable, Equatable, Codable {
+public struct NutrientValues: Sendable, Equatable, Hashable, Codable {
     public var fatG: Double?
     public var saturatedFatG: Double?
     public var transFatG: Double?

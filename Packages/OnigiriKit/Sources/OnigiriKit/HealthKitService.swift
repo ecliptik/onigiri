@@ -100,8 +100,7 @@ public final class HealthKitService {
     }
 
     private static func dayRange(for date: Date, now: Date) -> (start: Date, end: Date) {
-        let start = Calendar.current.startOfDay(for: date)
-        return (start, min(start.addingTimeInterval(86400), max(now, start)))
+        DayBounds.range(for: date, now: now)
     }
 
     private func sum(
@@ -222,13 +221,17 @@ public final class HealthKitService {
 
     private var waterSampleCache: [UUID: HKQuantitySample] = [:]
 
-    public func logWater(oz: Double, date: Date = .now) async throws {
+    /// Returns the sample UUID so the log can be undone.
+    @discardableResult
+    public func logWater(oz: Double, date: Date = .now) async throws -> UUID {
         let sample = HKQuantitySample(
             type: HKQuantityType(.dietaryWater),
             quantity: HKQuantity(unit: .fluidOunceUS(), doubleValue: oz),
             start: date, end: date
         )
         try await store.save(sample)
+        waterSampleCache[sample.uuid] = sample
+        return sample.uuid
     }
 
     /// Today's water servings from all sources, newest first.
@@ -252,7 +255,20 @@ public final class HealthKitService {
     }
 
     public func deleteWaterEntry(id: UUID) async throws {
-        guard let sample = waterSampleCache.removeValue(forKey: id) else { return }
+        if let sample = waterSampleCache.removeValue(forKey: id) {
+            try await store.delete(sample)
+            return
+        }
+        // Cache miss (fresh service instance, or the list was reloaded):
+        // fetch the sample by UUID so the delete still lands.
+        let descriptor = HKSampleQueryDescriptor(
+            predicates: [.quantitySample(
+                type: HKQuantityType(.dietaryWater),
+                predicate: HKQuery.predicateForObject(with: id)
+            )],
+            sortDescriptors: []
+        )
+        guard let sample = try await descriptor.result(for: store).first else { return }
         try await store.delete(sample)
     }
 
@@ -350,14 +366,31 @@ public final class HealthKitService {
                 sodiumMg: correlation.total(.dietarySodium, unit: .gramUnit(with: .milli)),
                 date: correlation.startDate,
                 category: (correlation.metadata?[Self.mealCategoryMetadataKey] as? String)
-                    .flatMap(FoodCategory.init(rawValue:))
+                    .flatMap(FoodCategory.init(rawValue:)),
+                nutrients: correlation.nutrientValues
             )
         }
     }
 
     /// Delete a logged entry (and its contained samples) by correlation UUID.
+    /// Falls back to a UUID query when the correlation isn't cached (fresh
+    /// service instance, or the cache was replaced by browsing another day) —
+    /// undo must never silently no-op.
     public func deleteFoodEntry(id: UUID) async throws {
-        guard let correlation = correlationCache.removeValue(forKey: id) else { return }
+        let correlation: HKCorrelation
+        if let cached = correlationCache.removeValue(forKey: id) {
+            correlation = cached
+        } else {
+            let descriptor = HKSampleQueryDescriptor(
+                predicates: [.correlation(
+                    type: HKCorrelationType(.food),
+                    predicate: HKQuery.predicateForObject(with: id)
+                )],
+                sortDescriptors: []
+            )
+            guard let fetched = try await descriptor.result(for: store).first else { return }
+            correlation = fetched
+        }
         try await store.delete(Array(correlation.objects) + [correlation])
     }
 
@@ -487,6 +520,34 @@ private extension HKCorrelation {
         objects(for: HKQuantityType(identifier))
             .compactMap { ($0 as? HKQuantitySample)?.quantity.doubleValue(for: unit) }
             .reduce(0, +)
+    }
+
+    /// Like total, but nil when the correlation carries no sample of the
+    /// type — "absent" and "zero" must round-trip differently.
+    func totalIfPresent(_ identifier: HKQuantityTypeIdentifier, unit: HKUnit) -> Double? {
+        objects(for: HKQuantityType(identifier)).isEmpty
+            ? nil : total(identifier, unit: unit)
+    }
+
+    /// The extended nutrients written by logFood, read back. Trans fat is
+    /// the one field that can't round-trip (no HealthKit type).
+    var nutrientValues: NutrientValues {
+        var values = NutrientValues(
+            fatG: totalIfPresent(.dietaryFatTotal, unit: .gram()),
+            saturatedFatG: totalIfPresent(.dietaryFatSaturated, unit: .gram()),
+            polyunsaturatedFatG: totalIfPresent(.dietaryFatPolyunsaturated, unit: .gram()),
+            monounsaturatedFatG: totalIfPresent(.dietaryFatMonounsaturated, unit: .gram()),
+            cholesterolMg: totalIfPresent(.dietaryCholesterol, unit: .gramUnit(with: .milli)),
+            carbsG: totalIfPresent(.dietaryCarbohydrates, unit: .gram()),
+            proteinG: totalIfPresent(.dietaryProtein, unit: .gram()),
+            fiberG: totalIfPresent(.dietaryFiber, unit: .gram()),
+            sugarG: totalIfPresent(.dietarySugar, unit: .gram()),
+            caffeineMg: totalIfPresent(.dietaryCaffeine, unit: .gramUnit(with: .milli))
+        )
+        for micro in Micronutrient.allCases {
+            values[micro] = totalIfPresent(micro.healthKitIdentifier, unit: micro.healthKitUnit)
+        }
+        return values
     }
 }
 #endif

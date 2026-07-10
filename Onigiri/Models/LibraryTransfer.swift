@@ -23,7 +23,8 @@ enum LibraryTransfer {
             meals: meals.map { meal in
                 .init(name: meal.name, items: meal.items.compactMap { item in
                     item.food.map { .init(foodName: $0.name, quantity: item.quantity) }
-                }, isFavorite: meal.isFavorite ? true : nil, category: meal.category)
+                }, isFavorite: meal.isFavorite ? true : nil, category: meal.category,
+                uuid: meal.uuid)
             },
             goal: goal.map {
                 .init(targetWeightLb: $0.targetWeightLb, targetDate: $0.targetDate,
@@ -67,10 +68,13 @@ enum LibraryTransfer {
                 foodsByName[ref.foodName.lowercased()].map { MealItem(food: $0, quantity: ref.quantity) }
             }
             guard !items.isEmpty else { continue }
-            context.insert(Meal(
+            let meal = Meal(
                 name: mealDef.name, items: items,
                 isFavorite: mealDef.isFavorite ?? false, category: mealDef.category
-            ))
+            )
+            // Keep the exported identity so configured meal widgets survive.
+            if let uuid = mealDef.uuid { meal.uuid = uuid }
+            context.insert(meal)
             addedMeals += 1
         }
 

@@ -20,8 +20,16 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
     @MainActor
     private func apply(_ payload: SyncPayload) {
         WatchSync.store(payload)
-        meals = payload.meals
-        goal = payload.goal
+        // nil/.keep mean the data was missing or undecodable (version
+        // skew) — hold on to the last good copy.
+        if let meals = payload.meals {
+            self.meals = meals
+        }
+        switch payload.goal {
+        case .set(let goal): self.goal = goal
+        case .clear: self.goal = nil
+        case .keep: break
+        }
         WidgetCenter.shared.reloadAllTimelines()
     }
 

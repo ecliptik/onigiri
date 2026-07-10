@@ -20,23 +20,16 @@ final class WaterModel {
         }
     }
 
+    @MainActor
     func add(oz: Double) async {
-        do {
-            try await health.logWater(oz: oz)
-            await refresh()
-            WidgetCenter.shared.reloadAllTimelines()
-        } catch {
-            errorMessage = "Couldn't log water: \(error.localizedDescription)"
-        }
+        // Shared feedback (toast + undo + haptic + widget reload).
+        await LogActions.logWater(oz: oz)
+        await refresh()
     }
 
+    @MainActor
     func delete(_ entry: WaterLogEntry) async {
-        do {
-            try await health.deleteWaterEntry(id: entry.id)
-            await refresh()
-            WidgetCenter.shared.reloadAllTimelines()
-        } catch {
-            errorMessage = "Couldn't delete that entry — Onigiri can only remove water it logged itself."
-        }
+        await LogActions.deleteWaterEntry(entry)
+        await refresh()
     }
 }

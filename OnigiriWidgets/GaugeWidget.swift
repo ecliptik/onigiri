@@ -46,12 +46,22 @@ struct GaugeWidgetView: View {
         VStack(spacing: 4) {
             OnigiriGauge(progress: entry.snapshot.gaugeProgress)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Text(entry.snapshot.summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
-                .font(.system(.title3, design: .rounded).weight(.bold))
-                .foregroundStyle(entry.snapshot.summary.balanceKcal <= 0 ? Color.green : Color.orange)
-            Text("kcal balance")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            // Honor the same "Calorie display" setting as the app/watch.
+            if SharedStore.showsRemainingKcal, let remaining = entry.snapshot.remainingKcal {
+                Text(remaining, format: .number.precision(.fractionLength(0)))
+                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .foregroundStyle(remaining >= 0 ? Color.green : Color.orange)
+                Text("kcal left")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(entry.snapshot.summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
+                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .foregroundStyle(entry.snapshot.summary.balanceKcal <= 0 ? Color.green : Color.orange)
+                Text("kcal balance")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }

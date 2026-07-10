@@ -51,12 +51,19 @@ public struct LibraryExport: Codable, Sendable, Equatable {
         public var items: [MealItemRef]
         public var isFavorite: Bool?
         public var category: String?
+        /// Preserved across export/import so widget configurations that
+        /// reference the meal survive a restore. Optional: old exports.
+        public var uuid: UUID?
 
-        public init(name: String, items: [MealItemRef], isFavorite: Bool? = nil, category: String? = nil) {
+        public init(
+            name: String, items: [MealItemRef], isFavorite: Bool? = nil,
+            category: String? = nil, uuid: UUID? = nil
+        ) {
             self.name = name
             self.items = items
             self.isFavorite = isFavorite
             self.category = category
+            self.uuid = uuid
         }
     }
 

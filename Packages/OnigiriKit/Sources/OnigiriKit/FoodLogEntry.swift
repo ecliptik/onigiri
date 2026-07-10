@@ -12,6 +12,9 @@ public struct FoodLogEntry: Identifiable, Sendable, Equatable {
     /// from the app; inferred from the time of day for entries without one
     /// (older logs, watch logs, other apps).
     public let category: FoodCategory
+    /// Extended nutrients read back from the correlation's samples, so a
+    /// deleted entry can be re-logged (undo) without losing detail.
+    public let nutrients: NutrientValues
 
     public init(
         id: UUID,
@@ -19,7 +22,8 @@ public struct FoodLogEntry: Identifiable, Sendable, Equatable {
         kcal: Double,
         sodiumMg: Double,
         date: Date,
-        category: FoodCategory? = nil
+        category: FoodCategory? = nil,
+        nutrients: NutrientValues = NutrientValues()
     ) {
         self.id = id
         self.name = name
@@ -27,5 +31,6 @@ public struct FoodLogEntry: Identifiable, Sendable, Equatable {
         self.sodiumMg = sodiumMg
         self.date = date
         self.category = category ?? FoodCategory.slot(for: date)
+        self.nutrients = nutrients
     }
 }

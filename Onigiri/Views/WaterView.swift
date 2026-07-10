@@ -11,6 +11,7 @@ struct WaterView: View {
 
     @State private var model = WaterModel()
     @State private var showSettings = false
+    @State private var toastCenter = ToastCenter.shared
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -47,6 +48,9 @@ struct WaterView: View {
         .task { await model.refresh() }
         .onAppear { Task { await model.refresh() } }
         .refreshable { await model.refresh() }
+        .onChange(of: toastCenter.mutationVersion) { _, _ in
+            Task { await model.refresh() }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 Task { await model.refresh() }
@@ -135,6 +139,7 @@ struct WaterView: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel("Delete \(Int(entry.oz)) ounce entry")
                 }
                 .padding(.vertical, 10)
                 .padding(.horizontal, 14)

@@ -28,7 +28,10 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
     @MainActor
     func push(from context: ModelContext) {
         let meals = ((try? context.fetch(FetchDescriptor<Meal>(sortBy: [SortDescriptor(\.name)]))) ?? [])
-            .map { SyncedMeal(id: $0.uuid, name: $0.name, kcal: $0.totalKcal, sodiumMg: $0.totalSodiumMg) }
+            .map { SyncedMeal(
+                id: $0.uuid, name: $0.name, kcal: $0.totalKcal, sodiumMg: $0.totalSodiumMg,
+                category: $0.category, nutrients: $0.totalNutrients
+            ) }
         let goal = ((try? context.fetch(FetchDescriptor<GoalSettings>())) ?? []).first
             .map { SyncedGoal(
                 targetWeightLb: $0.targetWeightLb,
@@ -39,7 +42,7 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         let balanceStyle = SharedStore.defaults.string(forKey: SharedStore.balanceStyleKey) ?? "balance"
         WatchSync.store(SyncPayload(
             meals: meals,
-            goal: goal,
+            goal: goal.map(GoalUpdate.set) ?? .clear,
             waterServingOz: SharedStore.waterServingOz,
             waterGoalOz: SharedStore.waterGoalOz,
             balanceStyle: balanceStyle

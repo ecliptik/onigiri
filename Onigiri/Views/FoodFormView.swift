@@ -15,7 +15,9 @@ struct FoodFormView: View {
     var startScanning = false
     /// Prefill from a scanned/searched product (new-food log flow).
     var prefill: ScannedProduct?
-    /// Called after Save & Log completes, so the presenter can dismiss too.
+    /// Timestamp for the entry the Log action writes (backfill support).
+    var logDate: Date = .now
+    /// Called after the Log action completes, so the presenter can dismiss too.
     var onLogged: (() -> Void)?
 
     @State private var name = ""
@@ -45,12 +47,11 @@ struct FoodFormView: View {
     @State private var isLookingUp = false
     @State private var lookupMessage: String?
     @State private var portionTarget: PortionTarget?
-    /// A new food inserted by Save & Log, so a second save updates it
+    @State private var portionDidLog = false
+    /// A new food inserted by the Log action, so a second save updates it
     /// instead of inserting a duplicate.
     @State private var createdFood: Food?
     @FocusState private var numberFieldFocused: Bool
-
-    private let health = HealthKitService()
 
     private var canSave: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty && kcal != nil
@@ -213,8 +214,15 @@ struct FoodFormView: View {
                     apply(product)
                 }
             }
-            .sheet(item: $portionTarget) { target in
+            .sheet(item: $portionTarget, onDismiss: {
+                // Cancelled portion after Log: the save already happened —
+                // say so instead of silently keeping it.
+                guard !portionDidLog else { return }
+                ToastCenter.shared.show("Saved \(name.trimmingCharacters(in: .whitespaces)) to your library ✓ — not logged")
+                dismiss()
+            }) { target in
                 PortionSheet(target: target) { quantity, category in
+                    portionDidLog = true
                     log(target, quantity: quantity, category: category)
                 }
                 .presentationDetents([.medium, .large])
@@ -349,21 +357,18 @@ struct FoodFormView: View {
 
     private func log(_ target: PortionTarget, quantity: Double, category: FoodCategory) {
         Task {
-            do {
-                try await health.logFood(
-                    name: target.name,
-                    kcal: target.kcal * quantity,
-                    sodiumMg: target.sodiumMg * quantity,
-                    nutrients: target.nutrients.scaled(by: quantity),
-                    category: category
-                )
-                WidgetCenter.shared.reloadAllTimelines()
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            let logged = await LogActions.logFood(
+                name: target.name,
+                kcal: target.kcal * quantity,
+                sodiumMg: target.sodiumMg * quantity,
+                nutrients: target.nutrients.scaled(by: quantity),
+                category: category,
+                date: logDate
+            )
+            if logged {
                 onLogged?()
-                dismiss()
-            } catch {
-                lookupMessage = "Saved, but couldn't log: \(error.localizedDescription)"
             }
+            dismiss()
         }
     }
 

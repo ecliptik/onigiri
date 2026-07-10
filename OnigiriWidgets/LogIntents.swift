@@ -35,7 +35,9 @@ struct LogMealIntent: AppIntent {
         try await HealthKitService().logFood(
             name: match.name,
             kcal: match.kcal,
-            sodiumMg: match.sodiumMg
+            sodiumMg: match.sodiumMg,
+            nutrients: match.nutrients ?? NutrientValues(),
+            category: match.category.flatMap(FoodCategory.init(rawValue:))
         )
         WidgetCenter.shared.reloadAllTimelines()
         return .result()

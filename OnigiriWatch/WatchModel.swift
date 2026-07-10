@@ -10,6 +10,8 @@ final class WatchModel {
 
     private let health = HealthKitService()
     private var started = false
+    /// Double-taps on a slow HealthKit write must not log twice.
+    private var isLogging = false
 
     var waterServingOz: Double { SharedStore.waterServingOz }
     var waterGoalOz: Double { SharedStore.waterGoalOz }
@@ -33,6 +35,9 @@ final class WatchModel {
     }
 
     func logWater() async {
+        guard !isLogging else { return }
+        isLogging = true
+        defer { isLogging = false }
         do {
             try await health.logWater(oz: waterServingOz)
             WKInterfaceDevice.current().play(.success)
@@ -44,8 +49,17 @@ final class WatchModel {
     }
 
     func log(_ meal: SyncedMeal) async {
+        guard !isLogging else { return }
+        isLogging = true
+        defer { isLogging = false }
         do {
-            try await health.logFood(name: meal.name, kcal: meal.kcal, sodiumMg: meal.sodiumMg)
+            // Carry the meal's slot and nutrients like the phone does; old
+            // payloads without them fall back to time-of-day inference.
+            try await health.logFood(
+                name: meal.name, kcal: meal.kcal, sodiumMg: meal.sodiumMg,
+                nutrients: meal.nutrients ?? NutrientValues(),
+                category: meal.category.flatMap(FoodCategory.init(rawValue:))
+            )
             WKInterfaceDevice.current().play(.success)
             await refresh()
             WidgetCenter.shared.reloadAllTimelines()

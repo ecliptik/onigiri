@@ -14,9 +14,10 @@ final class OnlineFoodSearch {
     private(set) var products: [String: ScannedProduct] = [:]
     private(set) var detailFailures: Set<String> = []
     private(set) var fetchingCode: String?
+    private var detailsInFlight: Set<String> = []
 
     private let client = OpenFoodFactsClient()
-    private var lastQuery = ""
+    private(set) var lastQuery = ""
 
     var hasSearched: Bool { !lastQuery.isEmpty }
 
@@ -51,12 +52,19 @@ final class OnlineFoodSearch {
         isSearching = false
     }
 
-    func loadDetail(for barcode: String) async {
-        guard products[barcode] == nil, !detailFailures.contains(barcode) else { return }
-        if let product = try? await client.product(barcode: barcode) {
-            products[barcode] = product
-        } else {
-            detailFailures.insert(barcode)
+    /// Unstructured on purpose: the row's .task would cancel the fetch
+    /// when the row scrolls off, then fetch again when it scrolls back.
+    /// One in-flight request per barcode, and it runs to completion.
+    func loadDetail(for barcode: String) {
+        guard products[barcode] == nil, !detailFailures.contains(barcode),
+              detailsInFlight.insert(barcode).inserted else { return }
+        Task {
+            defer { detailsInFlight.remove(barcode) }
+            if let product = try? await client.product(barcode: barcode) {
+                products[barcode] = product
+            } else {
+                detailFailures.insert(barcode)
+            }
         }
     }
 
@@ -130,7 +138,7 @@ struct OnlineResultRow: View {
             }
         }
         .disabled(search.fetchingCode != nil)
-        .task { await search.loadDetail(for: result.barcode) }
+        .task { search.loadDetail(for: result.barcode) }
     }
 }
 
@@ -149,7 +157,11 @@ struct OnlineResultsSection: View {
                     Text("Searching…")
                         .foregroundStyle(.secondary)
                 }
-            } else if search.results.isEmpty {
+            } else if search.results.isEmpty
+                        || query.trimmingCharacters(in: .whitespaces) != search.lastQuery {
+                // Also shown when the query changed after a search — the
+                // rows below are for the old words, and re-searching must
+                // not require emptying the results first.
                 Button {
                     Task { await search.search(query) }
                 } label: {

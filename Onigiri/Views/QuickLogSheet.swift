@@ -73,8 +73,11 @@ struct QuickLogSheet: View {
         return mealItems + foodItems
     }
 
-    private var filtered: [Item] {
-        let matched = allItems.filter { item in
+    /// Takes the item list as a parameter so body computes the whole
+    /// allItems → filtered → favorites/others chain once per evaluation
+    /// instead of ~3× per keystroke through chained computed properties.
+    private func filtered(_ items: [Item]) -> [Item] {
+        let matched = items.filter { item in
             switch kind {
             case .meals: if !item.isMeal { return false }
             case .foods: if item.isMeal { return false }
@@ -95,15 +98,11 @@ struct QuickLogSheet: View {
         }
     }
 
-    private var favorites: [Item] {
-        filtered.filter(\.isFavorite)
-    }
-
-    private var others: [Item] {
-        filtered.filter { !$0.isFavorite }
-    }
-
     var body: some View {
+        let items = allItems
+        let visible = filtered(items)
+        let favorites = visible.filter(\.isFavorite)
+        let others = visible.filter { !$0.isFavorite }
         NavigationStack {
             List {
                 Picker("Show", selection: $kind) {
@@ -147,13 +146,13 @@ struct QuickLogSheet: View {
                     ForEach(others) { item in
                         row(item)
                     }
-                    if filtered.isEmpty {
+                    if visible.isEmpty {
                         // Accurate copy: this sheet can create foods itself
                         // via the scan button and online search above.
                         ContentUnavailableView(
-                            allItems.isEmpty ? "No saved foods yet" : "No matches",
-                            systemImage: allItems.isEmpty ? "fork.knife" : "magnifyingglass",
-                            description: Text(allItems.isEmpty
+                            items.isEmpty ? "No saved foods yet" : "No matches",
+                            systemImage: items.isEmpty ? "fork.knife" : "magnifyingglass",
+                            description: Text(items.isEmpty
                                 ? "Scan a barcode or search online above — logged foods are saved for next time."
                                 : "Try different words, or search online below.")
                         )

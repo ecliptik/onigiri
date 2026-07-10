@@ -201,7 +201,11 @@ struct FoodFormView: View {
             .onReceive(NotificationCenter.default.publisher(
                 for: UITextField.textDidBeginEditingNotification
             )) { note in
-                guard let field = note.object as? UITextField else { return }
+                // The notification is app-wide: while one of this form's
+                // own sheets is up (scanner, online search, portion), its
+                // fields must not inherit the select-all.
+                guard !showScanner, !showSearch, portionTarget == nil,
+                      let field = note.object as? UITextField else { return }
                 DispatchQueue.main.async { field.selectAll(nil) }
             }
             .sheet(isPresented: $showScanner) {

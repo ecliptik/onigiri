@@ -35,15 +35,21 @@ public enum DailyPlanLoader {
 
     public static func load(goal: SyncedGoal?) async -> State {
         let health = HealthKitService()
-        let summary = (try? await health.todaySummary()) ?? .zero
         guard let goal else {
+            let summary = (try? await health.todaySummary()) ?? .zero
             return State(summary: summary, deficitTargetKcal: nil, gaugeProgress: 0)
         }
-        let healthWeight = (try? await health.latestBodyMassLb()) ?? nil
+        // The three reads are independent — run them concurrently; this
+        // path is complication/widget refresh latency.
+        async let summaryRead = health.todaySummary()
+        async let weightRead = health.latestBodyMassLb()
+        async let burnRead = health.averageDailyBurnKcal()
+        let summary = (try? await summaryRead) ?? .zero
+        let healthWeight = (try? await weightRead) ?? nil
         guard let weight = healthWeight ?? goal.fallbackCurrentWeightLb else {
             return State(summary: summary, deficitTargetKcal: nil, gaugeProgress: 0)
         }
-        let averageBurn = ((try? await health.averageDailyBurnKcal()) ?? nil)
+        let averageBurn = ((try? await burnRead) ?? nil)
             ?? max(summary.totalBurnKcal, 2000)
         let days = Calendar.current.dateComponents(
             [.day],

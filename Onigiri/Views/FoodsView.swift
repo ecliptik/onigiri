@@ -63,11 +63,15 @@ struct FoodsView: View {
     }
 
     var body: some View {
+        // Bound once per evaluation: each access to the computed properties
+        // re-filters and re-sorts the whole library (~3× per keystroke).
+        let visibleMeals = filteredMeals
+        let visibleFoods = filteredFoods
         NavigationStack {
             List {
-                if !filteredMeals.isEmpty {
+                if !visibleMeals.isEmpty {
                     Section("Meals") {
-                        ForEach(filteredMeals) { meal in
+                        ForEach(visibleMeals) { meal in
                             HStack(spacing: 10) {
                                 LibraryRow(
                                     name: meal.name,
@@ -112,13 +116,13 @@ struct FoodsView: View {
                             }
                         }
                         .onDelete { offsets in
-                            pendingMealDeletes = offsets.map { filteredMeals[$0] }
+                            pendingMealDeletes = offsets.map { visibleMeals[$0] }
                         }
                     }
                 }
 
                 Section("Foods") {
-                    ForEach(filteredFoods) { food in
+                    ForEach(visibleFoods) { food in
                         HStack(spacing: 10) {
                             LibraryRow(
                                 name: food.name,
@@ -156,7 +160,7 @@ struct FoodsView: View {
                         }
                     }
                     .onDelete { offsets in
-                        pendingFoodDeletes = offsets.map { filteredFoods[$0] }
+                        pendingFoodDeletes = offsets.map { visibleFoods[$0] }
                     }
 
                     if foods.isEmpty {
@@ -165,7 +169,7 @@ struct FoodsView: View {
                             systemImage: "fork.knife",
                             description: Text("Add a food once — calories and sodium off the label — then log it any day with a tap.")
                         )
-                    } else if filteredFoods.isEmpty && filteredMeals.isEmpty {
+                    } else if visibleFoods.isEmpty && visibleMeals.isEmpty {
                         ContentUnavailableView.search(text: searchText)
                     }
                 }

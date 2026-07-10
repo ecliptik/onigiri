@@ -1,5 +1,4 @@
 import Foundation
-import SwiftData
 import OnigiriKit
 
 /// Everything a widget needs to render one moment of the day.
@@ -25,44 +24,16 @@ struct DaySnapshot {
 
 @MainActor
 enum SnapshotLoader {
+    /// The widget process is memory-capped, so it must not open SwiftData.
+    /// The phone mirrors the goal into the App Group on every sync push;
+    /// the shared DailyPlanLoader does the rest, like the watch.
     static func load() async -> DaySnapshot {
-        let health = HealthKitService()
-        let summary = (try? await health.todaySummary()) ?? .zero
-
-        var deficitTarget: Double?
-        var remaining: Double?
-        var progress: Double = 0
-
-        if let container = try? SharedStore.modelContainer(),
-           let goal = try? container.mainContext.fetch(FetchDescriptor<GoalSettings>()).first {
-            let healthWeight = (try? await health.latestBodyMassLb()) ?? nil
-            if let weight = healthWeight ?? goal.fallbackCurrentWeightLb {
-                let averageBurn = ((try? await health.averageDailyBurnKcal()) ?? nil)
-                    ?? max(summary.totalBurnKcal, 2000)
-                let days = Calendar.current.dateComponents(
-                    [.day],
-                    from: Calendar.current.startOfDay(for: .now),
-                    to: goal.targetDate
-                ).day ?? 0
-                let plan = CalorieBudget.plan(
-                    currentWeightLb: weight,
-                    targetWeightLb: goal.targetWeightLb,
-                    daysRemaining: days,
-                    averageDailyBurn: averageBurn
-                )
-                deficitTarget = plan.requiredDailyDeficit
-                remaining = plan.dailyBudget - summary.intakeKcal
-                progress = plan.requiredDailyDeficit > 0
-                    ? max(0, min(1, -summary.balanceKcal / plan.requiredDailyDeficit))
-                    : 1
-            }
-        }
-
+        let state = await DailyPlanLoader.load(goal: WatchSync.loadGoal())
         return DaySnapshot(
-            summary: summary,
-            deficitTargetKcal: deficitTarget,
-            remainingKcal: remaining,
-            gaugeProgress: progress,
+            summary: state.summary,
+            deficitTargetKcal: state.deficitTargetKcal,
+            remainingKcal: state.remainingKcal,
+            gaugeProgress: state.gaugeProgress,
             waterGoalOz: SharedStore.waterGoalOz
         )
     }

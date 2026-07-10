@@ -156,23 +156,8 @@ struct FoodFormView: View {
                     }
                 }
 
-                Section {
-                    Button {
-                        saveAndLog()
-                    } label: {
-                        Text("Save & Log")
-                            .frame(maxWidth: .infinity)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.black)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.ricePaper)
-                    .listRowInsets(EdgeInsets())
-                    .disabled(!canSave)
-                } footer: {
-                    Text("Saves to your library, then confirms the portion and logs it.")
-                }
             }
+            .listSectionSpacing(10)
             .navigationTitle(food == nil ? "New Food" : "Edit Food")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -180,8 +165,16 @@ struct FoodFormView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
-                        .disabled(!canSave)
+                    // New foods always save AND log (the portion sheet
+                    // confirms; cancelling it keeps the save). Editing an
+                    // existing food just saves — no forced log entry.
+                    if food == nil {
+                        Button("Log") { saveAndLog() }
+                            .disabled(!canSave)
+                    } else {
+                        Button("Save") { save() }
+                            .disabled(!canSave)
+                    }
                 }
                 // Decimal pads have no return key; surface a Done while
                 // editing (keyboard-accessory placement is unreliable on

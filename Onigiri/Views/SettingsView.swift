@@ -50,7 +50,7 @@ struct SettingsView: View {
             VStack(spacing: 2) {
                 Text("Onigiri \(Bundle.main.appVersion)")
                 Text("© 2026 Micheal Waltz")
-                Link("forgejo.ecliptik.com/ecliptik/onigiri",
+                Link("https://forgejo.ecliptik.com/ecliptik/onigiri",
                      destination: URL(string: "https://forgejo.ecliptik.com/ecliptik/onigiri")!)
             }
             .frame(maxWidth: .infinity)

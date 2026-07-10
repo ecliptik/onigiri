@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import SwiftData
+import CoreData
 @testable import OnigiriKit
 
 @MainActor
@@ -58,5 +59,66 @@ struct LibraryMaintenanceTests {
 
         #expect(meal.items.count == 1)
         #expect(meal.totalKcal == 120)
+    }
+
+    /// End-to-end reproduction of the on-device crash loop: a food row
+    /// deleted out from under a meal item (batch deletes skip relationship
+    /// processing, exactly like pre-inverse stores), then the Core Data
+    /// pre-flight repair, then a normal SwiftData open that computes meal
+    /// totals — which used to trap the process.
+    @Test func storeRepairHealsAPoisonedStoreOnDisk() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("Poisoned.sqlite")
+
+        // Seed a normal library.
+        do {
+            let config = ModelConfiguration(url: url)
+            let container = try ModelContainer(
+                for: Food.self, Meal.self, GoalSettings.self,
+                configurations: config
+            )
+            let context = container.mainContext
+            let ghost = Food(name: "Ghost", kcal: 100, sodiumMg: 5)
+            let keeper = Food(name: "Oats", kcal: 150, sodiumMg: 2)
+            context.insert(ghost)
+            context.insert(keeper)
+            context.insert(Meal(name: "Breakfast", items: [
+                MealItem(food: ghost), MealItem(food: keeper),
+            ]))
+            try context.save()
+        }
+
+        // Poison it: delete the food row without relationship processing.
+        do {
+            let model = try #require(NSManagedObjectModel.makeManagedObjectModel(
+                for: [Food.self, Meal.self, MealItem.self, GoalSettings.self]
+            ))
+            let container = NSPersistentContainer(name: "Poisoned", managedObjectModel: model)
+            let description = NSPersistentStoreDescription(url: url)
+            description.shouldAddStoreAsynchronously = false
+            container.persistentStoreDescriptions = [description]
+            container.loadPersistentStores { _, error in #expect(error == nil) }
+            let fetch = NSFetchRequest<NSFetchRequestResult>(entityName: "Food")
+            fetch.predicate = NSPredicate(format: "name == %@", "Ghost")
+            try container.viewContext.execute(NSBatchDeleteRequest(fetchRequest: fetch))
+            let coordinator = container.persistentStoreCoordinator
+            try coordinator.persistentStores.forEach { try coordinator.remove($0) }
+        }
+
+        LibraryMaintenance.repairStore(at: url)
+
+        // The store must now open and compute totals without trapping.
+        let config = ModelConfiguration(url: url)
+        let container = try ModelContainer(
+            for: Food.self, Meal.self, GoalSettings.self,
+            configurations: config
+        )
+        let meals = try container.mainContext.fetch(FetchDescriptor<Meal>())
+        let meal = try #require(meals.first)
+        #expect(meal.items.count == 1)
+        #expect(meal.totalKcal == 150)
     }
 }

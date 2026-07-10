@@ -165,12 +165,18 @@ public enum SharedStore {
         return value > 0 ? value : 64
     }
 
+    /// Where the shared SwiftData store lives inside the App Group.
+    public static var storeURL: URL? {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID)?
+            .appendingPathComponent("Onigiri.sqlite")
+    }
+
     /// SwiftData container in the App Group so widgets can read the library.
     /// Falls back to the default location if the entitlement is missing.
     public static func modelContainer() throws -> ModelContainer {
         let schema = Schema([Food.self, Meal.self, GoalSettings.self])
-        if let base = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) {
-            let config = ModelConfiguration(url: base.appendingPathComponent("Onigiri.sqlite"))
+        if let url = storeURL {
+            let config = ModelConfiguration(url: url)
             return try ModelContainer(for: schema, configurations: [config])
         }
         return try ModelContainer(for: schema, configurations: [ModelConfiguration()])

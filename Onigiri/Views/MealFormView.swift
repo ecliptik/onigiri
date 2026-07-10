@@ -14,6 +14,18 @@ struct MealFormView: View {
     @State private var quantities: [PersistentIdentifier: Double] = [:]
     @State private var category: String?
     @State private var isFavorite = false
+    @State private var foodFilter = ""
+
+    /// Foods shown in the picker list; totals still count every selected
+    /// food, filtered out of view or not.
+    private var visibleFoods: [Food] {
+        let trimmed = foodFilter.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return foods }
+        return foods.filter {
+            $0.name.localizedCaseInsensitiveContains(trimmed)
+                || ($0.category?.localizedCaseInsensitiveContains(trimmed) ?? false)
+        }
+    }
 
     private var totalKcal: Double {
         foods.reduce(0) { $0 + $1.kcal * (quantities[$1.persistentModelID] ?? 0) }
@@ -36,7 +48,23 @@ struct MealFormView: View {
                 Toggle("Favorite", isOn: $isFavorite)
 
                 Section("Foods") {
-                    ForEach(foods) { food in
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(.secondary)
+                        TextField("Search foods", text: $foodFilter)
+                            .autocorrectionDisabled()
+                        if !foodFilter.isEmpty {
+                            Button {
+                                foodFilter = ""
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Clear search")
+                        }
+                    }
+                    ForEach(visibleFoods) { food in
                         Stepper(value: binding(for: food), in: 0...20, step: 1) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
@@ -52,6 +80,11 @@ struct MealFormView: View {
                                     .monospacedDigit()
                             }
                         }
+                    }
+                    if visibleFoods.isEmpty {
+                        Text("No foods match “\(foodFilter.trimmingCharacters(in: .whitespaces))”.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
                 }
 

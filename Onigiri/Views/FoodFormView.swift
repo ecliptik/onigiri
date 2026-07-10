@@ -157,7 +157,7 @@ struct FoodFormView: View {
                 }
 
             }
-            .listSectionSpacing(10)
+            .compactSections()
             .navigationTitle(food == nil ? "New Food" : "Edit Food")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

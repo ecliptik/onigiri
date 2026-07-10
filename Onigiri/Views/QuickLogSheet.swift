@@ -178,6 +178,7 @@ struct QuickLogSheet: View {
                     }
                 }
             }
+            .compactSections()
             .navigationTitle("Log")
             .navigationBarTitleDisplayMode(.inline)
             .onChange(of: searchText) { _, text in

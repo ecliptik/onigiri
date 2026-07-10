@@ -7,8 +7,11 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "drop"
+    @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "plate"
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
+    @AppStorage(SharedStore.waterServingKey, store: SharedStore.defaults) private var waterServingOz = 12.0
+    @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
 
     @State private var showExporter = false
     @State private var showImporter = false
@@ -19,6 +22,10 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("Appearance") {
+                    Picker("Food icon", selection: $foodIcon) {
+                        Text("🍽️ Plate").tag("plate")
+                        Text("🍙 Onigiri").tag("onigiri")
+                    }
                     Picker("Water icon", selection: $waterIcon) {
                         Text("💧 Droplet").tag("drop")
                         Text("🌊 Great Wave").tag("wave")
@@ -30,6 +37,19 @@ struct SettingsView: View {
                     Text("kcal left counts down what you can still eat today and meet your deficit goal; kcal balance is intake minus burn.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+
+                Section("Water") {
+                    Stepper(value: $waterServingOz, in: 4...40, step: 2) {
+                        LabeledContent("Serving size") {
+                            Text("\(waterServingOz, format: .number.precision(.fractionLength(0))) oz")
+                        }
+                    }
+                    Stepper(value: $waterGoalOz, in: 16...200, step: 8) {
+                        LabeledContent("Daily goal") {
+                            Text("\(waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
+                        }
+                    }
                 }
 
                 Section("Sodium") {
@@ -61,10 +81,18 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .compactSections()
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .onChange(of: balanceStyle) {
                 // The watch mirrors this setting; sync it right away.
+                PhoneSyncService.shared.push(from: context)
+            }
+            .onChange(of: waterServingOz) {
+                // The watch's water button uses the serving size too.
+                PhoneSyncService.shared.push(from: context)
+            }
+            .onChange(of: waterGoalOz) {
                 PhoneSyncService.shared.push(from: context)
             }
             .toolbar {

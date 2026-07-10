@@ -37,6 +37,7 @@ struct FoodSearchSheet: View {
                     }
                 }
             }
+            .compactSections()
             .navigationTitle("Search Database")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $query, prompt: "e.g. blueberries")

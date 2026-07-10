@@ -16,7 +16,7 @@ struct CalendarView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
+                VStack(spacing: Layout.screenSpacing) {
                     monthHeader
                     weekdayHeader
                     monthGrid

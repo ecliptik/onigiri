@@ -95,6 +95,7 @@ struct MealFormView: View {
                     }
                 }
             }
+            .compactSections()
             .navigationTitle(meal == nil ? "New Meal" : "Edit Meal")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

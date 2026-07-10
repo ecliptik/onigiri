@@ -16,7 +16,7 @@ struct WaterView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: Layout.screenSpacing) {
                     ring
                     addButtons
                     entriesList
@@ -34,14 +34,14 @@ struct WaterView: View {
             .navigationTitle("Water")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Water settings", systemImage: "gearshape") {
+                    // Same single Settings sheet as the Today gear.
+                    Button("Settings", systemImage: "gearshape") {
                         showSettings = true
                     }
                 }
             }
             .sheet(isPresented: $showSettings) {
-                WaterSettingsView(servingOz: $servingOz, goalOz: $goalOz)
-                    .presentationDetents([.medium])
+                SettingsView()
             }
         }
         .task { await model.refresh() }
@@ -140,36 +140,6 @@ struct WaterView: View {
                 .padding(.horizontal, 14)
                 .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
                 .padding(.horizontal)
-            }
-        }
-    }
-}
-
-struct WaterSettingsView: View {
-    @Binding var servingOz: Double
-    @Binding var goalOz: Double
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Stepper(value: $servingOz, in: 4...40, step: 2) {
-                    LabeledContent("Serving size") {
-                        Text("\(servingOz, format: .number.precision(.fractionLength(0))) oz")
-                    }
-                }
-                Stepper(value: $goalOz, in: 16...200, step: 8) {
-                    LabeledContent("Daily goal") {
-                        Text("\(goalOz, format: .number.precision(.fractionLength(0))) oz")
-                    }
-                }
-            }
-            .navigationTitle("Water Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
             }
         }
     }

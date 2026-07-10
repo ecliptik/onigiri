@@ -99,6 +99,7 @@ struct GoalView: View {
                         .disabled(targetWeightLb == nil || currentWeightLb == nil)
                 }
             }
+            .compactSections()
             .navigationTitle("Goal")
             .scrollDismissesKeyboard(.interactively)
             .toolbar {

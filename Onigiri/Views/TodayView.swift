@@ -10,6 +10,7 @@ struct TodayView: View {
     @Query private var goals: [GoalSettings]
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "drop"
+    @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "plate"
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
     @State private var activeSheet: TodaySheet?
@@ -35,11 +36,12 @@ struct TodayView: View {
     }
 
     private var waterEmoji: String { waterIcon == "wave" ? "🌊" : "💧" }
+    private var foodEmoji: String { foodIcon == "onigiri" ? "🍙" : "🍽️" }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: Layout.screenSpacing) {
                     balanceHeadline
                     hydrationRow
                     goalCard
@@ -299,7 +301,7 @@ struct TodayView: View {
                     Button {
                         activeSheet = .quickLog(.all)
                     } label: {
-                        logButtonLabel("🍙")
+                        logButtonLabel(foodEmoji)
                     }
                     .buttonStyle(.borderless)
                     .accessibilityLabel("Log food or meal")

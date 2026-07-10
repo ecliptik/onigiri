@@ -186,6 +186,7 @@ struct FoodsView: View {
                     }
                 }
             }
+            .compactSections()
             .navigationTitle("Foods")
             .searchable(text: $searchText, prompt: "Search foods, meals, and online")
             .onSubmit(of: .search) {

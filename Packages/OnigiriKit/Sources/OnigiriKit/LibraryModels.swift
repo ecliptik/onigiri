@@ -161,6 +161,7 @@ public enum SharedStore {
     public static let waterServingKey = "waterServingOz"
     public static let waterGoalKey = "waterGoalOz"
     public static let waterIconKey = "waterIcon"
+    public static let foodIconKey = "foodIcon"
     public static let sodiumLimitKey = "sodiumLimitMg"
     public static let balanceStyleKey = "balanceStyle"
 
@@ -179,6 +180,11 @@ public enum SharedStore {
     /// "drop" (💧, default) or "wave" (🌊) — user-selectable in Settings.
     public static var waterEmoji: String {
         defaults.string(forKey: waterIconKey) == "wave" ? "🌊" : "💧"
+    }
+
+    /// "plate" (🍽️, default) or "onigiri" (🍙) — the Today log-food button.
+    public static var foodEmoji: String {
+        defaults.string(forKey: foodIconKey) == "onigiri" ? "🍙" : "🍽️"
     }
 
     public static var defaults: UserDefaults {

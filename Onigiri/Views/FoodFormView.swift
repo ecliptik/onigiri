@@ -36,6 +36,7 @@ struct FoodFormView: View {
     @State private var caffeineMg: Double?
     @State private var micros: [String: Double] = [:]
     @State private var microsExpanded = false
+    @State private var nutrientsExpanded = false
     @State private var category: String?
     @State private var isFavorite = false
 
@@ -117,25 +118,31 @@ struct FoodFormView: View {
                     Toggle("Favorite", isOn: $isFavorite)
                 }
 
-                // Nutrition-label order. Trans fat is app-only: Apple
-                // Health has no dietary type for it.
-                Section("More nutrients") {
-                    nutrientRow("Fat (g)", value: $fatG)
-                    nutrientRow("Saturated fat (g)", value: $saturatedFatG)
-                    nutrientRow("Trans fat (g)", value: $transFatG)
-                    nutrientRow("Polyunsaturated fat (g)", value: $polyunsaturatedFatG)
-                    nutrientRow("Monounsaturated fat (g)", value: $monounsaturatedFatG)
-                    nutrientRow("Cholesterol (mg)", value: $cholesterolMg)
-                    nutrientRow("Sodium (mg)", value: $sodiumMg)
-                    nutrientRow("Carbs (g)", value: $carbsG)
-                    nutrientRow("Fiber (g)", value: $fiberG)
-                    nutrientRow("Sugar (g)", value: $sugarG)
-                    nutrientRow("Protein (g)", value: $proteinG)
-                    nutrientRow("Caffeine (mg)", value: $caffeineMg)
+                // Both nutrient groups start collapsed so Save & Log stays
+                // in reach; the filled counts show a scan brought data in.
+                // Nutrition-label order, matching the label being copied.
+                // Trans fat is app-only: Apple Health has no type for it.
+                Section {
+                    DisclosureGroup(isExpanded: $nutrientsExpanded) {
+                        nutrientRow("Fat (g)", value: $fatG)
+                        nutrientRow("Saturated fat (g)", value: $saturatedFatG)
+                        nutrientRow("Trans fat (g)", value: $transFatG)
+                        nutrientRow("Polyunsaturated fat (g)", value: $polyunsaturatedFatG)
+                        nutrientRow("Monounsaturated fat (g)", value: $monounsaturatedFatG)
+                        nutrientRow("Cholesterol (mg)", value: $cholesterolMg)
+                        nutrientRow("Sodium (mg)", value: $sodiumMg)
+                        nutrientRow("Carbs (g)", value: $carbsG)
+                        nutrientRow("Fiber (g)", value: $fiberG)
+                        nutrientRow("Sugar (g)", value: $sugarG)
+                        nutrientRow("Protein (g)", value: $proteinG)
+                        nutrientRow("Caffeine (mg)", value: $caffeineMg)
+                    } label: {
+                        groupLabel("More nutrients", filled: nutrientFieldCount)
+                    }
                 }
 
                 Section {
-                    DisclosureGroup("Vitamins & minerals", isExpanded: $microsExpanded) {
+                    DisclosureGroup(isExpanded: $microsExpanded) {
                         ForEach(Micronutrient.allCases) { micro in
                             LabeledContent("\(micro.displayName) (\(micro.unit.symbol))") {
                                 TextField("—", value: microBinding(micro), format: .number)
@@ -144,6 +151,8 @@ struct FoodFormView: View {
                                     .focused($numberFieldFocused)
                             }
                         }
+                    } label: {
+                        groupLabel("Vitamins & minerals", filled: micros.count)
                     }
                 }
 
@@ -236,7 +245,6 @@ struct FoodFormView: View {
                     sugarG = food.sugarG
                     caffeineMg = food.caffeineMg
                     micros = food.micros ?? [:]
-                    microsExpanded = !micros.isEmpty
                     category = food.category
                     isFavorite = food.isFavorite
                 } else if let prefill {
@@ -244,6 +252,24 @@ struct FoodFormView: View {
                 } else if startScanning {
                     showScanner = true
                 }
+            }
+        }
+    }
+
+    private var nutrientFieldCount: Int {
+        [fatG, saturatedFatG, transFatG, polyunsaturatedFatG, monounsaturatedFatG,
+         cholesterolMg, sodiumMg, carbsG, fiberG, sugarG, proteinG, caffeineMg]
+            .compactMap { $0 }.count
+    }
+
+    private func groupLabel(_ title: String, filled: Int) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            if filled > 0 {
+                Text("\(filled) filled")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -304,7 +330,6 @@ struct FoodFormView: View {
         sugarG = product.nutrients.sugarG
         caffeineMg = product.nutrients.caffeineMg
         micros = product.nutrients.micros
-        microsExpanded = !micros.isEmpty
         lookupMessage = product.kcal == nil
             ? "Found it, but no calorie data — check the label."
             : nil

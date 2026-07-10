@@ -8,6 +8,10 @@ struct TodayView: View {
     @State private var model = TodayModel()
     @Environment(\.scenePhase) private var scenePhase
     @Query private var goals: [GoalSettings]
+    @Query(filter: #Predicate<Food> { $0.isFavorite }, sort: \Food.name)
+    private var favoriteFoods: [Food]
+    @Query(filter: #Predicate<Meal> { $0.isFavorite }, sort: \Meal.name)
+    private var favoriteMeals: [Meal]
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "drop"
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "plate"
@@ -32,12 +36,14 @@ struct TodayView: View {
         case settings
         case quickLog(QuickActions.QuickLogKind)
         case datePicker
+        case portion(PortionTarget)
 
         var id: String {
             switch self {
             case .settings: "settings"
             case .quickLog(let kind): "quickLog-\(kind)"
             case .datePicker: "datePicker"
+            case .portion(let target): "portion-\(target.name)"
             }
         }
     }
@@ -118,6 +124,20 @@ struct TodayView: View {
                     DayJumpSheet(selected: model.selectedDate) { day in
                         Task { await model.select(day: day) }
                     }
+                case .portion(let target):
+                    PortionSheet(target: target) { quantity, category in
+                        Task {
+                            await LogActions.logFood(
+                                name: target.name,
+                                kcal: target.kcal * quantity,
+                                sodiumMg: target.sodiumMg * quantity,
+                                nutrients: target.nutrients.scaled(by: quantity),
+                                category: category,
+                                date: DayBounds.logTimestamp(for: model.selectedDate)
+                            )
+                        }
+                    }
+                    .presentationDetents([.medium, .large])
                 }
             }
             .onChange(of: quickActions.quickLogRequest) { _, _ in
@@ -167,6 +187,20 @@ struct TodayView: View {
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 6)
+    }
+
+    /// Favorite meals log one-tap with their own slot, like the Log sheet.
+    private func logFavorite(meal: Meal) {
+        Task {
+            await LogActions.logFood(
+                name: meal.name,
+                kcal: meal.totalKcal,
+                sodiumMg: meal.totalSodiumMg,
+                nutrients: meal.totalNutrients,
+                category: PortionTarget.category(from: meal.category),
+                date: DayBounds.logTimestamp(for: model.selectedDate)
+            )
+        }
     }
 
     /// Water logs into the browsed day (backfill included).
@@ -323,11 +357,33 @@ struct TodayView: View {
                 // Present on past days too: forgotten meals get backfilled
                 // into the browsed day (noon timestamp, slot picked in the
                 // portion sheet). Prominent glass, sized for their role as
-                // the primary logging actions.
-                Button {
-                    activeSheet = .quickLog(.all)
+                // the primary logging actions. Tap opens the Log sheet;
+                // long-press offers favorites and the scanner — the food
+                // parallel of the water button's amounts.
+                Menu {
+                    ForEach(favoriteMeals.prefix(6)) { meal in
+                        Button("⭐ \(meal.name)") {
+                            logFavorite(meal: meal)
+                        }
+                    }
+                    ForEach(favoriteFoods.prefix(6)) { food in
+                        Button("⭐ \(food.name)") {
+                            activeSheet = .portion(PortionTarget(
+                                name: food.name, kcal: food.kcal,
+                                sodiumMg: food.sodiumMg, nutrients: food.nutrients,
+                                serving: food.servingDescription,
+                                defaultCategory: PortionTarget.category(from: food.category)
+                            ))
+                        }
+                    }
+                    Divider()
+                    Button("Scan barcode", systemImage: "barcode.viewfinder") {
+                        QuickActions.shared.pending = .scanBarcode
+                    }
                 } label: {
                     logButtonLabel(foodEmoji)
+                } primaryAction: {
+                    activeSheet = .quickLog(.all)
                 }
                 .buttonStyle(.glassProminent)
                 .tint(.ricePaper)

@@ -217,9 +217,12 @@ struct FoodsView: View {
                         Button("Add Meal", systemImage: "takeoutbag.and.cup.and.straw") { showNewMeal = true }
                             .disabled(foods.isEmpty)
                     } label: {
-                        Image(systemName: "plus")
+                        // "＋ Add" instead of a bare plus: reads as a
+                        // general add that opens choices.
+                        Label("Add", systemImage: "plus")
+                            .labelStyle(.titleAndIcon)
                     }
-                    .accessibilityLabel("Add")
+                    .accessibilityLabel("Add food or meal")
                 }
             }
             .sheet(isPresented: $showNewFood) { FoodFormView(food: nil) }

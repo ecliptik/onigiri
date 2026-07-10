@@ -199,12 +199,15 @@ struct CalendarView: View {
 
     private var daySummaryCard: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // Constant leading anchor; the goal status is a trailing badge
-            // so nothing shifts or reflows as days change.
-            HStack(spacing: 6) {
-                Text("Day Summary")
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
+            // Goal status centered in the card; the chevron stays pinned
+            // trailing as the tap affordance.
+            ZStack {
+                HStack {
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
                 if model.earned.contains(selectedDay) {
                     Text("Goal met 🍙")
                         .font(.subheadline.weight(.semibold))
@@ -214,9 +217,6 @@ struct CalendarView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
             }
             // Fixed three-column grid, always rendered ("—" when a day has
             // no data): every icon keeps its exact position across day

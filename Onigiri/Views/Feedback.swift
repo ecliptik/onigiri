@@ -66,7 +66,7 @@ private struct ToastHost: ViewModifier {
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
-                    .background(.regularMaterial, in: .capsule)
+                    .glassEffect(.regular, in: .capsule)
                     .padding(.bottom, 56)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }

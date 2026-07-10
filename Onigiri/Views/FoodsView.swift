@@ -377,7 +377,7 @@ struct LogButton: View {
             .font(.subheadline.weight(.bold))
             .foregroundStyle(.black)
             .padding(8)
-            .background(Color.ricePaper, in: .circle)
+            .glassEffect(.regular.tint(Color.ricePaper).interactive(), in: .circle)
             // HIG minimum touch target; the visible circle stays small.
             .frame(minWidth: 44, minHeight: 44)
             .contentShape(.rect)

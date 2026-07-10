@@ -33,6 +33,9 @@ struct ContentView: View {
             }
         }
         .tint(.riceToast)
+        // Liquid Glass: the tab bar shrinks out of the way while scrolling
+        // content, re-expanding on scroll-up.
+        .tabBarMinimizeBehavior(.onScrollDown)
         .toastHost()
         .task {
             #if DEBUG

@@ -133,16 +133,15 @@ struct TodayView: View {
     }
 
     private func logButtonLabel(_ emoji: String) -> some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 4) {
             Image(systemName: "plus")
-                .font(.caption.weight(.bold))
+                .font(.subheadline.weight(.bold))
                 .foregroundStyle(.black)
             Text(emoji)
-                .font(.subheadline)
+                .font(.title3)
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 10)
-        .background(Color.ricePaper, in: .capsule)
+        .padding(.vertical, 4)
+        .padding(.horizontal, 6)
     }
 
     /// One-tap water: logs the default serving into the browsed day.
@@ -289,13 +288,15 @@ struct TodayView: View {
                 Spacer()
                 // Present on past days too: forgotten meals get backfilled
                 // into the browsed day (noon timestamp, slot picked in the
-                // portion sheet).
+                // portion sheet). Prominent glass, sized for their role as
+                // the primary logging actions.
                 Button {
                     activeSheet = .quickLog(.all)
                 } label: {
                     logButtonLabel(foodEmoji)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.glassProminent)
+                .tint(.ricePaper)
                 .accessibilityLabel("Log food or meal")
 
                 Button {
@@ -303,7 +304,8 @@ struct TodayView: View {
                 } label: {
                     logButtonLabel(waterEmoji)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.glassProminent)
+                .tint(.ricePaper)
                 .disabled(isLoggingWater)
                 .accessibilityLabel("Log \(Int(SharedStore.waterServingOz)) ounces of water")
             }

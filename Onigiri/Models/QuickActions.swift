@@ -24,9 +24,11 @@ final class QuickActions {
 
     var pending: Action?
 
-    /// Signals TodayView to present the quick-log sheet, pre-filtered.
-    var quickLogRequested = false
-    var quickLogKind: QuickLogKind = .all
+    /// One-shot request for TodayView to present the quick-log sheet,
+    /// pre-filtered. An Optional rather than a Bool so an unconsumed request
+    /// survives until a view is ready — re-setting a stuck `true` flag never
+    /// fires onChange again, which left quick actions dead on device.
+    var quickLogRequest: QuickLogKind?
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {

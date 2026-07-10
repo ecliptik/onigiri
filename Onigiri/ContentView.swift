@@ -51,6 +51,12 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 PhoneSyncService.shared.push(from: context)
+                // Belt and braces: consume any shortcut that arrived while no
+                // onChange observer was installed yet (cold-launch timing).
+                if let action = quickActions.pending {
+                    quickActions.pending = nil
+                    handle(action)
+                }
             }
         }
         .onChange(of: quickActions.pending) { _, action in
@@ -71,12 +77,10 @@ struct ContentView: View {
         case .logMeal:
             // Land on Today with the quick-log sheet up: one tap to log.
             selectedTab = .today
-            QuickActions.shared.quickLogKind = .meals
-            QuickActions.shared.quickLogRequested = true
+            QuickActions.shared.quickLogRequest = .meals
         case .logFood:
             selectedTab = .today
-            QuickActions.shared.quickLogKind = .foods
-            QuickActions.shared.quickLogRequested = true
+            QuickActions.shared.quickLogRequest = .foods
         case .scanBarcode:
             selectedTab = .foods
             scanRequest = true

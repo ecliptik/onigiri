@@ -8,6 +8,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "drop"
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
+    @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
 
     @State private var showExporter = false
     @State private var showImporter = false
@@ -22,6 +23,13 @@ struct SettingsView: View {
                         Text("💧 Droplet").tag("drop")
                         Text("🌊 Great Wave").tag("wave")
                     }
+                    Picker("Big number shows", selection: $balanceStyle) {
+                        Text("kcal balance").tag("balance")
+                        Text("kcal left").tag("remaining")
+                    }
+                    Text("kcal left counts down what you can still eat today and meet your deficit goal; kcal balance is intake minus burn. Applies to Today and the watch.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Sodium") {
@@ -55,6 +63,10 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: balanceStyle) {
+                // The watch mirrors this setting; sync it right away.
+                PhoneSyncService.shared.push(from: context)
+            }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }

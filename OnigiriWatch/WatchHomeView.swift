@@ -1,7 +1,7 @@
 import SwiftUI
 import OnigiriKit
 
-/// Watch home: the onigiri gauge and balance, with one-tap water and meal
+/// Watch home: the day's headline number, with one-tap water and meal
 /// logging. Meals and settings sync from the iPhone.
 struct WatchHomeView: View {
     @State private var model = WatchModel()
@@ -12,17 +12,7 @@ struct WatchHomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 10) {
-                    // Gauge and balance share a line so both buttons fit on
-                    // one screen without scrolling.
-                    HStack(spacing: 10) {
-                        OnigiriGauge(progress: model.state.gaugeProgress)
-                            .frame(width: 44, height: 44)
-                        Text(model.state.summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
-                            .font(.system(size: 32, weight: .bold, design: .rounded))
-                            .foregroundStyle(model.state.summary.balanceKcal <= 0 ? Color.green : Color.orange)
-                            .minimumScaleFactor(0.6)
-                            .lineLimit(1)
-                    }
+                    headlineNumber
 
                     Button {
                         showMeals = true
@@ -60,6 +50,29 @@ struct WatchHomeView: View {
         }
     }
 
+    /// Mirrors the phone's Today headline setting: ± balance, or kcal left
+    /// toward the deficit goal when the user picked the countdown.
+    @ViewBuilder
+    private var headlineNumber: some View {
+        if SharedStore.showsRemainingKcal, let remaining = model.state.remainingKcal {
+            VStack(spacing: 0) {
+                Text(remaining, format: .number.precision(.fractionLength(0)))
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundStyle(remaining >= 0 ? Color.green : Color.orange)
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+                Text("kcal left")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            Text(model.state.summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
+                .font(.system(size: 32, weight: .bold, design: .rounded))
+                .foregroundStyle(model.state.summary.balanceKcal <= 0 ? Color.green : Color.orange)
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
+        }
+    }
 }
 
 /// Synced meals, one tap to log.

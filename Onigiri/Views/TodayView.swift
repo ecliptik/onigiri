@@ -10,6 +10,7 @@ struct TodayView: View {
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "drop"
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
+    @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
     @State private var activeSheet: TodaySheet?
     @State private var quickActions = QuickActions.shared
 
@@ -85,11 +86,8 @@ struct TodayView: View {
                     QuickLogSheet(initialKind: kind)
                 }
             }
-            .onChange(of: quickActions.quickLogRequested) { _, requested in
-                if requested {
-                    quickActions.quickLogRequested = false
-                    activeSheet = .quickLog(quickActions.quickLogKind)
-                }
+            .onChange(of: quickActions.quickLogRequest) { _, _ in
+                consumeQuickLogRequest()
             }
             .simultaneousGesture(
                 DragGesture(minimumDistance: 30).onEnded { value in
@@ -104,12 +102,25 @@ struct TodayView: View {
         }
         .task { await model.start() }
         .refreshable { await model.refresh() }
-        .onAppear { Task { await model.refresh() } }
+        .onAppear {
+            Task { await model.refresh() }
+            consumeQuickLogRequest()
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 Task { await model.refresh() }
+                consumeQuickLogRequest()
             }
         }
+    }
+
+    /// Present the quick-log sheet if an app-icon shortcut asked for it.
+    /// Checked on change, on appear, and on foregrounding: a request raised
+    /// before this view existed must not be lost.
+    private func consumeQuickLogRequest() {
+        guard let kind = quickActions.quickLogRequest else { return }
+        quickActions.quickLogRequest = nil
+        activeSheet = .quickLog(kind)
     }
 
     // MARK: - Sections
@@ -120,15 +131,33 @@ struct TodayView: View {
         return model.selectedDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
     }
 
+    /// Budget remaining for the day, when the user prefers the countdown
+    /// headline and a plan exists; nil falls back to the ± balance.
+    private var remainingHeadlineKcal: Double? {
+        guard balanceStyle == "remaining",
+              let goal = goals.first, let plan = plan(for: goal) else { return nil }
+        return plan.dailyBudget - model.summary.intakeKcal
+    }
+
     private var balanceHeadline: some View {
         VStack(spacing: 4) {
-            Text(model.summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
-                .font(.system(size: 60, weight: .bold, design: .rounded))
-                .foregroundStyle(model.summary.balanceKcal <= 0 ? Color.green : Color.orange)
-                .contentTransition(.numericText())
-            Text("kcal balance")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            if let remaining = remainingHeadlineKcal {
+                Text(remaining, format: .number.precision(.fractionLength(0)))
+                    .font(.system(size: 60, weight: .bold, design: .rounded))
+                    .foregroundStyle(remaining >= 0 ? Color.green : Color.orange)
+                    .contentTransition(.numericText())
+                Text("kcal left")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(model.summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
+                    .font(.system(size: 60, weight: .bold, design: .rounded))
+                    .foregroundStyle(model.summary.balanceKcal <= 0 ? Color.green : Color.orange)
+                    .contentTransition(.numericText())
+                Text("kcal balance")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.top, 16)
     }

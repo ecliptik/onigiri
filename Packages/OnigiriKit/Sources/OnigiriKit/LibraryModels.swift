@@ -126,6 +126,13 @@ public enum SharedStore {
     public static let waterGoalKey = "waterGoalOz"
     public static let waterIconKey = "waterIcon"
     public static let sodiumLimitKey = "sodiumLimitMg"
+    public static let balanceStyleKey = "balanceStyle"
+
+    /// What the big Today/watch number shows: "balance" (± intake − burn,
+    /// default) or "remaining" (kcal left to eat toward the deficit goal).
+    public static var showsRemainingKcal: Bool {
+        defaults.string(forKey: balanceStyleKey) == "remaining"
+    }
 
     /// Daily sodium limit in mg (FDA guideline 2,300 by default).
     public static var sodiumLimitMg: Double {

@@ -10,11 +10,24 @@ public enum DailyPlanLoader {
         public let deficitTargetKcal: Double?
         /// 0...1 fill of the onigiri gauge (banked deficit / daily target).
         public let gaugeProgress: Double
+        /// Intake budget for the day (average burn − required deficit).
+        public let dailyBudgetKcal: Double?
 
-        public init(summary: DailyEnergySummary, deficitTargetKcal: Double?, gaugeProgress: Double) {
+        public init(
+            summary: DailyEnergySummary,
+            deficitTargetKcal: Double?,
+            gaugeProgress: Double,
+            dailyBudgetKcal: Double? = nil
+        ) {
             self.summary = summary
             self.deficitTargetKcal = deficitTargetKcal
             self.gaugeProgress = gaugeProgress
+            self.dailyBudgetKcal = dailyBudgetKcal
+        }
+
+        /// kcal still available to eat today, when a plan exists.
+        public var remainingKcal: Double? {
+            dailyBudgetKcal.map { $0 - summary.intakeKcal }
         }
 
         public static let empty = State(summary: .zero, deficitTargetKcal: nil, gaugeProgress: 0)
@@ -49,7 +62,8 @@ public enum DailyPlanLoader {
         return State(
             summary: summary,
             deficitTargetKcal: plan.requiredDailyDeficit,
-            gaugeProgress: progress
+            gaugeProgress: progress,
+            dailyBudgetKcal: plan.dailyBudget
         )
     }
 }

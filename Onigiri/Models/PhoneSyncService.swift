@@ -36,11 +36,13 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
                 fallbackCurrentWeightLb: $0.fallbackCurrentWeightLb
             ) }
 
+        let balanceStyle = SharedStore.defaults.string(forKey: SharedStore.balanceStyleKey) ?? "balance"
         WatchSync.store(SyncPayload(
             meals: meals,
             goal: goal,
             waterServingOz: SharedStore.waterServingOz,
-            waterGoalOz: SharedStore.waterGoalOz
+            waterGoalOz: SharedStore.waterGoalOz,
+            balanceStyle: balanceStyle
         ))
 
         guard WCSession.isSupported(),
@@ -52,7 +54,8 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
             meals: meals,
             goal: goal,
             waterServingOz: SharedStore.waterServingOz,
-            waterGoalOz: SharedStore.waterGoalOz
+            waterGoalOz: SharedStore.waterGoalOz,
+            balanceStyle: balanceStyle
         ))
     }
 

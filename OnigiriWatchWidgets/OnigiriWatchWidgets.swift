@@ -16,6 +16,15 @@ struct WatchEntry: TimelineEntry {
     let date: Date
     let state: DailyPlanLoader.State
     let waterGoalOz: Double
+    var showsRemaining = false
+
+    /// The headline number in the user's chosen style: (value, positive-is-good).
+    var headline: (kcal: Double, goodAboveZero: Bool) {
+        if showsRemaining, let remaining = state.remainingKcal {
+            return (remaining, true)
+        }
+        return (state.summary.balanceKcal, false)
+    }
 
     static let placeholder = WatchEntry(
         date: .now,
@@ -49,9 +58,14 @@ struct WatchProvider: TimelineProvider {
 
     @MainActor
     private func load() async -> WatchEntry {
-        // Goal and water settings sync from the phone into the shared defaults.
+        // Goal and display settings sync from the phone into the shared defaults.
         let state = await DailyPlanLoader.load(goal: WatchSync.loadGoal())
-        return WatchEntry(date: .now, state: state, waterGoalOz: SharedStore.waterGoalOz)
+        return WatchEntry(
+            date: .now,
+            state: state,
+            waterGoalOz: SharedStore.waterGoalOz,
+            showsRemaining: SharedStore.showsRemainingKcal
+        )
     }
 }
 
@@ -73,20 +87,30 @@ struct BalanceComplicationView: View {
     @Environment(\.widgetFamily) private var family
     let entry: WatchEntry
 
-    private var balance: Double { entry.state.summary.balanceKcal }
+    private var headlineText: Text {
+        let (kcal, goodAboveZero) = entry.headline
+        return goodAboveZero
+            ? Text("\(kcal, format: .number.precision(.fractionLength(0))) kcal left")
+            : Text("\(kcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))) kcal")
+    }
+
+    private var headlineColor: Color {
+        let (kcal, goodAboveZero) = entry.headline
+        return (goodAboveZero ? kcal >= 0 : kcal <= 0) ? .green : .orange
+    }
 
     var body: some View {
         switch family {
         case .accessoryInline:
-            Text("🍙 \(balance, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))) kcal")
+            Text("🍙 ").font(.body) + headlineText
         case .accessoryRectangular:
             HStack(spacing: 8) {
                 OnigiriGauge(progress: entry.state.gaugeProgress)
                     .frame(width: 36, height: 36)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("\(balance, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))) kcal")
+                    headlineText
                         .font(.headline.weight(.bold))
-                        .foregroundStyle(balance <= 0 ? Color.green : Color.orange)
+                        .foregroundStyle(headlineColor)
                     if let target = entry.state.deficitTargetKcal, target > 0 {
                         Text("\(Int(entry.state.gaugeProgress * 100))% of daily goal")
                             .font(.caption2)
@@ -103,9 +127,11 @@ struct BalanceComplicationView: View {
                 Text("🍙")
                     .font(.system(size: 12))
             } currentValueLabel: {
-                Text(balance, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
+                Text(entry.headline.kcal, format: entry.headline.goodAboveZero
+                    ? .number.precision(.fractionLength(0))
+                    : .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
                     .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundStyle(balance <= 0 ? Color.green : Color.orange)
+                    .foregroundStyle(headlineColor)
                     .minimumScaleFactor(0.6)
             }
             .gaugeStyle(.accessoryCircular)

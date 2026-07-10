@@ -35,12 +35,20 @@ public struct SyncPayload: Sendable {
     public let goal: SyncedGoal?
     public let waterServingOz: Double?
     public let waterGoalOz: Double?
+    public let balanceStyle: String?
 
-    public init(meals: [SyncedMeal], goal: SyncedGoal?, waterServingOz: Double?, waterGoalOz: Double?) {
+    public init(
+        meals: [SyncedMeal],
+        goal: SyncedGoal?,
+        waterServingOz: Double?,
+        waterGoalOz: Double?,
+        balanceStyle: String? = nil
+    ) {
         self.meals = meals
         self.goal = goal
         self.waterServingOz = waterServingOz
         self.waterGoalOz = waterGoalOz
+        self.balanceStyle = balanceStyle
     }
 }
 
@@ -56,11 +64,13 @@ public enum WatchSync {
         meals: [SyncedMeal],
         goal: SyncedGoal?,
         waterServingOz: Double,
-        waterGoalOz: Double
+        waterGoalOz: Double,
+        balanceStyle: String = "balance"
     ) -> [String: Any] {
         var context: [String: Any] = [
             SharedStore.waterServingKey: waterServingOz,
             SharedStore.waterGoalKey: waterGoalOz,
+            SharedStore.balanceStyleKey: balanceStyle,
         ]
         if let data = try? JSONEncoder().encode(meals) {
             context[mealsKey] = data
@@ -87,7 +97,8 @@ public enum WatchSync {
             meals: meals,
             goal: goal,
             waterServingOz: context[SharedStore.waterServingKey] as? Double,
-            waterGoalOz: context[SharedStore.waterGoalKey] as? Double
+            waterGoalOz: context[SharedStore.waterGoalKey] as? Double,
+            balanceStyle: context[SharedStore.balanceStyleKey] as? String
         )
     }
 
@@ -106,6 +117,9 @@ public enum WatchSync {
         }
         if let goalOz = payload.waterGoalOz {
             defaults.set(goalOz, forKey: SharedStore.waterGoalKey)
+        }
+        if let style = payload.balanceStyle {
+            defaults.set(style, forKey: SharedStore.balanceStyleKey)
         }
     }
 

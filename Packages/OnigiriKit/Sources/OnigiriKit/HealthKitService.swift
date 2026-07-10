@@ -236,8 +236,13 @@ public final class HealthKitService {
 
     /// Today's water servings from all sources, newest first.
     public func todayWaterEntries(now: Date = .now) async throws -> [WaterLogEntry] {
-        let startOfDay = Calendar.current.startOfDay(for: now)
-        let inToday = HKQuery.predicateForSamples(withStart: startOfDay, end: now, options: .strictStartDate)
+        try await waterEntries(on: now, now: now)
+    }
+
+    /// Water servings for any calendar day, newest first.
+    public func waterEntries(on date: Date, now: Date = .now) async throws -> [WaterLogEntry] {
+        let (start, end) = Self.dayRange(for: date, now: now)
+        let inToday = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
         let descriptor = HKSampleQueryDescriptor(
             predicates: [.quantitySample(type: HKQuantityType(.dietaryWater), predicate: inToday)],
             sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)]

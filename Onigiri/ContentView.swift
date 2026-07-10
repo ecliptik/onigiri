@@ -16,14 +16,16 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            Tab("Today", systemImage: "gauge.with.needle", value: .today) {
-                TodayView()
+            // Today sits center — the app's home, one thumb-reach from
+            // either side.
+            Tab("Water", systemImage: "drop.fill", value: .water) {
+                WaterView()
             }
             Tab("Foods", systemImage: "fork.knife", value: .foods) {
                 FoodsView(scanRequest: $scanRequest)
             }
-            Tab("Water", systemImage: "drop.fill", value: .water) {
-                WaterView()
+            Tab("Today", systemImage: "gauge.with.needle", value: .today) {
+                TodayView()
             }
             Tab("Goal", systemImage: "chart.line.downtrend.xyaxis", value: .goal) {
                 GoalView()

@@ -34,9 +34,38 @@ struct WaterView: View {
                 }
                 .padding(.bottom, 24)
             }
-            .navigationTitle("Water")
+            .navigationTitle(dayTitle)
             // Settings has one predictable home: the gear on Today (HIG
             // consistency — don't scatter entry points per tab).
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        Task { await model.goToPreviousDay() }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .accessibilityLabel("Previous day")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task { await model.goToNextDay() }
+                    } label: {
+                        Image(systemName: "chevron.right")
+                    }
+                    .disabled(model.isToday)
+                    .accessibilityLabel("Next day")
+                }
+            }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 30).onEnded { value in
+                    guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                    if value.translation.width < -60 {
+                        Task { await model.goToNextDay() }
+                    } else if value.translation.width > 60 {
+                        Task { await model.goToPreviousDay() }
+                    }
+                }
+            )
         }
         .task { await model.refresh() }
         .onAppear { Task { await model.refresh() } }
@@ -49,6 +78,13 @@ struct WaterView: View {
                 Task { await model.refresh() }
             }
         }
+    }
+
+    /// "Water" on today keeps the tab's identity; browsed days say which.
+    private var dayTitle: String {
+        if model.isToday { return "Water" }
+        if Calendar.current.isDateInYesterday(model.selectedDate) { return "Yesterday" }
+        return model.selectedDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
     }
 
     private var ring: some View {
@@ -110,12 +146,14 @@ struct WaterView: View {
 
     private var entriesList: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Today")
-                .font(.headline)
+            Text("Log")
+                .font(.sectionHeader)
                 .padding(.horizontal)
 
             if model.entries.isEmpty {
-                Text("Nothing yet — tap the button when you finish a glass.")
+                Text(model.isToday
+                     ? "Nothing yet — tap the button when you finish a glass."
+                     : "No water was logged this day.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal)

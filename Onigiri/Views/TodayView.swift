@@ -284,7 +284,7 @@ struct TodayView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Log")
-                    .font(.headline)
+                    .font(.sectionHeader)
                 Spacer()
                 // Present on past days too: forgotten meals get backfilled
                 // into the browsed day (noon timestamp, slot picked in the

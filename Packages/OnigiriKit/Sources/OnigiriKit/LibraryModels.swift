@@ -178,13 +178,28 @@ public enum SharedStore {
     }
 
     /// "drop" (💧, default) or "wave" (🌊) — user-selectable in Settings.
-    public static var waterEmoji: String {
-        defaults.string(forKey: waterIconKey) == "wave" ? "🌊" : "💧"
+    public static func waterEmoji(for raw: String?) -> String {
+        raw == "wave" ? "🌊" : "💧"
     }
 
-    /// "plate" (🍽️, default) or "onigiri" (🍙) — the Today log-food button.
+    public static var waterEmoji: String {
+        waterEmoji(for: defaults.string(forKey: waterIconKey))
+    }
+
+    /// The food icon used everywhere content means "food/intake" —
+    /// 🍎 by default; 🍙 stays the reward mark, not a food icon.
+    public static func foodEmoji(for raw: String?) -> String {
+        switch raw {
+        case "onigiri": "🍙"
+        case "plate": "🍽️"
+        case "bento": "🍱"
+        case "noodles": "🍜"
+        default: "🍎"
+        }
+    }
+
     public static var foodEmoji: String {
-        defaults.string(forKey: foodIconKey) == "onigiri" ? "🍙" : "🍽️"
+        foodEmoji(for: defaults.string(forKey: foodIconKey))
     }
 
     public static var defaults: UserDefaults {

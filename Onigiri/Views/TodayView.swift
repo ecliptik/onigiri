@@ -14,7 +14,7 @@ struct TodayView: View {
     private var favoriteMeals: [Meal]
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "drop"
-    @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "plate"
+    @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "apple"
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
     @State private var activeSheet: TodaySheet?
@@ -48,8 +48,8 @@ struct TodayView: View {
         }
     }
 
-    private var waterEmoji: String { waterIcon == "wave" ? "🌊" : "💧" }
-    private var foodEmoji: String { foodIcon == "onigiri" ? "🍙" : "🍽️" }
+    private var waterEmoji: String { SharedStore.waterEmoji(for: waterIcon) }
+    private var foodEmoji: String { SharedStore.foodEmoji(for: foodIcon) }
 
     var body: some View {
         NavigationStack {
@@ -181,7 +181,7 @@ struct TodayView: View {
         HStack(spacing: 4) {
             Image(systemName: "plus")
                 .font(.subheadline.weight(.bold))
-                .foregroundStyle(.black)
+                .foregroundStyle(.primary)
             Text(emoji)
                 .font(.title3)
         }
@@ -310,7 +310,9 @@ struct TodayView: View {
     private var meterGrid: some View {
         Grid(horizontalSpacing: 12, verticalSpacing: 12) {
             GridRow {
-                MeterCell(label: "Intake", value: model.summary.intakeKcal, systemImage: "fork.knife", tint: .orange)
+                // Intake wears the user's food emoji — one food icon
+                // everywhere content means "food".
+                MeterCell(label: "Intake", value: model.summary.intakeKcal, emoji: foodEmoji)
                 MeterCell(label: "Active", value: model.summary.activeBurnKcal, systemImage: "flame.fill", tint: .red)
                 MeterCell(label: "Resting", value: model.summary.restingBurnKcal, systemImage: "bed.double.fill", tint: .indigo)
             }
@@ -382,8 +384,7 @@ struct TodayView: View {
                 } primaryAction: {
                     activeSheet = .quickLog(.all)
                 }
-                .buttonStyle(.glassProminent)
-                .tint(.ricePaper)
+                .buttonStyle(.glass)
                 .accessibilityLabel("Log food or meal")
 
                 // Tap logs the default serving; long-press offers the
@@ -399,8 +400,7 @@ struct TodayView: View {
                 } primaryAction: {
                     logWater(oz: SharedStore.waterServingOz)
                 }
-                .buttonStyle(.glassProminent)
-                .tint(.ricePaper)
+                .buttonStyle(.glass)
                 .disabled(isLoggingWater)
                 .accessibilityLabel("Log \(Int(SharedStore.waterServingOz)) ounces of water")
             }
@@ -651,13 +651,18 @@ struct DailyGoalCard: View {
 struct MeterCell: View {
     let label: String
     let value: Double
-    let systemImage: String
-    let tint: Color
+    var systemImage: String?
+    var tint: Color = .primary
+    var emoji: String?
 
     var body: some View {
         VStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .foregroundStyle(tint)
+            if let emoji {
+                Text(emoji)
+            } else if let systemImage {
+                Image(systemName: systemImage)
+                    .foregroundStyle(tint)
+            }
             Text(value, format: .number.precision(.fractionLength(0)))
                 .font(.title3.weight(.semibold))
                 .monospacedDigit()

@@ -10,6 +10,10 @@ struct CalendarView: View {
     @State private var selectedDay = Calendar.current.startOfDay(for: .now)
     @Query private var goals: [GoalSettings]
     @Environment(\.scenePhase) private var scenePhase
+    // AppStorage (not static SharedStore reads) so icon changes re-render
+    // this screen immediately.
+    @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "drop"
+    @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "apple"
 
     private let calendar = Calendar.current
 
@@ -218,7 +222,7 @@ struct CalendarView: View {
             // changes, so only the numbers repaint.
             let totals = model.totalsByDay[selectedDay]
             HStack(spacing: 0) {
-                metric(icon: { Image(systemName: "fork.knife").foregroundStyle(.orange) },
+                metric(icon: { Text(SharedStore.foodEmoji(for: foodIcon)) },
                        text: totals.map { "\(Int($0.intakeKcal.rounded())) in" } ?? "—")
                 metric(icon: { Image(systemName: "flame.fill").foregroundStyle(.red) },
                        text: totals.map { "\(Int($0.burnKcal.rounded())) out" } ?? "—")
@@ -235,7 +239,7 @@ struct CalendarView: View {
                 metric(icon: { Text("🧂") },
                        text: summary.map { "\(Int($0.sodiumMg.rounded())) mg" } ?? "—",
                        color: summary.map { Color.sodiumStatus(mg: $0.sodiumMg, limitMg: SharedStore.sodiumLimitMg) } ?? .secondary)
-                metric(icon: { Text(SharedStore.waterEmoji) },
+                metric(icon: { Text(SharedStore.waterEmoji(for: waterIcon)) },
                        text: summary.map {
                            "\(Int($0.waterOz.rounded())) / \(Int(SharedStore.waterGoalOz)) oz"
                        } ?? "—",

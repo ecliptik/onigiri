@@ -7,7 +7,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "drop"
-    @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "plate"
+    @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "apple"
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
     @AppStorage(SharedStore.waterServingKey, store: SharedStore.defaults) private var waterServingOz = 12.0
@@ -71,6 +71,9 @@ struct SettingsView: View {
             Form {
                 Section("Appearance") {
                     Picker("Food icon", selection: $foodIcon) {
+                        Text("🍎 Apple").tag("apple")
+                        Text("🍱 Bento").tag("bento")
+                        Text("🍜 Noodles").tag("noodles")
                         Text("🍽️ Plate").tag("plate")
                         Text("🍙 Onigiri").tag("onigiri")
                     }

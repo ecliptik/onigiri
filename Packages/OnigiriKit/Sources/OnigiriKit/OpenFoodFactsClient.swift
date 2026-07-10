@@ -152,6 +152,9 @@ public struct OpenFoodFactsClient: Sendable {
             servingDescription = product.servingSize ?? "1 serving"
             nutrients = NutrientValues(
                 fatG: nutriments?.fatServing,
+                saturatedFatG: nutriments?.saturatedFatServing,
+                transFatG: nutriments?.transFatServing,
+                cholesterolMg: nutriments?.cholesterolServing.map { $0 * 1000 },
                 carbsG: nutriments?.carbsServing,
                 proteinG: nutriments?.proteinsServing,
                 fiberG: nutriments?.fiberServing,
@@ -165,6 +168,9 @@ public struct OpenFoodFactsClient: Sendable {
             servingDescription = "per 100 g"
             nutrients = NutrientValues(
                 fatG: nutriments?.fat100g,
+                saturatedFatG: nutriments?.saturatedFat100g,
+                transFatG: nutriments?.transFat100g,
+                cholesterolMg: nutriments?.cholesterol100g.map { $0 * 1000 },
                 carbsG: nutriments?.carbs100g,
                 proteinG: nutriments?.proteins100g,
                 fiberG: nutriments?.fiber100g,
@@ -254,6 +260,12 @@ private struct OFFNutriments: Decodable {
     let saltServing: Double?
     let fat100g: Double?
     let fatServing: Double?
+    let saturatedFat100g: Double?
+    let saturatedFatServing: Double?
+    let transFat100g: Double?
+    let transFatServing: Double?
+    let cholesterol100g: Double?
+    let cholesterolServing: Double?
     let carbs100g: Double?
     let carbsServing: Double?
     let proteins100g: Double?
@@ -276,6 +288,12 @@ private struct OFFNutriments: Decodable {
         case saltServing = "salt_serving"
         case fat100g = "fat_100g"
         case fatServing = "fat_serving"
+        case saturatedFat100g = "saturated-fat_100g"
+        case saturatedFatServing = "saturated-fat_serving"
+        case transFat100g = "trans-fat_100g"
+        case transFatServing = "trans-fat_serving"
+        case cholesterol100g = "cholesterol_100g"
+        case cholesterolServing = "cholesterol_serving"
         case carbs100g = "carbohydrates_100g"
         case carbsServing = "carbohydrates_serving"
         case proteins100g = "proteins_100g"
@@ -302,6 +320,12 @@ private struct OFFNutriments: Decodable {
         saltServing = flexibleDouble(.saltServing)
         fat100g = flexibleDouble(.fat100g)
         fatServing = flexibleDouble(.fatServing)
+        saturatedFat100g = flexibleDouble(.saturatedFat100g)
+        saturatedFatServing = flexibleDouble(.saturatedFatServing)
+        transFat100g = flexibleDouble(.transFat100g)
+        transFatServing = flexibleDouble(.transFatServing)
+        cholesterol100g = flexibleDouble(.cholesterol100g)
+        cholesterolServing = flexibleDouble(.cholesterolServing)
         carbs100g = flexibleDouble(.carbs100g)
         carbsServing = flexibleDouble(.carbsServing)
         proteins100g = flexibleDouble(.proteins100g)

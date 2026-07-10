@@ -9,8 +9,11 @@ public final class Food {
     public var servingDescription: String
     public var barcode: String?
     public var createdAt: Date
-    // Extended nutrients (grams), optional.
+    // Extended nutrients (grams; cholesterol mg), optional.
     public var fatG: Double?
+    public var saturatedFatG: Double?
+    public var transFatG: Double?
+    public var cholesterolMg: Double?
     public var carbsG: Double?
     public var proteinG: Double?
     public var fiberG: Double?
@@ -43,6 +46,9 @@ public final class Food {
         self.barcode = barcode
         self.createdAt = .now
         self.fatG = nutrients.fatG
+        self.saturatedFatG = nutrients.saturatedFatG
+        self.transFatG = nutrients.transFatG
+        self.cholesterolMg = nutrients.cholesterolMg
         self.carbsG = nutrients.carbsG
         self.proteinG = nutrients.proteinG
         self.fiberG = nutrients.fiberG
@@ -56,12 +62,16 @@ public final class Food {
     public var nutrients: NutrientValues {
         get {
             NutrientValues(
-                fatG: fatG, carbsG: carbsG, proteinG: proteinG,
+                fatG: fatG, saturatedFatG: saturatedFatG, transFatG: transFatG,
+                cholesterolMg: cholesterolMg, carbsG: carbsG, proteinG: proteinG,
                 fiberG: fiberG, sugarG: sugarG, micros: micros ?? [:]
             )
         }
         set {
             fatG = newValue.fatG
+            saturatedFatG = newValue.saturatedFatG
+            transFatG = newValue.transFatG
+            cholesterolMg = newValue.cholesterolMg
             carbsG = newValue.carbsG
             proteinG = newValue.proteinG
             fiberG = newValue.fiberG

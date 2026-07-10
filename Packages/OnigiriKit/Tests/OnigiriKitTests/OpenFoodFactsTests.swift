@@ -97,6 +97,19 @@ struct OpenFoodFactsTests {
         #expect(results[1].brand == "Bakery")
     }
 
+    @Test func parsesSaturatedTransFatAndCholesterol() throws {
+        let json = """
+        {"status":1,"product":{"product_name":"Butter","serving_size":"1 tbsp",
+        "nutriments":{"energy-kcal_serving":100,"fat_serving":11,
+        "saturated-fat_serving":7,"trans-fat_serving":0.5,
+        "cholesterol_serving":0.03}}}
+        """
+        let product = try OpenFoodFactsClient.parse(data: data(json), barcode: "123")
+        #expect(product.nutrients.saturatedFatG == 7)
+        #expect(product.nutrients.transFatG == 0.5)
+        #expect(abs((product.nutrients.cholesterolMg ?? -1) - 30) < 0.001) // g → mg
+    }
+
     @Test func parsesMicronutrientsPerServing() throws {
         // OFF reports micronutrients in grams; they land in mg/µg.
         let json = """

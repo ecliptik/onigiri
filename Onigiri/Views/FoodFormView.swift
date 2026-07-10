@@ -18,6 +18,9 @@ struct FoodFormView: View {
     @State private var serving = ""
     @State private var barcode: String?
     @State private var fatG: Double?
+    @State private var saturatedFatG: Double?
+    @State private var transFatG: Double?
+    @State private var cholesterolMg: Double?
     @State private var carbsG: Double?
     @State private var proteinG: Double?
     @State private var fiberG: Double?
@@ -73,12 +76,6 @@ struct FoodFormView: View {
                             .multilineTextAlignment(.trailing)
                             .focused($numberFieldFocused)
                     }
-                    LabeledContent("Sodium (mg)") {
-                        TextField("0", value: $sodiumMg, format: .number)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .focused($numberFieldFocused)
-                    }
                     LabeledContent("Serving") {
                         TextField("e.g. 1 cup, 8 oz", text: $serving)
                             .multilineTextAlignment(.trailing)
@@ -95,12 +92,18 @@ struct FoodFormView: View {
                     Toggle("Favorite", isOn: $isFavorite)
                 }
 
-                Section("More nutrients (g)") {
-                    nutrientRow("Fat", value: $fatG)
-                    nutrientRow("Carbs", value: $carbsG)
-                    nutrientRow("Protein", value: $proteinG)
-                    nutrientRow("Fiber", value: $fiberG)
-                    nutrientRow("Sugar", value: $sugarG)
+                // Nutrition-label order. Trans fat is app-only: Apple
+                // Health has no dietary type for it.
+                Section("More nutrients") {
+                    nutrientRow("Fat (g)", value: $fatG)
+                    nutrientRow("Saturated fat (g)", value: $saturatedFatG)
+                    nutrientRow("Trans fat (g)", value: $transFatG)
+                    nutrientRow("Cholesterol (mg)", value: $cholesterolMg)
+                    nutrientRow("Sodium (mg)", value: $sodiumMg)
+                    nutrientRow("Carbs (g)", value: $carbsG)
+                    nutrientRow("Fiber (g)", value: $fiberG)
+                    nutrientRow("Sugar (g)", value: $sugarG)
+                    nutrientRow("Protein (g)", value: $proteinG)
                 }
 
                 Section {
@@ -171,6 +174,9 @@ struct FoodFormView: View {
                     serving = food.servingDescription
                     barcode = food.barcode
                     fatG = food.fatG
+                    saturatedFatG = food.saturatedFatG
+                    transFatG = food.transFatG
+                    cholesterolMg = food.cholesterolMg
                     carbsG = food.carbsG
                     proteinG = food.proteinG
                     fiberG = food.fiberG
@@ -204,7 +210,8 @@ struct FoodFormView: View {
 
     private var formNutrients: NutrientValues {
         NutrientValues(
-            fatG: fatG, carbsG: carbsG, proteinG: proteinG,
+            fatG: fatG, saturatedFatG: saturatedFatG, transFatG: transFatG,
+            cholesterolMg: cholesterolMg, carbsG: carbsG, proteinG: proteinG,
             fiberG: fiberG, sugarG: sugarG, micros: micros
         )
     }
@@ -228,6 +235,9 @@ struct FoodFormView: View {
         serving = product.servingDescription
         barcode = product.barcode.isEmpty ? nil : product.barcode
         fatG = product.nutrients.fatG
+        saturatedFatG = product.nutrients.saturatedFatG
+        transFatG = product.nutrients.transFatG
+        cholesterolMg = product.nutrients.cholesterolMg
         carbsG = product.nutrients.carbsG
         proteinG = product.nutrients.proteinG
         fiberG = product.nutrients.fiberG

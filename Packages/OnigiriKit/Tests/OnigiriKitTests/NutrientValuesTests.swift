@@ -32,6 +32,18 @@ struct NutrientValuesTests {
         #expect(decoded.micros["vitaminK"] == 120)
     }
 
+    @Test func fatDetailAndCholesterolRoundTripAndScale() throws {
+        let values = NutrientValues(saturatedFatG: 4, transFatG: 0.5, cholesterolMg: 30)
+        let decoded = try JSONDecoder().decode(
+            NutrientValues.self, from: JSONEncoder().encode(values)
+        )
+        #expect(decoded == values)
+        let doubled = decoded.scaled(by: 2) + NutrientValues(cholesterolMg: 10)
+        #expect(doubled.saturatedFatG == 8)
+        #expect(doubled.transFatG == 1)
+        #expect(doubled.cholesterolMg == 70)
+    }
+
     @Test func scalingAndSummingIncludeMicros() {
         var a = NutrientValues()
         a[.calcium] = 100

@@ -79,9 +79,14 @@ public enum MicronutrientUnit: Sendable {
 }
 
 /// Optional extended nutrients. Calories and sodium remain the first-class
-/// fields; macros (grams) and micronutrients ride along when known.
+/// fields; macros (grams), cholesterol (mg), and micronutrients ride along
+/// when known. Trans fat is app-only: Apple Health has no dietary type
+/// for it.
 public struct NutrientValues: Sendable, Equatable, Codable {
     public var fatG: Double?
+    public var saturatedFatG: Double?
+    public var transFatG: Double?
+    public var cholesterolMg: Double?
     public var carbsG: Double?
     public var proteinG: Double?
     public var fiberG: Double?
@@ -93,6 +98,9 @@ public struct NutrientValues: Sendable, Equatable, Codable {
 
     public init(
         fatG: Double? = nil,
+        saturatedFatG: Double? = nil,
+        transFatG: Double? = nil,
+        cholesterolMg: Double? = nil,
         carbsG: Double? = nil,
         proteinG: Double? = nil,
         fiberG: Double? = nil,
@@ -100,6 +108,9 @@ public struct NutrientValues: Sendable, Equatable, Codable {
         micros: [String: Double] = [:]
     ) {
         self.fatG = fatG
+        self.saturatedFatG = saturatedFatG
+        self.transFatG = transFatG
+        self.cholesterolMg = cholesterolMg
         self.carbsG = carbsG
         self.proteinG = proteinG
         self.fiberG = fiberG
@@ -113,13 +124,17 @@ public struct NutrientValues: Sendable, Equatable, Codable {
     }
 
     public var isEmpty: Bool {
-        fatG == nil && carbsG == nil && proteinG == nil && fiberG == nil && sugarG == nil
+        fatG == nil && saturatedFatG == nil && transFatG == nil && cholesterolMg == nil
+            && carbsG == nil && proteinG == nil && fiberG == nil && sugarG == nil
             && micros.isEmpty
     }
 
     public func scaled(by factor: Double) -> NutrientValues {
         NutrientValues(
             fatG: fatG.map { $0 * factor },
+            saturatedFatG: saturatedFatG.map { $0 * factor },
+            transFatG: transFatG.map { $0 * factor },
+            cholesterolMg: cholesterolMg.map { $0 * factor },
             carbsG: carbsG.map { $0 * factor },
             proteinG: proteinG.map { $0 * factor },
             fiberG: fiberG.map { $0 * factor },
@@ -138,6 +153,9 @@ public struct NutrientValues: Sendable, Equatable, Codable {
         }
         return NutrientValues(
             fatG: add(lhs.fatG, rhs.fatG),
+            saturatedFatG: add(lhs.saturatedFatG, rhs.saturatedFatG),
+            transFatG: add(lhs.transFatG, rhs.transFatG),
+            cholesterolMg: add(lhs.cholesterolMg, rhs.cholesterolMg),
             carbsG: add(lhs.carbsG, rhs.carbsG),
             proteinG: add(lhs.proteinG, rhs.proteinG),
             fiberG: add(lhs.fiberG, rhs.fiberG),
@@ -146,15 +164,20 @@ public struct NutrientValues: Sendable, Equatable, Codable {
         )
     }
 
-    // Hand-written Codable: `micros` must default to empty when absent so
-    // pre-micronutrient JSON exports and stored blobs still decode.
+    // Hand-written Codable: every field is decodeIfPresent so encodings
+    // from before each addition (micros, saturated/trans fat, cholesterol)
+    // still decode.
     private enum CodingKeys: String, CodingKey {
-        case fatG, carbsG, proteinG, fiberG, sugarG, micros
+        case fatG, saturatedFatG, transFatG, cholesterolMg
+        case carbsG, proteinG, fiberG, sugarG, micros
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         fatG = try container.decodeIfPresent(Double.self, forKey: .fatG)
+        saturatedFatG = try container.decodeIfPresent(Double.self, forKey: .saturatedFatG)
+        transFatG = try container.decodeIfPresent(Double.self, forKey: .transFatG)
+        cholesterolMg = try container.decodeIfPresent(Double.self, forKey: .cholesterolMg)
         carbsG = try container.decodeIfPresent(Double.self, forKey: .carbsG)
         proteinG = try container.decodeIfPresent(Double.self, forKey: .proteinG)
         fiberG = try container.decodeIfPresent(Double.self, forKey: .fiberG)
@@ -165,6 +188,9 @@ public struct NutrientValues: Sendable, Equatable, Codable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encodeIfPresent(fatG, forKey: .fatG)
+        try container.encodeIfPresent(saturatedFatG, forKey: .saturatedFatG)
+        try container.encodeIfPresent(transFatG, forKey: .transFatG)
+        try container.encodeIfPresent(cholesterolMg, forKey: .cholesterolMg)
         try container.encodeIfPresent(carbsG, forKey: .carbsG)
         try container.encodeIfPresent(proteinG, forKey: .proteinG)
         try container.encodeIfPresent(fiberG, forKey: .fiberG)

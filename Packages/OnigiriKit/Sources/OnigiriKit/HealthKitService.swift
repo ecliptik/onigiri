@@ -21,6 +21,8 @@ public final class HealthKitService {
             HKQuantityType(.dietarySodium),
             HKQuantityType(.dietaryWater),
             HKQuantityType(.dietaryFatTotal),
+            HKQuantityType(.dietaryFatSaturated),
+            HKQuantityType(.dietaryCholesterol),
             HKQuantityType(.dietaryCarbohydrates),
             HKQuantityType(.dietaryProtein),
             HKQuantityType(.dietaryFiber),
@@ -289,6 +291,9 @@ public final class HealthKitService {
         }
         insert(.dietarySodium, .gramUnit(with: .milli), sodiumMg)
         insert(.dietaryFatTotal, .gram(), nutrients.fatG)
+        // Trans fat has no HealthKit type; it stays app-only.
+        insert(.dietaryFatSaturated, .gram(), nutrients.saturatedFatG)
+        insert(.dietaryCholesterol, .gramUnit(with: .milli), nutrients.cholesterolMg)
         insert(.dietaryCarbohydrates, .gram(), nutrients.carbsG)
         insert(.dietaryProtein, .gram(), nutrients.proteinG)
         insert(.dietaryFiber, .gram(), nutrients.fiberG)

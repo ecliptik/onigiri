@@ -6,8 +6,8 @@ import OnigiriKit
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
-    @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "drop"
-    @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "apple"
+    @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
+    @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
     @AppStorage(SharedStore.waterServingKey, store: SharedStore.defaults) private var waterServingOz = 12.0
@@ -71,15 +71,27 @@ struct SettingsView: View {
             Form {
                 Section("Appearance") {
                     Picker("Food icon", selection: $foodIcon) {
+                        Label {
+                            Text("Fork & Knife")
+                        } icon: {
+                            Image(systemName: "fork.knife").foregroundStyle(.orange)
+                        }
+                        .tag("sfFork")
                         Text("🍎 Apple").tag("apple")
                         Text("🍱 Bento").tag("bento")
                         Text("🍜 Noodles").tag("noodles")
-                        Text("🍴 Fork & Knife").tag("fork")
+                        Text("🍴 Fork & Knife emoji").tag("fork")
                         Text("🍽️ Plate").tag("plate")
                         Text("🍙 Onigiri").tag("onigiri")
                     }
                     Picker("Water icon", selection: $waterIcon) {
-                        Text("💧 Droplet").tag("drop")
+                        Label {
+                            Text("Droplet")
+                        } icon: {
+                            Image(systemName: "drop.fill").foregroundStyle(.blue)
+                        }
+                        .tag("sfDrop")
+                        Text("💧 Droplet emoji").tag("drop")
                         Text("🌊 Great Wave").tag("wave")
                         Text("🥤 Cup").tag("cup")
                         Text("🚰 Tap").tag("tap")

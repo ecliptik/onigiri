@@ -13,8 +13,8 @@ struct TodayView: View {
     @Query(filter: #Predicate<Meal> { $0.isFavorite }, sort: \Meal.name)
     private var favoriteMeals: [Meal]
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
-    @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "drop"
-    @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "apple"
+    @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
+    @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
     @State private var activeSheet: TodaySheet?
@@ -48,8 +48,6 @@ struct TodayView: View {
         }
     }
 
-    private var waterEmoji: String { SharedStore.waterEmoji(for: waterIcon) }
-    private var foodEmoji: String { SharedStore.foodEmoji(for: foodIcon) }
 
     var body: some View {
         NavigationStack {
@@ -179,12 +177,12 @@ struct TodayView: View {
 
     /// Outline glass with a toast-tinted stroke: the glass alone nearly
     /// vanishes on white, so the ring is what says "button" in light mode.
-    private func logButtonLabel(_ emoji: String) -> some View {
+    private func logButtonLabel(@ViewBuilder icon: () -> some View) -> some View {
         HStack(spacing: 4) {
             Image(systemName: "plus")
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(Color.riceToast)
-            Text(emoji)
+            icon()
                 .font(.title3)
         }
         .padding(.vertical, 8)
@@ -316,11 +314,17 @@ struct TodayView: View {
     private var meterGrid: some View {
         Grid(horizontalSpacing: 12, verticalSpacing: 12) {
             GridRow {
-                // Intake wears the user's food emoji — one food icon
+                // Intake wears the user's food icon — one food icon
                 // everywhere content means "food".
-                MeterCell(label: "Intake", value: model.summary.intakeKcal, emoji: foodEmoji)
-                MeterCell(label: "Active", value: model.summary.activeBurnKcal, systemImage: "flame.fill", tint: .red)
-                MeterCell(label: "Resting", value: model.summary.restingBurnKcal, systemImage: "bed.double.fill", tint: .indigo)
+                MeterCell(label: "Intake", value: model.summary.intakeKcal) {
+                    FoodIconView(raw: foodIcon)
+                }
+                MeterCell(label: "Active", value: model.summary.activeBurnKcal) {
+                    Image(systemName: "flame.fill").foregroundStyle(.red)
+                }
+                MeterCell(label: "Resting", value: model.summary.restingBurnKcal) {
+                    Image(systemName: "bed.double.fill").foregroundStyle(.indigo)
+                }
             }
         }
         .padding(.horizontal)
@@ -344,7 +348,7 @@ struct TodayView: View {
                     .foregroundStyle(model.summary.waterOz >= waterGoalOz ? Color.green : Color.secondary)
                     .fontWeight(model.summary.waterOz >= waterGoalOz ? .medium : .regular)
             } icon: {
-                Text(waterEmoji)
+                WaterIconView(raw: waterIcon)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -386,7 +390,7 @@ struct TodayView: View {
                         QuickActions.shared.pending = .scanBarcode
                     }
                 } label: {
-                    logButtonLabel(foodEmoji)
+                    logButtonLabel { FoodIconView(raw: foodIcon) }
                 } primaryAction: {
                     activeSheet = .quickLog(.all)
                 }
@@ -402,7 +406,7 @@ struct TodayView: View {
                         }
                     }
                 } label: {
-                    logButtonLabel(waterEmoji)
+                    logButtonLabel { WaterIconView(raw: waterIcon) }
                 } primaryAction: {
                     logWater(oz: SharedStore.waterServingOz)
                 }
@@ -463,7 +467,7 @@ struct TodayView: View {
         if !waterCollapsed {
             ForEach(model.waterLog) { entry in
                 HStack(alignment: .firstTextBaseline) {
-                    Text(waterEmoji)
+                    WaterIconView(raw: waterIcon)
                     Text(entry.date, style: .time)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -654,21 +658,14 @@ struct DailyGoalCard: View {
     }
 }
 
-struct MeterCell: View {
+struct MeterCell<Icon: View>: View {
     let label: String
     let value: Double
-    var systemImage: String?
-    var tint: Color = .primary
-    var emoji: String?
+    @ViewBuilder let icon: Icon
 
     var body: some View {
         VStack(spacing: 6) {
-            if let emoji {
-                Text(emoji)
-            } else if let systemImage {
-                Image(systemName: systemImage)
-                    .foregroundStyle(tint)
-            }
+            icon
             Text(value, format: .number.precision(.fractionLength(0)))
                 .font(.title3.weight(.semibold))
                 .monospacedDigit()

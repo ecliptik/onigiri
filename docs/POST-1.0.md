@@ -62,6 +62,14 @@ streaks, tappable day card → Today (`QuickActions.dayRequest`).
    around the balance headline, water/sodium fill bars. Design as a
    set (all metrics or none); a lone water bar looked out of place and
    was removed pre-1.0.
+9. **Showcase assets**: screenshots of every screen (light + dark) and a
+   short sizzle reel — for README.md and for sending to reviewers.
+   Simulator screenshots via `simctl io ... screenshot` are already part
+   of the workflow; video via `simctl io ... recordVideo` while driving
+   the seeded flow UI test makes a repeatable reel. Seed with
+   `--seed-sample-data` so the data looks lived-in. Note item 4 covers
+   notifications/reminders — Micheal has flagged it twice, so treat it
+   as the top vote-getter for 1.1 alongside the "show me my data" theme.
 
 ## Engineering backlog (from the pre-1.0 three-agent audit; none urgent)
 

@@ -80,7 +80,7 @@ struct SettingsView: View {
                         Text("🍎 Apple").tag("apple")
                         Text("🍱 Bento").tag("bento")
                         Text("🍜 Noodles").tag("noodles")
-                        Text("🍴 Fork & Knife emoji").tag("fork")
+                        Text("🍴 Fork & Knife").tag("fork")
                         Text("🍽️ Plate").tag("plate")
                         Text("🍙 Onigiri").tag("onigiri")
                     }

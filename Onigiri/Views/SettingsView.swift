@@ -70,7 +70,7 @@ struct SettingsView: View {
 
     private static let waterIconOptions: [(tag: String, name: String)] = [
         ("sfDrop", "Droplet"),
-        ("drop", "Droplet emoji"),
+        ("drop", "Droplet"),
         ("wave", "Great Wave"),
         ("cup", "Cup"),
         ("tap", "Tap"),

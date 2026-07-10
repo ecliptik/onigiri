@@ -20,6 +20,9 @@ struct TodayView: View {
     // you want to inspect.
     @State private var collapsedSections: Set<FoodCategory> = Set(FoodCategory.allCases)
     @State private var isLoggingWater = false
+    /// The headline number follows the user's text size (Dynamic Type);
+    /// minimumScaleFactor keeps huge accessibility sizes on one line.
+    @ScaledMetric(relativeTo: .largeTitle) private var headlineSize = 60.0
 
     /// One sheet slot: multiple .sheet modifiers chained on the same view
     /// compete and only one reliably presents. The kind is part of the
@@ -184,7 +187,9 @@ struct TodayView: View {
         VStack(spacing: 4) {
             if let remaining = remainingHeadlineKcal {
                 Text(remaining, format: .number.precision(.fractionLength(0)))
-                    .font(.system(size: 60, weight: .bold, design: .rounded))
+                    .font(.system(size: headlineSize, weight: .bold, design: .rounded))
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
                     .foregroundStyle(remaining >= 0 ? Color.green : Color.orange)
                     .contentTransition(.numericText())
                 Text("kcal left")
@@ -192,7 +197,9 @@ struct TodayView: View {
                     .foregroundStyle(.secondary)
             } else {
                 Text(model.summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
-                    .font(.system(size: 60, weight: .bold, design: .rounded))
+                    .font(.system(size: headlineSize, weight: .bold, design: .rounded))
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
                     .foregroundStyle(model.summary.balanceKcal <= 0 ? Color.green : Color.orange)
                     .contentTransition(.numericText())
                 Text("kcal balance")

@@ -58,7 +58,7 @@ struct SettingsView: View {
                             Text("\(sodiumLimitMg, format: .number.precision(.fractionLength(0))) mg")
                         }
                     }
-                    Text("The FDA guideline is 2,300mg sodium for adults.")
+                    Text("The FDA guideline is 2,300 mg sodium for adults.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

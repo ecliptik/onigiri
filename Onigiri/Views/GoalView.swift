@@ -16,12 +16,21 @@ struct GoalView: View {
     @State private var averageBurnKcal: Double?
     @State private var weightHistory: [WeightTrend.Point] = []
     @State private var loaded = false
-    @State private var savedToast = false
     @FocusState private var weightFieldFocused: Bool
 
     private let health = HealthKitService()
 
     private var currentWeightLb: Double? { healthWeightLb ?? manualWeightLb }
+
+    /// Save enables only when the form differs from the stored goal —
+    /// the tab has no Cancel, so an always-on Save would invite no-ops.
+    private var isDirty: Bool {
+        guard targetWeightLb != nil, currentWeightLb != nil else { return false }
+        guard let goal = goals.first else { return true }
+        return goal.targetWeightLb != targetWeightLb
+            || !Calendar.current.isDate(goal.targetDate, inSameDayAs: targetDate)
+            || (healthWeightLb == nil && goal.fallbackCurrentWeightLb != manualWeightLb)
+    }
 
     private var plan: CalorieBudget.Plan? {
         guard let current = currentWeightLb, let target = targetWeightLb, target < current else { return nil }
@@ -93,16 +102,16 @@ struct GoalView: View {
                 }
 
                 trendSection
-
-                Section {
-                    Button("Save goal") { save() }
-                        .disabled(targetWeightLb == nil || currentWeightLb == nil)
-                }
             }
             .compactSections()
             .navigationTitle("Goal")
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
+                // Confirm in the nav bar like every other form in the app.
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .disabled(!isDirty)
+                }
                 // Decimal pads have no return key; surface a Done while
                 // editing. (The keyboard-accessory toolbar placement doesn't
                 // reliably render on iOS 26, so this lives in the nav bar.)
@@ -120,18 +129,6 @@ struct GoalView: View {
                     }
                 }
             }
-            .overlay(alignment: .bottom) {
-                if savedToast {
-                    Text("Goal saved ✓")
-                        .font(.subheadline.weight(.medium))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(.regularMaterial, in: .capsule)
-                        .padding(.bottom, 8)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .animation(.snappy, value: savedToast)
         }
         .task {
             healthWeightLb = (try? await health.latestBodyMassLb()) ?? nil
@@ -244,11 +241,7 @@ struct GoalView: View {
             ))
         }
         weightFieldFocused = false
-        savedToast = true
         PhoneSyncService.shared.push(from: context)
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            savedToast = false
-        }
+        ToastCenter.shared.show("Goal saved ✓")
     }
 }

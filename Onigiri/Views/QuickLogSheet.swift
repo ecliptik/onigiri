@@ -171,11 +171,15 @@ struct QuickLogSheet: View {
                         row(item)
                     }
                     if filtered.isEmpty {
-                        Text(allItems.isEmpty
-                             ? "No saved foods yet — add some in the Foods tab first."
-                             : "No matches.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        // Accurate copy: this sheet can create foods itself
+                        // via the scan button and online search above.
+                        ContentUnavailableView(
+                            allItems.isEmpty ? "No saved foods yet" : "No matches",
+                            systemImage: allItems.isEmpty ? "fork.knife" : "magnifyingglass",
+                            description: Text(allItems.isEmpty
+                                ? "Scan a barcode or search online above — logged foods are saved for next time."
+                                : "Try different words, or search online below.")
+                        )
                     }
                 }
 

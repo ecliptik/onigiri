@@ -27,7 +27,7 @@ struct WatchHomeView: View {
                     Button {
                         Task { await model.logWater() }
                     } label: {
-                        Label("Add \(model.waterServingOz, format: .number.precision(.fractionLength(0))) oz", systemImage: "drop.fill")
+                        Label("Log \(model.waterServingOz, format: .number.precision(.fractionLength(0))) oz", systemImage: "drop.fill")
                             .font(.headline)
                             .frame(maxWidth: .infinity)
                     }

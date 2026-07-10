@@ -9,6 +9,9 @@ struct WaterView: View {
 
     private var waterEmoji: String { waterIcon == "wave" ? "🌊" : "💧" }
 
+    /// Dynamic Type for the ring's headline number.
+    @ScaledMetric(relativeTo: .largeTitle) private var ringNumberSize = 44.0
+
     @State private var model = WaterModel()
     @State private var toastCenter = ToastCenter.shared
     @Environment(\.scenePhase) private var scenePhase
@@ -59,7 +62,9 @@ struct WaterView: View {
                 .animation(.snappy, value: model.totalOz)
             VStack(spacing: 2) {
                 Text(model.totalOz, format: .number.precision(.fractionLength(0)))
-                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .font(.system(size: ringNumberSize, weight: .bold, design: .rounded))
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
                     .contentTransition(.numericText())
                 Text("of \(goalOz, format: .number.precision(.fractionLength(0))) oz")
                     .font(.subheadline)
@@ -76,7 +81,7 @@ struct WaterView: View {
                 Task { await model.add(oz: servingOz) }
             } label: {
                 Label {
-                    Text("Add \(servingOz, format: .number.precision(.fractionLength(0))) oz")
+                    Text("Log \(servingOz, format: .number.precision(.fractionLength(0))) oz")
                 } icon: {
                     Text(waterEmoji)
                 }

@@ -54,7 +54,7 @@ final class OnigiriUITests: XCTestCase {
 
         // Water quick-add: seeded 24 oz + one 12 oz serving = 36.
         app.tabBars.buttons["Water"].tap()
-        let addWater = app.buttons["Add 12 oz"]
+        let addWater = app.buttons["Log 12 oz"]
         XCTAssertTrue(addWater.waitForExistence(timeout: 10), "Water quick-add should render")
         XCTAssertTrue(app.staticTexts["24"].waitForExistence(timeout: 10), "Seeded water total should show")
         addWater.tap()

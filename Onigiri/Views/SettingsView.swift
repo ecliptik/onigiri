@@ -23,7 +23,7 @@ struct SettingsView: View {
                         Text("💧 Droplet").tag("drop")
                         Text("🌊 Great Wave").tag("wave")
                     }
-                    Picker("Big number shows", selection: $balanceStyle) {
+                    Picker("Calorie display", selection: $balanceStyle) {
                         Text("kcal balance").tag("balance")
                         Text("kcal left").tag("remaining")
                     }

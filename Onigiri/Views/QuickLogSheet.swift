@@ -20,6 +20,7 @@ struct QuickLogSheet: View {
     @State private var onlineSearch = OnlineFoodSearch()
     @State private var showScanner = false
     @State private var isLookingUpBarcode = false
+    @State private var formPrefill: ProductPrefill?
 
     private let health = HealthKitService()
 
@@ -173,13 +174,7 @@ struct QuickLogSheet: View {
                 // one-off food can be logged without saving it.
                 if !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
                     OnlineResultsSection(query: searchText, search: onlineSearch) { product in
-                        portionTarget = PortionTarget(
-                            name: product.name,
-                            kcal: product.kcal ?? 0,
-                            sodiumMg: product.sodiumMg ?? 0,
-                            nutrients: product.nutrients,
-                            serving: product.servingDescription
-                        )
+                        route(product)
                     }
                 }
             }
@@ -218,26 +213,54 @@ struct QuickLogSheet: View {
                     lookUpBarcode(code)
                 }
             }
+            .sheet(item: $formPrefill) { prefill in
+                // New foods go through the full form — reviewable, complete,
+                // and saved to the library. Save & Log finishes the log.
+                FoodFormView(food: nil, prefill: prefill.product) {
+                    dismiss()
+                }
+            }
         }
     }
 
-    /// Scan → fetch the product → confirm through the portion sheet. The
-    /// network fetch also gives the scanner sheet time to finish
-    /// dismissing before the portion sheet presents.
+    /// The fast portion sheet for a barcode the library already knows.
+    private func libraryTarget(forBarcode code: String) -> PortionTarget? {
+        guard let existing = foods.first(where: { $0.barcode == code }) else { return nil }
+        return PortionTarget(
+            name: existing.name,
+            kcal: existing.kcal,
+            sodiumMg: existing.sodiumMg,
+            nutrients: existing.nutrients,
+            serving: existing.servingDescription,
+            defaultCategory: PortionTarget.category(from: existing.category)
+        )
+    }
+
+    /// A known barcode goes straight to the fast portion sheet; anything
+    /// new opens the prefilled food form.
+    private func route(_ product: ScannedProduct) {
+        if let target = libraryTarget(forBarcode: product.barcode) {
+            portionTarget = target
+        } else {
+            formPrefill = ProductPrefill(product: product)
+        }
+    }
+
+    /// Scan → library check → fetch the product if it's new. The network
+    /// fetch also gives the scanner sheet time to finish dismissing before
+    /// the next sheet presents.
     private func lookUpBarcode(_ code: String) {
-        isLookingUpBarcode = true
         errorMessage = nil
+        if let target = libraryTarget(forBarcode: code) {
+            portionTarget = target
+            return
+        }
+        isLookingUpBarcode = true
         Task {
             defer { isLookingUpBarcode = false }
             do {
                 let product = try await OpenFoodFactsClient().product(barcode: code)
-                portionTarget = PortionTarget(
-                    name: product.name,
-                    kcal: product.kcal ?? 0,
-                    sodiumMg: product.sodiumMg ?? 0,
-                    nutrients: product.nutrients,
-                    serving: product.servingDescription
-                )
+                formPrefill = ProductPrefill(product: product)
             } catch {
                 errorMessage = error.localizedDescription
             }

@@ -25,6 +25,7 @@ struct FoodsView: View {
     @State private var categoryFilter: FoodCategory?
     @State private var portionTarget: PortionTarget?
     @State private var onlineSearch = OnlineFoodSearch()
+    @State private var formPrefill: ProductPrefill?
 
     private let health = HealthKitService()
 
@@ -175,13 +176,13 @@ struct FoodsView: View {
                 // more section below — a quick log/add without the food form.
                 if !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
                     OnlineResultsSection(query: searchText, search: onlineSearch) { product in
-                        portionTarget = PortionTarget(
-                            name: product.name,
-                            kcal: product.kcal ?? 0,
-                            sodiumMg: product.sodiumMg ?? 0,
-                            nutrients: product.nutrients,
-                            serving: product.servingDescription
-                        )
+                        // Known barcodes log fast; new foods go through the
+                        // full prefilled form (Save / Save & Log).
+                        if let existing = foods.first(where: { $0.barcode == product.barcode }) {
+                            portionTarget = makePortionTarget(for: existing)
+                        } else {
+                            formPrefill = ProductPrefill(product: product)
+                        }
                     }
                 }
             }
@@ -223,6 +224,9 @@ struct FoodsView: View {
                 }
             }
             .sheet(isPresented: $showNewFood) { FoodFormView(food: nil) }
+            .sheet(item: $formPrefill) { prefill in
+                FoodFormView(food: nil, prefill: prefill.product)
+            }
             .sheet(isPresented: $showScanFood) { FoodFormView(food: nil, startScanning: true) }
             .sheet(item: $editingFood) { FoodFormView(food: $0) }
             .sheet(isPresented: $showNewMeal) { MealFormView() }

@@ -1,9 +1,11 @@
 import SwiftUI
 import SwiftData
+import WidgetKit
 import OnigiriKit
 
 /// Create or edit a saved food, with barcode scanning to prefill from
-/// OpenFoodFacts.
+/// OpenFoodFacts. The one surface every new food passes through — Save
+/// keeps it in the library, Save & Log also confirms a portion and logs it.
 struct FoodFormView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -11,6 +13,10 @@ struct FoodFormView: View {
     let food: Food?
     /// Open the barcode scanner immediately (quick-action entry point).
     var startScanning = false
+    /// Prefill from a scanned/searched product (new-food log flow).
+    var prefill: ScannedProduct?
+    /// Called after Save & Log completes, so the presenter can dismiss too.
+    var onLogged: (() -> Void)?
 
     @State private var name = ""
     @State private var kcal: Double?
@@ -37,7 +43,17 @@ struct FoodFormView: View {
     @State private var showSearch = false
     @State private var isLookingUp = false
     @State private var lookupMessage: String?
+    @State private var portionTarget: PortionTarget?
+    /// A new food inserted by Save & Log, so a second save updates it
+    /// instead of inserting a duplicate.
+    @State private var createdFood: Food?
     @FocusState private var numberFieldFocused: Bool
+
+    private let health = HealthKitService()
+
+    private var canSave: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && kcal != nil
+    }
 
     var body: some View {
         NavigationStack {
@@ -130,6 +146,23 @@ struct FoodFormView: View {
                         }
                     }
                 }
+
+                Section {
+                    Button {
+                        saveAndLog()
+                    } label: {
+                        Text("Save & Log")
+                            .frame(maxWidth: .infinity)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.black)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.ricePaper)
+                    .listRowInsets(EdgeInsets())
+                    .disabled(!canSave)
+                } footer: {
+                    Text("Saves to your library, then confirms the portion and logs it.")
+                }
             }
             .navigationTitle(food == nil ? "New Food" : "Edit Food")
             .navigationBarTitleDisplayMode(.inline)
@@ -139,7 +172,7 @@ struct FoodFormView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
-                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || kcal == nil)
+                        .disabled(!canSave)
                 }
                 // Decimal pads have no return key; surface a Done while
                 // editing (keyboard-accessory placement is unreliable on
@@ -178,6 +211,12 @@ struct FoodFormView: View {
                     apply(product)
                 }
             }
+            .sheet(item: $portionTarget) { target in
+                PortionSheet(target: target) { quantity, category in
+                    log(target, quantity: quantity, category: category)
+                }
+                .presentationDetents([.medium, .large])
+            }
             .onAppear {
                 if let food {
                     name = food.name
@@ -200,6 +239,8 @@ struct FoodFormView: View {
                     microsExpanded = !micros.isEmpty
                     category = food.category
                     isFavorite = food.isFavorite
+                } else if let prefill {
+                    apply(prefill)
                 } else if startScanning {
                     showScanner = true
                 }
@@ -270,8 +311,47 @@ struct FoodFormView: View {
     }
 
     private func save() {
+        persist()
+        dismiss()
+    }
+
+    /// Save to the library, then confirm a portion to log. Persisting first
+    /// means the food survives even if the portion sheet is cancelled.
+    private func saveAndLog() {
+        persist()
+        portionTarget = PortionTarget(
+            name: name.trimmingCharacters(in: .whitespaces),
+            kcal: kcal ?? 0,
+            sodiumMg: sodiumMg ?? 0,
+            nutrients: formNutrients,
+            serving: serving,
+            defaultCategory: PortionTarget.category(from: category)
+        )
+    }
+
+    private func log(_ target: PortionTarget, quantity: Double, category: FoodCategory) {
+        Task {
+            do {
+                try await health.logFood(
+                    name: target.name,
+                    kcal: target.kcal * quantity,
+                    sodiumMg: target.sodiumMg * quantity,
+                    nutrients: target.nutrients.scaled(by: quantity),
+                    category: category
+                )
+                WidgetCenter.shared.reloadAllTimelines()
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                onLogged?()
+                dismiss()
+            } catch {
+                lookupMessage = "Saved, but couldn't log: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func persist() {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
-        if let food {
+        if let food = food ?? createdFood {
             food.name = trimmed
             food.kcal = kcal ?? 0
             food.sodiumMg = sodiumMg ?? 0
@@ -281,7 +361,7 @@ struct FoodFormView: View {
             food.category = category
             food.isFavorite = isFavorite
         } else {
-            context.insert(Food(
+            let new = Food(
                 name: trimmed,
                 kcal: kcal ?? 0,
                 sodiumMg: sodiumMg ?? 0,
@@ -290,9 +370,10 @@ struct FoodFormView: View {
                 nutrients: formNutrients,
                 isFavorite: isFavorite,
                 category: category
-            ))
+            )
+            context.insert(new)
+            createdFood = new
         }
         PhoneSyncService.shared.push(from: context)
-        dismiss()
     }
 }

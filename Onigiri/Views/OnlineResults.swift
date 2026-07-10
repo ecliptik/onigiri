@@ -81,6 +81,13 @@ final class OnlineFoodSearch {
     }
 }
 
+/// Identifiable wrapper so a fetched product can drive `.sheet(item:)`
+/// (the prefilled food form for new-food logging).
+struct ProductPrefill: Identifiable {
+    let product: ScannedProduct
+    var id: String { product.barcode }
+}
+
 /// One search hit: name/brand on the left, lazily fetched kcal + serving on
 /// the right.
 struct OnlineResultRow: View {

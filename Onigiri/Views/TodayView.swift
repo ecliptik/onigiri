@@ -254,7 +254,9 @@ struct TodayView: View {
                     .foregroundStyle(Color.sodiumStatus(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg))
                     .fontWeight(.medium)
             } icon: {
-                Image(systemName: "aqi.medium").foregroundStyle(.gray)
+                // Salt shaker, matching the emoji water icon beside it
+                // (aqi.medium was an air-quality glyph).
+                Text("🧂")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 

@@ -114,34 +114,37 @@ struct QuickLogSheet: View {
                 .listRowInsets(EdgeInsets())
 
                 // A plain field instead of .searchable so the barcode
-                // scanner can sit inside the row, at its right edge.
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                    TextField("Search library and online", text: $searchText)
-                        .autocorrectionDisabled()
-                        .submitLabel(.search)
-                        .onSubmit {
-                            Task { await onlineSearch.search(searchText) }
+                // scanner can sit inside the row, at its right edge. Its own
+                // Section so it doesn't fuse with the picker above.
+                Section {
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(.secondary)
+                        TextField("Search library and online", text: $searchText)
+                            .autocorrectionDisabled()
+                            .submitLabel(.search)
+                            .onSubmit {
+                                Task { await onlineSearch.search(searchText) }
+                            }
+                        if !searchText.isEmpty {
+                            Button {
+                                searchText = ""
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Clear search")
                         }
-                    if !searchText.isEmpty {
                         Button {
-                            searchText = ""
+                            showScanner = true
                         } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
+                            Image(systemName: "barcode.viewfinder")
+                                .foregroundStyle(Color.riceToast)
                         }
                         .buttonStyle(.borderless)
-                        .accessibilityLabel("Clear search")
+                        .accessibilityLabel("Scan barcode")
                     }
-                    Button {
-                        showScanner = true
-                    } label: {
-                        Image(systemName: "barcode.viewfinder")
-                            .foregroundStyle(Color.riceToast)
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel("Scan barcode")
                 }
 
                 if isLookingUpBarcode {

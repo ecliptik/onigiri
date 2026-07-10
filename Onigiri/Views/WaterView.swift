@@ -10,7 +10,6 @@ struct WaterView: View {
     private var waterEmoji: String { waterIcon == "wave" ? "🌊" : "💧" }
 
     @State private var model = WaterModel()
-    @State private var showSettings = false
     @State private var toastCenter = ToastCenter.shared
     @Environment(\.scenePhase) private var scenePhase
 
@@ -33,17 +32,8 @@ struct WaterView: View {
                 .padding(.bottom, 24)
             }
             .navigationTitle("Water")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    // Same single Settings sheet as the Today gear.
-                    Button("Settings", systemImage: "gearshape") {
-                        showSettings = true
-                    }
-                }
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
-            }
+            // Settings has one predictable home: the gear on Today (HIG
+            // consistency — don't scatter entry points per tab).
         }
         .task { await model.refresh() }
         .onAppear { Task { await model.refresh() } }
@@ -105,9 +95,11 @@ struct WaterView: View {
                     }
                 }
             } label: {
-                Text("Other amount")
+                // Looks like the control it is (HIG: visible affordance).
+                Label("Other amount", systemImage: "chevron.up.chevron.down")
                     .font(.subheadline)
             }
+            .buttonStyle(.bordered)
         }
     }
 

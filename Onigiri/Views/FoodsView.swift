@@ -378,7 +378,9 @@ struct LogButton: View {
             .foregroundStyle(.black)
             .padding(8)
             .background(Color.ricePaper, in: .circle)
-            .contentShape(.circle)
+            // HIG minimum touch target; the visible circle stays small.
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(.rect)
             .onTapGesture { action() }
             .onLongPressGesture(minimumDuration: 0.4) { onCustomPortion() }
             .accessibilityLabel("Log \(name)")

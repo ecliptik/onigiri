@@ -27,8 +27,11 @@ public enum FoodCategory: String, CaseIterable, Codable, Sendable, Identifiable 
 /// carries and Apple Health accepts. Each value is stored in the nutrient's
 /// canonical unit (`unit`), matching how nutrition labels state it.
 public enum Micronutrient: String, CaseIterable, Codable, Sendable, Identifiable {
+    // Declaration order is display order: minerals, then vitamins.
     case potassium, calcium, iron, magnesium, zinc
+    case phosphorus, selenium, copper, manganese, iodine, chromium, molybdenum, chloride
     case vitaminA, vitaminC, vitaminD, vitaminE, vitaminB6, vitaminB12, folate
+    case vitaminK, thiamin, riboflavin, niacin, pantothenicAcid, biotin
 
     public var id: String { rawValue }
 
@@ -39,6 +42,14 @@ public enum Micronutrient: String, CaseIterable, Codable, Sendable, Identifiable
         case .iron: "Iron"
         case .magnesium: "Magnesium"
         case .zinc: "Zinc"
+        case .phosphorus: "Phosphorus"
+        case .selenium: "Selenium"
+        case .copper: "Copper"
+        case .manganese: "Manganese"
+        case .iodine: "Iodine"
+        case .chromium: "Chromium"
+        case .molybdenum: "Molybdenum"
+        case .chloride: "Chloride"
         case .vitaminA: "Vitamin A"
         case .vitaminC: "Vitamin C"
         case .vitaminD: "Vitamin D"
@@ -46,15 +57,24 @@ public enum Micronutrient: String, CaseIterable, Codable, Sendable, Identifiable
         case .vitaminB6: "Vitamin B6"
         case .vitaminB12: "Vitamin B12"
         case .folate: "Folate"
+        case .vitaminK: "Vitamin K"
+        case .thiamin: "Thiamin (B1)"
+        case .riboflavin: "Riboflavin (B2)"
+        case .niacin: "Niacin (B3)"
+        case .pantothenicAcid: "Pantothenic acid (B5)"
+        case .biotin: "Biotin (B7)"
         }
     }
 
-    /// Canonical storage/display unit: mg for the minerals and vitamins
-    /// C/E/B6, µg for A/D/B12/folate (label convention and Health's).
+    /// Canonical storage/display unit, following label convention (and
+    /// Health's): µg for the trace nutrients, mg for the rest.
     public var unit: MicronutrientUnit {
         switch self {
-        case .vitaminA, .vitaminD, .vitaminB12, .folate: .micrograms
-        default: .milligrams
+        case .vitaminA, .vitaminD, .vitaminB12, .folate,
+             .vitaminK, .biotin, .selenium, .iodine, .chromium, .molybdenum:
+            .micrograms
+        default:
+            .milligrams
         }
     }
 }
@@ -86,11 +106,14 @@ public struct NutrientValues: Sendable, Equatable, Codable {
     public var fatG: Double?
     public var saturatedFatG: Double?
     public var transFatG: Double?
+    public var polyunsaturatedFatG: Double?
+    public var monounsaturatedFatG: Double?
     public var cholesterolMg: Double?
     public var carbsG: Double?
     public var proteinG: Double?
     public var fiberG: Double?
     public var sugarG: Double?
+    public var caffeineMg: Double?
     /// Micronutrients in their canonical units, keyed by Micronutrient
     /// rawValue — a plain-string dictionary so old encodings decode and
     /// keys from newer app versions survive a round trip.
@@ -100,21 +123,27 @@ public struct NutrientValues: Sendable, Equatable, Codable {
         fatG: Double? = nil,
         saturatedFatG: Double? = nil,
         transFatG: Double? = nil,
+        polyunsaturatedFatG: Double? = nil,
+        monounsaturatedFatG: Double? = nil,
         cholesterolMg: Double? = nil,
         carbsG: Double? = nil,
         proteinG: Double? = nil,
         fiberG: Double? = nil,
         sugarG: Double? = nil,
+        caffeineMg: Double? = nil,
         micros: [String: Double] = [:]
     ) {
         self.fatG = fatG
         self.saturatedFatG = saturatedFatG
         self.transFatG = transFatG
+        self.polyunsaturatedFatG = polyunsaturatedFatG
+        self.monounsaturatedFatG = monounsaturatedFatG
         self.cholesterolMg = cholesterolMg
         self.carbsG = carbsG
         self.proteinG = proteinG
         self.fiberG = fiberG
         self.sugarG = sugarG
+        self.caffeineMg = caffeineMg
         self.micros = micros
     }
 
@@ -123,78 +152,72 @@ public struct NutrientValues: Sendable, Equatable, Codable {
         set { micros[micro.rawValue] = newValue }
     }
 
+    /// Every optional scalar field, paired with its coding key — one list
+    /// to keep isEmpty/scaled/+/Codable in lockstep as fields accrue.
+    /// Computed because key paths aren't Sendable, so a stored static
+    /// would trip strict concurrency.
+    private static var scalarFields: [(WritableKeyPath<NutrientValues, Double?>, CodingKeys)] { [
+        (\.fatG, .fatG),
+        (\.saturatedFatG, .saturatedFatG),
+        (\.transFatG, .transFatG),
+        (\.polyunsaturatedFatG, .polyunsaturatedFatG),
+        (\.monounsaturatedFatG, .monounsaturatedFatG),
+        (\.cholesterolMg, .cholesterolMg),
+        (\.carbsG, .carbsG),
+        (\.proteinG, .proteinG),
+        (\.fiberG, .fiberG),
+        (\.sugarG, .sugarG),
+        (\.caffeineMg, .caffeineMg),
+    ] }
+
     public var isEmpty: Bool {
-        fatG == nil && saturatedFatG == nil && transFatG == nil && cholesterolMg == nil
-            && carbsG == nil && proteinG == nil && fiberG == nil && sugarG == nil
-            && micros.isEmpty
+        Self.scalarFields.allSatisfy { self[keyPath: $0.0] == nil } && micros.isEmpty
     }
 
     public func scaled(by factor: Double) -> NutrientValues {
-        NutrientValues(
-            fatG: fatG.map { $0 * factor },
-            saturatedFatG: saturatedFatG.map { $0 * factor },
-            transFatG: transFatG.map { $0 * factor },
-            cholesterolMg: cholesterolMg.map { $0 * factor },
-            carbsG: carbsG.map { $0 * factor },
-            proteinG: proteinG.map { $0 * factor },
-            fiberG: fiberG.map { $0 * factor },
-            sugarG: sugarG.map { $0 * factor },
-            micros: micros.mapValues { $0 * factor }
-        )
+        var scaled = self
+        for (field, _) in Self.scalarFields {
+            scaled[keyPath: field] = self[keyPath: field].map { $0 * factor }
+        }
+        scaled.micros = micros.mapValues { $0 * factor }
+        return scaled
     }
 
     /// Sums fields where at least one side has a value.
     public static func + (lhs: NutrientValues, rhs: NutrientValues) -> NutrientValues {
-        func add(_ a: Double?, _ b: Double?) -> Double? {
-            switch (a, b) {
-            case (nil, nil): nil
-            default: (a ?? 0) + (b ?? 0)
+        var sum = lhs
+        for (field, _) in scalarFields {
+            switch (lhs[keyPath: field], rhs[keyPath: field]) {
+            case (nil, nil): sum[keyPath: field] = nil
+            case let (a, b): sum[keyPath: field] = (a ?? 0) + (b ?? 0)
             }
         }
-        return NutrientValues(
-            fatG: add(lhs.fatG, rhs.fatG),
-            saturatedFatG: add(lhs.saturatedFatG, rhs.saturatedFatG),
-            transFatG: add(lhs.transFatG, rhs.transFatG),
-            cholesterolMg: add(lhs.cholesterolMg, rhs.cholesterolMg),
-            carbsG: add(lhs.carbsG, rhs.carbsG),
-            proteinG: add(lhs.proteinG, rhs.proteinG),
-            fiberG: add(lhs.fiberG, rhs.fiberG),
-            sugarG: add(lhs.sugarG, rhs.sugarG),
-            micros: lhs.micros.merging(rhs.micros, uniquingKeysWith: +)
-        )
+        sum.micros = lhs.micros.merging(rhs.micros, uniquingKeysWith: +)
+        return sum
     }
 
     // Hand-written Codable: every field is decodeIfPresent so encodings
-    // from before each addition (micros, saturated/trans fat, cholesterol)
-    // still decode.
+    // from before each field's addition still decode.
     private enum CodingKeys: String, CodingKey {
-        case fatG, saturatedFatG, transFatG, cholesterolMg
-        case carbsG, proteinG, fiberG, sugarG, micros
+        case fatG, saturatedFatG, transFatG, polyunsaturatedFatG, monounsaturatedFatG
+        case cholesterolMg, carbsG, proteinG, fiberG, sugarG, caffeineMg, micros
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        fatG = try container.decodeIfPresent(Double.self, forKey: .fatG)
-        saturatedFatG = try container.decodeIfPresent(Double.self, forKey: .saturatedFatG)
-        transFatG = try container.decodeIfPresent(Double.self, forKey: .transFatG)
-        cholesterolMg = try container.decodeIfPresent(Double.self, forKey: .cholesterolMg)
-        carbsG = try container.decodeIfPresent(Double.self, forKey: .carbsG)
-        proteinG = try container.decodeIfPresent(Double.self, forKey: .proteinG)
-        fiberG = try container.decodeIfPresent(Double.self, forKey: .fiberG)
-        sugarG = try container.decodeIfPresent(Double.self, forKey: .sugarG)
+        // micros first: the keypath writes below need self fully
+        // initialized (the optionals default to nil).
         micros = try container.decodeIfPresent([String: Double].self, forKey: .micros) ?? [:]
+        for (field, key) in Self.scalarFields {
+            self[keyPath: field] = try container.decodeIfPresent(Double.self, forKey: key)
+        }
     }
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encodeIfPresent(fatG, forKey: .fatG)
-        try container.encodeIfPresent(saturatedFatG, forKey: .saturatedFatG)
-        try container.encodeIfPresent(transFatG, forKey: .transFatG)
-        try container.encodeIfPresent(cholesterolMg, forKey: .cholesterolMg)
-        try container.encodeIfPresent(carbsG, forKey: .carbsG)
-        try container.encodeIfPresent(proteinG, forKey: .proteinG)
-        try container.encodeIfPresent(fiberG, forKey: .fiberG)
-        try container.encodeIfPresent(sugarG, forKey: .sugarG)
+        for (field, key) in Self.scalarFields {
+            try container.encodeIfPresent(self[keyPath: field], forKey: key)
+        }
         if !micros.isEmpty {
             try container.encode(micros, forKey: .micros)
         }

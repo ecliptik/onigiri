@@ -20,11 +20,14 @@ struct FoodFormView: View {
     @State private var fatG: Double?
     @State private var saturatedFatG: Double?
     @State private var transFatG: Double?
+    @State private var polyunsaturatedFatG: Double?
+    @State private var monounsaturatedFatG: Double?
     @State private var cholesterolMg: Double?
     @State private var carbsG: Double?
     @State private var proteinG: Double?
     @State private var fiberG: Double?
     @State private var sugarG: Double?
+    @State private var caffeineMg: Double?
     @State private var micros: [String: Double] = [:]
     @State private var microsExpanded = false
     @State private var category: String?
@@ -98,12 +101,15 @@ struct FoodFormView: View {
                     nutrientRow("Fat (g)", value: $fatG)
                     nutrientRow("Saturated fat (g)", value: $saturatedFatG)
                     nutrientRow("Trans fat (g)", value: $transFatG)
+                    nutrientRow("Polyunsaturated fat (g)", value: $polyunsaturatedFatG)
+                    nutrientRow("Monounsaturated fat (g)", value: $monounsaturatedFatG)
                     nutrientRow("Cholesterol (mg)", value: $cholesterolMg)
                     nutrientRow("Sodium (mg)", value: $sodiumMg)
                     nutrientRow("Carbs (g)", value: $carbsG)
                     nutrientRow("Fiber (g)", value: $fiberG)
                     nutrientRow("Sugar (g)", value: $sugarG)
                     nutrientRow("Protein (g)", value: $proteinG)
+                    nutrientRow("Caffeine (mg)", value: $caffeineMg)
                 }
 
                 Section {
@@ -176,11 +182,14 @@ struct FoodFormView: View {
                     fatG = food.fatG
                     saturatedFatG = food.saturatedFatG
                     transFatG = food.transFatG
+                    polyunsaturatedFatG = food.polyunsaturatedFatG
+                    monounsaturatedFatG = food.monounsaturatedFatG
                     cholesterolMg = food.cholesterolMg
                     carbsG = food.carbsG
                     proteinG = food.proteinG
                     fiberG = food.fiberG
                     sugarG = food.sugarG
+                    caffeineMg = food.caffeineMg
                     micros = food.micros ?? [:]
                     microsExpanded = !micros.isEmpty
                     category = food.category
@@ -211,8 +220,10 @@ struct FoodFormView: View {
     private var formNutrients: NutrientValues {
         NutrientValues(
             fatG: fatG, saturatedFatG: saturatedFatG, transFatG: transFatG,
+            polyunsaturatedFatG: polyunsaturatedFatG,
+            monounsaturatedFatG: monounsaturatedFatG,
             cholesterolMg: cholesterolMg, carbsG: carbsG, proteinG: proteinG,
-            fiberG: fiberG, sugarG: sugarG, micros: micros
+            fiberG: fiberG, sugarG: sugarG, caffeineMg: caffeineMg, micros: micros
         )
     }
 
@@ -237,11 +248,14 @@ struct FoodFormView: View {
         fatG = product.nutrients.fatG
         saturatedFatG = product.nutrients.saturatedFatG
         transFatG = product.nutrients.transFatG
+        polyunsaturatedFatG = product.nutrients.polyunsaturatedFatG
+        monounsaturatedFatG = product.nutrients.monounsaturatedFatG
         cholesterolMg = product.nutrients.cholesterolMg
         carbsG = product.nutrients.carbsG
         proteinG = product.nutrients.proteinG
         fiberG = product.nutrients.fiberG
         sugarG = product.nutrients.sugarG
+        caffeineMg = product.nutrients.caffeineMg
         micros = product.nutrients.micros
         microsExpanded = !micros.isEmpty
         lookupMessage = product.kcal == nil

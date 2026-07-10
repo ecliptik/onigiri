@@ -22,11 +22,14 @@ public final class HealthKitService {
             HKQuantityType(.dietaryWater),
             HKQuantityType(.dietaryFatTotal),
             HKQuantityType(.dietaryFatSaturated),
+            HKQuantityType(.dietaryFatPolyunsaturated),
+            HKQuantityType(.dietaryFatMonounsaturated),
             HKQuantityType(.dietaryCholesterol),
             HKQuantityType(.dietaryCarbohydrates),
             HKQuantityType(.dietaryProtein),
             HKQuantityType(.dietaryFiber),
             HKQuantityType(.dietarySugar),
+            HKQuantityType(.dietaryCaffeine),
         ]
         for micro in Micronutrient.allCases {
             types.insert(HKQuantityType(micro.healthKitIdentifier))
@@ -293,11 +296,14 @@ public final class HealthKitService {
         insert(.dietaryFatTotal, .gram(), nutrients.fatG)
         // Trans fat has no HealthKit type; it stays app-only.
         insert(.dietaryFatSaturated, .gram(), nutrients.saturatedFatG)
+        insert(.dietaryFatPolyunsaturated, .gram(), nutrients.polyunsaturatedFatG)
+        insert(.dietaryFatMonounsaturated, .gram(), nutrients.monounsaturatedFatG)
         insert(.dietaryCholesterol, .gramUnit(with: .milli), nutrients.cholesterolMg)
         insert(.dietaryCarbohydrates, .gram(), nutrients.carbsG)
         insert(.dietaryProtein, .gram(), nutrients.proteinG)
         insert(.dietaryFiber, .gram(), nutrients.fiberG)
         insert(.dietarySugar, .gram(), nutrients.sugarG)
+        insert(.dietaryCaffeine, .gramUnit(with: .milli), nutrients.caffeineMg)
         for micro in Micronutrient.allCases {
             insert(micro.healthKitIdentifier, micro.healthKitUnit, nutrients[micro])
         }
@@ -444,6 +450,14 @@ extension Micronutrient {
         case .iron: .dietaryIron
         case .magnesium: .dietaryMagnesium
         case .zinc: .dietaryZinc
+        case .phosphorus: .dietaryPhosphorus
+        case .selenium: .dietarySelenium
+        case .copper: .dietaryCopper
+        case .manganese: .dietaryManganese
+        case .iodine: .dietaryIodine
+        case .chromium: .dietaryChromium
+        case .molybdenum: .dietaryMolybdenum
+        case .chloride: .dietaryChloride
         case .vitaminA: .dietaryVitaminA
         case .vitaminC: .dietaryVitaminC
         case .vitaminD: .dietaryVitaminD
@@ -451,6 +465,12 @@ extension Micronutrient {
         case .vitaminB6: .dietaryVitaminB6
         case .vitaminB12: .dietaryVitaminB12
         case .folate: .dietaryFolate
+        case .vitaminK: .dietaryVitaminK
+        case .thiamin: .dietaryThiamin
+        case .riboflavin: .dietaryRiboflavin
+        case .niacin: .dietaryNiacin
+        case .pantothenicAcid: .dietaryPantothenicAcid
+        case .biotin: .dietaryBiotin
         }
     }
 

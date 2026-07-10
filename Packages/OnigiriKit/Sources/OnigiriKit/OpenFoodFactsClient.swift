@@ -154,11 +154,14 @@ public struct OpenFoodFactsClient: Sendable {
                 fatG: nutriments?.fatServing,
                 saturatedFatG: nutriments?.saturatedFatServing,
                 transFatG: nutriments?.transFatServing,
+                polyunsaturatedFatG: nutriments?.polyunsaturatedFatServing,
+                monounsaturatedFatG: nutriments?.monounsaturatedFatServing,
                 cholesterolMg: nutriments?.cholesterolServing.map { $0 * 1000 },
                 carbsG: nutriments?.carbsServing,
                 proteinG: nutriments?.proteinsServing,
                 fiberG: nutriments?.fiberServing,
                 sugarG: nutriments?.sugarsServing,
+                caffeineMg: nutriments?.caffeineServing.map { $0 * 1000 },
                 micros: microValues(nutriments?.microsServing)
             )
         } else {
@@ -170,11 +173,14 @@ public struct OpenFoodFactsClient: Sendable {
                 fatG: nutriments?.fat100g,
                 saturatedFatG: nutriments?.saturatedFat100g,
                 transFatG: nutriments?.transFat100g,
+                polyunsaturatedFatG: nutriments?.polyunsaturatedFat100g,
+                monounsaturatedFatG: nutriments?.monounsaturatedFat100g,
                 cholesterolMg: nutriments?.cholesterol100g.map { $0 * 1000 },
                 carbsG: nutriments?.carbs100g,
                 proteinG: nutriments?.proteins100g,
                 fiberG: nutriments?.fiber100g,
                 sugarG: nutriments?.sugars100g,
+                caffeineMg: nutriments?.caffeine100g.map { $0 * 1000 },
                 micros: microValues(nutriments?.micros100g)
             )
         }
@@ -264,8 +270,14 @@ private struct OFFNutriments: Decodable {
     let saturatedFatServing: Double?
     let transFat100g: Double?
     let transFatServing: Double?
+    let polyunsaturatedFat100g: Double?
+    let polyunsaturatedFatServing: Double?
+    let monounsaturatedFat100g: Double?
+    let monounsaturatedFatServing: Double?
     let cholesterol100g: Double?
     let cholesterolServing: Double?
+    let caffeine100g: Double?
+    let caffeineServing: Double?
     let carbs100g: Double?
     let carbsServing: Double?
     let proteins100g: Double?
@@ -292,8 +304,14 @@ private struct OFFNutriments: Decodable {
         case saturatedFatServing = "saturated-fat_serving"
         case transFat100g = "trans-fat_100g"
         case transFatServing = "trans-fat_serving"
+        case polyunsaturatedFat100g = "polyunsaturated-fat_100g"
+        case polyunsaturatedFatServing = "polyunsaturated-fat_serving"
+        case monounsaturatedFat100g = "monounsaturated-fat_100g"
+        case monounsaturatedFatServing = "monounsaturated-fat_serving"
         case cholesterol100g = "cholesterol_100g"
         case cholesterolServing = "cholesterol_serving"
+        case caffeine100g = "caffeine_100g"
+        case caffeineServing = "caffeine_serving"
         case carbs100g = "carbohydrates_100g"
         case carbsServing = "carbohydrates_serving"
         case proteins100g = "proteins_100g"
@@ -324,8 +342,14 @@ private struct OFFNutriments: Decodable {
         saturatedFatServing = flexibleDouble(.saturatedFatServing)
         transFat100g = flexibleDouble(.transFat100g)
         transFatServing = flexibleDouble(.transFatServing)
+        polyunsaturatedFat100g = flexibleDouble(.polyunsaturatedFat100g)
+        polyunsaturatedFatServing = flexibleDouble(.polyunsaturatedFatServing)
+        monounsaturatedFat100g = flexibleDouble(.monounsaturatedFat100g)
+        monounsaturatedFatServing = flexibleDouble(.monounsaturatedFatServing)
         cholesterol100g = flexibleDouble(.cholesterol100g)
         cholesterolServing = flexibleDouble(.cholesterolServing)
+        caffeine100g = flexibleDouble(.caffeine100g)
+        caffeineServing = flexibleDouble(.caffeineServing)
         carbs100g = flexibleDouble(.carbs100g)
         carbsServing = flexibleDouble(.carbsServing)
         proteins100g = flexibleDouble(.proteins100g)
@@ -380,6 +404,14 @@ private extension Micronutrient {
         case .iron: ["iron"]
         case .magnesium: ["magnesium"]
         case .zinc: ["zinc"]
+        case .phosphorus: ["phosphorus"]
+        case .selenium: ["selenium"]
+        case .copper: ["copper"]
+        case .manganese: ["manganese"]
+        case .iodine: ["iodine"]
+        case .chromium: ["chromium"]
+        case .molybdenum: ["molybdenum"]
+        case .chloride: ["chloride"]
         case .vitaminA: ["vitamin-a"]
         case .vitaminC: ["vitamin-c"]
         case .vitaminD: ["vitamin-d"]
@@ -387,6 +419,12 @@ private extension Micronutrient {
         case .vitaminB6: ["vitamin-b6"]
         case .vitaminB12: ["vitamin-b12"]
         case .folate: ["folates", "vitamin-b9"]
+        case .vitaminK: ["vitamin-k"]
+        case .thiamin: ["vitamin-b1"]
+        case .riboflavin: ["vitamin-b2"]
+        case .niacin: ["vitamin-pp", "vitamin-b3"]
+        case .pantothenicAcid: ["pantothenic-acid", "vitamin-b5"]
+        case .biotin: ["biotin", "vitamin-b7"]
         }
     }
 }

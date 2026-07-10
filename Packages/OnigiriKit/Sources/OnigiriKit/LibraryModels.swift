@@ -9,15 +9,18 @@ public final class Food {
     public var servingDescription: String
     public var barcode: String?
     public var createdAt: Date
-    // Extended nutrients (grams; cholesterol mg), optional.
+    // Extended nutrients (grams; cholesterol/caffeine mg), optional.
     public var fatG: Double?
     public var saturatedFatG: Double?
     public var transFatG: Double?
+    public var polyunsaturatedFatG: Double?
+    public var monounsaturatedFatG: Double?
     public var cholesterolMg: Double?
     public var carbsG: Double?
     public var proteinG: Double?
     public var fiberG: Double?
     public var sugarG: Double?
+    public var caffeineMg: Double?
     /// Vitamins & minerals in canonical units, keyed by Micronutrient
     /// rawValue. Optional so pre-existing stores migrate lightweight.
     public var micros: [String: Double]?
@@ -48,11 +51,14 @@ public final class Food {
         self.fatG = nutrients.fatG
         self.saturatedFatG = nutrients.saturatedFatG
         self.transFatG = nutrients.transFatG
+        self.polyunsaturatedFatG = nutrients.polyunsaturatedFatG
+        self.monounsaturatedFatG = nutrients.monounsaturatedFatG
         self.cholesterolMg = nutrients.cholesterolMg
         self.carbsG = nutrients.carbsG
         self.proteinG = nutrients.proteinG
         self.fiberG = nutrients.fiberG
         self.sugarG = nutrients.sugarG
+        self.caffeineMg = nutrients.caffeineMg
         self.micros = nutrients.micros.isEmpty ? nil : nutrients.micros
         self.isFavorite = isFavorite
         self.category = category
@@ -63,19 +69,25 @@ public final class Food {
         get {
             NutrientValues(
                 fatG: fatG, saturatedFatG: saturatedFatG, transFatG: transFatG,
+                polyunsaturatedFatG: polyunsaturatedFatG,
+                monounsaturatedFatG: monounsaturatedFatG,
                 cholesterolMg: cholesterolMg, carbsG: carbsG, proteinG: proteinG,
-                fiberG: fiberG, sugarG: sugarG, micros: micros ?? [:]
+                fiberG: fiberG, sugarG: sugarG, caffeineMg: caffeineMg,
+                micros: micros ?? [:]
             )
         }
         set {
             fatG = newValue.fatG
             saturatedFatG = newValue.saturatedFatG
             transFatG = newValue.transFatG
+            polyunsaturatedFatG = newValue.polyunsaturatedFatG
+            monounsaturatedFatG = newValue.monounsaturatedFatG
             cholesterolMg = newValue.cholesterolMg
             carbsG = newValue.carbsG
             proteinG = newValue.proteinG
             fiberG = newValue.fiberG
             sugarG = newValue.sugarG
+            caffeineMg = newValue.caffeineMg
             micros = newValue.micros.isEmpty ? nil : newValue.micros
         }
     }

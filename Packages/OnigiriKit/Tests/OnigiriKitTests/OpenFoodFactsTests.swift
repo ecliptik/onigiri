@@ -135,12 +135,31 @@ struct OpenFoodFactsTests {
         let json = """
         {"status":1,"product":{"product_name":"Spinach",
         "nutriments":{"energy-kcal_100g":23,
-        "zinc_100g":"0.011","vitamin-b9_100g":0.0002}}}
+        "zinc_100g":"0.011","vitamin-b9_100g":0.0002,
+        "vitamin-pp_100g":0.016,"pantothenic-acid_100g":0.005,
+        "selenium_100g":0.00005}}}
         """
         let product = try OpenFoodFactsClient.parse(data: data(json), barcode: "123")
         #expect(abs((product.nutrients[.zinc] ?? -1) - 11) < 0.001)
         // folate arrives under its vitamin-b9 alias (and as a string number)
         #expect(abs((product.nutrients[.folate] ?? -1) - 200) < 0.001)
+        // niacin arrives under OFF's vitamin-pp id
+        #expect(abs((product.nutrients[.niacin] ?? -1) - 16) < 0.001)
+        #expect(abs((product.nutrients[.pantothenicAcid] ?? -1) - 5) < 0.001)
+        #expect(abs((product.nutrients[.selenium] ?? -1) - 50) < 0.001) // g → µg
+    }
+
+    @Test func parsesFatSubtypesAndCaffeine() throws {
+        let json = """
+        {"status":1,"product":{"product_name":"Energy Drink","serving_size":"1 can",
+        "nutriments":{"energy-kcal_serving":110,
+        "polyunsaturated-fat_serving":1.5,"monounsaturated-fat_serving":2.5,
+        "caffeine_serving":0.08}}}
+        """
+        let product = try OpenFoodFactsClient.parse(data: data(json), barcode: "123")
+        #expect(product.nutrients.polyunsaturatedFatG == 1.5)
+        #expect(product.nutrients.monounsaturatedFatG == 2.5)
+        #expect(abs((product.nutrients.caffeineMg ?? -1) - 80) < 0.001) // g → mg
     }
 
     @Test func skipsBrandWhenAlreadyInName() throws {

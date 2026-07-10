@@ -33,7 +33,11 @@ struct NutrientValuesTests {
     }
 
     @Test func fatDetailAndCholesterolRoundTripAndScale() throws {
-        let values = NutrientValues(saturatedFatG: 4, transFatG: 0.5, cholesterolMg: 30)
+        let values = NutrientValues(
+            saturatedFatG: 4, transFatG: 0.5,
+            polyunsaturatedFatG: 1.5, monounsaturatedFatG: 2.5,
+            cholesterolMg: 30, caffeineMg: 80
+        )
         let decoded = try JSONDecoder().decode(
             NutrientValues.self, from: JSONEncoder().encode(values)
         )
@@ -41,7 +45,10 @@ struct NutrientValuesTests {
         let doubled = decoded.scaled(by: 2) + NutrientValues(cholesterolMg: 10)
         #expect(doubled.saturatedFatG == 8)
         #expect(doubled.transFatG == 1)
+        #expect(doubled.polyunsaturatedFatG == 3)
+        #expect(doubled.monounsaturatedFatG == 5)
         #expect(doubled.cholesterolMg == 70)
+        #expect(doubled.caffeineMg == 160)
     }
 
     @Test func scalingAndSummingIncludeMicros() {

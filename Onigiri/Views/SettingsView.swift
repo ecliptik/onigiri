@@ -47,16 +47,23 @@ struct SettingsView: View {
         } header: {
             Text("Data")
         } footer: {
-            Text("Onigiri \(Bundle.main.appVersion)")
-                .frame(maxWidth: .infinity)
-                .padding(.top, 8)
+            VStack(spacing: 2) {
+                Text("Onigiri \(Bundle.main.appVersion)")
+                Text("© 2026 Micheal Waltz")
+                Link("forgejo.ecliptik.com/ecliptik/onigiri",
+                     destination: URL(string: "https://forgejo.ecliptik.com/ecliptik/onigiri")!)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 8)
         }
     }
 
     private var backupCaption: String {
-        let auto = "The library also backs up daily to Files → On My iPhone → Onigiri."
-        guard let last = BackupService.lastBackupDate else { return auto }
-        return auto + " Last backup \(last.formatted(.dateTime.month(.abbreviated).day().hour().minute()))."
+        guard let last = BackupService.lastBackupDate else {
+            return "Backs up daily to Files → On My iPhone → Onigiri."
+        }
+        let stamp = last.formatted(.dateTime.month(.abbreviated).day().hour().minute())
+        return "Last backup \(stamp), Files → On My iPhone → Onigiri."
     }
 
     var body: some View {
@@ -75,7 +82,7 @@ struct SettingsView: View {
                         Text("kcal balance").tag("balance")
                         Text("kcal left").tag("remaining")
                     }
-                    Text("kcal left counts down what you can still eat today and meet your deficit goal; kcal balance is intake minus burn.")
+                    Text("kcal left counts down what you can still eat today while staying on your deficit goal. kcal balance shows intake minus burn.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -156,11 +163,9 @@ struct SettingsView: View {
 }
 
 extension Bundle {
-    /// "1.0 (1)" — marketing version plus build, for the Settings footer.
+    /// The full semantic version ("1.0.1") for the Settings footer.
     var appVersion: String {
-        let version = infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
-        let build = infoDictionary?["CFBundleVersion"] as? String ?? "?"
-        return "\(version) (\(build))"
+        infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
     }
 }
 

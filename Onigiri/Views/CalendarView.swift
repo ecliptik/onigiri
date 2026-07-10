@@ -265,17 +265,17 @@ struct CalendarView: View {
         .animation(.snappy, value: selectedDay)
     }
 
-    /// One equal-width column: icon pinned at the leading edge, value text
-    /// beside it — column widths never change, so icons don't move.
+    /// One equal-width column with a fixed-width icon slot, so SF Symbol
+    /// and emoji rows line up exactly and icons never move across days.
     private func metric(
         @ViewBuilder icon: () -> some View,
         text: String,
         color: Color = .primary
     ) -> some View {
-        Label {
-            Text(text).foregroundStyle(color)
-        } icon: {
+        HStack(spacing: 6) {
             icon()
+                .frame(width: 22, alignment: .center)
+            Text(text).foregroundStyle(color)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

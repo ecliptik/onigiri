@@ -36,6 +36,9 @@ targets:
       path: Onigiri/Info.plist
       properties:
         CFBundleDisplayName: Onigiri
+        # xcodegen defaults the generated plist to a literal "1.0" unless
+        # told to reference the build setting.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
         UILaunchScreen: {}
         # Backups live in Documents/Backups — visible in the Files app.
         UIFileSharingEnabled: true

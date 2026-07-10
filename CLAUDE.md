@@ -27,6 +27,13 @@ cd Packages/OnigiriKit && swift test     # pure-logic tests; ALSO needs the
 
 ## Deploying to devices
 
+- **Repeated watch install failures (CoreDeviceError 4000 / tunnel timeouts)
+  with the watch demonstrably awake usually mean the MAC-side daemon is
+  wedged, not the watch.** Diagnose with `xcrun devicectl list devices` —
+  "Timed out waiting for CoreDeviceService to fully initialize" confirms it.
+  Fix: `pkill -f CoreDeviceService` (no sudo needed), wait ~15 s for the
+  watch to reach "connecting/connected", then install. Don't send the user
+  chasing watch reboots until this is ruled out.
 - **Watch discovery requires Mac BLUETOOTH ON.** Two days of debugging
   (reboots, re-pairing, trust resets, cache wipes, VPN toggles) and the watch
   never appeared in Xcode/devicectl until the Mac's Bluetooth was enabled —

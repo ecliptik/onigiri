@@ -113,40 +113,6 @@ struct QuickLogSheet: View {
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
 
-                // A plain field instead of .searchable so the barcode
-                // scanner can sit inside the row, at its right edge. Its own
-                // Section so it doesn't fuse with the picker above.
-                Section {
-                    HStack(spacing: 8) {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundStyle(.secondary)
-                        TextField("Search library and online", text: $searchText)
-                            .autocorrectionDisabled()
-                            .submitLabel(.search)
-                            .onSubmit {
-                                Task { await onlineSearch.search(searchText) }
-                            }
-                        if !searchText.isEmpty {
-                            Button {
-                                searchText = ""
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel("Clear search")
-                        }
-                        Button {
-                            showScanner = true
-                        } label: {
-                            Image(systemName: "barcode.viewfinder")
-                                .foregroundStyle(Color.riceToast)
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Scan barcode")
-                    }
-                }
-
                 if isLookingUpBarcode {
                     HStack(spacing: 8) {
                         ProgressView()
@@ -194,6 +160,12 @@ struct QuickLogSheet: View {
             .compactSections()
             .navigationTitle("Log")
             .navigationBarTitleDisplayMode(.inline)
+            // A/B variant: system search field (focus animation, cancel,
+            // scroll-away) with the barcode scanner in the toolbar.
+            .searchable(text: $searchText, prompt: "Search library and online")
+            .onSubmit(of: .search) {
+                Task { await onlineSearch.search(searchText) }
+            }
             .onChange(of: searchText) { _, text in
                 if text.trimmingCharacters(in: .whitespaces).isEmpty {
                     onlineSearch.clear()
@@ -202,6 +174,14 @@ struct QuickLogSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showScanner = true
+                    } label: {
+                        Image(systemName: "barcode.viewfinder")
+                    }
+                    .accessibilityLabel("Scan barcode")
                 }
             }
             .task {

@@ -18,6 +18,8 @@ struct QuickLogSheet: View {
     @State private var isLogging = false
     @State private var portionTarget: PortionTarget?
     @State private var onlineSearch = OnlineFoodSearch()
+    @State private var showScanner = false
+    @State private var isLookingUpBarcode = false
 
     private let health = HealthKitService()
 
@@ -104,6 +106,44 @@ struct QuickLogSheet: View {
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
 
+                // A plain field instead of .searchable so the barcode
+                // scanner can sit inside the row, at its right edge.
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField("Search library and online", text: $searchText)
+                        .autocorrectionDisabled()
+                        .submitLabel(.search)
+                        .onSubmit {
+                            Task { await onlineSearch.search(searchText) }
+                        }
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Clear search")
+                    }
+                    Button {
+                        showScanner = true
+                    } label: {
+                        Image(systemName: "barcode.viewfinder")
+                            .foregroundStyle(Color.riceToast)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Scan barcode")
+                }
+
+                if isLookingUpBarcode {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("Looking up product…")
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 if let errorMessage {
                     Text(errorMessage)
                         .font(.footnote)
@@ -145,10 +185,6 @@ struct QuickLogSheet: View {
             }
             .navigationTitle("Log")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "Search library and online")
-            .onSubmit(of: .search) {
-                Task { await onlineSearch.search(searchText) }
-            }
             .onChange(of: searchText) { _, text in
                 if text.trimmingCharacters(in: .whitespaces).isEmpty {
                     onlineSearch.clear()
@@ -176,6 +212,34 @@ struct QuickLogSheet: View {
                     )
                 }
                 .presentationDetents([.medium, .large])
+            }
+            .sheet(isPresented: $showScanner) {
+                BarcodeScannerSheet { code in
+                    lookUpBarcode(code)
+                }
+            }
+        }
+    }
+
+    /// Scan → fetch the product → confirm through the portion sheet. The
+    /// network fetch also gives the scanner sheet time to finish
+    /// dismissing before the portion sheet presents.
+    private func lookUpBarcode(_ code: String) {
+        isLookingUpBarcode = true
+        errorMessage = nil
+        Task {
+            defer { isLookingUpBarcode = false }
+            do {
+                let product = try await OpenFoodFactsClient().product(barcode: code)
+                portionTarget = PortionTarget(
+                    name: product.name,
+                    kcal: product.kcal ?? 0,
+                    sodiumMg: product.sodiumMg ?? 0,
+                    nutrients: product.nutrients,
+                    serving: product.servingDescription
+                )
+            } catch {
+                errorMessage = error.localizedDescription
             }
         }
     }

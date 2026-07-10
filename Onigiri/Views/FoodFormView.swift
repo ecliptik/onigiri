@@ -43,18 +43,24 @@ struct FoodFormView: View {
         NavigationStack {
             Form {
                 Section {
-                    Button {
-                        showScanner = true
-                    } label: {
-                        Label("Scan barcode", systemImage: "barcode.viewfinder")
+                    // One row: text search on the left, barcode scan on
+                    // the right.
+                    HStack {
+                        Button {
+                            showSearch = true
+                        } label: {
+                            Label("Search database", systemImage: "magnifyingglass")
+                        }
+                        Spacer()
+                        Button {
+                            showScanner = true
+                        } label: {
+                            Image(systemName: "barcode.viewfinder")
+                                .foregroundStyle(Color.riceToast)
+                        }
+                        .accessibilityLabel("Scan barcode")
                     }
-                    .disabled(isLookingUp)
-
-                    Button {
-                        showSearch = true
-                    } label: {
-                        Label("Search database", systemImage: "magnifyingglass")
-                    }
+                    .buttonStyle(.borderless)
                     .disabled(isLookingUp)
 
                     if isLookingUp {

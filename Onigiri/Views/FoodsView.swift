@@ -24,6 +24,7 @@ struct FoodsView: View {
     @State private var searchText = ""
     @State private var categoryFilter: FoodCategory?
     @State private var portionTarget: PortionTarget?
+    @State private var onlineSearch = OnlineFoodSearch()
 
     private let health = HealthKitService()
 
@@ -169,9 +170,31 @@ struct FoodsView: View {
                         ContentUnavailableView.search(text: searchText)
                     }
                 }
+
+                // Saved items always rank first; the online database is one
+                // more section below — a quick log/add without the food form.
+                if !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                    OnlineResultsSection(query: searchText, search: onlineSearch) { product in
+                        portionTarget = PortionTarget(
+                            name: product.name,
+                            kcal: product.kcal ?? 0,
+                            sodiumMg: product.sodiumMg ?? 0,
+                            nutrients: product.nutrients,
+                            serving: product.servingDescription
+                        )
+                    }
+                }
             }
             .navigationTitle("Foods")
-            .searchable(text: $searchText, prompt: "Search foods and meals")
+            .searchable(text: $searchText, prompt: "Search foods, meals, and online")
+            .onSubmit(of: .search) {
+                Task { await onlineSearch.search(searchText) }
+            }
+            .onChange(of: searchText) { _, text in
+                if text.trimmingCharacters(in: .whitespaces).isEmpty {
+                    onlineSearch.clear()
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Menu {

@@ -17,6 +17,7 @@ struct QuickLogSheet: View {
     @State private var errorMessage: String?
     @State private var isLogging = false
     @State private var portionTarget: PortionTarget?
+    @State private var onlineSearch = OnlineFoodSearch()
 
     private let health = HealthKitService()
 
@@ -127,10 +128,32 @@ struct QuickLogSheet: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                // Saved items rank first; the online database follows so a
+                // one-off food can be logged without saving it.
+                if !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                    OnlineResultsSection(query: searchText, search: onlineSearch) { product in
+                        portionTarget = PortionTarget(
+                            name: product.name,
+                            kcal: product.kcal ?? 0,
+                            sodiumMg: product.sodiumMg ?? 0,
+                            nutrients: product.nutrients,
+                            serving: product.servingDescription
+                        )
+                    }
+                }
             }
             .navigationTitle("Log")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "Search foods, meals, categories")
+            .searchable(text: $searchText, prompt: "Search library and online")
+            .onSubmit(of: .search) {
+                Task { await onlineSearch.search(searchText) }
+            }
+            .onChange(of: searchText) { _, text in
+                if text.trimmingCharacters(in: .whitespaces).isEmpty {
+                    onlineSearch.clear()
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

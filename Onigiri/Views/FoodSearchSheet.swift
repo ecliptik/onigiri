@@ -13,6 +13,11 @@ struct FoodSearchSheet: View {
     @State private var isSearching = false
     @State private var fetchingCode: String?
     @State private var message: String?
+    /// Full products fetched lazily per visible row — the search index has
+    /// no nutrition, but calories + serving on the row disambiguate
+    /// same-named hits. Also reused when a row is picked.
+    @State private var products: [String: ScannedProduct] = [:]
+    @State private var detailFailures: Set<String> = []
     @FocusState private var searchFocused: Bool
 
     private let client = OpenFoodFactsClient()
@@ -49,10 +54,27 @@ struct FoodSearchSheet: View {
                             Spacer()
                             if fetchingCode == result.barcode {
                                 ProgressView()
+                            } else if let product = products[result.barcode] {
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text(product.kcal.map {
+                                        "\($0.formatted(.number.precision(.fractionLength(0)))) kcal"
+                                    } ?? "no data")
+                                        .foregroundStyle(product.kcal == nil ? .secondary : .primary)
+                                        .monospacedDigit()
+                                    if !product.servingDescription.isEmpty {
+                                        Text(product.servingDescription)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            } else if !detailFailures.contains(result.barcode) {
+                                ProgressView()
+                                    .controlSize(.small)
                             }
                         }
                     }
                     .disabled(fetchingCode != nil)
+                    .task { await loadDetail(for: result.barcode) }
                 }
             }
             .navigationTitle("Search Database")
@@ -96,7 +118,21 @@ struct FoodSearchSheet: View {
         isSearching = false
     }
 
+    private func loadDetail(for barcode: String) async {
+        guard products[barcode] == nil, !detailFailures.contains(barcode) else { return }
+        if let product = try? await client.product(barcode: barcode) {
+            products[barcode] = product
+        } else {
+            detailFailures.insert(barcode)
+        }
+    }
+
     private func pick(_ result: OpenFoodFactsClient.SearchResult) {
+        if let cached = products[result.barcode] {
+            onPick(cached)
+            dismiss()
+            return
+        }
         fetchingCode = result.barcode
         Task {
             defer { fetchingCode = nil }

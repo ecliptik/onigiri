@@ -58,6 +58,26 @@ struct SettingsView: View {
         }
     }
 
+    private static let foodIconOptions: [(tag: String, name: String)] = [
+        ("sfFork", "Fork & Knife"),
+        ("apple", "Apple"),
+        ("bento", "Bento"),
+        ("noodles", "Noodles"),
+        ("fork", "Fork & Knife"),
+        ("plate", "Plate"),
+        ("onigiri", "Onigiri"),
+    ]
+
+    private static let waterIconOptions: [(tag: String, name: String)] = [
+        ("sfDrop", "Droplet"),
+        ("drop", "Droplet emoji"),
+        ("wave", "Great Wave"),
+        ("cup", "Cup"),
+        ("tap", "Tap"),
+        ("pour", "Pour"),
+        ("ice", "Ice"),
+    ]
+
     private var backupCaption: String {
         guard let last = BackupService.lastBackupDate else {
             return "Backs up daily to Files → On My iPhone → Onigiri."
@@ -70,31 +90,32 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("Appearance") {
+                    // navigationLink style: menu pickers strip both image
+                    // attachments and icon colors from their rows; a pushed
+                    // list renders real SwiftUI rows — true colors, aligned
+                    // icon column.
                     Picker("Food icon", selection: $foodIcon) {
-                        // Inline symbol in the Text so it aligns and colors
-                        // like the emoji rows (Label indents and menus
-                        // template-tint its icon).
-                        (Text(Image(systemName: "fork.knife")).foregroundStyle(.orange)
-                            + Text(" Fork & Knife"))
-                            .tag("sfFork")
-                        Text("🍎 Apple").tag("apple")
-                        Text("🍱 Bento").tag("bento")
-                        Text("🍜 Noodles").tag("noodles")
-                        Text("🍴 Fork & Knife").tag("fork")
-                        Text("🍽️ Plate").tag("plate")
-                        Text("🍙 Onigiri").tag("onigiri")
+                        ForEach(Self.foodIconOptions, id: \.tag) { option in
+                            HStack(spacing: 10) {
+                                FoodIconView(raw: option.tag)
+                                    .frame(width: 28)
+                                Text(option.name)
+                            }
+                            .tag(option.tag)
+                        }
                     }
+                    .pickerStyle(.navigationLink)
                     Picker("Water icon", selection: $waterIcon) {
-                        (Text(Image(systemName: "drop.fill")).foregroundStyle(.blue)
-                            + Text(" Droplet"))
-                            .tag("sfDrop")
-                        Text("💧 Droplet emoji").tag("drop")
-                        Text("🌊 Great Wave").tag("wave")
-                        Text("🥤 Cup").tag("cup")
-                        Text("🚰 Tap").tag("tap")
-                        Text("🫗 Pour").tag("pour")
-                        Text("🧊 Ice").tag("ice")
+                        ForEach(Self.waterIconOptions, id: \.tag) { option in
+                            HStack(spacing: 10) {
+                                WaterIconView(raw: option.tag)
+                                    .frame(width: 28)
+                                Text(option.name)
+                            }
+                            .tag(option.tag)
+                        }
                     }
+                    .pickerStyle(.navigationLink)
                     Picker("Calorie display", selection: $balanceStyle) {
                         Text("kcal balance").tag("balance")
                         Text("kcal left").tag("remaining")

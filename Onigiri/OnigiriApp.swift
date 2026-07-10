@@ -15,6 +15,13 @@ struct OnigiriApp: App {
         }
     }()
 
+    init() {
+        // Heal stores poisoned before Food↔MealItem had an inverse: a meal
+        // item pointing at a deleted food crashed every launch as soon as
+        // anything computed meal totals (e.g. the watch sync push).
+        LibraryMaintenance.repairDanglingFoodReferences(context: Self.container.mainContext)
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

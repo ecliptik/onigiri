@@ -147,6 +147,9 @@ struct FoodsView: View {
                     }
                     .onDelete { offsets in
                         offsets.map { filteredFoods[$0] }.forEach(context.delete)
+                        // Drop the now food-less items from any meals that
+                        // used the deleted foods.
+                        LibraryMaintenance.repairDanglingFoodReferences(context: context)
                     }
 
                     if foods.isEmpty {

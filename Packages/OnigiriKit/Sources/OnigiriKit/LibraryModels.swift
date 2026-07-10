@@ -18,6 +18,10 @@ public final class Food {
     // Library organization.
     public var isFavorite: Bool = false
     public var category: String?
+    /// Inverse of MealItem.food (declared there): deleting a food nullifies
+    /// the items that reference it instead of leaving a dangling pointer
+    /// that traps SwiftData on the next property access.
+    public var mealItems: [MealItem]
 
     public init(
         name: String,
@@ -42,6 +46,7 @@ public final class Food {
         self.sugarG = nutrients.sugarG
         self.isFavorite = isFavorite
         self.category = category
+        self.mealItems = []
     }
 
     public var nutrients: NutrientValues {
@@ -60,6 +65,7 @@ public final class Food {
 
 @Model
 public final class MealItem {
+    @Relationship(inverse: \Food.mealItems)
     public var food: Food?
     public var quantity: Double
 

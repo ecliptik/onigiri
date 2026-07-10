@@ -144,6 +144,15 @@ struct FoodFormView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+            // Pre-filled values are usually replaced, not appended to:
+            // select all on focus so typing overwrites. Async so the
+            // selection lands after the cursor placement.
+            .onReceive(NotificationCenter.default.publisher(
+                for: UITextField.textDidBeginEditingNotification
+            )) { note in
+                guard let field = note.object as? UITextField else { return }
+                DispatchQueue.main.async { field.selectAll(nil) }
+            }
             .sheet(isPresented: $showScanner) {
                 BarcodeScannerSheet { code in
                     Task { await lookup(code) }

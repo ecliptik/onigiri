@@ -54,4 +54,14 @@ struct CalorieBudgetTests {
             currentWeightLb: 179, targetWeightLb: 180, observedLossPerDayLb: 0.1
         ) == 0)
     }
+
+    @Test func remainingHeadlineFlipsToOverWithPositiveNumber() {
+        let left = CalorieBudget.remainingHeadline(402)
+        #expect(left.value == 402)
+        #expect(left.caption == "kcal left")
+        let over = CalorieBudget.remainingHeadline(-138)
+        #expect(over.value == 138)
+        #expect(over.caption == "kcal over")
+        #expect(CalorieBudget.remainingHeadline(0).caption == "kcal left")
+    }
 }

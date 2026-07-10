@@ -249,13 +249,14 @@ struct TodayView: View {
     private var balanceHeadline: some View {
         VStack(spacing: 4) {
             if let remaining = remainingHeadlineKcal {
-                Text(remaining, format: .number.precision(.fractionLength(0)))
+                let headline = CalorieBudget.remainingHeadline(remaining)
+                Text(headline.value, format: .number.precision(.fractionLength(0)))
                     .font(.system(size: headlineSize, weight: .bold, design: .rounded))
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
-                    .foregroundStyle(remaining >= 0 ? Color.green : Color.orange)
+                    .foregroundStyle(Color.remainingStatus(kcal: remaining))
                     .contentTransition(.numericText())
-                Text("kcal left")
+                Text(headline.caption)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {

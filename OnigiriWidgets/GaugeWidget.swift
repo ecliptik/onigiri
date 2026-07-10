@@ -48,10 +48,11 @@ struct GaugeWidgetView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             // Honor the same "Calorie display" setting as the app/watch.
             if SharedStore.showsRemainingKcal, let remaining = entry.snapshot.remainingKcal {
-                Text(remaining, format: .number.precision(.fractionLength(0)))
+                let headline = CalorieBudget.remainingHeadline(remaining)
+                Text(headline.value, format: .number.precision(.fractionLength(0)))
                     .font(.system(.title3, design: .rounded).weight(.bold))
-                    .foregroundStyle(remaining >= 0 ? Color.green : Color.orange)
-                Text("kcal left")
+                    .foregroundStyle(Color.remainingStatus(kcal: remaining))
+                Text(headline.caption)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             } else {

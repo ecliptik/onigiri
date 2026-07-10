@@ -51,3 +51,11 @@ public enum CalorieBudget {
         return Int((remainingLb / observedLossPerDayLb).rounded(.up))
     }
 }
+
+public extension CalorieBudget {
+    /// Headline presentation for the remaining budget: a positive number
+    /// with a "kcal left"/"kcal over" caption, instead of a negative count.
+    static func remainingHeadline(_ remaining: Double) -> (value: Double, caption: String) {
+        remaining >= 0 ? (remaining, "kcal left") : (-remaining, "kcal over")
+    }
+}

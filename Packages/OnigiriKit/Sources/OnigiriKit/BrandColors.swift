@@ -26,4 +26,13 @@ public extension Color {
         if mg >= limitMg - 300 { return .riceToast }
         return .green
     }
+
+    /// Traffic-light for the "kcal left" headline, mirroring sodiumStatus:
+    /// green with room, toast yellow within a snack (150 kcal) of the
+    /// budget, orange once over.
+    static func remainingStatus(kcal: Double) -> Color {
+        if kcal < 0 { return .orange }
+        if kcal <= 150 { return .riceToast }
+        return .green
+    }
 }

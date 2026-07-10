@@ -60,13 +60,14 @@ struct WatchHomeView: View {
     @ViewBuilder
     private var headlineNumber: some View {
         if SharedStore.showsRemainingKcal, let remaining = model.state.remainingKcal {
+            let headline = CalorieBudget.remainingHeadline(remaining)
             VStack(spacing: 0) {
-                Text(remaining, format: .number.precision(.fractionLength(0)))
+                Text(headline.value, format: .number.precision(.fractionLength(0)))
                     .font(.system(size: 32, weight: .bold, design: .rounded))
-                    .foregroundStyle(remaining >= 0 ? Color.green : Color.orange)
+                    .foregroundStyle(Color.remainingStatus(kcal: remaining))
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)
-                Text("kcal left")
+                Text(headline.caption)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

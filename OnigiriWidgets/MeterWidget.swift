@@ -51,12 +51,13 @@ struct MeterWidgetView: View {
             VStack(alignment: .leading, spacing: 4) {
                 // Honor the same "Calorie display" setting as the app/watch.
                 if SharedStore.showsRemainingKcal, let remaining = entry.snapshot.remainingKcal {
-                    Text(remaining, format: .number.precision(.fractionLength(0)))
+                    let headline = CalorieBudget.remainingHeadline(remaining)
+                    Text(headline.value, format: .number.precision(.fractionLength(0)))
                         .font(.system(size: 34, weight: .bold, design: .rounded))
-                        .foregroundStyle(remaining >= 0 ? Color.green : Color.orange)
+                        .foregroundStyle(Color.remainingStatus(kcal: remaining))
                         .minimumScaleFactor(0.6)
                         .invalidatableContent()
-                    Text("kcal left")
+                    Text(headline.caption)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 } else {

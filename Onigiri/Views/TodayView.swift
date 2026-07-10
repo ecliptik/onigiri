@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import WidgetKit
 import OnigiriKit
 
 /// Home screen: the daily calorie meter, goal gauge, and today's log.
@@ -13,7 +14,11 @@ struct TodayView: View {
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
     @State private var activeSheet: TodaySheet?
     @State private var quickActions = QuickActions.shared
-    @State private var collapsedSections: Set<FoodCategory> = []
+    // Collapsed by default: a full day is four one-line totals; expand what
+    // you want to inspect.
+    @State private var collapsedSections: Set<FoodCategory> = Set(FoodCategory.allCases)
+    @State private var toast: String?
+    @State private var isLoggingWater = false
 
     /// One sheet slot: multiple .sheet modifiers chained on the same view
     /// compete and only one reliably presents.
@@ -101,6 +106,18 @@ struct TodayView: View {
                 }
             )
         }
+        .overlay(alignment: .bottom) {
+            if let toast {
+                Text(toast)
+                    .font(.subheadline.weight(.medium))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: .capsule)
+                    .padding(.bottom, 8)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy, value: toast)
         .task { await model.start() }
         .refreshable { await model.refresh() }
         .onAppear {
@@ -112,6 +129,46 @@ struct TodayView: View {
                 Task { await model.refresh() }
                 consumeQuickLogRequest()
             }
+        }
+    }
+
+    private func logButtonLabel(_ emoji: String) -> some View {
+        HStack(spacing: 2) {
+            Image(systemName: "plus")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.black)
+            Text(emoji)
+                .font(.subheadline)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .background(Color.ricePaper, in: .capsule)
+    }
+
+    /// One-tap water: logs the default serving, same as the app-icon shortcut.
+    private func logWaterServing() {
+        guard !isLoggingWater else { return }
+        isLoggingWater = true
+        let oz = SharedStore.waterServingOz
+        Task {
+            defer { isLoggingWater = false }
+            do {
+                try await HealthKitService().logWater(oz: oz)
+                WidgetCenter.shared.reloadAllTimelines()
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                showToast("Logged \(oz.formatted(.number.precision(.fractionLength(0)))) oz water ✓")
+                await model.refresh()
+            } catch {
+                showToast("Couldn't log water: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func showToast(_ message: String) {
+        toast = message
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            if toast == message { toast = nil }
         }
     }
 
@@ -242,14 +299,19 @@ struct TodayView: View {
                     Button {
                         activeSheet = .quickLog(.all)
                     } label: {
-                        Image(systemName: "plus")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(.black)
-                            .padding(8)
-                            .background(Color.ricePaper, in: .circle)
+                        logButtonLabel("🍙")
                     }
                     .buttonStyle(.borderless)
                     .accessibilityLabel("Log food or meal")
+
+                    Button {
+                        logWaterServing()
+                    } label: {
+                        logButtonLabel(waterEmoji)
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(isLoggingWater)
+                    .accessibilityLabel("Log \(Int(SharedStore.waterServingOz)) ounces of water")
                 }
             }
             .padding(.horizontal)

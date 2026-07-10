@@ -71,12 +71,12 @@ struct SettingsView: View {
             Form {
                 Section("Appearance") {
                     Picker("Food icon", selection: $foodIcon) {
-                        Label {
-                            Text("Fork & Knife")
-                        } icon: {
-                            Image(systemName: "fork.knife").foregroundStyle(.orange)
-                        }
-                        .tag("sfFork")
+                        // Inline symbol in the Text so it aligns and colors
+                        // like the emoji rows (Label indents and menus
+                        // template-tint its icon).
+                        (Text(Image(systemName: "fork.knife")).foregroundStyle(.orange)
+                            + Text(" Fork & Knife"))
+                            .tag("sfFork")
                         Text("🍎 Apple").tag("apple")
                         Text("🍱 Bento").tag("bento")
                         Text("🍜 Noodles").tag("noodles")
@@ -85,12 +85,9 @@ struct SettingsView: View {
                         Text("🍙 Onigiri").tag("onigiri")
                     }
                     Picker("Water icon", selection: $waterIcon) {
-                        Label {
-                            Text("Droplet")
-                        } icon: {
-                            Image(systemName: "drop.fill").foregroundStyle(.blue)
-                        }
-                        .tag("sfDrop")
+                        (Text(Image(systemName: "drop.fill")).foregroundStyle(.blue)
+                            + Text(" Droplet"))
+                            .tag("sfDrop")
                         Text("💧 Droplet emoji").tag("drop")
                         Text("🌊 Great Wave").tag("wave")
                         Text("🥤 Cup").tag("cup")

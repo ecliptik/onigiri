@@ -375,7 +375,7 @@ struct LogButton: View {
     var body: some View {
         Image(systemName: "plus")
             .font(.subheadline.weight(.bold))
-            .foregroundStyle(.primary)
+            .foregroundStyle(Color.riceToast)
             .padding(8)
             .glassEffect(.regular.interactive(), in: .circle)
             .overlay(

@@ -183,7 +183,7 @@ struct TodayView: View {
         HStack(spacing: 4) {
             Image(systemName: "plus")
                 .font(.subheadline.weight(.bold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.riceToast)
             Text(emoji)
                 .font(.title3)
         }

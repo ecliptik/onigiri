@@ -5,6 +5,7 @@ import OnigiriKit
 final class TodayModel {
     private(set) var summary: DailyEnergySummary = .zero
     private(set) var foodLog: [FoodLogEntry] = []
+    private(set) var waterLog: [WaterLogEntry] = []
     private(set) var currentWeightLb: Double?
     private(set) var averageBurnKcal: Double?
     private(set) var errorMessage: String?
@@ -77,9 +78,19 @@ final class TodayModel {
             }
         }
         #endif
+        await loadStatic()
         await refresh()
     }
 
+    /// Weight and average burn don't depend on the browsed day — loading
+    /// them per chevron tap made day switching feel laggy. Fetched on
+    /// start and on foregrounding instead.
+    func loadStatic() async {
+        currentWeightLb = (try? await health.latestBodyMassLb()) ?? currentWeightLb
+        averageBurnKcal = (try? await health.averageDailyBurnKcal()) ?? averageBurnKcal
+    }
+
+    /// Day data only — fast enough that browsing feels immediate.
     func refresh() async {
         // A new calendar day rolls the view back to "today".
         if isToday {
@@ -90,17 +101,14 @@ final class TodayModel {
         do {
             async let summary = health.daySummary(for: selectedDate)
             async let foodLog = health.foodEntries(on: selectedDate)
-            async let weight = health.latestBodyMassLb()
-            async let averageBurn = health.averageDailyBurnKcal()
-            let (loadedSummary, loadedLog, loadedWeight, loadedBurn) =
-                try await (summary, foodLog, weight, averageBurn)
+            async let waterLog = health.waterEntries(on: selectedDate)
+            let (loadedSummary, loadedFood, loadedWater) =
+                try await (summary, foodLog, waterLog)
             guard generation == refreshGeneration else { return }
             self.summary = loadedSummary
-            self.foodLog = loadedLog
-            self.currentWeightLb = loadedWeight
-            self.averageBurnKcal = loadedBurn
+            self.foodLog = loadedFood
+            self.waterLog = loadedWater
             errorMessage = nil
-            print("[onigiri] refresh: intake=\(self.summary.intakeKcal) burn=\(self.summary.totalBurnKcal) log=\(self.foodLog.count) weight=\(String(describing: self.currentWeightLb)) avgBurn=\(String(describing: self.averageBurnKcal))")
         } catch {
             guard generation == refreshGeneration else { return }
             errorMessage = "Couldn't read Health data: \(error.localizedDescription)"

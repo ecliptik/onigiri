@@ -19,6 +19,7 @@ struct TodayView: View {
     // Collapsed by default: a full day is four one-line totals; expand what
     // you want to inspect.
     @State private var collapsedSections: Set<FoodCategory> = Set(FoodCategory.allCases)
+    @State private var waterCollapsed = true
     @State private var isLoggingWater = false
     /// The headline number follows the user's text size (Dynamic Type);
     /// minimumScaleFactor keeps huge accessibility sizes on one line.
@@ -126,7 +127,10 @@ struct TodayView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
-                Task { await model.refresh() }
+                Task {
+                    await model.loadStatic()
+                    await model.refresh()
+                }
                 consumeQuickLogRequest()
             }
         }
@@ -144,14 +148,14 @@ struct TodayView: View {
         .padding(.horizontal, 6)
     }
 
-    /// One-tap water: logs the default serving into the browsed day.
-    private func logWaterServing() {
+    /// Water logs into the browsed day (backfill included).
+    private func logWater(oz: Double) {
         guard !isLoggingWater else { return }
         isLoggingWater = true
         Task {
             defer { isLoggingWater = false }
             await LogActions.logWater(
-                oz: SharedStore.waterServingOz,
+                oz: oz,
                 date: DayBounds.logTimestamp(for: model.selectedDate)
             )
         }
@@ -266,12 +270,16 @@ struct TodayView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Label {
-                Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(waterGoalOz, format: .number.precision(.fractionLength(0))) oz water")
-                    .foregroundStyle(model.summary.waterOz >= waterGoalOz ? Color.green : Color.secondary)
-                    .fontWeight(model.summary.waterOz >= waterGoalOz ? .medium : .regular)
-            } icon: {
-                Text(waterEmoji)
+            VStack(alignment: .leading, spacing: 4) {
+                Label {
+                    Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(waterGoalOz, format: .number.precision(.fractionLength(0))) oz water")
+                        .foregroundStyle(model.summary.waterOz >= waterGoalOz ? Color.green : Color.secondary)
+                        .fontWeight(model.summary.waterOz >= waterGoalOz ? .medium : .regular)
+                } icon: {
+                    Text(waterEmoji)
+                }
+                ProgressView(value: min(1, waterGoalOz > 0 ? model.summary.waterOz / waterGoalOz : 0))
+                    .tint(.blue)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -299,10 +307,18 @@ struct TodayView: View {
                 .tint(.ricePaper)
                 .accessibilityLabel("Log food or meal")
 
-                Button {
-                    logWaterServing()
+                // Tap logs the default serving; long-press offers the
+                // other amounts (the old Water tab's menu).
+                Menu {
+                    ForEach([8.0, 12, 16, 20, 24, 32], id: \.self) { oz in
+                        Button("\(oz, format: .number.precision(.fractionLength(0))) oz") {
+                            logWater(oz: oz)
+                        }
+                    }
                 } label: {
                     logButtonLabel(waterEmoji)
+                } primaryAction: {
+                    logWater(oz: SharedStore.waterServingOz)
                 }
                 .buttonStyle(.glassProminent)
                 .tint(.ricePaper)
@@ -324,10 +340,66 @@ struct TodayView: View {
                     mealSection(category, entries: entries)
                 }
             }
+
+            if !model.waterLog.isEmpty {
+                waterSection
+            }
         }
         // Full width regardless of content, so the header stays left-pinned
         // even when the day has no entries.
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The day's water servings, folded into the log like a meal slot.
+    @ViewBuilder
+    private var waterSection: some View {
+        Button {
+            withAnimation(.snappy) { waterCollapsed.toggle() }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(waterCollapsed ? 0 : 90))
+                Text("Water")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) oz")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal)
+        .accessibilityLabel("Water, \(Int(model.summary.waterOz)) ounces, \(waterCollapsed ? "collapsed" : "expanded")")
+
+        if !waterCollapsed {
+            ForEach(model.waterLog) { entry in
+                HStack(alignment: .firstTextBaseline) {
+                    Text(waterEmoji)
+                    Text(entry.date, style: .time)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("\(entry.oz, format: .number.precision(.fractionLength(0))) oz")
+                        .monospacedDigit()
+                    Button {
+                        Task { await LogActions.deleteWaterEntry(entry) }
+                    } label: {
+                        Image(systemName: "trash")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Delete \(Int(entry.oz)) ounce entry")
+                }
+                .padding(.vertical, 10)
+                .padding(.horizontal, 14)
+                .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
+                .padding(.horizontal)
+            }
+        }
     }
 
     /// One meal-slot group: a tappable header with the slot's total that

@@ -7,8 +7,11 @@ final class CalendarModel {
     private(set) var streak = 0
     private(set) var targetDeficitKcal: Double?
     private(set) var totalsByDay: [Date: DayEnergyTotals] = [:]
+    /// Full summary (sodium, water) for the selected day's detail card.
+    private(set) var selectedDaySummary: DailyEnergySummary?
 
     private let health = HealthKitService()
+    private var summaryGeneration = 0
 
     func refresh(goal: SyncedGoal?) async {
         // Today's plan supplies the deficit target the calendar judges against.
@@ -25,5 +28,14 @@ final class CalendarModel {
 
     func earnedCount(inMonthOf month: Date) -> Int {
         StreakCalendar.earnedCount(inMonthOf: month, earned: earned)
+    }
+
+    /// Sodium/water for the tapped day — the same numbers Today shows.
+    func loadDaySummary(for day: Date) async {
+        summaryGeneration += 1
+        let generation = summaryGeneration
+        let summary = try? await health.daySummary(for: day)
+        guard generation == summaryGeneration else { return }
+        selectedDaySummary = summary
     }
 }

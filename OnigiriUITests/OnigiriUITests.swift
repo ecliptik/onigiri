@@ -52,26 +52,18 @@ final class OnigiriUITests: XCTestCase {
             "Logged food should appear in the Today log"
         )
 
-        // Water quick-add: seeded 24 oz + one 12 oz serving = 36.
-        app.tabBars.buttons["Water"].tap()
-        let addWater = app.buttons["Log 12 oz"]
-        XCTAssertTrue(addWater.waitForExistence(timeout: 10), "Water quick-add should render")
-        XCTAssertTrue(app.staticTexts["24"].waitForExistence(timeout: 10), "Seeded water total should show")
-        addWater.tap()
+        // Water lives on Today now: seeded 24 oz + one 12 oz serving = 36,
+        // shown in the hydration row.
         XCTAssertTrue(
-            app.staticTexts["36"].waitForExistence(timeout: 10),
-            "Ring total should update after quick-add"
+            app.staticTexts["24 / 64 oz water"].waitForExistence(timeout: 10),
+            "Seeded water total should show in the hydration row"
         )
-
-        // Today's +💧 one-taps the default serving too: 36 + 12 = 48.
-        app.tabBars.buttons["Today"].tap()
         let waterButton = app.buttons["Log 12 ounces of water"]
         XCTAssertTrue(waterButton.waitForExistence(timeout: 10), "Today should show the +water button")
         waterButton.tap()
-        app.tabBars.buttons["Water"].tap()
         XCTAssertTrue(
-            app.staticTexts["48"].waitForExistence(timeout: 10),
-            "Ring total should include the Today one-tap log"
+            app.staticTexts["36 / 64 oz water"].waitForExistence(timeout: 10),
+            "Hydration total should update after the one-tap log"
         )
 
         // Streak calendar: the three seeded history days each earned an

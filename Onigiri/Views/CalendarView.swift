@@ -37,6 +37,9 @@ struct CalendarView: View {
         .task { await refresh() }
         .onAppear { Task { await refresh() } }
         .refreshable { await refresh() }
+        .onChange(of: selectedDay) { _, day in
+            Task { await model.loadDaySummary(for: day) }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 Task { await refresh() }
@@ -53,6 +56,7 @@ struct CalendarView: View {
             )
         }
         await model.refresh(goal: goal)
+        await model.loadDaySummary(for: selectedDay)
     }
 
     // MARK: - Pieces
@@ -168,6 +172,26 @@ struct CalendarView: View {
                     Text("Daily target: \(target, format: .number.precision(.fractionLength(0))) kcal deficit")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+                // The same hydration/sodium numbers Today shows for the day.
+                if let summary = model.selectedDaySummary {
+                    HStack(spacing: 14) {
+                        Label {
+                            Text("\(summary.sodiumMg, format: .number.precision(.fractionLength(0))) mg sodium")
+                                .foregroundStyle(Color.sodiumStatus(mg: summary.sodiumMg, limitMg: SharedStore.sodiumLimitMg))
+                        } icon: {
+                            Text("🧂")
+                        }
+                        Label {
+                            Text("\(summary.waterOz, format: .number.precision(.fractionLength(0))) / \(SharedStore.waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
+                                .foregroundStyle(summary.waterOz >= SharedStore.waterGoalOz ? Color.green : Color.secondary)
+                        } icon: {
+                            Text(SharedStore.waterEmoji)
+                        }
+                        Spacer()
+                    }
+                    .font(.subheadline)
+                    .monospacedDigit()
                 }
             } else {
                 Text("No data recorded this day.")

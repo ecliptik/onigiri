@@ -4,7 +4,7 @@ import WidgetKit
 import OnigiriKit
 
 enum AppTab: Hashable {
-    case today, foods, water, goal, calendar
+    case today, foods, goal, calendar
 }
 
 struct ContentView: View {
@@ -16,16 +16,13 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            // Today sits center — the app's home, one thumb-reach from
-            // either side.
-            Tab("Water", systemImage: "drop.fill", value: .water) {
-                WaterView()
+            // Today sits first and is the app's home; water lives inside it
+            // (hydration row + a Water group in the log).
+            Tab("Today", systemImage: "gauge.with.needle", value: .today) {
+                TodayView()
             }
             Tab("Foods", systemImage: "fork.knife", value: .foods) {
                 FoodsView(scanRequest: $scanRequest)
-            }
-            Tab("Today", systemImage: "gauge.with.needle", value: .today) {
-                TodayView()
             }
             Tab("Goal", systemImage: "chart.line.downtrend.xyaxis", value: .goal) {
                 GoalView()
@@ -75,11 +72,11 @@ struct ContentView: View {
     private func handle(_ action: QuickActions.Action) {
         switch action {
         case .logWater:
-            // Log before switching so the Water tab's on-appear refresh
-            // already sees the new serving; LogActions handles feedback.
+            // Water lives on Today now; LogActions handles the feedback
+            // and Today refreshes via the mutation counter.
+            selectedTab = .today
             Task {
                 await LogActions.logWater(oz: SharedStore.waterServingOz)
-                selectedTab = .water
             }
         case .logMeal:
             // Land on Today with the quick-log sheet up: one tap to log.

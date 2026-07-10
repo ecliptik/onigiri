@@ -27,7 +27,7 @@ struct SettingsView: View {
                         Text("kcal balance").tag("balance")
                         Text("kcal left").tag("remaining")
                     }
-                    Text("kcal left counts down what you can still eat today and meet your deficit goal; kcal balance is intake minus burn. Applies to Today and the watch.")
+                    Text("kcal left counts down what you can still eat today and meet your deficit goal; kcal balance is intake minus burn.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

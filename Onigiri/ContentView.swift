@@ -45,6 +45,7 @@ struct ContentView: View {
             PhoneSyncService.shared.activate {
                 PhoneSyncService.shared.push(from: context)
             }
+            BackupService.backupIfDue(context: context)
             // A quick action may have launched the app before this view existed.
             if let action = quickActions.pending {
                 quickActions.pending = nil
@@ -54,6 +55,7 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 PhoneSyncService.shared.push(from: context)
+                BackupService.backupIfDue(context: context)
                 // Belt and braces: consume any shortcut that arrived while no
                 // onChange observer was installed yet (cold-launch timing).
                 if let action = quickActions.pending {

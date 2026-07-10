@@ -10,32 +10,33 @@ struct WatchHomeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 10) {
-                    headlineNumber
+            // Three fixed elements — no ScrollView, so everything always
+            // fits the screen without the water button spilling below it.
+            VStack(spacing: 6) {
+                headlineNumber
 
-                    Button {
-                        showMeals = true
-                    } label: {
-                        Label("Log a meal", systemImage: "fork.knife")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.orange)
-
-                    Button {
-                        Task { await model.logWater() }
-                    } label: {
-                        Label("Log \(model.waterServingOz, format: .number.precision(.fractionLength(0))) oz", systemImage: "drop.fill")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.blue)
+                Button {
+                    showMeals = true
+                } label: {
+                    Label("Log a meal", systemImage: "fork.knife")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
                 }
-                .padding(.horizontal, 4)
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
+
+                Button {
+                    Task { await model.logWater() }
+                } label: {
+                    Label("Log \(model.waterServingOz, format: .number.precision(.fractionLength(0))) oz", systemImage: "drop.fill")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.blue)
             }
+            .controlSize(.small)
+            .padding(.horizontal, 4)
             .navigationTitle("🍙 Onigiri")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showMeals) {

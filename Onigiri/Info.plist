@@ -20,6 +20,8 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Onigiri uses the camera to scan food barcodes.</string>
 	<key>NSHealthShareUsageDescription</key>
@@ -61,6 +63,8 @@
 			<string>com.ecliptik.Onigiri.scanBarcode</string>
 		</dict>
 	</array>
+	<key>UIFileSharingEnabled</key>
+	<true/>
 	<key>UILaunchScreen</key>
 	<dict/>
 </dict>

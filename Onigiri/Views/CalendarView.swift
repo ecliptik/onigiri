@@ -17,13 +17,21 @@ struct CalendarView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Layout.screenSpacing) {
-                    monthHeader
                     // Stats first — they were below the fold at the bottom.
                     summaryCard
-                    weekdayHeader
-                    monthGrid
-                    dayHeader
-                    daySummaryCard
+                    // Region-scoped swipes: the grid pages months, the day
+                    // area pages days. Chevrons stay as the visible,
+                    // accessible affordance for both.
+                    VStack(spacing: Layout.screenSpacing) {
+                        weekdayHeader
+                        monthGrid
+                    }
+                    .simultaneousGesture(horizontalSwipe { shiftMonth($0) })
+                    VStack(spacing: Layout.screenSpacing) {
+                        dayHeader
+                        daySummaryCard
+                    }
+                    .simultaneousGesture(horizontalSwipe { shiftDay($0) })
                     if model.targetDeficitKcal == nil {
                         Text("No goal set — days earn an onigiri for any calorie deficit. Set a goal to raise the bar.")
                             .font(.footnote)
@@ -34,7 +42,28 @@ struct CalendarView: View {
                 }
                 .padding(.horizontal)
             }
-            .navigationTitle("Calendar")
+            // Month chevrons in the nav bar with the month as the title —
+            // the same browsing pattern as Today.
+            .navigationTitle(displayedMonth.formatted(.dateTime.month(.wide).year()))
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        shiftMonth(-1)
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .accessibilityLabel("Previous month")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        shiftMonth(1)
+                    } label: {
+                        Image(systemName: "chevron.right")
+                    }
+                    .disabled(calendar.isDate(displayedMonth, equalTo: .now, toGranularity: .month))
+                    .accessibilityLabel("Next month")
+                }
+            }
         }
         .task { await refresh() }
         .onAppear { Task { await refresh() } }
@@ -58,27 +87,6 @@ struct CalendarView: View {
     }
 
     // MARK: - Pieces
-
-    private var monthHeader: some View {
-        HStack {
-            Button {
-                displayedMonth = calendar.date(byAdding: .month, value: -1, to: displayedMonth) ?? displayedMonth
-            } label: {
-                Image(systemName: "chevron.left")
-            }
-            Spacer()
-            Text(displayedMonth, format: .dateTime.month(.wide).year())
-                .font(.headline)
-            Spacer()
-            Button {
-                displayedMonth = calendar.date(byAdding: .month, value: 1, to: displayedMonth) ?? displayedMonth
-            } label: {
-                Image(systemName: "chevron.right")
-            }
-            .disabled(calendar.isDate(displayedMonth, equalTo: .now, toGranularity: .month))
-        }
-        .padding(.top, 8)
-    }
 
     private var weekdayHeader: some View {
         let symbols = calendar.veryShortStandaloneWeekdaySymbols
@@ -160,6 +168,24 @@ struct CalendarView: View {
         selectedDay = min(calendar.startOfDay(for: day), calendar.startOfDay(for: .now))
         if !calendar.isDate(selectedDay, equalTo: displayedMonth, toGranularity: .month) {
             displayedMonth = calendar.startOfMonth(for: selectedDay)
+        }
+    }
+
+    private func shiftMonth(_ delta: Int) {
+        guard let month = calendar.date(byAdding: .month, value: delta, to: displayedMonth),
+              month <= calendar.startOfMonth(for: .now) else { return }
+        displayedMonth = month
+    }
+
+    /// Left = forward, right = back — same thresholds as Today's day swipe.
+    private func horizontalSwipe(_ shift: @escaping (Int) -> Void) -> some Gesture {
+        DragGesture(minimumDistance: 30).onEnded { value in
+            guard abs(value.translation.width) > abs(value.translation.height) else { return }
+            if value.translation.width < -60 {
+                shift(1)
+            } else if value.translation.width > 60 {
+                shift(-1)
+            }
         }
     }
 

@@ -18,6 +18,47 @@ struct SettingsView: View {
     @State private var exportDocument: LibraryJSONDocument?
     @State private var transferMessage: String?
 
+    // Its own property: inlining this pushed the Form past what the
+    // type-checker will solve in reasonable time.
+    private var dataSection: some View {
+        Section {
+            Button("Export library…", systemImage: "square.and.arrow.up") {
+                exportDocument = (try? LibraryTransfer.export(from: context)).map(LibraryJSONDocument.init)
+                showExporter = exportDocument != nil
+            }
+            Button("Import library…", systemImage: "square.and.arrow.down") {
+                showImporter = true
+            }
+            Button("Back up now", systemImage: "externaldrive") {
+                if BackupService.backupIfDue(context: context, force: true) != nil {
+                    transferMessage = "Backed up ✓"
+                } else {
+                    transferMessage = "Backup failed."
+                }
+            }
+            if let transferMessage {
+                Text(transferMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            Text(backupCaption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } header: {
+            Text("Data")
+        } footer: {
+            Text("Onigiri \(Bundle.main.appVersion)")
+                .frame(maxWidth: .infinity)
+                .padding(.top, 8)
+        }
+    }
+
+    private var backupCaption: String {
+        let auto = "The library also backs up daily to Files → On My iPhone → Onigiri."
+        guard let last = BackupService.lastBackupDate else { return auto }
+        return auto + " Last backup \(last.formatted(.dateTime.month(.abbreviated).day().hour().minute()))."
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -63,23 +104,7 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Section("Data") {
-                    Button("Export library…", systemImage: "square.and.arrow.up") {
-                        exportDocument = (try? LibraryTransfer.export(from: context)).map(LibraryJSONDocument.init)
-                        showExporter = exportDocument != nil
-                    }
-                    Button("Import library…", systemImage: "square.and.arrow.down") {
-                        showImporter = true
-                    }
-                    if let transferMessage {
-                        Text(transferMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text("Export or import Onigiri Foods, Meals, Goals, and Settings.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                dataSection
             }
             .compactSections()
             .navigationTitle("Settings")
@@ -127,6 +152,15 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+}
+
+extension Bundle {
+    /// "1.0 (1)" — marketing version plus build, for the Settings footer.
+    var appVersion: String {
+        let version = infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        return "\(version) (\(build))"
     }
 }
 

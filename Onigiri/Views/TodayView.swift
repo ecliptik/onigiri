@@ -330,16 +330,12 @@ struct TodayView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Label {
-                    Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(waterGoalOz, format: .number.precision(.fractionLength(0))) oz water")
-                        .foregroundStyle(model.summary.waterOz >= waterGoalOz ? Color.green : Color.secondary)
-                        .fontWeight(model.summary.waterOz >= waterGoalOz ? .medium : .regular)
-                } icon: {
-                    Text(waterEmoji)
-                }
-                ProgressView(value: min(1, waterGoalOz > 0 ? model.summary.waterOz / waterGoalOz : 0))
-                    .tint(.blue)
+            Label {
+                Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(waterGoalOz, format: .number.precision(.fractionLength(0))) oz water")
+                    .foregroundStyle(model.summary.waterOz >= waterGoalOz ? Color.green : Color.secondary)
+                    .fontWeight(model.summary.waterOz >= waterGoalOz ? .medium : .regular)
+            } icon: {
+                Text(waterEmoji)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

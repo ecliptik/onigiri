@@ -211,10 +211,10 @@ struct CalendarView: View {
             }
             HStack(spacing: 0) {
                 stat(
-                    model.averageDeficit(inMonthOf: displayedMonth).map {
+                    model.totalDeficit(inMonthOf: displayedMonth).map {
                         "\(Int($0.rounded())) kcal"
                     } ?? "—",
-                    caption: "avg deficit, this month"
+                    caption: "total deficit, this month"
                 )
                 Divider().frame(height: 36)
                 stat(

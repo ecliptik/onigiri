@@ -25,14 +25,15 @@ final class CalendarModel {
         bestStreak = StreakCalendar.bestStreak(earned: earned)
     }
 
-    /// Mean daily deficit across the month's recorded days (nil when none).
-    func averageDeficit(inMonthOf month: Date) -> Double? {
+    /// Net deficit summed across the month's recorded days (nil when none) —
+    /// the month's total "burned off" calories. Surplus days subtract.
+    func totalDeficit(inMonthOf month: Date) -> Double? {
         let calendar = Calendar.current
         let deficits = totalsByDay
             .filter { calendar.isDate($0.key, equalTo: month, toGranularity: .month) }
             .map(\.value.deficitKcal)
         guard !deficits.isEmpty else { return nil }
-        return deficits.reduce(0, +) / Double(deficits.count)
+        return deficits.reduce(0, +)
     }
 
     func earnedCount(inMonthOf month: Date) -> Int {

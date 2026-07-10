@@ -177,6 +177,8 @@ struct TodayView: View {
         }
     }
 
+    /// Outline glass with a toast-tinted stroke: the glass alone nearly
+    /// vanishes on white, so the ring is what says "button" in light mode.
     private func logButtonLabel(_ emoji: String) -> some View {
         HStack(spacing: 4) {
             Image(systemName: "plus")
@@ -185,8 +187,12 @@ struct TodayView: View {
             Text(emoji)
                 .font(.title3)
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 6)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .overlay(
+            Capsule().strokeBorder(Color.riceToast.opacity(0.5), lineWidth: 1)
+        )
     }
 
     /// Favorite meals log one-tap with their own slot, like the Log sheet.
@@ -384,7 +390,7 @@ struct TodayView: View {
                 } primaryAction: {
                     activeSheet = .quickLog(.all)
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.plain)
                 .accessibilityLabel("Log food or meal")
 
                 // Tap logs the default serving; long-press offers the
@@ -400,7 +406,7 @@ struct TodayView: View {
                 } primaryAction: {
                     logWater(oz: SharedStore.waterServingOz)
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.plain)
                 .disabled(isLoggingWater)
                 .accessibilityLabel("Log \(Int(SharedStore.waterServingOz)) ounces of water")
             }

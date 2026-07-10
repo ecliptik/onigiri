@@ -378,6 +378,9 @@ struct LogButton: View {
             .foregroundStyle(.primary)
             .padding(8)
             .glassEffect(.regular.interactive(), in: .circle)
+            .overlay(
+                Circle().strokeBorder(Color.riceToast.opacity(0.5), lineWidth: 1)
+            )
             // HIG minimum touch target; the visible circle stays small.
             .frame(minWidth: 44, minHeight: 44)
             .contentShape(.rect)

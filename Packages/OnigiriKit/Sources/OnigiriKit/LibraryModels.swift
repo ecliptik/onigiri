@@ -177,9 +177,16 @@ public enum SharedStore {
         return value > 0 ? value : 2300
     }
 
-    /// "drop" (💧, default) or "wave" (🌊) — user-selectable in Settings.
+    /// Water icon options; 💧 drop is the default.
     public static func waterEmoji(for raw: String?) -> String {
-        raw == "wave" ? "🌊" : "💧"
+        switch raw {
+        case "wave": "🌊"
+        case "cup": "🥤"
+        case "tap": "🚰"
+        case "pour": "🫗"
+        case "ice": "🧊"
+        default: "💧"
+        }
     }
 
     public static var waterEmoji: String {
@@ -194,6 +201,7 @@ public enum SharedStore {
         case "plate": "🍽️"
         case "bento": "🍱"
         case "noodles": "🍜"
+        case "fork": "🍴"
         default: "🍎"
         }
     }

@@ -74,12 +74,17 @@ struct SettingsView: View {
                         Text("🍎 Apple").tag("apple")
                         Text("🍱 Bento").tag("bento")
                         Text("🍜 Noodles").tag("noodles")
+                        Text("🍴 Fork & Knife").tag("fork")
                         Text("🍽️ Plate").tag("plate")
                         Text("🍙 Onigiri").tag("onigiri")
                     }
                     Picker("Water icon", selection: $waterIcon) {
                         Text("💧 Droplet").tag("drop")
                         Text("🌊 Great Wave").tag("wave")
+                        Text("🥤 Cup").tag("cup")
+                        Text("🚰 Tap").tag("tap")
+                        Text("🫗 Pour").tag("pour")
+                        Text("🧊 Ice").tag("ice")
                     }
                     Picker("Calorie display", selection: $balanceStyle) {
                         Text("kcal balance").tag("balance")

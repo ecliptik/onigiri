@@ -363,18 +363,39 @@ public final class HealthKitService {
             return []
         }
         correlationCache = Dictionary(uniqueKeysWithValues: correlations.map { ($0.uuid, $0) })
-        return correlations.map { correlation in
-            FoodLogEntry(
-                id: correlation.uuid,
-                name: correlation.metadata?[HKMetadataKeyFoodType] as? String ?? "Food",
-                kcal: correlation.total(.dietaryEnergyConsumed, unit: .kilocalorie()),
-                sodiumMg: correlation.total(.dietarySodium, unit: .gramUnit(with: .milli)),
-                date: correlation.startDate,
-                category: (correlation.metadata?[Self.mealCategoryMetadataKey] as? String)
-                    .flatMap(FoodCategory.init(rawValue:)),
-                nutrients: correlation.nutrientValues
-            )
+        return correlations.map(Self.entry(from:))
+    }
+
+    /// Distinct foods logged over the trailing week, newest first — the
+    /// Log sheet's Recent section. Leaves the deletion cache alone: these
+    /// entries are re-logged, never deleted from here.
+    public func recentFoodEntries(days: Int = 7, limit: Int = 10, now: Date = .now) async throws -> [FoodLogEntry] {
+        let start = Calendar.current.date(byAdding: .day, value: -days, to: now)
+        let inWindow = HKQuery.predicateForSamples(withStart: start, end: now, options: .strictStartDate)
+        let descriptor = HKSampleQueryDescriptor(
+            predicates: [.correlation(type: HKCorrelationType(.food), predicate: inWindow)],
+            sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)]
+        )
+        do {
+            return try await descriptor.result(for: store)
+                .map(Self.entry(from:))
+                .uniquedByName(limit: limit)
+        } catch let error as HKError where error.code == .errorAuthorizationNotDetermined {
+            return []
         }
+    }
+
+    private static func entry(from correlation: HKCorrelation) -> FoodLogEntry {
+        FoodLogEntry(
+            id: correlation.uuid,
+            name: correlation.metadata?[HKMetadataKeyFoodType] as? String ?? "Food",
+            kcal: correlation.total(.dietaryEnergyConsumed, unit: .kilocalorie()),
+            sodiumMg: correlation.total(.dietarySodium, unit: .gramUnit(with: .milli)),
+            date: correlation.startDate,
+            category: (correlation.metadata?[Self.mealCategoryMetadataKey] as? String)
+                .flatMap(FoodCategory.init(rawValue:)),
+            nutrients: correlation.nutrientValues
+        )
     }
 
     /// Delete a logged entry (and its contained samples) by correlation UUID.
@@ -463,11 +484,34 @@ public final class HealthKitService {
         }
         try await store.save(samples)
 
-        // breakfast and lunch as named food correlations
+        // breakfast and lunch as named food correlations, with label-style
+        // nutrients so the day-detail screen has something to show
+        var eggs = NutrientValues(
+            fatG: 22, saturatedFatG: 7, polyunsaturatedFatG: 3,
+            monounsaturatedFatG: 9, cholesterolMg: 375,
+            carbsG: 30, proteinG: 24, fiberG: 2, sugarG: 3
+        )
+        eggs[.iron] = 3
+        eggs[.calcium] = 120
+        eggs[.potassium] = 300
+        eggs[.vitaminD] = 2
+        eggs[.folate] = 80
+        var burrito = NutrientValues(
+            fatG: 24, saturatedFatG: 9, polyunsaturatedFatG: 3.5,
+            monounsaturatedFatG: 8, cholesterolMg: 95,
+            carbsG: 72, proteinG: 42, fiberG: 8, sugarG: 4
+        )
+        burrito[.potassium] = 850
+        burrito[.calcium] = 250
+        burrito[.iron] = 4.5
+        burrito[.magnesium] = 90
+        burrito[.zinc] = 4
+        burrito[.vitaminC] = 12
+        burrito[.vitaminA] = 150
         try await logFood(name: "Two eggs & toast", kcal: 420, sodiumMg: 610,
-                          date: todayAt(0.25))
+                          nutrients: eggs, date: todayAt(0.25))
         try await logFood(name: "Chicken burrito", kcal: 680, sodiumMg: 940,
-                          date: todayAt(0.75))
+                          nutrients: burrito, date: todayAt(0.75))
         // past days' intake as named logs so day browsing has entries
         for day in 1...3 {
             guard let dayStart = calendar.date(byAdding: .day, value: -day, to: todayStart) else { continue }

@@ -56,7 +56,7 @@ struct TodayView: View {
                     balanceHeadline
                     hydrationRow
                     goalCard
-                    meterGrid
+                    nutritionDetailLink
                     loggedSection
 
                     if let message = model.errorMessage {
@@ -309,6 +309,29 @@ struct TodayView: View {
             daysRemaining: days,
             averageDailyBurn: model.expectedDailyBurnKcal
         )
+    }
+
+    /// The meter grid doubles as the door to the day's full nutrient
+    /// breakdown; the caption chevron is what makes that discoverable.
+    private var nutritionDetailLink: some View {
+        NavigationLink {
+            DayNutritionView(model: model)
+        } label: {
+            VStack(spacing: 8) {
+                meterGrid
+                HStack(spacing: 4) {
+                    Text("Nutrition details")
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.horizontal)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Shows the day's full nutrient breakdown")
     }
 
     private var meterGrid: some View {

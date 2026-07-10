@@ -35,6 +35,18 @@ public enum Micronutrient: String, CaseIterable, Codable, Sendable, Identifiable
 
     public var id: String { rawValue }
 
+    /// Display groups, in declaration (= display) order.
+    public static let minerals: [Micronutrient] = [
+        .potassium, .calcium, .iron, .magnesium, .zinc,
+        .phosphorus, .selenium, .copper, .manganese, .iodine,
+        .chromium, .molybdenum, .chloride,
+    ]
+    public static let vitamins: [Micronutrient] = [
+        .vitaminA, .vitaminC, .vitaminD, .vitaminE, .vitaminB6, .vitaminB12,
+        .folate, .vitaminK, .thiamin, .riboflavin, .niacin,
+        .pantothenicAcid, .biotin,
+    ]
+
     public var displayName: String {
         switch self {
         case .potassium: "Potassium"

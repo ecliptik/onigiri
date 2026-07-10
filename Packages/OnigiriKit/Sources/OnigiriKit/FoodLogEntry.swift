@@ -34,3 +34,26 @@ public struct FoodLogEntry: Identifiable, Sendable, Equatable {
         self.nutrients = nutrients
     }
 }
+
+public extension Sequence<FoodLogEntry> {
+    /// The day's combined extended nutrients (the day-detail screen).
+    /// Fields nobody logged stay nil, so the UI can tell "none recorded"
+    /// from an actual zero.
+    var totalNutrients: NutrientValues {
+        reduce(NutrientValues()) { $0 + $1.nutrients }
+    }
+
+    /// Newest first, one entry per food name (case- and whitespace-
+    /// insensitive), capped at `limit` — the Log sheet's Recent section.
+    func uniquedByName(limit: Int) -> [FoodLogEntry] {
+        var seen = Set<String>()
+        var recents: [FoodLogEntry] = []
+        for entry in sorted(by: { $0.date > $1.date }) {
+            let key = entry.name.trimmingCharacters(in: .whitespaces).lowercased()
+            guard !key.isEmpty, seen.insert(key).inserted else { continue }
+            recents.append(entry)
+            if recents.count == limit { break }
+        }
+        return recents
+    }
+}

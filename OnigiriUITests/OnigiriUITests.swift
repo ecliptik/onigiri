@@ -66,9 +66,60 @@ final class OnigiriUITests: XCTestCase {
             "Hydration total should update after the one-tap log"
         )
 
+        // The meter grid drills into the day's full nutrient breakdown,
+        // summed from the seeded meals' extended nutrients.
+        app.staticTexts["Nutrition details"].tap()
+        XCTAssertTrue(
+            app.navigationBars["Nutrition"].waitForExistence(timeout: 10),
+            "Meter grid should push the day nutrition detail"
+        )
+        XCTAssertTrue(
+            app.staticTexts["Macronutrients"].waitForExistence(timeout: 5),
+            "Seeded meals should produce a macro section"
+        )
+        XCTAssertTrue(app.staticTexts["Protein"].exists)
+        app.swipeUp()
+        app.swipeUp()
+        XCTAssertTrue(
+            app.staticTexts["Calcium"].waitForExistence(timeout: 5),
+            "Seeded micronutrients should render in the Minerals section"
+        )
+        app.navigationBars["Nutrition"].buttons.firstMatch.tap()
+        // Scrolling the detail minimized the iOS 26 tab bar to just the
+        // active tab; scrolling back up re-expands it.
+        app.swipeDown()
+
+        // Recents: the Log sheet leads with last week's distinct logged
+        // foods. "Chicken burrito" lives only in seeded HealthKit history
+        // (not the library), so its Log button can only come from the
+        // Recent query — and its portion sheet must carry the entry's own
+        // values ("as last logged"), the no-library-match path.
+        app.buttons["Log food or meal"].tap()
+        XCTAssertTrue(
+            app.staticTexts["Recent"].waitForExistence(timeout: 10),
+            "Log sheet should lead with a Recent section"
+        )
+        let recentBurrito = app.buttons["Log Chicken burrito"]
+        XCTAssertTrue(recentBurrito.waitForExistence(timeout: 5),
+                      "History-only food should surface in Recents")
+        recentBurrito.tap()
+        // LabeledContent folds label and value into one element, so match
+        // the combined label rather than a bare static text.
+        let lastLogged = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS 'as last logged'")).firstMatch
+        XCTAssertTrue(lastLogged.waitForExistence(timeout: 5),
+                      "Recent without a library match should re-log its own values")
+        let logRecent = app.buttons["Log"]
+        XCTAssertTrue(logRecent.waitForExistence(timeout: 5),
+                      "Recent row should open the portion sheet")
+        logRecent.tap()
+
         // Streak calendar: the three seeded history days each earned an
         // onigiri (750 kcal deficit vs ~618 target), so the streak is 3.
-        app.tabBars.buttons["Calendar"].tap()
+        let calendarTab = app.tabBars.buttons["Calendar"]
+        XCTAssertTrue(calendarTab.waitForExistence(timeout: 5),
+                      "Tab bar should be back after the sheet dismisses")
+        calendarTab.tap()
         XCTAssertTrue(
             app.staticTexts["3 days"].waitForExistence(timeout: 10),
             "Seeded history should produce a 3-day streak"

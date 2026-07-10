@@ -26,6 +26,8 @@ struct QuickLogSheet: View {
     @State private var formPrefill: ProductPrefill?
     @State private var editingFood: Food?
     @State private var editingMeal: Meal?
+    /// Last week's distinct logged foods, newest first (HealthKit history).
+    @State private var recents: [FoodLogEntry] = []
 
     private struct Item: Identifiable {
         let id: String
@@ -125,6 +127,15 @@ struct QuickLogSheet: View {
                         .font(.footnote)
                         .foregroundStyle(.red)
                 }
+                // What you actually ate lately beats any sort order — but it
+                // yields to search, which is about finding something else.
+                if searchText.isEmpty, !recents.isEmpty {
+                    Section("Recent") {
+                        ForEach(recents) { entry in
+                            recentRow(entry)
+                        }
+                    }
+                }
                 if !favorites.isEmpty {
                     Section("Favorites") {
                         ForEach(favorites) { item in
@@ -189,6 +200,7 @@ struct QuickLogSheet: View {
                     kindLoaded = true
                     kind = initialKind
                 }
+                recents = (try? await HealthKitService().recentFoodEntries()) ?? []
             }
             .sheet(item: $portionTarget) { target in
                 PortionSheet(target: target) { quantity, category in
@@ -293,6 +305,49 @@ struct QuickLogSheet: View {
             }
         }
         .accessibilityAddTraits(.isButton)
+    }
+
+    /// A recent entry re-logs through the portion sheet. No editor behind
+    /// the row — there's nothing to edit — so the whole row is the action.
+    private func recentRow(_ entry: FoodLogEntry) -> some View {
+        HStack(spacing: 10) {
+            LibraryRow(
+                name: entry.name,
+                detail: entry.date.formatted(.relative(presentation: .named)),
+                kcal: entry.kcal,
+                sodiumMg: entry.sodiumMg
+            )
+            LogButton(name: entry.name) {
+                portionTarget = recentTarget(for: entry)
+            } onCustomPortion: {
+                portionTarget = recentTarget(for: entry)
+            }
+        }
+        .contentShape(.rect)
+        .onTapGesture {
+            portionTarget = recentTarget(for: entry)
+        }
+        .accessibilityAddTraits(.isButton)
+    }
+
+    /// Library values win when a food of the same name still exists —
+    /// they carry Micheal's hand-corrections. Otherwise re-log the
+    /// entry's own values.
+    private func recentTarget(for entry: FoodLogEntry) -> PortionTarget {
+        if let food = foods.first(where: {
+            $0.name.localizedCaseInsensitiveCompare(entry.name) == .orderedSame
+        }) {
+            return PortionTarget(
+                name: food.name, kcal: food.kcal, sodiumMg: food.sodiumMg,
+                nutrients: food.nutrients, serving: food.servingDescription,
+                defaultCategory: PortionTarget.category(from: food.category)
+            )
+        }
+        return PortionTarget(
+            name: entry.name, kcal: entry.kcal, sodiumMg: entry.sodiumMg,
+            nutrients: entry.nutrients, serving: "as last logged",
+            defaultCategory: entry.category
+        )
     }
 
     private func makePortionTarget(for item: Item) -> PortionTarget {

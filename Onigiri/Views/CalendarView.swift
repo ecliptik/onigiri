@@ -18,10 +18,11 @@ struct CalendarView: View {
             ScrollView {
                 VStack(spacing: Layout.screenSpacing) {
                     monthHeader
+                    // Stats first — they were below the fold at the bottom.
+                    summaryCard
                     weekdayHeader
                     monthGrid
                     daySummaryCard
-                    summaryCard
                     milestonesCard
                     if model.targetDeficitKcal == nil {
                         Text("No goal set — days earn an onigiri for any calorie deficit. Set a goal to raise the bar.")
@@ -38,9 +39,6 @@ struct CalendarView: View {
         .task { await refresh() }
         .onAppear { Task { await refresh() } }
         .refreshable { await refresh() }
-        .onChange(of: selectedDay) { _, day in
-            Task { await model.loadDaySummary(for: day) }
-        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 Task { await refresh() }
@@ -57,7 +55,6 @@ struct CalendarView: View {
             )
         }
         await model.refresh(goal: goal)
-        await model.loadDaySummary(for: selectedDay)
     }
 
     // MARK: - Pieces
@@ -149,6 +146,9 @@ struct CalendarView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
             if let totals = model.totalsByDay[selectedDay] {
                 HStack(spacing: 14) {
@@ -174,44 +174,22 @@ struct CalendarView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                // The same hydration/sodium numbers Today shows for the day.
-                if let summary = model.selectedDaySummary {
-                    HStack(spacing: 14) {
-                        Label {
-                            Text("\(summary.sodiumMg, format: .number.precision(.fractionLength(0))) mg sodium")
-                                .foregroundStyle(Color.sodiumStatus(mg: summary.sodiumMg, limitMg: SharedStore.sodiumLimitMg))
-                        } icon: {
-                            Text("🧂")
-                        }
-                        Label {
-                            Text("\(summary.waterOz, format: .number.precision(.fractionLength(0))) / \(SharedStore.waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
-                                .foregroundStyle(summary.waterOz >= SharedStore.waterGoalOz ? Color.green : Color.secondary)
-                        } icon: {
-                            Text(SharedStore.waterEmoji)
-                        }
-                        Spacer()
-                    }
-                    .font(.subheadline)
-                    .monospacedDigit()
-                }
             } else {
                 Text("No data recorded this day.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-
-            // Jump to the full record (and backfill) on Today.
-            Button {
-                QuickActions.shared.dayRequest = selectedDay
-            } label: {
-                Label("View day", systemImage: "arrow.right.circle")
-                    .font(.subheadline.weight(.medium))
-            }
-            .buttonStyle(.borderless)
-            .tint(.riceToast)
         }
         .padding(14)
         .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
+        .contentShape(.rect)
+        // The whole card is the tap target: opens the day's full record
+        // (sodium, water, entries, backfill) on Today.
+        .onTapGesture {
+            QuickActions.shared.dayRequest = selectedDay
+        }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Opens this day on Today")
         .animation(.snappy, value: selectedDay)
     }
 

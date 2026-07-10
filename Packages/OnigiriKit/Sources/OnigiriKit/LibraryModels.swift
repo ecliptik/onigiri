@@ -164,6 +164,9 @@ public enum SharedStore {
     public static let foodIconKey = "foodIcon"
     public static let sodiumLimitKey = "sodiumLimitMg"
     public static let balanceStyleKey = "balanceStyle"
+    public static let remindMealsKey = "remindMeals"
+    public static let remindWaterKey = "remindWater"
+    public static let remindStreakKey = "remindStreak"
 
     /// What the big Today/watch number shows: "balance" (± intake − burn,
     /// default) or "remaining" (kcal left to eat toward the deficit goal).

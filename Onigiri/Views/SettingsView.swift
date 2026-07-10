@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UserNotifications
 import OnigiriKit
 
 /// App-wide settings: appearance choices and data portability.
@@ -12,11 +13,58 @@ struct SettingsView: View {
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
     @AppStorage(SharedStore.waterServingKey, store: SharedStore.defaults) private var waterServingOz = 12.0
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
+    @AppStorage(SharedStore.remindMealsKey, store: SharedStore.defaults) private var remindMeals = false
+    @AppStorage(SharedStore.remindWaterKey, store: SharedStore.defaults) private var remindWater = false
+    @AppStorage(SharedStore.remindStreakKey, store: SharedStore.defaults) private var remindStreak = false
+    @State private var notificationsDenied = false
 
     @State private var showExporter = false
     @State private var showImporter = false
     @State private var exportDocument: LibraryJSONDocument?
     @State private var transferMessage: String?
+
+    /// All opt-in, fixed times (see the footer); permission is requested
+    /// the first time a toggle turns on, never at launch.
+    private var remindersSection: some View {
+        Section {
+            Toggle("Not logged by 2 PM", isOn: $remindMeals)
+            Toggle("Water pacing", isOn: $remindWater)
+            Toggle("Streak about to lapse", isOn: $remindStreak)
+            if notificationsDenied {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Notifications are off for Onigiri, so reminders can't fire.")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                    Button("Turn on in Settings") {
+                        if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                    .font(.footnote.weight(.semibold))
+                }
+            }
+            #if DEBUG
+            Button("Preview reminders", systemImage: "bell.badge") {
+                ReminderScheduler.shared.preview()
+            }
+            #endif
+        } header: {
+            Text("Reminders")
+        } footer: {
+            Text("Meals check in at 2 PM, water at 11 AM, 3 PM, and 7 PM while you're behind, streaks at 8 PM. Everything stays quiet once you've logged.")
+        }
+    }
+
+    private func reminderToggled(_ on: Bool) {
+        if on {
+            Task {
+                let granted = await ReminderScheduler.shared.requestPermission()
+                notificationsDenied = !granted
+            }
+        } else {
+            ReminderScheduler.shared.replan()
+        }
+    }
 
     // Its own property: inlining this pushed the Form past what the
     // type-checker will solve in reasonable time.
@@ -125,6 +173,8 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                remindersSection
+
                 Section("Water") {
                     Stepper(value: $waterServingOz, in: 4...40, step: 2) {
                         LabeledContent("Serving size") {
@@ -164,6 +214,19 @@ struct SettingsView: View {
             }
             .onChange(of: waterGoalOz) {
                 PhoneSyncService.shared.push(from: context)
+                // The pacing checkpoints scale off the goal.
+                ReminderScheduler.shared.replan()
+            }
+            .onChange(of: remindMeals) { _, on in reminderToggled(on) }
+            .onChange(of: remindWater) { _, on in reminderToggled(on) }
+            .onChange(of: remindStreak) { _, on in reminderToggled(on) }
+            .task {
+                // Surface an existing denial as soon as Settings opens with
+                // any reminder switched on.
+                let status = await UNUserNotificationCenter.current()
+                    .notificationSettings().authorizationStatus
+                notificationsDenied = status == .denied
+                    && (remindMeals || remindWater || remindStreak)
             }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

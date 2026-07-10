@@ -46,6 +46,7 @@ struct ContentView: View {
                 PhoneSyncService.shared.push(from: context)
             }
             BackupService.backupIfDue(context: context)
+            ReminderScheduler.shared.activate()
             // A quick action may have launched the app before this view existed.
             if let action = quickActions.pending {
                 quickActions.pending = nil
@@ -56,6 +57,9 @@ struct ContentView: View {
             if phase == .active {
                 PhoneSyncService.shared.push(from: context)
                 BackupService.backupIfDue(context: context)
+                // Reminders replan from fresh state on every foreground —
+                // logging elsewhere (watch, Health) can't notify us.
+                ReminderScheduler.shared.replan()
                 // Belt and braces: consume any shortcut that arrived while no
                 // onChange observer was installed yet (cold-launch timing).
                 if let action = quickActions.pending {

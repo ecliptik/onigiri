@@ -167,5 +167,7 @@ enum LogActions {
             UINotificationFeedbackGenerator().notificationOccurred(haptic)
         }
         ToastCenter.shared.noteMutation()
+        // A log can satisfy (or revive) pending reminders — replan.
+        ReminderScheduler.shared.replan()
     }
 }

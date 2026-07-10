@@ -22,6 +22,7 @@ struct CalendarView: View {
                     monthGrid
                     daySummaryCard
                     summaryCard
+                    milestonesCard
                     if model.targetDeficitKcal == nil {
                         Text("No goal set — days earn an onigiri for any calorie deficit. Set a goal to raise the bar.")
                             .font(.footnote)
@@ -198,6 +199,16 @@ struct CalendarView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
+
+            // Jump to the full record (and backfill) on Today.
+            Button {
+                QuickActions.shared.dayRequest = selectedDay
+            } label: {
+                Label("View day", systemImage: "arrow.right.circle")
+                    .font(.subheadline.weight(.medium))
+            }
+            .buttonStyle(.borderless)
+            .tint(.riceToast)
         }
         .padding(14)
         .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
@@ -210,29 +221,63 @@ struct CalendarView: View {
     }
 
     private var summaryCard: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 0) {
+                stat("🍙 \(model.earnedCount(inMonthOf: displayedMonth))", caption: "this month")
+                Divider().frame(height: 36)
+                stat(
+                    "\(model.streak) \(model.streak == 1 ? "day" : "days")",
+                    caption: "current streak",
+                    color: model.streak > 0 ? .green : .secondary
+                )
+            }
+            HStack(spacing: 0) {
+                stat(
+                    model.averageDeficit(inMonthOf: displayedMonth).map {
+                        "\(Int($0.rounded())) kcal"
+                    } ?? "—",
+                    caption: "avg deficit, this month"
+                )
+                Divider().frame(height: 36)
+                stat(
+                    "\(model.bestStreak) \(model.bestStreak == 1 ? "day" : "days")",
+                    caption: "best streak"
+                )
+            }
+        }
+        .padding(.vertical, 14)
+        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
+    }
+
+    private func stat(_ value: String, caption: String, color: Color = .primary) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(color)
+                .monospacedDigit()
+            Text(caption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Streak milestones — earned badges stay lit for good.
+    private var milestonesCard: some View {
         HStack(spacing: 0) {
-            VStack(spacing: 2) {
-                Text("🍙 \(model.earnedCount(inMonthOf: displayedMonth))")
-                    .font(.title3.weight(.bold))
-                    .monospacedDigit()
-                Text("this month")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            ForEach([7, 30, 100], id: \.self) { days in
+                let lit = model.bestStreak >= days
+                VStack(spacing: 2) {
+                    Text(lit ? "🏅" : "🔒")
+                        .font(.title3)
+                        .opacity(lit ? 1 : 0.4)
+                    Text("\(days)-day streak")
+                        .font(.caption)
+                        .foregroundStyle(lit ? .primary : .secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .accessibilityLabel("\(days)-day streak milestone, \(lit ? "earned" : "locked")")
             }
-            .frame(maxWidth: .infinity)
-
-            Divider().frame(height: 36)
-
-            VStack(spacing: 2) {
-                Text("\(model.streak) \(model.streak == 1 ? "day" : "days")")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(model.streak > 0 ? Color.green : Color.secondary)
-                    .monospacedDigit()
-                Text("current streak")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity)
         }
         .padding(.vertical, 14)
         .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))

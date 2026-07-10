@@ -32,6 +32,15 @@ final class TodayModel {
         await refresh()
     }
 
+    /// Jump straight to a day (date picker, Calendar's "View day").
+    func select(day: Date) async {
+        selectedDate = min(
+            Calendar.current.startOfDay(for: day),
+            Calendar.current.startOfDay(for: .now)
+        )
+        await refresh()
+    }
+
     /// Expected full-day burn: 14-day average when history exists, otherwise
     /// today's accrual or a conservative floor.
     var expectedDailyBurnKcal: Double {

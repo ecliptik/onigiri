@@ -29,6 +29,10 @@ final class QuickActions {
     /// survives until a view is ready — re-setting a stuck `true` flag never
     /// fires onChange again, which left quick actions dead on device.
     var quickLogRequest: QuickLogKind?
+
+    /// One-shot request for TodayView to browse to a specific day
+    /// (Calendar's "View day"), same consumable-Optional pattern.
+    var dayRequest: Date?
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {

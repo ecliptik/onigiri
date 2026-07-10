@@ -66,4 +66,29 @@ public enum StreakCalendar {
     ) -> Int {
         earned.count { calendar.isDate($0, equalTo: month, toGranularity: .month) }
     }
+
+    /// The longest consecutive run of earned days, ever — drives the
+    /// milestone badges.
+    public static func bestStreak(
+        earned: Set<Date>,
+        calendar: Calendar = .current
+    ) -> Int {
+        var best = 0
+        for day in earned {
+            // Only count runs from their first day.
+            if let previous = calendar.date(byAdding: .day, value: -1, to: day),
+               earned.contains(previous) {
+                continue
+            }
+            var length = 0
+            var current = day
+            while earned.contains(current) {
+                length += 1
+                guard let next = calendar.date(byAdding: .day, value: 1, to: current) else { break }
+                current = next
+            }
+            best = max(best, length)
+        }
+        return best
+    }
 }

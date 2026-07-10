@@ -67,6 +67,10 @@ struct ContentView: View {
             quickActions.pending = nil
             handle(action)
         }
+        .onChange(of: quickActions.dayRequest) { _, day in
+            // Calendar's "View day": land on Today, which consumes the date.
+            if day != nil { selectedTab = .today }
+        }
     }
 
     private func handle(_ action: QuickActions.Action) {

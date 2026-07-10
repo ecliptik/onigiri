@@ -31,11 +31,13 @@ struct TodayView: View {
     private enum TodaySheet: Identifiable {
         case settings
         case quickLog(QuickActions.QuickLogKind)
+        case datePicker
 
         var id: String {
             switch self {
             case .settings: "settings"
             case .quickLog(let kind): "quickLog-\(kind)"
+            case .datePicker: "datePicker"
             }
         }
     }
@@ -64,6 +66,18 @@ struct TodayView: View {
                 .padding(.bottom, 24)
             }
             .navigationTitle(dayTitle)
+            // Tapping the title offers fast day jumps (Calendar-style
+            // picker) and a way home from deep browsing.
+            .toolbarTitleMenu {
+                Button("Jump to date…", systemImage: "calendar") {
+                    activeSheet = .datePicker
+                }
+                if !model.isToday {
+                    Button("Go to today", systemImage: "arrow.uturn.backward") {
+                        Task { await model.select(day: .now) }
+                    }
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -100,9 +114,16 @@ struct TodayView: View {
                         initialKind: kind,
                         logDate: DayBounds.logTimestamp(for: model.selectedDate)
                     )
+                case .datePicker:
+                    DayJumpSheet(selected: model.selectedDate) { day in
+                        Task { await model.select(day: day) }
+                    }
                 }
             }
             .onChange(of: quickActions.quickLogRequest) { _, _ in
+                consumeQuickLogRequest()
+            }
+            .onChange(of: quickActions.dayRequest) { _, _ in
                 consumeQuickLogRequest()
             }
             .simultaneousGesture(
@@ -161,10 +182,15 @@ struct TodayView: View {
         }
     }
 
-    /// Present the quick-log sheet if an app-icon shortcut asked for it.
-    /// Checked on change, on appear, and on foregrounding: a request raised
-    /// before this view existed must not be lost.
+    /// Present the quick-log sheet if an app-icon shortcut asked for it,
+    /// and browse to a requested day (Calendar's "View day"). Checked on
+    /// change, on appear, and on foregrounding: a request raised before
+    /// this view existed must not be lost.
     private func consumeQuickLogRequest() {
+        if let day = quickActions.dayRequest {
+            quickActions.dayRequest = nil
+            Task { await model.select(day: day) }
+        }
         guard let kind = quickActions.quickLogRequest else { return }
         quickActions.quickLogRequest = nil
         activeSheet = .quickLog(kind)
@@ -470,6 +496,40 @@ struct TodayView: View {
                 .padding(.horizontal)
             }
         }
+    }
+}
+
+/// Graphical date picker for jumping straight to a day's record.
+private struct DayJumpSheet: View {
+    @State var selected: Date
+    let onPick: (Date) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            DatePicker(
+                "Day",
+                selection: $selected,
+                in: ...Date.now,
+                displayedComponents: .date
+            )
+            .datePickerStyle(.graphical)
+            .padding(.horizontal)
+            .navigationTitle("Jump to Date")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("View Day") {
+                        onPick(selected)
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 

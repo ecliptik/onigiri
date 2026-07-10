@@ -51,6 +51,14 @@ struct StreakCalendarTests {
         #expect(StreakCalendar.currentStreak(earned: []) == 0)
     }
 
+    @Test func bestStreakFindsTheLongestRunAnywhere() {
+        // A 2-run ending today and an older 4-run: best is 4.
+        let earned: Set<Date> = [day(0), day(-1), day(-10), day(-11), day(-12), day(-13)]
+        #expect(StreakCalendar.bestStreak(earned: earned) == 4)
+        #expect(StreakCalendar.bestStreak(earned: []) == 0)
+        #expect(StreakCalendar.bestStreak(earned: [day(-3)]) == 1)
+    }
+
     @Test func monthCountOnlyCountsThatMonth() {
         // Pick a stable reference: the 15th of this month, with earned days
         // this month and one ~40 days earlier (previous month).

@@ -19,9 +19,15 @@ final class OnigiriUITests: XCTestCase {
         app.tabBars.buttons["Foods"].tap()
         app.tabBars.buttons["Today"].tap()
 
-        // Seeded food correlations should appear in the Today log.
+        // Seeded food correlations should appear in the Today log. Meal
+        // sections start collapsed, so expand them to see the entry rows.
         XCTAssertTrue(
-            app.staticTexts["Chicken burrito"].waitForExistence(timeout: 20),
+            app.buttons.matching(collapsedSectionPredicate).firstMatch.waitForExistence(timeout: 20),
+            "Seeded log should render meal-slot sections"
+        )
+        expandMealSections(in: app)
+        XCTAssertTrue(
+            app.staticTexts["Chicken burrito"].waitForExistence(timeout: 10),
             "Seeded lunch should render in the Logged today list"
         )
         XCTAssertTrue(app.staticTexts["Two eggs & toast"].exists)
@@ -38,11 +44,13 @@ final class OnigiriUITests: XCTestCase {
         confirmLog.tap()
 
         app.tabBars.buttons["Today"].tap()
+        XCTAssertTrue(app.staticTexts["Snack"].waitForExistence(timeout: 10),
+                      "Entry should land in its meal-slot section")
+        expandMealSections(in: app)
         XCTAssertTrue(
             app.staticTexts["Protein shake"].waitForExistence(timeout: 10),
             "Logged food should appear in the Today log"
         )
-        XCTAssertTrue(app.staticTexts["Snack"].exists, "Entry should land in its meal-slot section")
 
         // Water quick-add: seeded 24 oz + one 12 oz serving = 36.
         app.tabBars.buttons["Water"].tap()
@@ -55,6 +63,17 @@ final class OnigiriUITests: XCTestCase {
             "Ring total should update after quick-add"
         )
 
+        // Today's +💧 one-taps the default serving too: 36 + 12 = 48.
+        app.tabBars.buttons["Today"].tap()
+        let waterButton = app.buttons["Log 12 ounces of water"]
+        XCTAssertTrue(waterButton.waitForExistence(timeout: 10), "Today should show the +water button")
+        waterButton.tap()
+        app.tabBars.buttons["Water"].tap()
+        XCTAssertTrue(
+            app.staticTexts["48"].waitForExistence(timeout: 10),
+            "Ring total should include the Today one-tap log"
+        )
+
         // Streak calendar: the three seeded history days each earned an
         // onigiri (750 kcal deficit vs ~618 target), so the streak is 3.
         app.tabBars.buttons["Calendar"].tap()
@@ -62,6 +81,22 @@ final class OnigiriUITests: XCTestCase {
             app.staticTexts["3 days"].waitForExistence(timeout: 10),
             "Seeded history should produce a 3-day streak"
         )
+    }
+
+    /// Today's meal-slot sections start collapsed; their header buttons say
+    /// so in the accessibility label ("Lunch, 680 kcal, collapsed").
+    private var collapsedSectionPredicate: NSPredicate {
+        NSPredicate(format: "label CONTAINS 'collapsed'")
+    }
+
+    /// Expand every collapsed meal section so entry rows are hittable.
+    @MainActor
+    private func expandMealSections(in app: XCUIApplication) {
+        let collapsed = app.buttons.matching(collapsedSectionPredicate)
+        for _ in 0..<4 {
+            guard collapsed.count > 0 else { return }
+            collapsed.firstMatch.tap()
+        }
     }
 
     /// The decimal pad has no return key; the Goal tab shows a nav-bar Done

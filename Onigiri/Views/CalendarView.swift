@@ -158,7 +158,7 @@ struct CalendarView: View {
             }
             .accessibilityLabel("Previous day")
             Spacer()
-            Text(selectedDay, format: .dateTime.weekday(.wide).month(.abbreviated).day())
+            Text(selectedDay, format: .dateTime.weekday(.abbreviated).month(.wide).day())
                 .font(.headline)
             Spacer()
             Button {

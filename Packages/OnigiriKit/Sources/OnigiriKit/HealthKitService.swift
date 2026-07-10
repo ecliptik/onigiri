@@ -15,16 +15,22 @@ public final class HealthKitService {
 
     // MARK: - Authorization
 
-    private static let shareTypes: Set<HKSampleType> = [
-        HKQuantityType(.dietaryEnergyConsumed),
-        HKQuantityType(.dietarySodium),
-        HKQuantityType(.dietaryWater),
-        HKQuantityType(.dietaryFatTotal),
-        HKQuantityType(.dietaryCarbohydrates),
-        HKQuantityType(.dietaryProtein),
-        HKQuantityType(.dietaryFiber),
-        HKQuantityType(.dietarySugar),
-    ]
+    private static let shareTypes: Set<HKSampleType> = {
+        var types: Set<HKSampleType> = [
+            HKQuantityType(.dietaryEnergyConsumed),
+            HKQuantityType(.dietarySodium),
+            HKQuantityType(.dietaryWater),
+            HKQuantityType(.dietaryFatTotal),
+            HKQuantityType(.dietaryCarbohydrates),
+            HKQuantityType(.dietaryProtein),
+            HKQuantityType(.dietaryFiber),
+            HKQuantityType(.dietarySugar),
+        ]
+        for micro in Micronutrient.allCases {
+            types.insert(HKQuantityType(micro.healthKitIdentifier))
+        }
+        return types
+    }()
 
     private static let readTypes: Set<HKObjectType> = [
         HKQuantityType(.dietaryEnergyConsumed),
@@ -287,6 +293,9 @@ public final class HealthKitService {
         insert(.dietaryProtein, .gram(), nutrients.proteinG)
         insert(.dietaryFiber, .gram(), nutrients.fiberG)
         insert(.dietarySugar, .gram(), nutrients.sugarG)
+        for micro in Micronutrient.allCases {
+            insert(micro.healthKitIdentifier, micro.healthKitUnit, nutrients[micro])
+        }
         let correlation = HKCorrelation(
             type: HKCorrelationType(.food),
             start: date, end: date,
@@ -420,6 +429,32 @@ public final class HealthKitService {
         }
     }
     #endif
+}
+
+extension Micronutrient {
+    var healthKitIdentifier: HKQuantityTypeIdentifier {
+        switch self {
+        case .potassium: .dietaryPotassium
+        case .calcium: .dietaryCalcium
+        case .iron: .dietaryIron
+        case .magnesium: .dietaryMagnesium
+        case .zinc: .dietaryZinc
+        case .vitaminA: .dietaryVitaminA
+        case .vitaminC: .dietaryVitaminC
+        case .vitaminD: .dietaryVitaminD
+        case .vitaminE: .dietaryVitaminE
+        case .vitaminB6: .dietaryVitaminB6
+        case .vitaminB12: .dietaryVitaminB12
+        case .folate: .dietaryFolate
+        }
+    }
+
+    var healthKitUnit: HKUnit {
+        switch unit {
+        case .milligrams: .gramUnit(with: .milli)
+        case .micrograms: .gramUnit(with: .micro)
+        }
+    }
 }
 
 private extension HKCorrelation {

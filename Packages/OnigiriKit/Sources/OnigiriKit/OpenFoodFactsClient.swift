@@ -132,6 +132,19 @@ public struct OpenFoodFactsClient: Sendable {
         let sodiumMg: Double?
         let servingDescription: String
         let nutrients: NutrientValues
+        // OFF reports micronutrients in grams; scale each into its
+        // canonical unit (mg/µg).
+        func microValues(_ grams: [String: Double]?) -> [String: Double] {
+            guard let grams else { return [:] }
+            var values: [String: Double] = [:]
+            for micro in Micronutrient.allCases {
+                if let g = grams[micro.rawValue], g > 0 {
+                    values[micro.rawValue] = g * micro.unit.perGram
+                }
+            }
+            return values
+        }
+
         if let perServing = nutriments?.energyKcalServing {
             kcal = perServing
             sodiumMg = sodiumGrams(nutriments?.sodiumServing, salt: nutriments?.saltServing)
@@ -142,7 +155,8 @@ public struct OpenFoodFactsClient: Sendable {
                 carbsG: nutriments?.carbsServing,
                 proteinG: nutriments?.proteinsServing,
                 fiberG: nutriments?.fiberServing,
-                sugarG: nutriments?.sugarsServing
+                sugarG: nutriments?.sugarsServing,
+                micros: microValues(nutriments?.microsServing)
             )
         } else {
             kcal = nutriments?.energyKcal100g
@@ -154,7 +168,8 @@ public struct OpenFoodFactsClient: Sendable {
                 carbsG: nutriments?.carbs100g,
                 proteinG: nutriments?.proteins100g,
                 fiberG: nutriments?.fiber100g,
-                sugarG: nutriments?.sugars100g
+                sugarG: nutriments?.sugars100g,
+                micros: microValues(nutriments?.micros100g)
             )
         }
 
@@ -247,6 +262,10 @@ private struct OFFNutriments: Decodable {
     let fiberServing: Double?
     let sugars100g: Double?
     let sugarsServing: Double?
+    /// Micronutrients in grams (OFF's storage unit), keyed by
+    /// Micronutrient rawValue.
+    let microsServing: [String: Double]
+    let micros100g: [String: Double]
 
     enum CodingKeys: String, CodingKey {
         case energyKcal100g = "energy-kcal_100g"
@@ -291,5 +310,59 @@ private struct OFFNutriments: Decodable {
         fiberServing = flexibleDouble(.fiberServing)
         sugars100g = flexibleDouble(.sugars100g)
         sugarsServing = flexibleDouble(.sugarsServing)
+
+        // Micronutrient keys are looked up dynamically — 24 CodingKeys
+        // cases would say the same thing longer.
+        let dynamic = try decoder.container(keyedBy: DynamicKey.self)
+        func flexibleDouble(named name: String) -> Double? {
+            guard let key = DynamicKey(stringValue: name) else { return nil }
+            if let value = try? dynamic.decode(Double.self, forKey: key) { return value }
+            if let text = try? dynamic.decode(String.self, forKey: key) { return Double(text) }
+            return nil
+        }
+        var serving: [String: Double] = [:]
+        var per100: [String: Double] = [:]
+        for micro in Micronutrient.allCases {
+            for offID in micro.offIDs {
+                if serving[micro.rawValue] == nil,
+                   let value = flexibleDouble(named: "\(offID)_serving") {
+                    serving[micro.rawValue] = value
+                }
+                if per100[micro.rawValue] == nil,
+                   let value = flexibleDouble(named: "\(offID)_100g") {
+                    per100[micro.rawValue] = value
+                }
+            }
+        }
+        microsServing = serving
+        micros100g = per100
+    }
+}
+
+private struct DynamicKey: CodingKey {
+    let stringValue: String
+    var intValue: Int? { nil }
+
+    init?(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { nil }
+}
+
+private extension Micronutrient {
+    /// OpenFoodFacts nutriment ids to try, most common first.
+    var offIDs: [String] {
+        switch self {
+        case .potassium: ["potassium"]
+        case .calcium: ["calcium"]
+        case .iron: ["iron"]
+        case .magnesium: ["magnesium"]
+        case .zinc: ["zinc"]
+        case .vitaminA: ["vitamin-a"]
+        case .vitaminC: ["vitamin-c"]
+        case .vitaminD: ["vitamin-d"]
+        case .vitaminE: ["vitamin-e"]
+        case .vitaminB6: ["vitamin-b6"]
+        case .vitaminB12: ["vitamin-b12"]
+        case .folate: ["folates", "vitamin-b9"]
+        }
     }
 }

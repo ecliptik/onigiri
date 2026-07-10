@@ -22,6 +22,8 @@ struct FoodFormView: View {
     @State private var proteinG: Double?
     @State private var fiberG: Double?
     @State private var sugarG: Double?
+    @State private var micros: [String: Double] = [:]
+    @State private var microsExpanded = false
     @State private var category: String?
     @State private var isFavorite = false
 
@@ -100,6 +102,19 @@ struct FoodFormView: View {
                     nutrientRow("Fiber", value: $fiberG)
                     nutrientRow("Sugar", value: $sugarG)
                 }
+
+                Section {
+                    DisclosureGroup("Vitamins & minerals", isExpanded: $microsExpanded) {
+                        ForEach(Micronutrient.allCases) { micro in
+                            LabeledContent("\(micro.displayName) (\(micro.unit.symbol))") {
+                                TextField("—", value: microBinding(micro), format: .number)
+                                    .keyboardType(.decimalPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .focused($numberFieldFocused)
+                            }
+                        }
+                    }
+                }
             }
             .navigationTitle(food == nil ? "New Food" : "Edit Food")
             .navigationBarTitleDisplayMode(.inline)
@@ -151,6 +166,8 @@ struct FoodFormView: View {
                     proteinG = food.proteinG
                     fiberG = food.fiberG
                     sugarG = food.sugarG
+                    micros = food.micros ?? [:]
+                    microsExpanded = !micros.isEmpty
                     category = food.category
                     isFavorite = food.isFavorite
                 } else if startScanning {
@@ -158,6 +175,13 @@ struct FoodFormView: View {
                 }
             }
         }
+    }
+
+    private func microBinding(_ micro: Micronutrient) -> Binding<Double?> {
+        Binding(
+            get: { micros[micro.rawValue] },
+            set: { micros[micro.rawValue] = $0 }
+        )
     }
 
     private func nutrientRow(_ label: String, value: Binding<Double?>) -> some View {
@@ -170,7 +194,10 @@ struct FoodFormView: View {
     }
 
     private var formNutrients: NutrientValues {
-        NutrientValues(fatG: fatG, carbsG: carbsG, proteinG: proteinG, fiberG: fiberG, sugarG: sugarG)
+        NutrientValues(
+            fatG: fatG, carbsG: carbsG, proteinG: proteinG,
+            fiberG: fiberG, sugarG: sugarG, micros: micros
+        )
     }
 
     private func lookup(_ code: String) async {
@@ -196,6 +223,8 @@ struct FoodFormView: View {
         proteinG = product.nutrients.proteinG
         fiberG = product.nutrients.fiberG
         sugarG = product.nutrients.sugarG
+        micros = product.nutrients.micros
+        microsExpanded = !micros.isEmpty
         lookupMessage = product.kcal == nil
             ? "Found it, but no calorie data — check the label."
             : nil

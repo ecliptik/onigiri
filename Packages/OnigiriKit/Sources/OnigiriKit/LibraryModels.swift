@@ -15,6 +15,9 @@ public final class Food {
     public var proteinG: Double?
     public var fiberG: Double?
     public var sugarG: Double?
+    /// Vitamins & minerals in canonical units, keyed by Micronutrient
+    /// rawValue. Optional so pre-existing stores migrate lightweight.
+    public var micros: [String: Double]?
     // Library organization.
     public var isFavorite: Bool = false
     public var category: String?
@@ -44,6 +47,7 @@ public final class Food {
         self.proteinG = nutrients.proteinG
         self.fiberG = nutrients.fiberG
         self.sugarG = nutrients.sugarG
+        self.micros = nutrients.micros.isEmpty ? nil : nutrients.micros
         self.isFavorite = isFavorite
         self.category = category
         self.mealItems = []
@@ -51,7 +55,10 @@ public final class Food {
 
     public var nutrients: NutrientValues {
         get {
-            NutrientValues(fatG: fatG, carbsG: carbsG, proteinG: proteinG, fiberG: fiberG, sugarG: sugarG)
+            NutrientValues(
+                fatG: fatG, carbsG: carbsG, proteinG: proteinG,
+                fiberG: fiberG, sugarG: sugarG, micros: micros ?? [:]
+            )
         }
         set {
             fatG = newValue.fatG
@@ -59,6 +66,7 @@ public final class Food {
             proteinG = newValue.proteinG
             fiberG = newValue.fiberG
             sugarG = newValue.sugarG
+            micros = newValue.micros.isEmpty ? nil : newValue.micros
         }
     }
 }

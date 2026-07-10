@@ -97,6 +97,39 @@ struct OpenFoodFactsTests {
         #expect(results[1].brand == "Bakery")
     }
 
+    @Test func parsesMicronutrientsPerServing() throws {
+        // OFF reports micronutrients in grams; they land in mg/µg.
+        let json = """
+        {"status":1,"product":{"product_name":"Fortified Cereal",
+        "serving_size":"1 cup",
+        "nutriments":{"energy-kcal_serving":150,
+        "potassium_serving":0.18,"calcium_serving":0.13,"iron_serving":0.0081,
+        "vitamin-c_serving":0.006,"vitamin-b12_serving":0.0000024,
+        "folates_serving":0.0004}}}
+        """
+        let product = try OpenFoodFactsClient.parse(data: data(json), barcode: "123")
+        func value(_ micro: Micronutrient) -> Double { product.nutrients[micro] ?? -1 }
+        #expect(abs(value(.potassium) - 180) < 0.001)   // g → mg
+        #expect(abs(value(.calcium) - 130) < 0.001)
+        #expect(abs(value(.iron) - 8.1) < 0.001)
+        #expect(abs(value(.vitaminC) - 6) < 0.001)
+        #expect(abs(value(.vitaminB12) - 2.4) < 0.001)  // g → µg
+        #expect(abs(value(.folate) - 400) < 0.001)
+        #expect(product.nutrients[.zinc] == nil)
+    }
+
+    @Test func micronutrientsFallBackToPer100gAndAltKeys() throws {
+        let json = """
+        {"status":1,"product":{"product_name":"Spinach",
+        "nutriments":{"energy-kcal_100g":23,
+        "zinc_100g":"0.011","vitamin-b9_100g":0.0002}}}
+        """
+        let product = try OpenFoodFactsClient.parse(data: data(json), barcode: "123")
+        #expect(abs((product.nutrients[.zinc] ?? -1) - 11) < 0.001)
+        // folate arrives under its vitamin-b9 alias (and as a string number)
+        #expect(abs((product.nutrients[.folate] ?? -1) - 200) < 0.001)
+    }
+
     @Test func skipsBrandWhenAlreadyInName() throws {
         let json = """
         {"status":1,"product":{"product_name":"Nutella","brands":"Nutella,Ferrero",

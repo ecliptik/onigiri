@@ -315,9 +315,28 @@ struct CalendarView: View {
                     caption: "best streak"
                 )
             }
+            // Predicted vs real: the month's deficit ÷ 3,500 next to what
+            // the scale's 7-day average actually did over the same window.
+            HStack(spacing: 0) {
+                stat(
+                    model.predictedLb(inMonthOf: displayedMonth).map {
+                        "≈ \(signedLb($0))"
+                    } ?? "—",
+                    caption: "predicted, by deficit"
+                )
+                Divider().frame(height: 36)
+                stat(
+                    model.actualLb(inMonthOf: displayedMonth).map(signedLb) ?? "—",
+                    caption: "scale change, this month"
+                )
+            }
         }
         .padding(.vertical, 14)
         .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
+    }
+
+    private func signedLb(_ value: Double) -> String {
+        "\(value.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always(includingZero: false)))) lb"
     }
 
     private func stat(_ value: String, caption: String, color: Color = .primary) -> some View {

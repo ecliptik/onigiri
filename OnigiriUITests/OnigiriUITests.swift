@@ -124,6 +124,14 @@ final class OnigiriUITests: XCTestCase {
             app.staticTexts["3 days"].waitForExistence(timeout: 10),
             "Seeded history should produce a 3-day streak"
         )
+
+        // Predicted vs actual: the summary card's third row. Seeded data
+        // has both a month of weigh-ins and deficit days, so neither side
+        // should be an em dash.
+        XCTAssertTrue(app.staticTexts["predicted, by deficit"].exists,
+                      "Summary card should show the predicted change stat")
+        XCTAssertTrue(app.staticTexts["scale change, this month"].exists,
+                      "Summary card should show the scale change stat")
     }
 
     /// Today's meal-slot sections start collapsed; their header buttons say

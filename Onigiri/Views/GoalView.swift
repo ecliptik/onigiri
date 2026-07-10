@@ -15,6 +15,7 @@ struct GoalView: View {
     @State private var healthWeightLb: Double?
     @State private var averageBurnKcal: Double?
     @State private var weightHistory: [WeightTrend.Point] = []
+    @State private var dailyTotals: [DayEnergyTotals] = []
     @State private var loaded = false
     @FocusState private var weightFieldFocused: Bool
 
@@ -90,6 +91,17 @@ struct GoalView: View {
                         LabeledContent("Average burn") {
                             Text("≈ \(averageBurnKcal ?? 2000, format: .number.precision(.fractionLength(0))) kcal/day")
                         }
+                        // Is the math showing up on the scale? Trailing 30
+                        // days of deficit vs the smoothed weigh-in change.
+                        if let predicted = predicted30Lb, let actual = actual30Lb {
+                            LabeledContent("Last 30 days") {
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text("≈ \(signedLb(predicted)) predicted")
+                                    Text("\(signedLb(actual)) on the scale")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
                         if plan.isAggressive {
                             Label(
                                 "That pace is aggressive. A later target date means a gentler daily budget.",
@@ -134,6 +146,7 @@ struct GoalView: View {
             healthWeightLb = (try? await health.latestBodyMassLb()) ?? nil
             averageBurnKcal = (try? await health.averageDailyBurnKcal()) ?? nil
             weightHistory = (try? await health.bodyMassHistory()) ?? []
+            dailyTotals = (try? await health.dailyEnergyTotals()) ?? []
             if !loaded, let goal = goals.first {
                 targetWeightLb = goal.targetWeightLb
                 targetDate = goal.targetDate
@@ -141,6 +154,29 @@ struct GoalView: View {
                 loaded = true
             }
         }
+    }
+
+    // MARK: - Predicted vs actual (trailing 30 days)
+
+    private var thirtyDaysAgo: Date {
+        Calendar.current.date(byAdding: .day, value: -30, to: .now) ?? .now
+    }
+
+    /// Nil until the window has logged days — no data, no claim.
+    private var predicted30Lb: Double? {
+        let deficits = dailyTotals
+            .filter { $0.day >= thirtyDaysAgo }
+            .map(\.deficitKcal)
+        guard !deficits.isEmpty else { return nil }
+        return WeightTrend.Change.predictedLb(totalDeficitKcal: deficits.reduce(0, +))
+    }
+
+    private var actual30Lb: Double? {
+        WeightTrend.Change.actualLb(history: weightHistory, from: thirtyDaysAgo, to: .now)
+    }
+
+    private func signedLb(_ value: Double) -> String {
+        "\(value.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always(includingZero: false)))) lb"
     }
 
     // MARK: - Weight trend

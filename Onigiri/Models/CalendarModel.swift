@@ -10,6 +10,8 @@ final class CalendarModel {
     private(set) var totalsByDay: [Date: DayEnergyTotals] = [:]
     /// Full summary (sodium, water) for the selected day's detail card.
     private(set) var selectedDaySummary: DailyEnergySummary?
+    /// A year of weigh-ins so any browsable month can show its scale change.
+    private(set) var weightHistory: [WeightTrend.Point] = []
 
     private let health = HealthKitService()
     private var summaryGeneration = 0
@@ -26,6 +28,24 @@ final class CalendarModel {
         earned = StreakCalendar.earnedDays(totals: totals, targetDeficitKcal: plan.deficitTargetKcal)
         streak = StreakCalendar.currentStreak(earned: earned)
         bestStreak = StreakCalendar.bestStreak(earned: earned)
+        weightHistory = (try? await health.bodyMassHistory(days: 365)) ?? weightHistory
+    }
+
+    /// Predicted lb change for the month (its net deficit ÷ 3,500).
+    func predictedLb(inMonthOf month: Date) -> Double? {
+        totalDeficit(inMonthOf: month).map(WeightTrend.Change.predictedLb)
+    }
+
+    /// What the scale actually did across the month (nil when it lacks
+    /// two smoothed weigh-ins).
+    func actualLb(inMonthOf month: Date, now: Date = .now) -> Double? {
+        let calendar = Calendar.current
+        guard let start = calendar.date(from: calendar.dateComponents([.year, .month], from: month)),
+              let nextMonth = calendar.date(byAdding: .month, value: 1, to: start)
+        else { return nil }
+        return WeightTrend.Change.actualLb(
+            history: weightHistory, from: start, to: min(nextMonth, now)
+        )
     }
 
     /// Net deficit summed across the month's recorded days (nil when none) —

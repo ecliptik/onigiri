@@ -28,6 +28,33 @@ public enum WeightTrend {
         }
     }
 
+    /// Predicted vs actual weight change over a window — the "did the math
+    /// show up on the scale" comparison on Calendar and Goal.
+    public enum Change {
+        static let kcalPerLb = 3_500.0
+
+        /// Lb change implied by a net calorie deficit (negative = lost).
+        public static func predictedLb(totalDeficitKcal: Double) -> Double {
+            -totalDeficitKcal / kcalPerLb
+        }
+
+        /// Scale change (lb) across the window, read from the 7-day moving
+        /// average so single noisy weigh-ins don't swing it: last smoothed
+        /// point in the window minus the first. Nil until the window holds
+        /// two smoothed points on different days.
+        public static func actualLb(
+            history: [Point],
+            from start: Date,
+            to end: Date
+        ) -> Double? {
+            let smoothed = movingAverage(history, windowDays: 7)
+                .filter { $0.date >= start && $0.date <= end }
+            guard let first = smoothed.first, let last = smoothed.last,
+                  first.date < last.date else { return nil }
+            return last.weightLb - first.weightLb
+        }
+    }
+
     /// Least-squares slope in lb/day. Negative means losing weight.
     /// Nil when there are fewer than two distinct dates.
     public static func slopeLbPerDay(_ points: [Point]) -> Double? {

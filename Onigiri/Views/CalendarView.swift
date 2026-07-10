@@ -22,6 +22,7 @@ struct CalendarView: View {
                     summaryCard
                     weekdayHeader
                     monthGrid
+                    dayHeader
                     daySummaryCard
                     if model.targetDeficitKcal == nil {
                         Text("No goal set — days earn an onigiri for any calorie deficit. Set a goal to raise the bar.")
@@ -130,12 +131,41 @@ struct CalendarView: View {
         return days
     }
 
+    /// Cycle the selected day like the month header cycles months; the
+    /// grid follows across month boundaries.
+    private var dayHeader: some View {
+        HStack {
+            Button {
+                shiftDay(-1)
+            } label: {
+                Image(systemName: "chevron.left")
+            }
+            .accessibilityLabel("Previous day")
+            Spacer()
+            Text(selectedDay, format: .dateTime.weekday(.wide).month(.abbreviated).day())
+                .font(.headline)
+            Spacer()
+            Button {
+                shiftDay(1)
+            } label: {
+                Image(systemName: "chevron.right")
+            }
+            .disabled(calendar.isDateInToday(selectedDay))
+            .accessibilityLabel("Next day")
+        }
+    }
+
+    private func shiftDay(_ delta: Int) {
+        guard let day = calendar.date(byAdding: .day, value: delta, to: selectedDay) else { return }
+        selectedDay = min(calendar.startOfDay(for: day), calendar.startOfDay(for: .now))
+        if !calendar.isDate(selectedDay, equalTo: displayedMonth, toGranularity: .month) {
+            displayedMonth = calendar.startOfMonth(for: selectedDay)
+        }
+    }
+
     private var daySummaryCard: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text(selectedDay, format: .dateTime.weekday(.wide).month(.abbreviated).day())
-                    .font(.headline)
-                Spacer()
                 if model.earned.contains(selectedDay) {
                     Text("🍙 earned")
                         .font(.subheadline.weight(.semibold))
@@ -144,7 +174,11 @@ struct CalendarView: View {
                     Text("in progress")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                } else {
+                    Text("Day summary")
+                        .font(.subheadline.weight(.semibold))
                 }
+                Spacer()
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)

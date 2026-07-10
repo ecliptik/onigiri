@@ -68,6 +68,9 @@ struct CalendarView: View {
         .task { await refresh() }
         .onAppear { Task { await refresh() } }
         .refreshable { await refresh() }
+        .onChange(of: selectedDay) { _, day in
+            Task { await model.loadDaySummary(for: day) }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 Task { await refresh() }
@@ -84,6 +87,7 @@ struct CalendarView: View {
             )
         }
         await model.refresh(goal: goal)
+        await model.loadDaySummary(for: selectedDay)
     }
 
     // MARK: - Pieces
@@ -209,33 +213,42 @@ struct CalendarView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
-            if let totals = model.totalsByDay[selectedDay] {
-                HStack(spacing: 14) {
-                    Label {
-                        Text("\(totals.intakeKcal, format: .number.precision(.fractionLength(0))) in")
-                    } icon: {
-                        Image(systemName: "fork.knife").foregroundStyle(.orange)
-                    }
-                    Label {
-                        Text("\(totals.burnKcal, format: .number.precision(.fractionLength(0))) out")
-                    } icon: {
-                        Image(systemName: "flame.fill").foregroundStyle(.red)
-                    }
-                    Spacer()
-                    Text(deficitText(for: totals))
-                        .fontWeight(.semibold)
-                        .foregroundStyle(totals.deficitKcal > 0 ? Color.green : Color.orange)
-                }
-                .font(.subheadline)
-                .monospacedDigit()
-                if let target = model.targetDeficitKcal {
-                    Text("Daily target: \(target, format: .number.precision(.fractionLength(0))) kcal deficit")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                Text("No data recorded this day.")
-                    .font(.subheadline)
+            // Fixed three-column grid, always rendered ("—" when a day has
+            // no data): every icon keeps its exact position across day
+            // changes, so only the numbers repaint.
+            let totals = model.totalsByDay[selectedDay]
+            HStack(spacing: 0) {
+                metric(icon: { Image(systemName: "fork.knife").foregroundStyle(.orange) },
+                       text: totals.map { "\(Int($0.intakeKcal.rounded())) in" } ?? "—")
+                metric(icon: { Image(systemName: "flame.fill").foregroundStyle(.red) },
+                       text: totals.map { "\(Int($0.burnKcal.rounded())) out" } ?? "—")
+                Text(totals.map(deficitText(for:)) ?? "—")
+                    .fontWeight(.semibold)
+                    .foregroundStyle((totals?.deficitKcal ?? 0) > 0 ? Color.green : Color.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .font(.subheadline)
+            .monospacedDigit()
+
+            let summary = model.selectedDaySummary
+            HStack(spacing: 0) {
+                metric(icon: { Text("🧂") },
+                       text: summary.map { "\(Int($0.sodiumMg.rounded())) mg" } ?? "—",
+                       color: summary.map { Color.sodiumStatus(mg: $0.sodiumMg, limitMg: SharedStore.sodiumLimitMg) } ?? .secondary)
+                metric(icon: { Text(SharedStore.waterEmoji) },
+                       text: summary.map {
+                           "\(Int($0.waterOz.rounded())) / \(Int(SharedStore.waterGoalOz)) oz"
+                       } ?? "—",
+                       color: (summary?.waterOz ?? 0) >= SharedStore.waterGoalOz ? .green : .primary)
+                Spacer()
+                    .frame(maxWidth: .infinity)
+            }
+            .font(.subheadline)
+            .monospacedDigit()
+
+            if let target = model.targetDeficitKcal {
+                Text("Daily target: \(target, format: .number.precision(.fractionLength(0))) kcal deficit")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
@@ -250,6 +263,21 @@ struct CalendarView: View {
         .accessibilityAddTraits(.isButton)
         .accessibilityHint("Opens this day on Today")
         .animation(.snappy, value: selectedDay)
+    }
+
+    /// One equal-width column: icon pinned at the leading edge, value text
+    /// beside it — column widths never change, so icons don't move.
+    private func metric(
+        @ViewBuilder icon: () -> some View,
+        text: String,
+        color: Color = .primary
+    ) -> some View {
+        Label {
+            Text(text).foregroundStyle(color)
+        } icon: {
+            icon()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func deficitText(for totals: DayEnergyTotals) -> String {

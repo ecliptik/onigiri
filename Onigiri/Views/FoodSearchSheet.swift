@@ -22,14 +22,6 @@ struct FoodSearchSheet: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                if let suggestion = search.suggestion {
-                    Button {
-                        query = suggestion
-                        Task { await search.search(suggestion) }
-                    } label: {
-                        Label("Did you mean “\(suggestion)”?", systemImage: "text.magnifyingglass")
-                    }
-                }
                 if let message = search.message {
                     Text(message)
                         .font(.footnote)

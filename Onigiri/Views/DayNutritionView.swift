@@ -21,7 +21,7 @@ struct DayNutritionView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else if totals.isEmpty {
-                Text("This day's entries carry no detailed nutrients — foods logged with just calories and sodium.")
+                Text("This day's entries were logged with just calories and sodium. To see macros and micros here, edit a food in Foods and fill in its label values (or rescan its barcode) — every log after that carries them.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {

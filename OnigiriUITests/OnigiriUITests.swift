@@ -73,16 +73,21 @@ final class OnigiriUITests: XCTestCase {
             app.navigationBars["Nutrition"].waitForExistence(timeout: 10),
             "Meter grid should push the day nutrition detail"
         )
-        XCTAssertTrue(
-            app.staticTexts["Macronutrients"].waitForExistence(timeout: 5),
-            "Seeded meals should produce a macro section"
-        )
-        XCTAssertTrue(app.staticTexts["Protein"].exists)
+        // Groups are collapsed by default; expand to reach the rows.
+        let macroGroup = app.staticTexts["Macronutrients"]
+        XCTAssertTrue(macroGroup.waitForExistence(timeout: 5),
+                      "Seeded meals should produce a macro group")
+        macroGroup.tap()
+        XCTAssertTrue(app.staticTexts["Protein"].waitForExistence(timeout: 5),
+                      "Expanding macros should reveal the rows")
         app.swipeUp()
-        app.swipeUp()
+        let mineralsGroup = app.staticTexts["Minerals"]
+        XCTAssertTrue(mineralsGroup.waitForExistence(timeout: 5),
+                      "Seeded micronutrients should produce a Minerals group")
+        mineralsGroup.tap()
         XCTAssertTrue(
             app.staticTexts["Calcium"].waitForExistence(timeout: 5),
-            "Seeded micronutrients should render in the Minerals section"
+            "Expanding Minerals should reveal its rows"
         )
         app.navigationBars["Nutrition"].buttons.firstMatch.tap()
         // Scrolling the detail minimized the iOS 26 tab bar to just the

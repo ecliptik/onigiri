@@ -338,9 +338,10 @@ struct CalendarView: View {
 
 }
 
-/// The browsed month's full story, pushed from the summary card: outcome
-/// totals, predicted vs scale weight change, and all-time records.
-private struct MonthDetailView: View {
+/// The browsed month's full story, pushed from Calendar's summary card
+/// and Today's goal card: outcome totals, predicted vs scale weight
+/// change, and all-time records.
+struct MonthDetailView: View {
     let model: CalendarModel
     let month: Date
 

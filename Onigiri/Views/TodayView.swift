@@ -6,6 +6,8 @@ import OnigiriKit
 /// Home screen: the daily calorie meter, goal gauge, and today's log.
 struct TodayView: View {
     @State private var model = TodayModel()
+    /// Backs the goal card's month-detail push; refreshed on push.
+    @State private var monthModel = CalendarModel()
     @Environment(\.scenePhase) private var scenePhase
     @Query private var goals: [GoalSettings]
     @Query(filter: #Predicate<Food> { $0.isFavorite }, sort: \Food.name)
@@ -53,13 +55,25 @@ struct TodayView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Layout.screenSpacing) {
-                    // Every big metric opens the day's nutrition detail —
-                    // tapping the headline or goal card should not feel
-                    // different from tapping the meters below them.
-                    nutritionLink { balanceHeadline }
+                    // Two doors, split by meaning: the headline is what you
+                    // ate (→ day nutrition detail), the goal card is how
+                    // the plan is going (→ the month story Calendar shows).
+                    // The meters are display-only.
+                    nutritionLink {
+                        VStack(spacing: 8) {
+                            balanceHeadline
+                            HStack(spacing: 4) {
+                                Text("Nutrition details")
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2.weight(.semibold))
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
+                    }
                     hydrationRow
-                    nutritionLink { goalCard }
-                    nutritionDetailLink
+                    monthDetailLink { goalCard }
+                    meterGrid
                     loggedSection
 
                     if let message = model.errorMessage {
@@ -314,7 +328,7 @@ struct TodayView: View {
         )
     }
 
-    /// Push to the day's full nutrient breakdown from any big metric.
+    /// Push to the day's full nutrient breakdown.
     private func nutritionLink(@ViewBuilder _ content: () -> some View) -> some View {
         NavigationLink {
             DayNutritionView(model: model)
@@ -325,27 +339,25 @@ struct TodayView: View {
         .accessibilityHint("Shows the day's full nutrient breakdown")
     }
 
-    /// The meter grid doubles as the door to the day's full nutrient
-    /// breakdown; the caption chevron is what makes that discoverable.
-    private var nutritionDetailLink: some View {
+    /// Push to the same month story Calendar's summary card shows; the
+    /// model refreshes on push so Today doesn't pay for it up front.
+    private func monthDetailLink(@ViewBuilder _ content: () -> some View) -> some View {
         NavigationLink {
-            DayNutritionView(model: model)
-        } label: {
-            VStack(spacing: 8) {
-                meterGrid
-                HStack(spacing: 4) {
-                    Text("Nutrition details")
-                    Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.semibold))
+            MonthDetailView(model: monthModel, month: .now)
+                .task {
+                    await monthModel.refresh(goal: goals.first.map {
+                        SyncedGoal(
+                            targetWeightLb: $0.targetWeightLb,
+                            targetDate: $0.targetDate,
+                            fallbackCurrentWeightLb: $0.fallbackCurrentWeightLb
+                        )
+                    })
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.horizontal)
-            }
+        } label: {
+            content()
         }
         .buttonStyle(.plain)
-        .accessibilityHint("Shows the day's full nutrient breakdown")
+        .accessibilityHint("Shows this month's deficit, weight change, and records")
     }
 
     private var meterGrid: some View {

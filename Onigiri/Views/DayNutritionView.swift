@@ -25,9 +25,15 @@ struct DayNutritionView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
-                macroSection
-                microSection("Minerals", Micronutrient.minerals)
-                microSection("Vitamins", Micronutrient.vitamins)
+                // Collapsed by default, like the Log's meal sections:
+                // the summary reads at a glance, the deep detail is a tap.
+                Section {
+                    if hasMacros {
+                        DisclosureGroup("Macronutrients") { macroRows }
+                    }
+                    microGroup("Minerals", Micronutrient.minerals)
+                    microGroup("Vitamins", Micronutrient.vitamins)
+                }
             }
         }
         .navigationTitle("Nutrition")
@@ -58,32 +64,38 @@ struct DayNutritionView: View {
         }
     }
 
-    @ViewBuilder
-    private var macroSection: some View {
-        Section("Macronutrients") {
-            amountRow("Fat", totals.fatG, "g")
-            amountRow("Saturated", totals.saturatedFatG, "g", indented: true)
-            amountRow("Trans", totals.transFatG, "g", indented: true)
-            amountRow("Polyunsaturated", totals.polyunsaturatedFatG, "g", indented: true)
-            amountRow("Monounsaturated", totals.monounsaturatedFatG, "g", indented: true)
-            amountRow("Cholesterol", totals.cholesterolMg, "mg")
-            amountRow("Carbohydrates", totals.carbsG, "g")
-            amountRow("Fiber", totals.fiberG, "g", indented: true)
-            amountRow("Sugar", totals.sugarG, "g", indented: true)
-            amountRow("Protein", totals.proteinG, "g")
-            amountRow("Caffeine", totals.caffeineMg, "mg")
-        }
+    private var hasMacros: Bool {
+        [totals.fatG, totals.saturatedFatG, totals.transFatG,
+         totals.polyunsaturatedFatG, totals.monounsaturatedFatG,
+         totals.cholesterolMg, totals.carbsG, totals.fiberG,
+         totals.sugarG, totals.proteinG, totals.caffeineMg]
+            .contains { $0 != nil }
     }
 
-    /// One micronutrient group; whole section disappears when the day
-    /// recorded nothing in it.
     @ViewBuilder
-    private func microSection(_ title: String, _ group: [Micronutrient]) -> some View {
+    private var macroRows: some View {
+        amountRow("Fat", totals.fatG, "g")
+        amountRow("Saturated", totals.saturatedFatG, "g", indented: true)
+        amountRow("Trans", totals.transFatG, "g", indented: true)
+        amountRow("Polyunsaturated", totals.polyunsaturatedFatG, "g", indented: true)
+        amountRow("Monounsaturated", totals.monounsaturatedFatG, "g", indented: true)
+        amountRow("Cholesterol", totals.cholesterolMg, "mg")
+        amountRow("Carbohydrates", totals.carbsG, "g")
+        amountRow("Fiber", totals.fiberG, "g", indented: true)
+        amountRow("Sugar", totals.sugarG, "g", indented: true)
+        amountRow("Protein", totals.proteinG, "g")
+        amountRow("Caffeine", totals.caffeineMg, "mg")
+    }
+
+    /// One micronutrient group; disappears entirely when the day recorded
+    /// nothing in it.
+    @ViewBuilder
+    private func microGroup(_ title: String, _ group: [Micronutrient]) -> some View {
         let present = group.compactMap { micro in
             totals[micro].map { (micro, $0) }
         }
         if !present.isEmpty {
-            Section(title) {
+            DisclosureGroup(title) {
                 ForEach(present, id: \.0) { micro, value in
                     amountRow(micro.displayName, value, micro.unit.symbol)
                 }

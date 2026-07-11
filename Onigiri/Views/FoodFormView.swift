@@ -221,8 +221,6 @@ struct FoodFormView: View {
                     )
                     dismiss()
                 }
-            } message: {
-                Text("It's saved to your library either way.")
             }
             .sheet(isPresented: $showScanner) {
                 BarcodeScannerSheet { code in

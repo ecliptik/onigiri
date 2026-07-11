@@ -42,6 +42,7 @@ struct TodayView: View {
         case quickLog(QuickActions.QuickLogKind)
         case datePicker
         case portion(PortionTarget)
+        case editEntry(FoodLogEntry)
 
         var id: String {
             switch self {
@@ -49,6 +50,7 @@ struct TodayView: View {
             case .quickLog(let kind): "quickLog-\(kind)"
             case .datePicker: "datePicker"
             case .portion(let target): "portion-\(target.name)"
+            case .editEntry(let entry): "edit-\(entry.id.uuidString)"
             }
         }
     }
@@ -153,6 +155,20 @@ struct TodayView: View {
                                 category: category,
                                 date: DayBounds.logTimestamp(for: model.selectedDate)
                             )
+                        }
+                    }
+                    .presentationDetents([.medium, .large])
+                case .editEntry(let entry):
+                    // Rescale a logged entry: the sheet treats what was
+                    // logged as one serving; confirming replaces the entry
+                    // in place (same time, chosen slot), Undo restores it.
+                    PortionSheet(target: PortionTarget(
+                        name: entry.name, kcal: entry.kcal,
+                        sodiumMg: entry.sodiumMg, nutrients: entry.nutrients,
+                        serving: "as logged", defaultCategory: entry.category
+                    )) { quantity, category in
+                        Task {
+                            await LogActions.editFoodEntry(entry, quantity: quantity, category: category)
                         }
                     }
                     .presentationDetents([.medium, .large])
@@ -531,7 +547,10 @@ struct TodayView: View {
                 .padding(.vertical, 10)
                 .padding(.horizontal, 14)
                 .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
-                .swipeToDelete(active: $rowSwipeActive) {
+                .logRowSwipeActions(
+                    active: $rowSwipeActive,
+                    itemName: "\(Int(entry.oz)) ounce entry"
+                ) {
                     Task { await LogActions.deleteWaterEntry(entry) }
                 }
                 .accessibilityAction(named: "Delete") {
@@ -599,8 +618,15 @@ struct TodayView: View {
                 .padding(.vertical, 10)
                 .padding(.horizontal, 14)
                 .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
-                .swipeToDelete(active: $rowSwipeActive) {
+                .logRowSwipeActions(
+                    active: $rowSwipeActive,
+                    itemName: entry.name,
+                    onEdit: { activeSheet = .editEntry(entry) }
+                ) {
                     Task { await LogActions.deleteFoodEntry(entry) }
+                }
+                .accessibilityAction(named: "Edit") {
+                    activeSheet = .editEntry(entry)
                 }
                 .accessibilityAction(named: "Delete") {
                     Task { await LogActions.deleteFoodEntry(entry) }
@@ -612,54 +638,115 @@ struct TodayView: View {
 }
 
 private extension View {
-    func swipeToDelete(active: Binding<Bool>, onDelete: @escaping () -> Void) -> some View {
-        modifier(SwipeToDelete(rowSwipeActive: active, onDelete: onDelete))
+    func logRowSwipeActions(
+        active: Binding<Bool>,
+        itemName: String,
+        onEdit: (() -> Void)? = nil,
+        onDelete: @escaping () -> Void
+    ) -> some View {
+        modifier(LogRowSwipeActions(
+            rowSwipeActive: active, itemName: itemName,
+            onEdit: onEdit, onDelete: onDelete
+        ))
     }
 }
 
-/// Swipe-left-to-delete for log rows, matching the library lists. Today's
-/// log lives in a ScrollView (collapsible custom sections), so there are
-/// no native swipeActions — this drags the row over a red trash reveal
-/// and deletes past the threshold (Undo stays in the toast). Reports
-/// activity through the binding so the day-paging swipe stands down.
-private struct SwipeToDelete: ViewModifier {
+/// Swipe actions for log rows, matching the library lists: swipe right
+/// (leading) to edit, swipe left (trailing) to delete, full swipes commit
+/// the action outright. Today's log lives in a ScrollView (collapsible
+/// custom sections), so there are no native swipeActions — this drags the
+/// row over button reveals instead, and reports drag activity through the
+/// binding so the day-paging swipe stands down.
+private struct LogRowSwipeActions: ViewModifier {
     @Binding var rowSwipeActive: Bool
+    let itemName: String
+    var onEdit: (() -> Void)?
     let onDelete: () -> Void
-    @State private var offset: CGFloat = 0
 
-    private static let threshold: CGFloat = -80
+    @State private var offset: CGFloat = 0
+    /// Where the row currently rests: 0, or ±buttonWidth when open.
+    @State private var restOffset: CGFloat = 0
+
+    private static let buttonWidth: CGFloat = 72
+    private static let fullSwipe: CGFloat = 220
 
     func body(content: Content) -> some View {
         content
             .offset(x: offset)
-            .background(alignment: .trailing) {
-                if offset < 0 {
-                    HStack {
-                        Spacer()
-                        Image(systemName: "trash.fill")
-                            .foregroundStyle(.white)
-                            .padding(.trailing, 16)
+            .background {
+                ZStack {
+                    if offset > 0, onEdit != nil {
+                        HStack {
+                            actionButton("pencil", tint: .riceToast, width: offset) {
+                                settle(0)
+                                onEdit?()
+                            }
+                            .accessibilityLabel("Edit \(itemName)")
+                            Spacer(minLength: 0)
+                        }
                     }
-                    .frame(width: max(0, -offset))
-                    .frame(maxHeight: .infinity)
-                    .background(.red, in: .rect(cornerRadius: 12))
+                    if offset < 0 {
+                        HStack {
+                            Spacer(minLength: 0)
+                            actionButton("trash.fill", tint: .red, width: -offset) {
+                                settle(0)
+                                onDelete()
+                            }
+                            .accessibilityLabel("Delete \(itemName)")
+                        }
+                    }
                 }
+                .clipShape(.rect(cornerRadius: 12))
+            }
+            .contentShape(.rect)
+            .onTapGesture {
+                if restOffset != 0 { settle(0) }
             }
             .gesture(
                 DragGesture(minimumDistance: 15)
                     .onChanged { value in
                         guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                        offset = min(0, value.translation.width)
-                        if offset < -10 { rowSwipeActive = true }
+                        var next = restOffset + value.translation.width
+                        if onEdit == nil { next = min(0, next) }
+                        offset = next
+                        if abs(offset) > 10 { rowSwipeActive = true }
                     }
                     .onEnded { _ in
-                        let shouldDelete = offset < Self.threshold
-                        withAnimation(.snappy) { offset = 0 }
-                        if shouldDelete { onDelete() }
-                        // Reset after the outer gesture's onEnded has run.
+                        if offset < -Self.fullSwipe {
+                            settle(0)
+                            onDelete()
+                        } else if offset > Self.fullSwipe, let onEdit {
+                            settle(0)
+                            onEdit()
+                        } else if offset < -Self.buttonWidth * 0.6 {
+                            settle(-Self.buttonWidth)
+                        } else if offset > Self.buttonWidth * 0.6, onEdit != nil {
+                            settle(Self.buttonWidth)
+                        } else {
+                            settle(0)
+                        }
+                        // After the outer day-swipe's onEnded has run.
                         DispatchQueue.main.async { rowSwipeActive = false }
                     }
             )
+    }
+
+    private func actionButton(
+        _ symbol: String, tint: Color, width: CGFloat, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .foregroundStyle(.white)
+                .frame(width: max(Self.buttonWidth, width))
+                .frame(maxHeight: .infinity)
+                .background(tint)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func settle(_ value: CGFloat) {
+        withAnimation(.snappy) { offset = value }
+        restOffset = value
     }
 }
 

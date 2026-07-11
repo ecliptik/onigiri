@@ -157,16 +157,42 @@ final class OnigiriUITests: XCTestCase {
             app.swipeUp()
         }
         // A slow press-drag, not swipeLeft(): the flick is too fast for a
-        // DragGesture inside a ScrollView to accumulate samples.
-        waterRow.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5))
-            .press(
-                forDuration: 0.1,
-                thenDragTo: waterRow.coordinate(withNormalizedOffset: CGVector(dx: -2.0, dy: 0.5))
-            )
+        // DragGesture inside a ScrollView to accumulate samples. 300pt
+        // left is past the full-swipe threshold, so it deletes outright.
+        let waterStart = waterRow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        waterStart.press(
+            forDuration: 0.1,
+            thenDragTo: waterStart.withOffset(CGVector(dx: -300, dy: 0))
+        )
         XCTAssertTrue(app.staticTexts["24 / 64 oz water"].waitForExistence(timeout: 10),
                       "Swiping a water row left should delete it")
         XCTAssertTrue(app.navigationBars["Today"].exists,
                       "A row swipe must not page to another day")
+
+        // Swipe RIGHT on a food row reveals Edit (library-consistent);
+        // 150pt opens the reveal without committing. Editing to 2
+        // servings doubles the entry in place.
+        let shakeRow = app.staticTexts["Protein shake"].firstMatch
+        XCTAssertTrue(shakeRow.waitForExistence(timeout: 5))
+        for _ in 0..<2 where !shakeRow.isHittable {
+            app.swipeUp()
+        }
+        let shakeStart = shakeRow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        shakeStart.press(
+            forDuration: 0.1,
+            thenDragTo: shakeStart.withOffset(CGVector(dx: 150, dy: 0))
+        )
+        let editShake = app.buttons["Edit Protein shake"]
+        XCTAssertTrue(editShake.waitForExistence(timeout: 5),
+                      "Right-swiping a log row should reveal Edit")
+        editShake.tap()
+        let twoServings = app.buttons["2"]
+        XCTAssertTrue(twoServings.waitForExistence(timeout: 5),
+                      "Edit should open the portion sheet")
+        twoServings.tap()
+        app.buttons["Log"].tap()
+        XCTAssertTrue(app.staticTexts["360 kcal"].waitForExistence(timeout: 10),
+                      "Editing to 2 servings should double the logged entry")
         // Scroll back up so the minimized tab bar re-expands.
         app.swipeDown()
         let calendarTabAgain = app.tabBars.buttons["Calendar"]

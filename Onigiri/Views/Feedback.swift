@@ -124,6 +124,37 @@ enum LogActions {
         }
     }
 
+    /// Rescale a logged entry (the log row's Edit): replace it with the
+    /// same food at `quantity` servings of what was logged, keeping its
+    /// original time. Undo restores the original entry.
+    static func editFoodEntry(_ entry: FoodLogEntry, quantity: Double, category: FoodCategory) async {
+        do {
+            try await HealthKitService().deleteFoodEntry(id: entry.id)
+            let newId = try await HealthKitService().logFood(
+                name: entry.name,
+                kcal: entry.kcal * quantity,
+                sodiumMg: entry.sodiumMg * quantity,
+                nutrients: entry.nutrients.scaled(by: quantity),
+                category: category,
+                date: entry.date
+            )
+            didMutate(haptic: .success)
+            ToastCenter.shared.show("Updated \(entry.name) ✓") {
+                Task {
+                    try? await HealthKitService().deleteFoodEntry(id: newId)
+                    try? await HealthKitService().logFood(
+                        name: entry.name, kcal: entry.kcal, sodiumMg: entry.sodiumMg,
+                        nutrients: entry.nutrients, category: entry.category,
+                        date: entry.date
+                    )
+                    didMutate(haptic: nil)
+                }
+            }
+        } catch {
+            ToastCenter.shared.show("Couldn't update: \(error.localizedDescription)")
+        }
+    }
+
     /// Removes a log entry; Undo re-logs the same values at the same time
     /// (trans fat is the one detail HealthKit can't give back).
     static func deleteFoodEntry(_ entry: FoodLogEntry) async {

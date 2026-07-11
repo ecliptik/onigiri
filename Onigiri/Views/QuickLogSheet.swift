@@ -315,7 +315,12 @@ struct QuickLogSheet: View {
                 name: entry.name,
                 detail: entry.date.formatted(.relative(presentation: .named)),
                 kcal: entry.kcal,
-                sodiumMg: entry.sodiumMg
+                sodiumMg: entry.sodiumMg,
+                // History entries don't know what they were; a name still
+                // in the meal library is the best available signal.
+                isMeal: meals.contains {
+                    $0.name.localizedCaseInsensitiveCompare(entry.name) == .orderedSame
+                }
             )
             LogButton(name: entry.name) {
                 portionTarget = recentTarget(for: entry)

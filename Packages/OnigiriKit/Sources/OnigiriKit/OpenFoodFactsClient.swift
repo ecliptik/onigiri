@@ -29,11 +29,15 @@ public struct ScannedProduct: Sendable, Equatable {
 public enum OpenFoodFactsError: Error, LocalizedError {
     case notFound
     case badResponse
+    /// 429/503 — OpenFoodFacts rate-limits search (~10/min per IP) and
+    /// its endpoints shed load with 503s. Waiting genuinely helps.
+    case throttled
 
     public var errorDescription: String? {
         switch self {
         case .notFound: "That barcode isn't in OpenFoodFacts."
         case .badResponse: "OpenFoodFacts didn't respond as expected."
+        case .throttled: "OpenFoodFacts is busy — wait a minute and try again."
         }
     }
 }
@@ -74,11 +78,41 @@ public struct OpenFoodFactsClient: Sendable {
     /// search.openfoodfacts.org service first (the legacy cgi endpoint
     /// throttles with 503s under load), but that service has real outages
     /// (502s observed 2026-07-10) — the legacy endpoint is the fallback.
-    public func search(query: String, limit: Int = 20) async throws -> [SearchResult] {
+    /// Default limit of 10: each result row lazily fetches its full
+    /// product for the kcal preview, so results ≈ follow-up requests
+    /// against the same rate limit.
+    public func search(query: String, limit: Int = 10) async throws -> [SearchResult] {
+        // Three passes with exponential backoff (0s, 1s, 2s) before the
+        // user sees an error — OFF's 503s are often momentary.
+        var lastError: Error = OpenFoodFactsError.badResponse
+        for attempt in 0..<3 {
+            if attempt > 0 {
+                try await Task.sleep(for: .seconds(Double(1 << (attempt - 1))))
+            }
+            do {
+                return try await searchOnce(query: query, limit: limit)
+            } catch {
+                lastError = error
+            }
+        }
+        throw lastError
+    }
+
+    private func searchOnce(query: String, limit: Int) async throws -> [SearchResult] {
+        let primaryError: Error
         do {
             return try await searchALicious(query: query, limit: limit)
         } catch {
+            primaryError = error
+        }
+        do {
             return try await legacySearch(query: query, limit: limit)
+        } catch {
+            // Both legs down. "Wait a minute" is actionable, "failed"
+            // isn't — surface throttling if either leg reported it.
+            if case OpenFoodFactsError.throttled = error { throw error }
+            if case OpenFoodFactsError.throttled = primaryError { throw primaryError }
+            throw error
         }
     }
 
@@ -87,6 +121,9 @@ public struct OpenFoodFactsClient: Sendable {
         components.queryItems = [
             .init(name: "q", value: query),
             .init(name: "page_size", value: String(limit)),
+            // Rank/return fields in the user's language, not whichever
+            // language edited the database last.
+            .init(name: "langs", value: Self.languageCode),
         ]
         guard let url = components.url else { throw OpenFoodFactsError.badResponse }
         let data = try await fetch(url)
@@ -94,7 +131,9 @@ public struct OpenFoodFactsClient: Sendable {
     }
 
     private func legacySearch(query: String, limit: Int) async throws -> [SearchResult] {
-        var components = URLComponents(string: "https://world.openfoodfacts.org/cgi/search.pl")!
+        var components = URLComponents(
+            string: "https://\(Self.regionSubdomain).openfoodfacts.org/cgi/search.pl"
+        )!
         components.queryItems = [
             .init(name: "search_terms", value: query),
             .init(name: "search_simple", value: "1"),
@@ -102,6 +141,7 @@ public struct OpenFoodFactsClient: Sendable {
             .init(name: "json", value: "1"),
             .init(name: "page_size", value: String(limit)),
             .init(name: "fields", value: "code,product_name,brands"),
+            .init(name: "lc", value: Self.languageCode),
         ]
         guard let url = components.url else { throw OpenFoodFactsError.badResponse }
         let data = try await fetch(url)
@@ -114,8 +154,20 @@ public struct OpenFoodFactsClient: Sendable {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw OpenFoodFactsError.badResponse }
         guard http.statusCode != 404 else { throw OpenFoodFactsError.notFound }
+        guard http.statusCode != 429, http.statusCode != 503 else { throw OpenFoodFactsError.throttled }
         guard http.statusCode == 200 else { throw OpenFoodFactsError.badResponse }
         return data
+    }
+
+    /// OFF country subdomains scope search results to products sold in
+    /// the user's region — without this, "roasted potatoes" surfaces
+    /// whatever language edited the database last.
+    private static var regionSubdomain: String {
+        Locale.current.region?.identifier.lowercased() ?? "world"
+    }
+
+    private static var languageCode: String {
+        Locale.current.language.languageCode?.identifier ?? "en"
     }
 
     static func parse(data: Data, barcode: String) throws -> ScannedProduct {

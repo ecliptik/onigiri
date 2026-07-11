@@ -40,7 +40,11 @@ final class OnlineFoodSearch {
             }
         } catch {
             guard lastQuery == trimmed else { return }
-            message = "Online search failed: \(error.localizedDescription)"
+            // OFF errors already read as full sentences ("OpenFoodFacts
+            // is busy — wait a minute…"); don't prefix them with "failed".
+            message = error is OpenFoodFactsError
+                ? error.localizedDescription
+                : "Online search failed: \(error.localizedDescription)"
         }
         isSearching = false
     }

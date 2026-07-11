@@ -116,6 +116,36 @@ struct OpenFoodFactsTests {
         #expect(results[1].brand == nil)
     }
 
+    @Test func ranksPhraseMatchesAboveWordMatches() {
+        func result(_ name: String) -> OpenFoodFactsClient.SearchResult {
+            .init(barcode: name, name: name, brand: nil)
+        }
+        let ranked = OpenFoodFactsClient.rank([
+            result("Honey Bunches of Oats Honey Roasted"),
+            result("Ready Rice Roasted Chicken"),
+            result("Crispy Roasted Potatoes"),
+            result("Potatoes au Gratin"),
+        ], query: "Roasted Potatoes")
+        // Whole phrase wins; the one-word matches tie and keep server order.
+        #expect(ranked.map(\.name) == [
+            "Crispy Roasted Potatoes",
+            "Honey Bunches of Oats Honey Roasted",
+            "Ready Rice Roasted Chicken",
+            "Potatoes au Gratin",
+        ])
+    }
+
+    @Test func rankKeepsServerOrderForTies() {
+        func result(_ name: String) -> OpenFoodFactsClient.SearchResult {
+            .init(barcode: name, name: name, brand: nil)
+        }
+        let ranked = OpenFoodFactsClient.rank(
+            [result("Roasted A"), result("Roasted B"), result("Roasted C")],
+            query: "roasted almonds"
+        )
+        #expect(ranked.map(\.name) == ["Roasted A", "Roasted B", "Roasted C"])
+    }
+
     @Test func parsesSaturatedTransFatAndCholesterol() throws {
         let json = """
         {"status":1,"product":{"product_name":"Butter","serving_size":"1 tbsp",

@@ -14,6 +14,9 @@ final class OnlineFoodSearch {
     private(set) var products: [String: ScannedProduct] = [:]
     private(set) var detailFailures: Set<String> = []
     private(set) var fetchingCode: String?
+    /// "Did you mean…" — search fields never autocorrect on iOS (system
+    /// behavior), so misspellings get a tappable suggestion instead.
+    private(set) var suggestion: String?
     private var detailsInFlight: Set<String> = []
 
     private let client = OpenFoodFactsClient()
@@ -31,6 +34,7 @@ final class OnlineFoodSearch {
         isSearching = true
         message = nil
         results = []
+        suggestion = Self.spellCorrected(trimmed)
         do {
             let hits = try await client.search(query: trimmed)
             guard lastQuery == trimmed else { return } // superseded
@@ -53,7 +57,32 @@ final class OnlineFoodSearch {
         lastQuery = ""
         results = []
         message = nil
+        suggestion = nil
         isSearching = false
+    }
+
+    /// The query with each misspelled word replaced by the system spell
+    /// checker's best guess; nil when nothing would change.
+    private static func spellCorrected(_ query: String) -> String? {
+        let checker = UITextChecker()
+        let language = Locale.current.identifier
+        var corrected: [String] = []
+        var changed = false
+        for word in query.split(separator: " ").map(String.init) {
+            let range = NSRange(location: 0, length: word.utf16.count)
+            let misspelled = checker.rangeOfMisspelledWord(
+                in: word, range: range, startingAt: 0, wrap: false, language: language
+            )
+            if misspelled.location != NSNotFound,
+               let guess = checker.guesses(forWordRange: misspelled, in: word, language: language)?.first {
+                corrected.append((word as NSString).replacingCharacters(in: misspelled, with: guess))
+                changed = true
+            } else {
+                corrected.append(word)
+            }
+        }
+        let result = corrected.joined(separator: " ")
+        return changed && result.lowercased() != query.lowercased() ? result : nil
     }
 
     /// Unstructured on purpose: the row's .task would cancel the fetch
@@ -171,6 +200,13 @@ struct OnlineResultsSection: View {
                 } label: {
                     Label("Search online for “\(query.trimmingCharacters(in: .whitespaces))”",
                           systemImage: "magnifyingglass")
+                }
+            }
+            if let suggestion = search.suggestion {
+                Button {
+                    Task { await search.search(suggestion) }
+                } label: {
+                    Label("Did you mean “\(suggestion)”?", systemImage: "text.magnifyingglass")
                 }
             }
             if let message = search.message {

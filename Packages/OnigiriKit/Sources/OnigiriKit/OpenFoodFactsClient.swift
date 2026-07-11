@@ -98,15 +98,37 @@ public struct OpenFoodFactsClient: Sendable {
         throw lastError
     }
 
+    /// Both endpoints match loosely ("roasted potatoes" surfaces "honey
+    /// roasted oats"), so results re-rank client-side: whole-phrase
+    /// matches first, then by how many query words the name contains,
+    /// keeping the server's order for ties.
+    static func rank(_ results: [SearchResult], query: String) -> [SearchResult] {
+        let phrase = query.lowercased().trimmingCharacters(in: .whitespaces)
+        let words = phrase.split(separator: " ").map(String.init)
+        guard !words.isEmpty else { return results }
+        func score(_ result: SearchResult) -> Int {
+            let name = result.name.lowercased()
+            var value = words.count { name.contains($0) } * 10
+            if name.contains(phrase) { value += 100 }
+            return value
+        }
+        return results.enumerated()
+            .map { (offset: $0.offset, result: $0.element, score: score($0.element)) }
+            .sorted {
+                $0.score != $1.score ? $0.score > $1.score : $0.offset < $1.offset
+            }
+            .map(\.result)
+    }
+
     private func searchOnce(query: String, limit: Int) async throws -> [SearchResult] {
         let primaryError: Error
         do {
-            return try await searchALicious(query: query, limit: limit)
+            return try await Self.rank(searchALicious(query: query, limit: limit), query: query)
         } catch {
             primaryError = error
         }
         do {
-            return try await legacySearch(query: query, limit: limit)
+            return try await Self.rank(legacySearch(query: query, limit: limit), query: query)
         } catch {
             // Both legs down. "Wait a minute" is actionable, "failed"
             // isn't — surface throttling if either leg reported it.

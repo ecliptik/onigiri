@@ -291,52 +291,36 @@ struct CalendarView: View {
         return deficit >= 0 ? "\(deficit) deficit" : "\(-deficit) surplus"
     }
 
+    /// Highlights only — the full month story (deficit, predicted vs
+    /// scale, best streak) lives one tap deeper. The screen was getting
+    /// crowded with all six stats on the card.
     private var summaryCard: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 0) {
-                stat("🍙 \(model.earnedCount(inMonthOf: displayedMonth))", caption: "this month")
-                Divider().frame(height: 36)
-                stat(
-                    "\(model.streak) \(model.streak == 1 ? "day" : "days")",
-                    caption: "current streak",
-                    color: model.streak > 0 ? .green : .secondary
-                )
+        NavigationLink {
+            MonthDetailView(model: model, month: displayedMonth)
+        } label: {
+            VStack(spacing: 8) {
+                HStack(spacing: 0) {
+                    stat("🍙 \(model.earnedCount(inMonthOf: displayedMonth))", caption: "this month")
+                    Divider().frame(height: 36)
+                    stat(
+                        "\(model.streak) \(model.streak == 1 ? "day" : "days")",
+                        caption: "current streak",
+                        color: model.streak > 0 ? .green : .secondary
+                    )
+                }
+                HStack(spacing: 4) {
+                    Text("Month details")
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
-            HStack(spacing: 0) {
-                stat(
-                    model.totalDeficit(inMonthOf: displayedMonth).map {
-                        "\(Int($0.rounded())) kcal"
-                    } ?? "—",
-                    caption: "total deficit, this month"
-                )
-                Divider().frame(height: 36)
-                stat(
-                    "\(model.bestStreak) \(model.bestStreak == 1 ? "day" : "days")",
-                    caption: "best streak"
-                )
-            }
-            // Predicted vs real: the month's deficit ÷ 3,500 next to what
-            // the scale's 7-day average actually did over the same window.
-            HStack(spacing: 0) {
-                stat(
-                    model.predictedLb(inMonthOf: displayedMonth).map {
-                        "≈ \(signedLb($0))"
-                    } ?? "—",
-                    caption: "predicted, by deficit"
-                )
-                Divider().frame(height: 36)
-                stat(
-                    model.actualLb(inMonthOf: displayedMonth).map(signedLb) ?? "—",
-                    caption: "scale change, this month"
-                )
-            }
+            .padding(.vertical, 12)
+            .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
         }
-        .padding(.vertical, 14)
-        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
-    }
-
-    private func signedLb(_ value: Double) -> String {
-        "\(value.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always(includingZero: false)))) lb"
+        .buttonStyle(.plain)
+        .accessibilityHint("Shows the month's deficit, weight change, and records")
     }
 
     private func stat(_ value: String, caption: String, color: Color = .primary) -> some View {
@@ -352,6 +336,55 @@ struct CalendarView: View {
         .frame(maxWidth: .infinity)
     }
 
+}
+
+/// The browsed month's full story, pushed from the summary card: outcome
+/// totals, predicted vs scale weight change, and all-time records.
+private struct MonthDetailView: View {
+    let model: CalendarModel
+    let month: Date
+
+    var body: some View {
+        List {
+            Section("This month") {
+                LabeledContent("Days goal met") {
+                    Text("🍙 \(model.earnedCount(inMonthOf: month))")
+                }
+                LabeledContent("Total deficit") {
+                    Text(model.totalDeficit(inMonthOf: month).map {
+                        "\(Int($0.rounded())) kcal"
+                    } ?? "—")
+                    .monospacedDigit()
+                }
+                LabeledContent("Predicted, by deficit") {
+                    Text(model.predictedLb(inMonthOf: month).map { "≈ \(signedLb($0))" } ?? "—")
+                        .monospacedDigit()
+                }
+                LabeledContent("Scale change") {
+                    Text(model.actualLb(inMonthOf: month).map(signedLb) ?? "—")
+                        .monospacedDigit()
+                }
+                Text("Predicted spends the month's net deficit at 3,500 kcal per lb; scale change compares 7-day averages, so sparse weigh-ins show —.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Streaks") {
+                LabeledContent("Current") {
+                    Text("\(model.streak) \(model.streak == 1 ? "day" : "days")")
+                        .foregroundStyle(model.streak > 0 ? .green : .secondary)
+                }
+                LabeledContent("Best ever") {
+                    Text("\(model.bestStreak) \(model.bestStreak == 1 ? "day" : "days")")
+                }
+            }
+        }
+        .navigationTitle(month.formatted(.dateTime.month(.wide).year()))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func signedLb(_ value: Double) -> String {
+        "\(value.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always(includingZero: false)))) lb"
+    }
 }
 
 private struct DayCell: View {

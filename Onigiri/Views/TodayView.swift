@@ -53,9 +53,12 @@ struct TodayView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Layout.screenSpacing) {
-                    balanceHeadline
+                    // Every big metric opens the day's nutrition detail —
+                    // tapping the headline or goal card should not feel
+                    // different from tapping the meters below them.
+                    nutritionLink { balanceHeadline }
                     hydrationRow
-                    goalCard
+                    nutritionLink { goalCard }
                     nutritionDetailLink
                     loggedSection
 
@@ -309,6 +312,17 @@ struct TodayView: View {
             daysRemaining: days,
             averageDailyBurn: model.expectedDailyBurnKcal
         )
+    }
+
+    /// Push to the day's full nutrient breakdown from any big metric.
+    private func nutritionLink(@ViewBuilder _ content: () -> some View) -> some View {
+        NavigationLink {
+            DayNutritionView(model: model)
+        } label: {
+            content()
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Shows the day's full nutrient breakdown")
     }
 
     /// The meter grid doubles as the door to the day's full nutrient

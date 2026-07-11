@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import UIKit
 import UserNotifications
+import WidgetKit
 import OnigiriKit
 
 /// App-wide settings: appearance choices and data portability.
@@ -10,6 +11,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
+    @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
     @AppStorage(SharedStore.waterServingKey, store: SharedStore.defaults) private var waterServingOz = 12.0
@@ -26,6 +28,20 @@ struct SettingsView: View {
     @State private var showImporter = false
     @State private var exportDocument: LibraryJSONDocument?
     @State private var transferMessage: String?
+
+    /// "Choose your own…" flow: which icon slot the emoji prompt edits,
+    /// what was selected before (to restore on cancel/invalid), and the
+    /// typed value.
+    @State private var customIconSlot: IconSlot?
+    @State private var customIconPrevious = ""
+    @State private var customEmojiInput = ""
+
+    enum IconSlot: String, Identifiable {
+        case food = "Food icon"
+        case water = "Water icon"
+        case reward = "Goal badge"
+        var id: String { rawValue }
+    }
 
     /// All opt-in, fixed times (see the footer); permission is requested
     /// the first time a toggle turns on, never at launch.
@@ -132,6 +148,86 @@ struct SettingsView: View {
         ("ice", "Ice"),
     ]
 
+    private static let rewardIconOptions: [(tag: String, name: String)] = [
+        ("onigiri", "Onigiri"),
+        ("trophy", "Trophy"),
+        ("medal", "Gold Medal"),
+        ("star", "Star"),
+        ("fire", "Fire"),
+        ("muscle", "Strong"),
+        ("target", "Bullseye"),
+        ("sparkles", "Sparkles"),
+    ]
+
+    /// Appended to every icon picker: the current custom emoji (when one
+    /// is set — otherwise the picker would show no selection) and the
+    /// "Choose your own…" entry that opens the emoji prompt.
+    @ViewBuilder
+    private func customIconRows(current: String) -> some View {
+        if SharedStore.isCustomEmoji(current) {
+            HStack(spacing: 10) {
+                Text(current)
+                    .frame(width: 28)
+                Text("Custom")
+            }
+            .tag(current)
+        }
+        HStack(spacing: 10) {
+            Image(systemName: "face.smiling")
+                .frame(width: 28)
+                .foregroundStyle(.secondary)
+            Text("Choose your own…")
+        }
+        .tag("custom")
+    }
+
+    /// Selecting "custom" opens the prompt — prefilled with the slot's
+    /// current emoji, which the field selects so one keystroke replaces
+    /// it. Any real selection syncs to the watch like before.
+    private func iconChanged(_ slot: IconSlot, from old: String, to new: String) {
+        if new == "custom" {
+            customIconPrevious = old
+            customEmojiInput = resolvedEmoji(for: slot, raw: old)
+            customIconSlot = slot
+        } else {
+            PhoneSyncService.shared.push(from: context)
+        }
+    }
+
+    private func commitCustomEmoji(for slot: IconSlot) {
+        let value = customEmojiInput.trimmingCharacters(in: .whitespaces)
+        if SharedStore.isCustomEmoji(value) {
+            setIcon(slot, to: value)
+        } else {
+            setIcon(slot, to: customIconPrevious)
+            ToastCenter.shared.show("One emoji only — keeping the old icon.")
+        }
+    }
+
+    private func resolvedEmoji(for slot: IconSlot, raw: String) -> String {
+        switch slot {
+        case .food: SharedStore.foodEmoji(for: raw)
+        case .water: SharedStore.waterEmoji(for: raw)
+        case .reward: SharedStore.rewardEmoji(for: raw)
+        }
+    }
+
+    private func iconRaw(for slot: IconSlot) -> String {
+        switch slot {
+        case .food: foodIcon
+        case .water: waterIcon
+        case .reward: rewardIcon
+        }
+    }
+
+    private func setIcon(_ slot: IconSlot, to value: String) {
+        switch slot {
+        case .food: foodIcon = value
+        case .water: waterIcon = value
+        case .reward: rewardIcon = value
+        }
+    }
+
     private var backupCaption: String {
         // Files names the local location after the device ("On My iPad").
         let location = "Files → On My \(UIDevice.current.model) → Onigiri"
@@ -142,46 +238,94 @@ struct SettingsView: View {
         return "Last backup \(stamp), \(location)."
     }
 
+    // Its own property, like dataSection: the icon pickers pushed the
+    // inline Form past what the type-checker will solve in reasonable time.
+    private var appearanceSection: some View {
+        Section("Appearance") {
+            // navigationLink style: menu pickers strip both image
+            // attachments and icon colors from their rows; a pushed
+            // list renders real SwiftUI rows — true colors, aligned
+            // icon column.
+            Picker("Food icon", selection: $foodIcon) {
+                ForEach(Self.foodIconOptions, id: \.tag) { option in
+                    HStack(spacing: 10) {
+                        FoodIconView(raw: option.tag)
+                            .frame(width: 28)
+                        Text(option.name)
+                    }
+                    .tag(option.tag)
+                }
+                customIconRows(current: foodIcon)
+            }
+            .pickerStyle(.navigationLink)
+            Picker("Water icon", selection: $waterIcon) {
+                ForEach(Self.waterIconOptions, id: \.tag) { option in
+                    HStack(spacing: 10) {
+                        WaterIconView(raw: option.tag)
+                            .frame(width: 28)
+                        Text(option.name)
+                    }
+                    .tag(option.tag)
+                }
+                customIconRows(current: waterIcon)
+            }
+            .pickerStyle(.navigationLink)
+            Picker("Goal badge", selection: $rewardIcon) {
+                ForEach(Self.rewardIconOptions, id: \.tag) { option in
+                    HStack(spacing: 10) {
+                        Text(SharedStore.rewardEmoji(for: option.tag))
+                            .frame(width: 28)
+                        Text(option.name)
+                    }
+                    .tag(option.tag)
+                }
+                customIconRows(current: rewardIcon)
+            }
+            .pickerStyle(.navigationLink)
+            Picker("Calorie display", selection: $balanceStyle) {
+                Text("kcal balance").tag("balance")
+                Text("kcal left").tag("remaining")
+            }
+            Toggle("Progress gauges", isOn: $progressGauges)
+            // These hide the metrics themselves on Today, not
+            // their fill bars (that misread cost a debug session).
+            Toggle("Show sodium", isOn: $showSodium)
+            Toggle("Show water", isOn: $showWater)
+        }
+        // The icon plumbing lives here, off the body's modifier chain —
+        // adding it there pushed the whole Form past the type-checker.
+        .onChange(of: foodIcon) { old, new in
+            iconChanged(.food, from: old, to: new)
+        }
+        .onChange(of: waterIcon) { old, new in
+            iconChanged(.water, from: old, to: new)
+        }
+        .onChange(of: rewardIcon) { old, new in
+            iconChanged(.reward, from: old, to: new)
+            // The gauge widgets and complications render the badge.
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+        .sheet(item: $customIconSlot) { slot in
+            EmojiPromptSheet(
+                title: slot.rawValue,
+                input: $customEmojiInput,
+                onUse: { commitCustomEmoji(for: slot); customIconSlot = nil },
+                onCancel: { customIconSlot = nil }
+            )
+            // Swiping the sheet away counts as Cancel; commit already
+            // rewrote the selection, so restoring is a no-op then.
+            .onDisappear {
+                if iconRaw(for: slot) == "custom" {
+                    setIcon(slot, to: customIconPrevious)
+                }
+            }
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
-                Section("Appearance") {
-                    // navigationLink style: menu pickers strip both image
-                    // attachments and icon colors from their rows; a pushed
-                    // list renders real SwiftUI rows — true colors, aligned
-                    // icon column.
-                    Picker("Food icon", selection: $foodIcon) {
-                        ForEach(Self.foodIconOptions, id: \.tag) { option in
-                            HStack(spacing: 10) {
-                                FoodIconView(raw: option.tag)
-                                    .frame(width: 28)
-                                Text(option.name)
-                            }
-                            .tag(option.tag)
-                        }
-                    }
-                    .pickerStyle(.navigationLink)
-                    Picker("Water icon", selection: $waterIcon) {
-                        ForEach(Self.waterIconOptions, id: \.tag) { option in
-                            HStack(spacing: 10) {
-                                WaterIconView(raw: option.tag)
-                                    .frame(width: 28)
-                                Text(option.name)
-                            }
-                            .tag(option.tag)
-                        }
-                    }
-                    .pickerStyle(.navigationLink)
-                    Picker("Calorie display", selection: $balanceStyle) {
-                        Text("kcal balance").tag("balance")
-                        Text("kcal left").tag("remaining")
-                    }
-                    Toggle("Progress gauges", isOn: $progressGauges)
-                    // These hide the metrics themselves on Today, not
-                    // their fill bars (that misread cost a debug session).
-                    Toggle("Show sodium", isOn: $showSodium)
-                    Toggle("Show water", isOn: $showWater)
-                }
+                appearanceSection
 
                 remindersSection
 
@@ -218,13 +362,6 @@ struct SettingsView: View {
                 // The watch mirrors this setting; sync it right away.
                 PhoneSyncService.shared.push(from: context)
             }
-            .onChange(of: foodIcon) {
-                // Icon personalization syncs to the watch too.
-                PhoneSyncService.shared.push(from: context)
-            }
-            .onChange(of: waterIcon) {
-                PhoneSyncService.shared.push(from: context)
-            }
             .onChange(of: waterServingOz) {
                 // The watch's water button uses the serving size too.
                 PhoneSyncService.shared.push(from: context)
@@ -242,8 +379,9 @@ struct SettingsView: View {
                 // any reminder switched on.
                 let status = await UNUserNotificationCenter.current()
                     .notificationSettings().authorizationStatus
-                notificationsDenied = status == .denied
-                    && (remindMeals || remindWater || remindStreak)
+                let denied: Bool = status == .denied
+                let anyReminderOn: Bool = remindMeals || remindWater || remindStreak
+                notificationsDenied = denied && anyReminderOn
             }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

@@ -10,12 +10,18 @@ import OnigiriKit
 final class OnlineFoodSearch {
     private(set) var results: [OpenFoodFactsClient.SearchResult] = []
     private(set) var isSearching = false
+    private(set) var isLoadingMore = false
     private(set) var message: String?
+    /// Shown below the rows when paging stopped early (throttled).
+    private(set) var moreMessage: String?
     private(set) var products: [String: ScannedProduct] = [:]
     private(set) var detailFailures: Set<String> = []
     private(set) var fetchingCode: String?
     private var detailsInFlight: Set<String> = []
+    private var page = 1
+    private var hasMore = false
 
+    private static let pageSize = 10
     private let client = OpenFoodFactsClient()
     private(set) var lastQuery = ""
 
@@ -30,11 +36,15 @@ final class OnlineFoodSearch {
         lastQuery = trimmed
         isSearching = true
         message = nil
+        moreMessage = nil
         results = []
+        page = 1
+        hasMore = false
         do {
-            let hits = try await client.search(query: trimmed)
+            let hits = try await client.search(query: trimmed, limit: Self.pageSize)
             guard lastQuery == trimmed else { return } // superseded
             results = hits
+            hasMore = hits.count == Self.pageSize
             if hits.isEmpty {
                 message = "No online matches — try different words."
             }
@@ -51,11 +61,42 @@ final class OnlineFoodSearch {
         isSearching = false
     }
 
+    /// The next page, triggered when the last row scrolls into view. A
+    /// full page means there may be another; a short/empty page — or a
+    /// throttle — ends paging until the next fresh search.
+    func loadMore() async {
+        guard hasMore, !isSearching, !isLoadingMore, hasSearched else { return }
+        let query = lastQuery
+        isLoadingMore = true
+        do {
+            let hits = try await client.search(query: query, limit: Self.pageSize, page: page + 1)
+            guard lastQuery == query else { return } // superseded
+            page += 1
+            hasMore = hits.count == Self.pageSize
+            // OFF pages can shift between requests — drop repeats.
+            let known = Set(results.map(\.barcode))
+            let fresh = hits.filter { !known.contains($0.barcode) }
+            if fresh.isEmpty && !hits.isEmpty { hasMore = false }
+            results += fresh
+        } catch {
+            guard lastQuery == query else { return }
+            hasMore = false
+            moreMessage = error as? OpenFoodFactsError == .throttled
+                ? "OpenFoodFacts is busy — try again in a minute."
+                : "Couldn't load more results."
+        }
+        isLoadingMore = false
+    }
+
     func clear() {
         lastQuery = ""
         results = []
         message = nil
+        moreMessage = nil
         isSearching = false
+        isLoadingMore = false
+        page = 1
+        hasMore = false
     }
 
     /// Unstructured on purpose: the row's .task would cancel the fetch
@@ -184,6 +225,23 @@ struct OnlineResultsSection: View {
                 OnlineResultRow(result: result, search: search) {
                     Task { onPick(await search.product(for: result)) }
                 }
+                .onAppear {
+                    // Reaching the last row pulls the next page.
+                    if result.id == search.results.last?.id {
+                        Task { await search.loadMore() }
+                    }
+                }
+            }
+            if search.isLoadingMore {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Searching…")
+                        .foregroundStyle(.secondary)
+                }
+            } else if let more = search.moreMessage {
+                Text(more)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
     }

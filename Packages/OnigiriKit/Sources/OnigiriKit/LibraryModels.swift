@@ -173,6 +173,7 @@ public enum SharedStore {
     public static let waterGoalKey = "waterGoalOz"
     public static let waterIconKey = "waterIcon"
     public static let foodIconKey = "foodIcon"
+    public static let rewardIconKey = "rewardIcon"
     public static let sodiumLimitKey = "sodiumLimitMg"
     public static let balanceStyleKey = "balanceStyle"
     public static let progressGaugesKey = "progressGauges"
@@ -194,7 +195,25 @@ public enum SharedStore {
         return value > 0 ? value : 2300
     }
 
-    /// Water icon options; 💧 drop is the default.
+    /// One visible character that presents as emoji — keeps letters and
+    /// digits out of the icon slots while allowing any real emoji
+    /// (multi-scalar sequences like flags and ZWJ families included).
+    public static func isCustomEmoji(_ value: String) -> Bool {
+        guard value.count == 1, let first = value.unicodeScalars.first else { return false }
+        return first.properties.isEmoji
+            && (first.properties.isEmojiPresentation
+                || value.unicodeScalars.contains { $0.properties.isVariationSelector }
+                || value.unicodeScalars.count > 1)
+    }
+
+    /// An icon slot's raw value that isn't a preset tag: the user's own
+    /// emoji, stored verbatim.
+    static func customEmoji(_ raw: String?) -> String? {
+        raw.flatMap { isCustomEmoji($0) ? $0 : nil }
+    }
+
+    /// Water icon options; 💧 drop is the default; any custom emoji the
+    /// user typed is stored as itself.
     public static func waterEmoji(for raw: String?) -> String {
         switch raw {
         case "wave": "🌊"
@@ -202,7 +221,7 @@ public enum SharedStore {
         case "tap": "🚰"
         case "pour": "🫗"
         case "ice": "🧊"
-        default: "💧"
+        default: customEmoji(raw) ?? "💧"
         }
     }
 
@@ -219,12 +238,32 @@ public enum SharedStore {
         case "bento": "🍱"
         case "noodles": "🍜"
         case "fork": "🍴"
-        default: "🍎"
+        default: customEmoji(raw) ?? "🍎"
         }
     }
 
     public static var foodEmoji: String {
         foodEmoji(for: defaults.string(forKey: foodIconKey))
+    }
+
+    /// The earned-goal badge shown on Today, the calendar, and the
+    /// complications; 🍙 by default. The onigiri stays the app's logo and
+    /// name regardless of this choice.
+    public static func rewardEmoji(for raw: String?) -> String {
+        switch raw {
+        case "trophy": "🏆"
+        case "medal": "🥇"
+        case "star": "⭐️"
+        case "fire": "🔥"
+        case "muscle": "💪"
+        case "target": "🎯"
+        case "sparkles": "✨"
+        default: customEmoji(raw) ?? "🍙"
+        }
+    }
+
+    public static var rewardEmoji: String {
+        rewardEmoji(for: defaults.string(forKey: rewardIconKey))
     }
 
     /// ONE shared instance, deliberately. This was a computed property

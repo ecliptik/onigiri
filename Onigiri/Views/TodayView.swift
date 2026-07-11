@@ -125,6 +125,7 @@ struct TodayView: View {
                 .padding(.bottom, 24)
             }
             .readableContentWidth()
+            .expandsTabBarAtTop()
             .navigationTitle(dayTitle)
             // Tapping the title offers fast day jumps (Calendar-style
             // picker) and a way home from deep browsing.
@@ -928,6 +929,7 @@ struct DailyGoalCard: View {
     let intakeKcal: Double
     let plan: CalorieBudget.Plan
     var showsRemaining = true
+    @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
 
     private var progress: Double {
         plan.requiredDailyDeficit > 0 ? bankedKcal / plan.requiredDailyDeficit : 1
@@ -938,7 +940,7 @@ struct DailyGoalCard: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            OnigiriGauge(progress: progress)
+            OnigiriGauge(progress: progress, emoji: SharedStore.rewardEmoji(for: rewardIcon))
                 .frame(width: 84, height: 84)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -965,7 +967,7 @@ struct DailyGoalCard: View {
                             .foregroundStyle(.orange)
                     }
                 } else if progress >= 1 {
-                    Text("🍙 earned")
+                    Text("\(SharedStore.rewardEmoji(for: rewardIcon)) earned")
                         .font(.subheadline)
                         .foregroundStyle(.green)
                 } else {

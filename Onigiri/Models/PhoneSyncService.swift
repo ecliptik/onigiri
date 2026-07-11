@@ -42,6 +42,7 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         let balanceStyle = SharedStore.defaults.string(forKey: SharedStore.balanceStyleKey) ?? "balance"
         let foodIcon = SharedStore.defaults.string(forKey: SharedStore.foodIconKey) ?? "sfFork"
         let waterIcon = SharedStore.defaults.string(forKey: SharedStore.waterIconKey) ?? "sfDrop"
+        let rewardIcon = SharedStore.defaults.string(forKey: SharedStore.rewardIconKey) ?? "onigiri"
         WatchSync.store(SyncPayload(
             meals: meals,
             goal: goal.map(GoalUpdate.set) ?? .clear,
@@ -49,7 +50,8 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
             waterGoalOz: SharedStore.waterGoalOz,
             balanceStyle: balanceStyle,
             foodIcon: foodIcon,
-            waterIcon: waterIcon
+            waterIcon: waterIcon,
+            rewardIcon: rewardIcon
         ))
 
         guard WCSession.isSupported(),
@@ -64,7 +66,8 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
             waterGoalOz: SharedStore.waterGoalOz,
             balanceStyle: balanceStyle,
             foodIcon: foodIcon,
-            waterIcon: waterIcon
+            waterIcon: waterIcon,
+            rewardIcon: rewardIcon
         ))
     }
 

@@ -972,6 +972,104 @@ final class OnigiriUITests: XCTestCase {
         add(attachment)
     }
 
+    /// Reward badge + search paging (opt-in via BADGE_PAGING=1, seeded
+    /// sims): swaps the goal badge to the trophy preset, then to a custom
+    /// emoji, checking the calendar's "Goal met" line follows; then pages
+    /// the online search past the first 10 results (or hits the graceful
+    /// throttle footnote — either proves the mechanism).
+    @MainActor
+    func testRewardBadgeAndSearchPaging() throws {
+        guard ProcessInfo.processInfo.environment["BADGE_PAGING"] == "1" else {
+            throw XCTSkip("Set BADGE_PAGING=1 to run the badge/paging test")
+        }
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--seed-sample-data"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        // Preset swap: Settings → Goal badge → Trophy.
+        switchTab(in: app, to: "Today")
+        app.buttons["Settings"].tap()
+        let badgeRow = app.staticTexts["Goal badge"]
+        XCTAssertTrue(badgeRow.waitForExistence(timeout: 10), "Goal badge picker row")
+        badgeRow.tap()
+        app.staticTexts["Trophy"].tap()
+        // The push-picker pops on selection; close Settings.
+        app.buttons["Done"].tap()
+
+        // A seeded past day earned its badge — the day card proves the swap.
+        switchTab(in: app, to: "Calendar")
+        let dayEight = app.staticTexts["8"].firstMatch
+        XCTAssertTrue(dayEight.waitForExistence(timeout: 10), "Calendar day 8")
+        dayEight.tap()
+        // The day card flattens its children — match any element's label.
+        let trophyMet = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS 'Goal met 🏆'")
+        ).firstMatch
+        XCTAssertTrue(trophyMet.waitForExistence(timeout: 5), "Day card shows the trophy badge")
+        attachShot(named: "badge-trophy")
+
+        // Custom emoji through the "Choose your own…" prompt.
+        switchTab(in: app, to: "Today")
+        app.buttons["Settings"].tap()
+        XCTAssertTrue(badgeRow.waitForExistence(timeout: 10))
+        badgeRow.tap()
+        app.staticTexts["Choose your own…"].tap()
+        // The prompt sheet's field focuses itself with the current emoji
+        // selected — typing replaces it, no tap (a tap would deselect).
+        // Target by identifier: the emoji keyboard's own "Search Emoji"
+        // bar is a TextField too.
+        let field = app.textFields["emojiPromptField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "Emoji prompt field")
+        Thread.sleep(forTimeInterval: 1.5)
+        field.typeText("🦄")
+        attachShot(named: "badge-custom-prompt")
+        app.buttons["Use it"].tap()
+        app.buttons["Done"].tap()
+        switchTab(in: app, to: "Calendar")
+        dayEight.tap()
+        let customMet = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS 'Goal met 🦄'")
+        ).firstMatch
+        XCTAssertTrue(customMet.waitForExistence(timeout: 5), "Day card shows the custom badge")
+        attachShot(named: "badge-custom")
+
+        // Paging: search online, walk to the bottom, expect either a second
+        // page of rows or the throttle footnote.
+        switchTab(in: app, to: "Foods")
+        let searchField = app.searchFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 10), "Search field")
+        searchField.tap()
+        searchField.typeText("chicken\n")
+        let firstRowCount = { (app: XCUIApplication) -> Int in
+            app.buttons.matching(
+                NSPredicate(format: "label CONTAINS[c] 'kcal' OR label CONTAINS[c] 'no data'")
+            ).count
+        }
+        // Let the first page land, then scroll the list to its end.
+        Thread.sleep(forTimeInterval: 5)
+        let before = firstRowCount(app)
+        let throttled = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS[c] 'busy' OR label CONTAINS[c] 'more results'")
+        ).firstMatch
+        var swipes = 0
+        while swipes < 12 {
+            app.swipeUp(velocity: .fast)
+            swipes += 1
+            if throttled.exists { break }
+            if firstRowCount(app) > max(before, 10) { break }
+        }
+        Thread.sleep(forTimeInterval: 3)
+        let after = firstRowCount(app)
+        attachShot(named: "paging-bottom")
+        XCTAssertTrue(
+            after > max(before, 10) || throttled.exists,
+            "Second page loaded (\(before)→\(after)) or throttle footnote shown"
+        )
+    }
+
     /// One-off: grants whatever Health sheet is pending, without seeding.
     @MainActor
     func testGrantPendingAccess() throws {

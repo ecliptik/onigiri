@@ -7,12 +7,37 @@ enum AppTab: Hashable {
     case today, foods, goal, calendar
 }
 
+/// The visible screen reports whether it's scrolled to the top; while it
+/// is, the tab bar is pinned expanded. The system re-expands only on an
+/// upward scroll GESTURE — collapsing log sections shrinks the content
+/// with no gesture, stranding a minimized bar at the very top.
+@Observable
+@MainActor
+final class TabBarPin {
+    static let shared = TabBarPin()
+    var atTop = true
+}
+
+extension View {
+    /// Attach to a screen's root scroll container: reports its at-top
+    /// state so the tab bar is always full when there's nowhere left to
+    /// scroll up (see TabBarPin).
+    func expandsTabBarAtTop() -> some View {
+        onScrollGeometryChange(for: Bool.self) { geo in
+            geo.contentOffset.y + geo.contentInsets.top <= 1
+        } action: { _, atTop in
+            TabBarPin.shared.atTop = atTop
+        }
+    }
+}
+
 struct ContentView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: AppTab = .today
     @State private var scanRequest = false
     @State private var quickActions = QuickActions.shared
+    @State private var tabBarPin = TabBarPin.shared
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -33,8 +58,10 @@ struct ContentView: View {
         }
         .tint(.riceToast)
         // Liquid Glass: the tab bar shrinks out of the way while scrolling
-        // content, re-expanding on scroll-up.
-        .tabBarMinimizeBehavior(.onScrollDown)
+        // content, re-expanding on scroll-up — and pinned full whenever
+        // the screen is at the top (the system misses gesture-less
+        // returns to the top, like collapsing the log sections).
+        .tabBarMinimizeBehavior(tabBarPin.atTop ? .never : .onScrollDown)
         .toastHost()
         .task {
             #if DEBUG

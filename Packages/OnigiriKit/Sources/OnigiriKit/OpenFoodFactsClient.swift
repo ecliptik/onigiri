@@ -80,8 +80,9 @@ public struct OpenFoodFactsClient: Sendable {
     /// (502s observed 2026-07-10) — the legacy endpoint is the fallback.
     /// Default limit of 10: each result row lazily fetches its full
     /// product for the kcal preview, so results ≈ follow-up requests
-    /// against the same rate limit.
-    public func search(query: String, limit: Int = 10) async throws -> [SearchResult] {
+    /// against the same rate limit. Pages start at 1; callers fetch the
+    /// next page when the user scrolls past the last row.
+    public func search(query: String, limit: Int = 10, page: Int = 1) async throws -> [SearchResult] {
         // Three passes with exponential backoff (0s, 1s, 2s) before the
         // user sees an error — OFF's 503s are often momentary.
         var lastError: Error = OpenFoodFactsError.badResponse
@@ -90,7 +91,7 @@ public struct OpenFoodFactsClient: Sendable {
                 try await Task.sleep(for: .seconds(Double(1 << (attempt - 1))))
             }
             do {
-                return try await searchOnce(query: query, limit: limit)
+                return try await searchOnce(query: query, limit: limit, page: page)
             } catch {
                 lastError = error
             }
@@ -120,15 +121,15 @@ public struct OpenFoodFactsClient: Sendable {
             .map(\.result)
     }
 
-    private func searchOnce(query: String, limit: Int) async throws -> [SearchResult] {
+    private func searchOnce(query: String, limit: Int, page: Int) async throws -> [SearchResult] {
         let primaryError: Error
         do {
-            return try await Self.rank(searchALicious(query: query, limit: limit), query: query)
+            return try await Self.rank(searchALicious(query: query, limit: limit, page: page), query: query)
         } catch {
             primaryError = error
         }
         do {
-            return try await Self.rank(legacySearch(query: query, limit: limit), query: query)
+            return try await Self.rank(legacySearch(query: query, limit: limit, page: page), query: query)
         } catch {
             // Both legs down. "Wait a minute" is actionable, "failed"
             // isn't — surface throttling if either leg reported it.
@@ -138,11 +139,12 @@ public struct OpenFoodFactsClient: Sendable {
         }
     }
 
-    private func searchALicious(query: String, limit: Int) async throws -> [SearchResult] {
+    private func searchALicious(query: String, limit: Int, page: Int) async throws -> [SearchResult] {
         var components = URLComponents(string: "https://search.openfoodfacts.org/search")!
         components.queryItems = [
             .init(name: "q", value: query),
             .init(name: "page_size", value: String(limit)),
+            .init(name: "page", value: String(page)),
             // Rank/return fields in the user's language, not whichever
             // language edited the database last.
             .init(name: "langs", value: Self.languageCode),
@@ -152,7 +154,7 @@ public struct OpenFoodFactsClient: Sendable {
         return try Self.parseSearch(data: data)
     }
 
-    private func legacySearch(query: String, limit: Int) async throws -> [SearchResult] {
+    private func legacySearch(query: String, limit: Int, page: Int) async throws -> [SearchResult] {
         var components = URLComponents(
             string: "https://\(Self.regionSubdomain).openfoodfacts.org/cgi/search.pl"
         )!
@@ -162,6 +164,7 @@ public struct OpenFoodFactsClient: Sendable {
             .init(name: "action", value: "process"),
             .init(name: "json", value: "1"),
             .init(name: "page_size", value: String(limit)),
+            .init(name: "page", value: String(page)),
             .init(name: "fields", value: "code,product_name,brands"),
             .init(name: "lc", value: Self.languageCode),
         ]

@@ -14,6 +14,7 @@ struct CalendarView: View {
     // this screen immediately.
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
+    @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
 
     private let calendar = Calendar.current
 
@@ -47,6 +48,7 @@ struct CalendarView: View {
                 .padding(.horizontal)
             }
             .readableContentWidth()
+            .expandsTabBarAtTop()
             // Month chevrons in the nav bar with the month as the title —
             // the same browsing pattern as Today.
             .navigationTitle(displayedMonth.formatted(.dateTime.month(.wide).year()))
@@ -217,7 +219,7 @@ struct CalendarView: View {
                         .foregroundStyle(.tertiary)
                 }
                 if model.earned.contains(selectedDay) {
-                    Text("Goal met 🍙")
+                    Text("Goal met \(SharedStore.rewardEmoji(for: rewardIcon))")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.green)
                 } else if calendar.isDateInToday(selectedDay) {
@@ -308,7 +310,7 @@ struct CalendarView: View {
         } label: {
             VStack(spacing: 8) {
                 HStack(spacing: 0) {
-                    stat("🍙 \(model.earnedCount(inMonthOf: displayedMonth))", caption: "this month")
+                    stat("\(SharedStore.rewardEmoji(for: rewardIcon)) \(model.earnedCount(inMonthOf: displayedMonth))", caption: "this month")
                     Divider().frame(height: 36)
                     stat(
                         "\(model.streak) \(model.streak == 1 ? "day" : "days")",
@@ -352,12 +354,13 @@ struct CalendarView: View {
 struct MonthDetailView: View {
     let model: CalendarModel
     let month: Date
+    @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
 
     var body: some View {
         List {
             Section("This month") {
                 LabeledContent("Days goal met") {
-                    Text("🍙 \(model.earnedCount(inMonthOf: month))")
+                    Text("\(SharedStore.rewardEmoji(for: rewardIcon)) \(model.earnedCount(inMonthOf: month))")
                 }
                 LabeledContent("Total deficit") {
                     Text(model.totalDeficit(inMonthOf: month).map {
@@ -409,6 +412,7 @@ private struct DayCell: View {
     @ScaledMetric(relativeTo: .caption2) private var cellHeight = 44.0
     @ScaledMetric(relativeTo: .caption2) private var markerHeight = 20.0
     @ScaledMetric(relativeTo: .caption2) private var emojiSize = 15.0
+    @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
 
     var body: some View {
         VStack(spacing: 2) {
@@ -420,7 +424,7 @@ private struct DayCell: View {
                 // Sized into the same box as the dot branch: emoji glyphs
                 // draw past their line height, and at 18pt the rice ball
                 // bled into the row below on iPad's wide grid.
-                Text("🍙")
+                Text(SharedStore.rewardEmoji(for: rewardIcon))
                     .font(.system(size: emojiSize))
                     .frame(height: markerHeight)
             } else {

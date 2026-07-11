@@ -215,6 +215,7 @@ struct FoodsView: View {
             }
             .compactSections()
             .readableContentWidth()
+            .expandsTabBarAtTop()
             .navigationTitle("Foods")
             .fileImporter(isPresented: $showLibraryImporter, allowedContentTypes: [.json]) { result in
                 ToastCenter.shared.show(LibraryTransfer.handlePickedFile(result, context: context))

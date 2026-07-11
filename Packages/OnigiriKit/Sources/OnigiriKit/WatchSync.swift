@@ -60,6 +60,7 @@ public struct SyncPayload: Sendable {
     /// Icon personalization rides along so the watch matches the phone.
     public let foodIcon: String?
     public let waterIcon: String?
+    public let rewardIcon: String?
 
     public init(
         meals: [SyncedMeal]?,
@@ -68,7 +69,8 @@ public struct SyncPayload: Sendable {
         waterGoalOz: Double?,
         balanceStyle: String? = nil,
         foodIcon: String? = nil,
-        waterIcon: String? = nil
+        waterIcon: String? = nil,
+        rewardIcon: String? = nil
     ) {
         self.meals = meals
         self.goal = goal
@@ -77,6 +79,7 @@ public struct SyncPayload: Sendable {
         self.balanceStyle = balanceStyle
         self.foodIcon = foodIcon
         self.waterIcon = waterIcon
+        self.rewardIcon = rewardIcon
     }
 }
 
@@ -95,7 +98,8 @@ public enum WatchSync {
         waterGoalOz: Double,
         balanceStyle: String = "balance",
         foodIcon: String = "sfFork",
-        waterIcon: String = "sfDrop"
+        waterIcon: String = "sfDrop",
+        rewardIcon: String = "onigiri"
     ) -> [String: Any] {
         var context: [String: Any] = [
             SharedStore.waterServingKey: waterServingOz,
@@ -103,6 +107,7 @@ public enum WatchSync {
             SharedStore.balanceStyleKey: balanceStyle,
             SharedStore.foodIconKey: foodIcon,
             SharedStore.waterIconKey: waterIcon,
+            SharedStore.rewardIconKey: rewardIcon,
         ]
         if let data = try? JSONEncoder().encode(meals) {
             context[mealsKey] = data
@@ -132,7 +137,8 @@ public enum WatchSync {
             waterGoalOz: context[SharedStore.waterGoalKey] as? Double,
             balanceStyle: context[SharedStore.balanceStyleKey] as? String,
             foodIcon: context[SharedStore.foodIconKey] as? String,
-            waterIcon: context[SharedStore.waterIconKey] as? String
+            waterIcon: context[SharedStore.waterIconKey] as? String,
+            rewardIcon: context[SharedStore.rewardIconKey] as? String
         )
     }
 
@@ -165,6 +171,9 @@ public enum WatchSync {
         }
         if let waterIcon = payload.waterIcon {
             defaults.set(waterIcon, forKey: SharedStore.waterIconKey)
+        }
+        if let rewardIcon = payload.rewardIcon {
+            defaults.set(rewardIcon, forKey: SharedStore.rewardIconKey)
         }
     }
 

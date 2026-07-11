@@ -1,18 +1,22 @@
 import SwiftUI
 
-/// The onigiri fills bottom-up as today's banked deficit approaches the
-/// daily goal.
+/// The reward badge fills bottom-up as today's banked deficit approaches
+/// the daily goal.
 public struct OnigiriGauge: View {
     /// 0...1 fraction of the daily deficit goal achieved.
     public let progress: Double
+    /// The badge emoji; defaults to the stored choice so widgets and
+    /// complications follow the setting without threading it through.
+    public let emoji: String
 
-    public init(progress: Double) {
+    public init(progress: Double, emoji: String = SharedStore.rewardEmoji) {
         self.progress = progress
+        self.emoji = emoji
     }
 
     public var body: some View {
         GeometryReader { geo in
-            let emoji = Text("🍙")
+            let emoji = Text(emoji)
                 .font(.system(size: min(geo.size.width, geo.size.height) * 0.85))
             ZStack {
                 emoji

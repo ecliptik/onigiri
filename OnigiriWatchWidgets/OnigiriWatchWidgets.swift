@@ -102,7 +102,7 @@ struct BalanceComplicationView: View {
     var body: some View {
         switch family {
         case .accessoryInline:
-            Text("🍙 ").font(.body) + headlineText
+            Text("\(SharedStore.rewardEmoji) ").font(.body) + headlineText
         case .accessoryRectangular:
             HStack(spacing: 8) {
                 OnigiriGauge(progress: entry.state.gaugeProgress)
@@ -124,7 +124,7 @@ struct BalanceComplicationView: View {
             }
         default:
             Gauge(value: entry.state.gaugeProgress) {
-                Text("🍙")
+                Text(SharedStore.rewardEmoji)
                     .font(.system(size: 12))
             } currentValueLabel: {
                 Text(entry.headline.kcal, format: entry.headline.goodAboveZero

@@ -11,7 +11,6 @@ struct WatchHomeView: View {
     // in the shared defaults via WatchSync.store).
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
-    @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
 
     var body: some View {
         NavigationStack {
@@ -22,7 +21,6 @@ struct WatchHomeView: View {
             ScrollView {
                 VStack(spacing: 6) {
                     headlineNumber
-                    waterProgress
 
                     Button {
                         showMeals = true
@@ -42,7 +40,7 @@ struct WatchHomeView: View {
                         Task { await model.logWater() }
                     } label: {
                         Label {
-                            Text("Log \(model.waterServingOz, format: .number.precision(.fractionLength(0))) oz")
+                            Text("Log water")
                         } icon: {
                             WaterIconView(raw: waterIcon)
                         }
@@ -66,19 +64,6 @@ struct WatchHomeView: View {
             if phase == .active {
                 Task { await model.refresh() }
             }
-        }
-    }
-
-    /// Water progress under the headline — the phone's hydration row,
-    /// compressed to one line. Green once the goal is met.
-    private var waterProgress: some View {
-        HStack(spacing: 3) {
-            WaterIconView(raw: waterIcon)
-                .font(.caption2)
-            Text("\(model.state.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
-                .font(.caption2)
-                .monospacedDigit()
-                .foregroundStyle(model.state.summary.waterOz >= waterGoalOz ? .green : .secondary)
         }
     }
 

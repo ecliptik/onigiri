@@ -143,6 +143,36 @@ final class OnigiriUITests: XCTestCase {
             "Seeded history should produce a 3-day streak"
         )
 
+        // Log rows delete by swipe now (library-consistent, trash icons
+        // gone). Water was 36 oz across three 12 oz rows; deleting one
+        // brings the hydration row back to 24 — and the day-paging swipe
+        // must stand down, so the title stays "Today".
+        app.tabBars.buttons["Today"].tap()
+        expandMealSections(in: app)
+        let waterRow = app.staticTexts["12 oz"].firstMatch
+        XCTAssertTrue(waterRow.waitForExistence(timeout: 10),
+                      "Water rows should be visible once expanded")
+        // The water group sits at the bottom of the expanded log.
+        for _ in 0..<3 where !waterRow.isHittable {
+            app.swipeUp()
+        }
+        // A slow press-drag, not swipeLeft(): the flick is too fast for a
+        // DragGesture inside a ScrollView to accumulate samples.
+        waterRow.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5))
+            .press(
+                forDuration: 0.1,
+                thenDragTo: waterRow.coordinate(withNormalizedOffset: CGVector(dx: -2.0, dy: 0.5))
+            )
+        XCTAssertTrue(app.staticTexts["24 / 64 oz water"].waitForExistence(timeout: 10),
+                      "Swiping a water row left should delete it")
+        XCTAssertTrue(app.navigationBars["Today"].exists,
+                      "A row swipe must not page to another day")
+        // Scroll back up so the minimized tab bar re-expands.
+        app.swipeDown()
+        let calendarTabAgain = app.tabBars.buttons["Calendar"]
+        XCTAssertTrue(calendarTabAgain.waitForExistence(timeout: 5))
+        calendarTabAgain.tap()
+
         // Predicted vs actual moved off the card into the pushed month
         // detail. Seeded data has a month of weigh-ins and deficit days,
         // so both rows should carry real values (assert on lb, not —).

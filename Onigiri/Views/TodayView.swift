@@ -27,6 +27,9 @@ struct TodayView: View {
     @State private var collapsedSections: Set<FoodCategory> = Set(FoodCategory.allCases)
     @State private var waterCollapsed = true
     @State private var isLoggingWater = false
+    /// True while a log row is mid swipe-to-delete, so the day-paging
+    /// swipe on the whole screen stands down.
+    @State private var rowSwipeActive = false
     /// The headline number follows the user's text size (Dynamic Type);
     /// minimumScaleFactor keeps huge accessibility sizes on one line.
     @ScaledMetric(relativeTo: .largeTitle) private var headlineSize = 60.0
@@ -163,6 +166,7 @@ struct TodayView: View {
             }
             .simultaneousGesture(
                 DragGesture(minimumDistance: 30).onEnded { value in
+                    guard !rowSwipeActive else { return }
                     guard abs(value.translation.width) > abs(value.translation.height) else { return }
                     if value.translation.width < -60 {
                         Task { await model.goToNextDay() }
@@ -523,18 +527,16 @@ struct TodayView: View {
                     Spacer()
                     Text("\(entry.oz, format: .number.precision(.fractionLength(0))) oz")
                         .monospacedDigit()
-                    Button {
-                        Task { await LogActions.deleteWaterEntry(entry) }
-                    } label: {
-                        Image(systemName: "trash")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel("Delete \(Int(entry.oz)) ounce entry")
                 }
                 .padding(.vertical, 10)
                 .padding(.horizontal, 14)
                 .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
+                .swipeToDelete(active: $rowSwipeActive) {
+                    Task { await LogActions.deleteWaterEntry(entry) }
+                }
+                .accessibilityAction(named: "Delete") {
+                    Task { await LogActions.deleteWaterEntry(entry) }
+                }
                 .padding(.horizontal)
             }
         }
@@ -593,21 +595,71 @@ struct TodayView: View {
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
                     }
-                    Button {
-                        Task { await LogActions.deleteFoodEntry(entry) }
-                    } label: {
-                        Image(systemName: "trash")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel("Delete \(entry.name)")
                 }
                 .padding(.vertical, 10)
                 .padding(.horizontal, 14)
                 .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
+                .swipeToDelete(active: $rowSwipeActive) {
+                    Task { await LogActions.deleteFoodEntry(entry) }
+                }
+                .accessibilityAction(named: "Delete") {
+                    Task { await LogActions.deleteFoodEntry(entry) }
+                }
                 .padding(.horizontal)
             }
         }
+    }
+}
+
+private extension View {
+    func swipeToDelete(active: Binding<Bool>, onDelete: @escaping () -> Void) -> some View {
+        modifier(SwipeToDelete(rowSwipeActive: active, onDelete: onDelete))
+    }
+}
+
+/// Swipe-left-to-delete for log rows, matching the library lists. Today's
+/// log lives in a ScrollView (collapsible custom sections), so there are
+/// no native swipeActions — this drags the row over a red trash reveal
+/// and deletes past the threshold (Undo stays in the toast). Reports
+/// activity through the binding so the day-paging swipe stands down.
+private struct SwipeToDelete: ViewModifier {
+    @Binding var rowSwipeActive: Bool
+    let onDelete: () -> Void
+    @State private var offset: CGFloat = 0
+
+    private static let threshold: CGFloat = -80
+
+    func body(content: Content) -> some View {
+        content
+            .offset(x: offset)
+            .background(alignment: .trailing) {
+                if offset < 0 {
+                    HStack {
+                        Spacer()
+                        Image(systemName: "trash.fill")
+                            .foregroundStyle(.white)
+                            .padding(.trailing, 16)
+                    }
+                    .frame(width: max(0, -offset))
+                    .frame(maxHeight: .infinity)
+                    .background(.red, in: .rect(cornerRadius: 12))
+                }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 15)
+                    .onChanged { value in
+                        guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                        offset = min(0, value.translation.width)
+                        if offset < -10 { rowSwipeActive = true }
+                    }
+                    .onEnded { _ in
+                        let shouldDelete = offset < Self.threshold
+                        withAnimation(.snappy) { offset = 0 }
+                        if shouldDelete { onDelete() }
+                        // Reset after the outer gesture's onEnded has run.
+                        DispatchQueue.main.async { rowSwipeActive = false }
+                    }
+            )
     }
 }
 

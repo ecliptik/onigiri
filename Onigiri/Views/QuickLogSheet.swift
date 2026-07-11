@@ -49,7 +49,7 @@ struct QuickLogSheet: View {
             Item(
                 id: "meal-\(meal.uuid.uuidString)",
                 name: meal.name,
-                detail: meal.items.compactMap(\.food?.name).joined(separator: ", "),
+                detail: "",
                 kcal: meal.totalKcal,
                 sodiumMg: meal.totalSodiumMg,
                 nutrients: meal.totalNutrients,

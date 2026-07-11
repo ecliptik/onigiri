@@ -5,7 +5,8 @@ import OnigiriKit
 
 /// Create or edit a saved food, with barcode scanning to prefill from
 /// OpenFoodFacts. The one surface every new food passes through — Save
-/// keeps it in the library, Save & Log also confirms a portion and logs it.
+/// persists to the library, then offers to log a portion (declining is
+/// the meal-building path).
 struct FoodFormView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -48,6 +49,8 @@ struct FoodFormView: View {
     @State private var lookupMessage: String?
     @State private var portionTarget: PortionTarget?
     @State private var portionDidLog = false
+    /// The post-save "Log it?" prompt for new foods.
+    @State private var askToLog = false
     /// A new food inserted by the Log action, so a second save updates it
     /// instead of inserting a duplicate.
     @State private var createdFood: Food?
@@ -119,7 +122,7 @@ struct FoodFormView: View {
                     Toggle("Favorite", isOn: $isFavorite)
                 }
 
-                // Both nutrient groups start collapsed so Save & Log stays
+                // Both nutrient groups start collapsed so Save stays
                 // in reach; the filled counts show a scan brought data in.
                 // Nutrition-label order, matching the label being copied.
                 // Trans fat is app-only: Apple Health has no type for it.
@@ -153,7 +156,7 @@ struct FoodFormView: View {
                             }
                         }
                     } label: {
-                        groupLabel("Vitamins & minerals", filled: micros.count)
+                        groupLabel("Vitamins & minerals", filled: microFieldCount)
                     }
                 }
 
@@ -166,11 +169,10 @@ struct FoodFormView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    // New foods always save AND log (the portion sheet
-                    // confirms; cancelling it keeps the save). Editing an
-                    // existing food just saves — no forced log entry.
+                    // New foods save first, then OFFER to log — building a
+                    // meal means adding foods without logging them.
                     if food == nil {
-                        Button("Log") { saveAndLog() }
+                        Button("Save") { saveAndAskToLog() }
                             .disabled(!canSave)
                     } else {
                         Button("Save") { save() }
@@ -207,6 +209,20 @@ struct FoodFormView: View {
                 guard !showScanner, !showSearch, portionTarget == nil,
                       let field = note.object as? UITextField else { return }
                 DispatchQueue.main.async { field.selectAll(nil) }
+            }
+            .alert(
+                "Log “\(name.trimmingCharacters(in: .whitespaces))”?",
+                isPresented: $askToLog
+            ) {
+                Button("Log") { presentPortionSheet() }
+                Button("Not Now", role: .cancel) {
+                    ToastCenter.shared.show(
+                        "Saved \(name.trimmingCharacters(in: .whitespaces)) to your library ✓"
+                    )
+                    dismiss()
+                }
+            } message: {
+                Text("It's saved to your library either way.")
             }
             .sheet(isPresented: $showScanner) {
                 BarcodeScannerSheet { code in
@@ -261,10 +277,16 @@ struct FoodFormView: View {
         }
     }
 
+    /// Zero is "nothing on the label", not data worth advertising —
+    /// only positive values count as filled.
     private var nutrientFieldCount: Int {
         [fatG, saturatedFatG, transFatG, polyunsaturatedFatG, monounsaturatedFatG,
          cholesterolMg, sodiumMg, carbsG, fiberG, sugarG, proteinG, caffeineMg]
-            .compactMap { $0 }.count
+            .count { ($0 ?? 0) > 0 }
+    }
+
+    private var microFieldCount: Int {
+        micros.values.count { $0 > 0 }
     }
 
     private func groupLabel(_ title: String, filled: Int) -> some View {
@@ -345,10 +367,15 @@ struct FoodFormView: View {
         dismiss()
     }
 
-    /// Save to the library, then confirm a portion to log. Persisting first
-    /// means the food survives even if the portion sheet is cancelled.
-    private func saveAndLog() {
+    /// New-food flow: persist first (the food survives every later
+    /// choice), then offer to log it — declining is the meal-building
+    /// path, where foods are added without eating them.
+    private func saveAndAskToLog() {
         persist()
+        askToLog = true
+    }
+
+    private func presentPortionSheet() {
         portionTarget = PortionTarget(
             name: name.trimmingCharacters(in: .whitespaces),
             kcal: kcal ?? 0,

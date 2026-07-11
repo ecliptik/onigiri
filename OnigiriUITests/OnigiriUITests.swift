@@ -536,7 +536,7 @@ final class OnigiriUITests: XCTestCase {
         grantHealthAccess(in: app, timeout: 10)
 
         app.tabBars.buttons["Foods"].tap()
-        let addMenu = app.buttons["Add"]
+        let addMenu = app.buttons["Add food or meal"]
         XCTAssertTrue(addMenu.waitForExistence(timeout: 10), "Add menu")
         addMenu.tap()
         let addFood = app.buttons["Add Food"]

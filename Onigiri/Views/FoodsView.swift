@@ -73,9 +73,11 @@ struct FoodsView: View {
                     Section("Meals") {
                         ForEach(visibleMeals) { meal in
                             HStack(spacing: 10) {
+                                // Just the meal's name — listing every
+                                // member made rows balloon (Micheal).
                                 LibraryRow(
                                     name: meal.name,
-                                    detail: meal.items.compactMap(\.food?.name).joined(separator: ", "),
+                                    detail: "",
                                     kcal: meal.totalKcal,
                                     sodiumMg: meal.totalSodiumMg,
                                     isFavorite: meal.isFavorite
@@ -236,10 +238,13 @@ struct FoodsView: View {
                         Button("Add Meal", systemImage: "takeoutbag.and.cup.and.straw") { showNewMeal = true }
                             .disabled(foods.isEmpty)
                     } label: {
-                        // "＋ Add" instead of a bare plus: reads as a
-                        // general add that opens choices.
-                        Label("Add", systemImage: "plus")
-                            .labelStyle(.titleAndIcon)
+                        // "＋ Add" instead of a bare plus. An explicit
+                        // HStack, not Label(.titleAndIcon): iOS 26 toolbars
+                        // strip Label titles down to the icon.
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus")
+                            Text("Add")
+                        }
                     }
                     .accessibilityLabel("Add food or meal")
                 }

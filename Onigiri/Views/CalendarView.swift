@@ -159,8 +159,15 @@ struct CalendarView: View {
             }
             .accessibilityLabel("Previous day")
             Spacer()
-            Text(selectedDay, format: .dateTime.weekday(.abbreviated).month(.wide).day())
-                .font(.headline)
+            // "Today" over the date: while browsing an earlier month the
+            // persistent day card read like that month's data at a glance.
+            if calendar.isDateInToday(selectedDay) {
+                Text("Today")
+                    .font(.headline)
+            } else {
+                Text(selectedDay, format: .dateTime.weekday(.abbreviated).month(.wide).day())
+                    .font(.headline)
+            }
             Spacer()
             Button {
                 shiftDay(1)

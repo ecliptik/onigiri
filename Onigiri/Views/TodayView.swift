@@ -664,10 +664,12 @@ private struct LogRowSwipeActions: ViewModifier {
     let onDelete: () -> Void
 
     @State private var offset: CGFloat = 0
-    /// Where the row currently rests: 0, or ±buttonWidth when open.
+    /// Where the row currently rests: 0, or ±revealWidth when open.
     @State private var restOffset: CGFloat = 0
 
-    private static let buttonWidth: CGFloat = 72
+    /// Floating circular buttons, like the system's iOS 26 swipe pills.
+    private static let buttonSize: CGFloat = 44
+    private static let revealWidth: CGFloat = 60
     private static let fullSwipe: CGFloat = 220
 
     func body(content: Content) -> some View {
@@ -677,26 +679,29 @@ private struct LogRowSwipeActions: ViewModifier {
                 ZStack {
                     if offset > 0, onEdit != nil {
                         HStack {
-                            actionButton("pencil", tint: .riceToast, width: offset) {
+                            actionButton("pencil", tint: .riceToast) {
                                 settle(0)
                                 onEdit?()
                             }
                             .accessibilityLabel("Edit \(itemName)")
                             Spacer(minLength: 0)
                         }
+                        .padding(.leading, 8)
+                        .opacity(min(1, offset / 40))
                     }
                     if offset < 0 {
                         HStack {
                             Spacer(minLength: 0)
-                            actionButton("trash.fill", tint: .red, width: -offset) {
+                            actionButton("trash.fill", tint: .red) {
                                 settle(0)
                                 onDelete()
                             }
                             .accessibilityLabel("Delete \(itemName)")
                         }
+                        .padding(.trailing, 8)
+                        .opacity(min(1, -offset / 40))
                     }
                 }
-                .clipShape(.rect(cornerRadius: 12))
             }
             .contentShape(.rect)
             .onTapGesture {
@@ -718,10 +723,10 @@ private struct LogRowSwipeActions: ViewModifier {
                         } else if offset > Self.fullSwipe, let onEdit {
                             settle(0)
                             onEdit()
-                        } else if offset < -Self.buttonWidth * 0.6 {
-                            settle(-Self.buttonWidth)
-                        } else if offset > Self.buttonWidth * 0.6, onEdit != nil {
-                            settle(Self.buttonWidth)
+                        } else if offset < -Self.revealWidth * 0.6 {
+                            settle(-Self.revealWidth)
+                        } else if offset > Self.revealWidth * 0.6, onEdit != nil {
+                            settle(Self.revealWidth)
                         } else {
                             settle(0)
                         }
@@ -732,14 +737,14 @@ private struct LogRowSwipeActions: ViewModifier {
     }
 
     private func actionButton(
-        _ symbol: String, tint: Color, width: CGFloat, action: @escaping () -> Void
+        _ symbol: String, tint: Color, action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white)
-                .frame(width: max(Self.buttonWidth, width))
-                .frame(maxHeight: .infinity)
-                .background(tint)
+                .frame(width: Self.buttonSize, height: Self.buttonSize)
+                .background(tint, in: .circle)
         }
         .buttonStyle(.plain)
     }

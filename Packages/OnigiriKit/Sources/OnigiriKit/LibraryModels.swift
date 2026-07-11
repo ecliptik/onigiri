@@ -227,9 +227,15 @@ public enum SharedStore {
         foodEmoji(for: defaults.string(forKey: foodIconKey))
     }
 
-    public static var defaults: UserDefaults {
-        UserDefaults(suiteName: appGroupID) ?? .standard
-    }
+    /// ONE shared instance, deliberately. This was a computed property
+    /// minting a fresh UserDefaults per access — @AppStorage observes the
+    /// specific instance it's given, and cross-instance KVO fires on the
+    /// simulator but not reliably on device, so Settings toggles wrote
+    /// through one instance while Today listened on another and never
+    /// heard the change.
+    /// nonisolated(unsafe): UserDefaults is documented thread-safe; it
+    /// just predates Sendable.
+    public nonisolated(unsafe) static let defaults = UserDefaults(suiteName: appGroupID) ?? .standard
 
     public static var waterServingOz: Double {
         let value = defaults.double(forKey: waterServingKey)

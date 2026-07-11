@@ -18,7 +18,7 @@ settings:
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: YOUR_TEAM_ID
     CURRENT_PROJECT_VERSION: 1
-    MARKETING_VERSION: "1.1.1"
+    MARKETING_VERSION: "1.1.2"
 
 targets:
   Onigiri:

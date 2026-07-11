@@ -463,6 +463,7 @@ struct PortionSheet: View {
     let target: PortionTarget
     let onLog: (Double, FoodCategory) -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var quantity = 1.0
     @State private var category: FoodCategory
 
@@ -495,12 +496,23 @@ struct PortionSheet: View {
                     }
                 }
                 Section {
-                    Picker("Meal", selection: $category) {
-                        ForEach(FoodCategory.allCases) { option in
-                            Text(option.rawValue).tag(option)
+                    // Segmented controls ignore Dynamic Type; go menu at
+                    // accessibility sizes so the slot names scale too.
+                    if dynamicTypeSize.isAccessibilitySize {
+                        Picker("Meal", selection: $category) {
+                            ForEach(FoodCategory.allCases) { option in
+                                Text(option.rawValue).tag(option)
+                            }
                         }
+                        .pickerStyle(.menu)
+                    } else {
+                        Picker("Meal", selection: $category) {
+                            ForEach(FoodCategory.allCases) { option in
+                                Text(option.rawValue).tag(option)
+                            }
+                        }
+                        .pickerStyle(.segmented)
                     }
-                    .pickerStyle(.segmented)
                     LabeledContent("Will log") {
                         Text("\(target.kcal * quantity, format: .number.precision(.fractionLength(0))) kcal • \(target.sodiumMg * quantity, format: .number.precision(.fractionLength(0))) mg Na")
                             .monospacedDigit()
@@ -535,26 +547,53 @@ struct LibraryRow: View {
     /// the Foods tab's sections already say which is which.
     var isMeal = false
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var nameLine: some View {
+        HStack(spacing: 4) {
+            if isFavorite {
+                Image(systemName: "star.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.yellow)
+            }
+            Text(name)
+                .foregroundStyle(.primary)
+            if isMeal {
+                Text("Meal")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.quaternary.opacity(0.6), in: .capsule)
+            }
+        }
+    }
+
     var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            // Side-by-side columns squeeze names into mid-word breaks at
+            // accessibility sizes — stack the row instead.
+            VStack(alignment: .leading, spacing: 4) {
+                nameLine
+                if !detail.isEmpty {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text("\(kcal, format: .number.precision(.fractionLength(0))) kcal · \(sodiumMg, format: .number.precision(.fractionLength(0))) mg Na")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        } else {
+            standardBody
+        }
+    }
+
+    private var standardBody: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    if isFavorite {
-                        Image(systemName: "star.fill")
-                            .font(.caption2)
-                            .foregroundStyle(.yellow)
-                    }
-                    Text(name)
-                        .foregroundStyle(.primary)
-                    if isMeal {
-                        Text("Meal")
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.quaternary.opacity(0.6), in: .capsule)
-                    }
-                }
+                nameLine
                 if !detail.isEmpty {
                     Text(detail)
                         .font(.caption)

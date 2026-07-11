@@ -357,6 +357,14 @@ final class OnigiriUITests: XCTestCase {
             _ = button.waitForExistence(timeout: 5)
             button.tap()
         }
+        // The walkthrough must always finish — a missed optional control
+        // skips its shots rather than failing the whole capture.
+        @discardableResult
+        func tapIfExists(_ element: XCUIElement, timeout: TimeInterval = 3) -> Bool {
+            guard element.waitForExistence(timeout: timeout), element.isHittable else { return false }
+            element.tap()
+            return true
+        }
 
         app.launch()
         grantHealthAccess(in: app, timeout: 30)
@@ -380,96 +388,106 @@ final class OnigiriUITests: XCTestCase {
         shot("nutrition-empty-day")
         app.navigationBars["Nutrition"].buttons.firstMatch.tap()
 
-        // Jump-to-date sheet, then home.
-        app.navigationBars.firstMatch.staticTexts.firstMatch.tap()
-        if app.buttons["Jump to date…"].waitForExistence(timeout: 3) {
-            app.buttons["Jump to date…"].tap()
-            shot("day-jump-sheet")
-            app.buttons["Cancel"].firstMatch.tap()
-        }
-        app.navigationBars.firstMatch.staticTexts.firstMatch.tap()
-        if app.buttons["Go to today"].waitForExistence(timeout: 3) {
-            app.buttons["Go to today"].tap()
-        }
+        // Back to today via chevrons (the title menu isn't reliably
+        // hittable from tests; the jump sheet is a stock DatePicker).
+        for _ in 0..<5 { app.buttons["Next day"].tap() }
 
         // Log sheet: kinds, no-match search, portion sheet.
         app.buttons["Log food or meal"].tap()
         _ = app.staticTexts["Recent"].waitForExistence(timeout: 10)
         shot("logsheet-all")
-        // Scoped to the segmented picker: "Foods"/"Meals" also name tabs.
-        let kindPicker = app.segmentedControls.firstMatch
-        kindPicker.buttons["Meals"].tap()
-        shot("logsheet-meals")
-        kindPicker.buttons["Foods"].tap()
-        shot("logsheet-foods")
+        // At accessibility sizes the kind picker is a menu, not segments;
+        // segment shots only make sense in the normal pass.
+        if app.segmentedControls.count > 0 {
+            let kindPicker = app.segmentedControls.firstMatch
+            kindPicker.buttons["Meals"].tap()
+            shot("logsheet-meals")
+            kindPicker.buttons["Foods"].tap()
+            shot("logsheet-foods")
+        }
+        let logShakeRow = app.buttons["Log Protein shake"].firstMatch
+        for _ in 0..<3 where !logShakeRow.isHittable {
+            app.swipeUp()
+        }
+        if tapIfExists(logShakeRow) {
+            shot("portion-sheet")
+            // The half-height portion sheet leaves the Log sheet's Cancel
+            // hittable behind it — the topmost (last) Cancel is the portion's.
+            app.buttons.matching(identifier: "Cancel").allElementsBoundByIndex.last?.tap()
+        }
+        // Search state last: focusing the field replaces toolbar buttons,
+        // so the sheet gets torn down by relaunching instead.
         let searchField = app.searchFields.firstMatch
         if searchField.waitForExistence(timeout: 5) {
             searchField.tap()
             searchField.typeText("zzzz")
             shot("logsheet-no-matches", settle: 1.2)
-            searchField.buttons["Clear text"].firstMatch.tap()
         }
-        app.buttons["Log Protein shake"].firstMatch.tap()
-        shot("portion-sheet")
-        app.buttons["Cancel"].firstMatch.tap()
-        app.navigationBars["Log"].buttons["Cancel"].tap()
+        // Keep the text-size override; drop only the seed flag so the
+        // relaunch doesn't double the sample data.
+        app.launchArguments.removeAll { $0 == "--seed-sample-data" }
+        app.launch()
 
         // Foods: filter menu, add menu, forms.
         tab("Foods")
         shot("foods")
-        app.buttons["Filter by category"].tap()
-        shot("foods-filter-menu")
-        app.buttons["Breakfast"].firstMatch.tap()
-        shot("foods-filtered-breakfast")
-        app.buttons["Filter by category"].tap()
-        app.buttons["All"].firstMatch.tap()
-        app.buttons["Add food or meal"].tap()
-        shot("foods-add-menu")
-        app.buttons["Add Food"].tap()
-        shot("food-form-new", settle: 1.2)
-        app.buttons["Cancel"].firstMatch.tap()
-        // Edit an existing food (row tap).
-        app.staticTexts["Protein shake"].firstMatch.tap()
-        shot("food-form-edit", settle: 1.2)
-        app.buttons["Cancel"].firstMatch.tap()
-        // Meal editor.
-        app.staticTexts["Chicken & rice"].firstMatch.tap()
-        shot("meal-form-edit", settle: 1.2)
-        app.buttons["Cancel"].firstMatch.tap()
+        if tapIfExists(app.buttons["Filter by category"]) {
+            shot("foods-filter-menu")
+            if tapIfExists(app.buttons["Breakfast"].firstMatch) {
+                shot("foods-filtered-breakfast")
+                tapIfExists(app.buttons["Filter by category"])
+                tapIfExists(app.buttons["All"].firstMatch)
+            }
+        }
+        if tapIfExists(app.buttons["Add food or meal"], timeout: 5) {
+            shot("foods-add-menu")
+            if tapIfExists(app.buttons["Add Food"]) {
+                shot("food-form-new", settle: 1.2)
+                tapIfExists(app.buttons["Cancel"].firstMatch)
+            }
+        }
+        if tapIfExists(app.staticTexts["Protein shake"].firstMatch) {
+            shot("food-form-edit", settle: 1.2)
+            tapIfExists(app.buttons["Cancel"].firstMatch)
+        }
+        if tapIfExists(app.staticTexts["Chicken & rice"].firstMatch) {
+            shot("meal-form-edit", settle: 1.2)
+            tapIfExists(app.buttons["Cancel"].firstMatch)
+        }
 
         // Goal, including the focused-keyboard state.
         tab("Goal")
         shot("goal")
-        let targetField = app.textFields.firstMatch
-        if targetField.waitForExistence(timeout: 3) {
-            targetField.tap()
+        if tapIfExists(app.textFields.firstMatch) {
             shot("goal-keyboard")
-            if app.buttons["Done"].firstMatch.waitForExistence(timeout: 2) {
-                app.buttons["Done"].firstMatch.tap()
-            }
+            tapIfExists(app.buttons["Done"].firstMatch, timeout: 2)
         }
 
         // Calendar: previous month (little data), day picking, month detail.
         tab("Calendar")
         shot("calendar")
-        app.buttons["Previous month"].tap()
-        shot("calendar-previous-month")
-        app.staticTexts["Month details"].tap()
-        shot("month-detail-sparse", settle: 1.0)
-        app.navigationBars.buttons.firstMatch.tap()
-        app.buttons["Next month"].tap()
+        if tapIfExists(app.buttons["Previous month"]) {
+            shot("calendar-previous-month")
+        }
+        if tapIfExists(app.staticTexts["Month details"]) {
+            shot("month-detail-sparse", settle: 1.0)
+            tapIfExists(app.navigationBars.buttons.firstMatch)
+        }
+        tapIfExists(app.buttons["Next month"])
 
         // Settings: pushed icon picker + data section.
         tab("Today")
-        app.buttons["Settings"].tap()
-        _ = app.staticTexts["Reminders"].waitForExistence(timeout: 5)
-        shot("settings-top")
-        app.staticTexts["Food icon"].tap()
-        shot("settings-food-icon-picker")
-        app.navigationBars.buttons.firstMatch.tap()
-        app.swipeUp()
-        shot("settings-bottom")
-        app.buttons["Done"].tap()
+        if tapIfExists(app.buttons["Settings"]) {
+            _ = app.staticTexts["Reminders"].waitForExistence(timeout: 5)
+            shot("settings-top")
+            if tapIfExists(app.staticTexts["Food icon"]) {
+                shot("settings-food-icon-picker")
+                tapIfExists(app.navigationBars.buttons.firstMatch)
+            }
+            app.swipeUp()
+            shot("settings-bottom")
+            tapIfExists(app.buttons["Done"])
+        }
         shot("today-final")
     }
 

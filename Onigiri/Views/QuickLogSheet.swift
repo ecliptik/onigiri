@@ -12,6 +12,7 @@ struct QuickLogSheet: View {
     var logDate: Date = .now
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query(sort: \Meal.name) private var meals: [Meal]
     @Query(sort: \Food.name) private var foods: [Food]
     @State private var kind: QuickActions.QuickLogKind = .all
@@ -98,21 +99,47 @@ struct QuickLogSheet: View {
         }
     }
 
+    /// A history entry is "a meal" when its name still matches the meal
+    /// library — drives the Meal tag and the kind filter for Recents.
+    private func isMealName(_ name: String) -> Bool {
+        meals.contains { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame }
+    }
+
     var body: some View {
         let items = allItems
         let visible = filtered(items)
         let favorites = visible.filter(\.isFavorite)
         let others = visible.filter { !$0.isFavorite }
+        // Recents respect the Meals/Foods filter like everything else.
+        let visibleRecents = recents.filter { entry in
+            switch kind {
+            case .all: true
+            case .meals: isMealName(entry.name)
+            case .foods: !isMealName(entry.name)
+            }
+        }
         NavigationStack {
             List {
-                Picker("Show", selection: $kind) {
-                    Text("All").tag(QuickActions.QuickLogKind.all)
-                    Text("Meals").tag(QuickActions.QuickLogKind.meals)
-                    Text("Foods").tag(QuickActions.QuickLogKind.foods)
+                // Segmented controls don't scale with Dynamic Type (UIKit
+                // limitation) — at accessibility sizes this becomes a menu
+                // row so the labels grow with everything else.
+                if dynamicTypeSize.isAccessibilitySize {
+                    Picker("Show", selection: $kind) {
+                        Text("All").tag(QuickActions.QuickLogKind.all)
+                        Text("Meals").tag(QuickActions.QuickLogKind.meals)
+                        Text("Foods").tag(QuickActions.QuickLogKind.foods)
+                    }
+                    .pickerStyle(.menu)
+                } else {
+                    Picker("Show", selection: $kind) {
+                        Text("All").tag(QuickActions.QuickLogKind.all)
+                        Text("Meals").tag(QuickActions.QuickLogKind.meals)
+                        Text("Foods").tag(QuickActions.QuickLogKind.foods)
+                    }
+                    .pickerStyle(.segmented)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
                 }
-                .pickerStyle(.segmented)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
 
                 if isLookingUpBarcode {
                     HStack(spacing: 8) {
@@ -128,9 +155,9 @@ struct QuickLogSheet: View {
                 }
                 // What you actually ate lately beats any sort order — but it
                 // yields to search, which is about finding something else.
-                if searchText.isEmpty, !recents.isEmpty {
+                if searchText.isEmpty, !visibleRecents.isEmpty {
                     Section("Recent") {
-                        ForEach(recents) { entry in
+                        ForEach(visibleRecents) { entry in
                             recentRow(entry)
                         }
                     }
@@ -318,9 +345,7 @@ struct QuickLogSheet: View {
                 sodiumMg: entry.sodiumMg,
                 // History entries don't know what they were; a name still
                 // in the meal library is the best available signal.
-                isMeal: meals.contains {
-                    $0.name.localizedCaseInsensitiveCompare(entry.name) == .orderedSame
-                }
+                isMeal: isMealName(entry.name)
             )
             LogButton(name: entry.name) {
                 portionTarget = recentTarget(for: entry)

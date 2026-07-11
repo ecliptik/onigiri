@@ -841,6 +841,8 @@ struct DailyGoalCard: View {
         plan.requiredDailyDeficit > 0 ? bankedKcal / plan.requiredDailyDeficit : 1
     }
     private var remainingKcal: Double { plan.dailyBudget - intakeKcal }
+    /// `max(0, -0.0)` keeps IEEE negative zero, which formats as "-0".
+    private var displayBankedKcal: Double { bankedKcal == 0 ? 0 : bankedKcal }
 
     var body: some View {
         HStack(spacing: 16) {
@@ -855,7 +857,7 @@ struct DailyGoalCard: View {
                         .font(.headline)
                         .foregroundStyle(progress >= 1 ? Color.green : Color.secondary)
                 }
-                Text("\(bankedKcal, format: .number.precision(.fractionLength(0))) of \(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal deficit")
+                Text("\(displayBankedKcal, format: .number.precision(.fractionLength(0))) of \(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal deficit")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 // Keep the card the same height across days: today shows the
@@ -875,7 +877,8 @@ struct DailyGoalCard: View {
                         .font(.subheadline)
                         .foregroundStyle(.green)
                 } else {
-                    Text("goal not met")
+                    // An untracked day isn't a failed day.
+                    Text(intakeKcal == 0 ? "nothing logged" : "goal not met")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

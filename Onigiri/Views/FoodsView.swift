@@ -371,52 +371,9 @@ struct FoodsView: View {
 }
 
 /// Portion helpers shared by the quick menu and the custom sheet.
-enum Portion {
-    /// Mixed-number label for quarter values ("¾", "1¼", "2½"); plain
-    /// decimal for anything typed in between.
-    static func label(for quantity: Double) -> String {
-        let whole = Int(quantity.rounded(.down))
-        let glyph: String? = switch quantity - Double(whole) {
-        case 0.25: "¼"
-        case 0.5: "½"
-        case 0.75: "¾"
-        default: nil
-        }
-        if let glyph { return whole == 0 ? glyph : "\(whole)\(glyph)" }
-        return quantity.formatted(.number.precision(.fractionLength(0...2)))
-    }
-
-    /// TextField format for the servings field: displays the fraction
-    /// label, parses decimals ("1.25", "1,25") and fraction glyphs ("1¼").
-    struct ServingsFormat: ParseableFormatStyle {
-        struct ParseError: Error {}
-
-        struct Strategy: ParseStrategy {
-            func parse(_ value: String) throws -> Double {
-                var text = value.trimmingCharacters(in: .whitespaces)
-                var total = 0.0
-                for (glyph, amount) in [("¼", 0.25), ("½", 0.5), ("¾", 0.75)] {
-                    if text.hasSuffix(glyph) {
-                        total += amount
-                        text.removeLast()
-                        break
-                    }
-                }
-                if !text.isEmpty {
-                    guard let number = Double(text.replacingOccurrences(of: ",", with: ".")) else {
-                        throw ParseError()
-                    }
-                    total += number
-                }
-                return total
-            }
-        }
-
-        var parseStrategy: Strategy { Strategy() }
-
-        func format(_ value: Double) -> String { Portion.label(for: value) }
-    }
-}
+// (The fraction-glyph servings format lived here briefly; Micheal
+// prefers plain decimals — 0.85 of a serving fine-tunes calories in a
+// way ¾ never could.)
 
 /// What the custom-portion sheet is scaling, and which meal slot it
 /// defaults to (the item's own category, else the current time of day).
@@ -482,12 +439,12 @@ struct PortionSheet: View {
         NavigationStack {
             Form {
                 Section(target.name) {
-                    // One control instead of six fraction chips (Micheal's
-                    // call): step by quarters, or type any amount — the
-                    // field shows tidy fractions ("1¼").
-                    Stepper(value: $quantity, in: 0.25...50, step: 0.25) {
-                        LabeledContent("Servings") {
-                            TextField("1", value: $quantity, format: Portion.ServingsFormat())
+                    // Plain decimals, 0.01–100: type 0.85 to fine-tune
+                    // calories, or 2 to double. The ± buttons step by
+                    // quarters for quick nudges.
+                    Stepper(value: $quantity, in: 0.01...100, step: 0.25) {
+                        LabeledContent("Serving") {
+                            TextField("1", value: $quantity, format: .number.precision(.fractionLength(0...2)))
                                 .keyboardType(.decimalPad)
                                 .multilineTextAlignment(.trailing)
                                 .frame(maxWidth: 80)

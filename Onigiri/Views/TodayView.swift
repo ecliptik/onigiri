@@ -20,6 +20,8 @@ struct TodayView: View {
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
     @AppStorage(SharedStore.progressGaugesKey, store: SharedStore.defaults) private var progressGauges = false
+    @AppStorage(SharedStore.showSodiumGaugeKey, store: SharedStore.defaults) private var showSodiumGauge = true
+    @AppStorage(SharedStore.showWaterGaugeKey, store: SharedStore.defaults) private var showWaterGauge = true
     @State private var activeSheet: TodaySheet?
     @State private var quickActions = QuickActions.shared
     @State private var toastCenter = ToastCenter.shared
@@ -83,17 +85,18 @@ struct TodayView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Layout.screenSpacing) {
-                    // Two doors, split by meaning: the headline is what you
-                    // ate (→ day nutrition detail), the goal card is how
-                    // the plan is going (→ the month story Calendar shows).
-                    // The meters are display-only.
-                    nutritionLink {
-                        VStack(spacing: 8) {
-                            if progressGauges {
-                                gaugedHeadline
-                            } else {
-                                balanceHeadline
-                            }
+                    // Two doors, split by meaning: "Nutrition details" is
+                    // what you ate (→ day detail), the goal card is how
+                    // the plan is going (→ the month story). Only the
+                    // caption is tappable — a link around the whole
+                    // headline swallowed half of the day-paging swipes.
+                    VStack(spacing: 8) {
+                        if progressGauges {
+                            gaugedHeadline
+                        } else {
+                            balanceHeadline
+                        }
+                        nutritionLink {
                             HStack(spacing: 4) {
                                 Text("Nutrition details")
                                 Image(systemName: "chevron.right")
@@ -101,6 +104,9 @@ struct TodayView: View {
                             }
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 16)
+                            .contentShape(.rect)
                         }
                     }
                     hydrationRow
@@ -488,7 +494,7 @@ struct TodayView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .gaugeFill(
-                enabled: progressGauges,
+                enabled: progressGauges && showSodiumGauge,
                 fraction: sodiumLimitMg > 0 ? model.summary.sodiumMg / sodiumLimitMg : 0,
                 tint: Color.sodiumStatus(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg)
             )
@@ -502,7 +508,7 @@ struct TodayView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .gaugeFill(
-                enabled: progressGauges,
+                enabled: progressGauges && showWaterGauge,
                 fraction: waterGoalOz > 0 ? model.summary.waterOz / waterGoalOz : 0,
                 tint: .blue
             )

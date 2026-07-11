@@ -14,6 +14,8 @@ struct SettingsView: View {
     @AppStorage(SharedStore.waterServingKey, store: SharedStore.defaults) private var waterServingOz = 12.0
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.progressGaugesKey, store: SharedStore.defaults) private var progressGauges = false
+    @AppStorage(SharedStore.showSodiumGaugeKey, store: SharedStore.defaults) private var showSodiumGauge = true
+    @AppStorage(SharedStore.showWaterGaugeKey, store: SharedStore.defaults) private var showWaterGauge = true
     @AppStorage(SharedStore.remindMealsKey, store: SharedStore.defaults) private var remindMeals = false
     @AppStorage(SharedStore.remindWaterKey, store: SharedStore.defaults) private var remindWater = false
     @AppStorage(SharedStore.remindStreakKey, store: SharedStore.defaults) private var remindStreak = false
@@ -172,12 +174,8 @@ struct SettingsView: View {
                         Text("kcal left").tag("remaining")
                     }
                     Toggle("Progress gauges", isOn: $progressGauges)
-                    Text("Draws a ring around Today's headline and fill bars behind water and sodium.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("kcal left counts down what you can still eat today while staying on your deficit goal. kcal balance shows intake minus burn.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Toggle("Show sodium gauge", isOn: $showSodiumGauge)
+                    Toggle("Show water gauge", isOn: $showWaterGauge)
                 }
 
                 remindersSection

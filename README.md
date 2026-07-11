@@ -2,6 +2,8 @@
 
 A personal calorie, nutrition, and water tracker for iPhone + Apple Watch, built with SwiftUI and deeply integrated with Apple Health.
 
+**This project was 100% built agentically using [Claude Code](https://claude.com/claude-code).**
+
 ## Screenshots
 
 | Today | Foods | Goal | Calendar |

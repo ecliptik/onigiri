@@ -97,6 +97,25 @@ struct OpenFoodFactsTests {
         #expect(results[1].brand == "Bakery")
     }
 
+    @Test func parsesLegacySearchResults() throws {
+        // The cgi fallback: comma-joined brands, product_name key.
+        let json = """
+        {"count":"3","products":[
+          {"code":"5065015507000","product_name":"Pepperoni","brands":"Properoni, Someone Else"},
+          {"code":"123","product_name":"  "},
+          {"product_name":"No Code"},
+          {"code":"456","product_name":"Plain","brands":null}
+        ]}
+        """
+        let results = try OpenFoodFactsClient.parseLegacySearch(data: data(json))
+        #expect(results.count == 2)
+        #expect(results[0].barcode == "5065015507000")
+        #expect(results[0].name == "Pepperoni")
+        #expect(results[0].brand == "Properoni")
+        #expect(results[1].name == "Plain")
+        #expect(results[1].brand == nil)
+    }
+
     @Test func parsesSaturatedTransFatAndCholesterol() throws {
         let json = """
         {"status":1,"product":{"product_name":"Butter","serving_size":"1 tbsp",

@@ -40,7 +40,15 @@ struct FoodSearchSheet: View {
             .compactSections()
             .navigationTitle("Search Database")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $query, prompt: "e.g. blueberries")
+            // Pinned to the top, unlike the app's other (bottom) search
+            // bars: this sheet opens EMPTY, and a bottom bar under a blank
+            // list reads upside down — results should fill in below the
+            // field, not above it.
+            .searchable(
+                text: $query,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "e.g. blueberries"
+            )
             .searchFocused($searchFocused)
             .onSubmit(of: .search) {
                 Task { await search.search(query) }

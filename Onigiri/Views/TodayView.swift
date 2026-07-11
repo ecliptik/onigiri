@@ -30,6 +30,28 @@ struct TodayView: View {
     /// True while a log row is mid swipe-to-delete, so the day-paging
     /// swipe on the whole screen stands down.
     @State private var rowSwipeActive = false
+    /// Log deletes confirm first, like the library's (and the
+    /// confirmation is what lets the delete toast drop its Undo).
+    @State private var pendingLogDelete: PendingLogDelete?
+
+    private enum PendingLogDelete: Identifiable {
+        case food(FoodLogEntry)
+        case water(WaterLogEntry)
+
+        var id: UUID {
+            switch self {
+            case .food(let entry): entry.id
+            case .water(let entry): entry.id
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .food(let entry): "Delete “\(entry.name)”?"
+            case .water(let entry): "Delete the \(Int(entry.oz)) oz water entry?"
+            }
+        }
+    }
     /// The headline number follows the user's text size (Dynamic Type);
     /// minimumScaleFactor keeps huge accessibility sizes on one line.
     @ScaledMetric(relativeTo: .largeTitle) private var headlineSize = 60.0
@@ -173,6 +195,26 @@ struct TodayView: View {
                     }
                     .presentationDetents([.medium, .large])
                 }
+            }
+            .alert(
+                pendingLogDelete?.title ?? "",
+                isPresented: .init(
+                    get: { pendingLogDelete != nil },
+                    set: { if !$0 { pendingLogDelete = nil } }
+                ),
+                presenting: pendingLogDelete
+            ) { pending in
+                Button("Delete", role: .destructive) {
+                    Task {
+                        switch pending {
+                        case .food(let entry): await LogActions.deleteFoodEntry(entry)
+                        case .water(let entry): await LogActions.deleteWaterEntry(entry)
+                        }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("This can't be undone.")
             }
             .onChange(of: quickActions.quickLogRequest) { _, _ in
                 consumeQuickLogRequest()
@@ -551,10 +593,10 @@ struct TodayView: View {
                     active: $rowSwipeActive,
                     itemName: "\(Int(entry.oz)) ounce entry"
                 ) {
-                    Task { await LogActions.deleteWaterEntry(entry) }
+                    pendingLogDelete = .water(entry)
                 }
                 .accessibilityAction(named: "Delete") {
-                    Task { await LogActions.deleteWaterEntry(entry) }
+                    pendingLogDelete = .water(entry)
                 }
                 .padding(.horizontal)
             }
@@ -623,13 +665,13 @@ struct TodayView: View {
                     itemName: entry.name,
                     onEdit: { activeSheet = .editEntry(entry) }
                 ) {
-                    Task { await LogActions.deleteFoodEntry(entry) }
+                    pendingLogDelete = .food(entry)
                 }
                 .accessibilityAction(named: "Edit") {
                     activeSheet = .editEntry(entry)
                 }
                 .accessibilityAction(named: "Delete") {
-                    Task { await LogActions.deleteFoodEntry(entry) }
+                    pendingLogDelete = .food(entry)
                 }
                 .padding(.horizontal)
             }

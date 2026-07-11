@@ -123,6 +123,9 @@ struct FoodsView: View {
                                 } label: {
                                     Label("Delete", systemImage: "trash.fill")
                                 }
+                                // The screen-wide riceToast tint bleeds
+                                // into destructive swipe pills on iOS 26.
+                                .tint(.red)
                             }
                         }
                     }
@@ -171,6 +174,7 @@ struct FoodsView: View {
                             } label: {
                                 Label("Delete", systemImage: "trash.fill")
                             }
+                            .tint(.red)
                         }
                     }
 
@@ -268,27 +272,31 @@ struct FoodsView: View {
                     showScanFood = true
                 }
             }
-            .confirmationDialog(
+            // Alerts, not confirmationDialogs: iOS 26 anchors dialogs to
+            // the source row as a popover bubble; a destructive confirm
+            // should be the standard centered alert.
+            .alert(
                 deleteMealsTitle,
                 isPresented: .init(
                     get: { !pendingMealDeletes.isEmpty },
                     set: { if !$0 { pendingMealDeletes = [] } }
-                ),
-                titleVisibility: .visible
+                )
             ) {
                 Button("Delete", role: .destructive) {
                     pendingMealDeletes.forEach(context.delete)
                     pendingMealDeletes = []
                     PhoneSyncService.shared.push(from: context)
                 }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This can't be undone.")
             }
-            .confirmationDialog(
+            .alert(
                 deleteFoodsTitle,
                 isPresented: .init(
                     get: { !pendingFoodDeletes.isEmpty },
                     set: { if !$0 { pendingFoodDeletes = [] } }
-                ),
-                titleVisibility: .visible
+                )
             ) {
                 Button("Delete", role: .destructive) {
                     pendingFoodDeletes.forEach(context.delete)
@@ -298,6 +306,9 @@ struct FoodsView: View {
                     LibraryMaintenance.repairDanglingFoodReferences(context: context)
                     PhoneSyncService.shared.push(from: context)
                 }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(deleteFoodsMessage)
             }
         }
     }
@@ -309,17 +320,20 @@ struct FoodsView: View {
     }
 
     private var deleteFoodsTitle: String {
-        let base = pendingFoodDeletes.count == 1
+        pendingFoodDeletes.count == 1
             ? "Delete “\(pendingFoodDeletes[0].name)”?"
             : "Delete \(pendingFoodDeletes.count) foods?"
+    }
+
+    private var deleteFoodsMessage: String {
         let foodIDs = Set(pendingFoodDeletes.map(\.persistentModelID))
         let affectedMeals = Set(meals.filter { meal in
             meal.items.contains { item in
                 item.food.map { foodIDs.contains($0.persistentModelID) } ?? false
             }
         }.map(\.name))
-        guard !affectedMeals.isEmpty else { return base }
-        return base + " It will also be removed from \(affectedMeals.sorted().joined(separator: ", "))."
+        guard !affectedMeals.isEmpty else { return "This can't be undone." }
+        return "It will also be removed from \(affectedMeals.sorted().joined(separator: ", ")). This can't be undone."
     }
 
     private func makePortionTarget(for food: Food) -> PortionTarget {
@@ -353,16 +367,49 @@ struct FoodsView: View {
 
 /// Portion helpers shared by the quick menu and the custom sheet.
 enum Portion {
-    static let quickOptions: [Double] = [0.25, 0.5, 0.75, 1, 1.5, 2]
-
+    /// Mixed-number label for quarter values ("¾", "1¼", "2½"); plain
+    /// decimal for anything typed in between.
     static func label(for quantity: Double) -> String {
-        switch quantity {
+        let whole = Int(quantity.rounded(.down))
+        let glyph: String? = switch quantity - Double(whole) {
         case 0.25: "¼"
         case 0.5: "½"
         case 0.75: "¾"
-        case 1.5: "1½"
-        default: quantity.formatted(.number.precision(.fractionLength(0...2)))
+        default: nil
         }
+        if let glyph { return whole == 0 ? glyph : "\(whole)\(glyph)" }
+        return quantity.formatted(.number.precision(.fractionLength(0...2)))
+    }
+
+    /// TextField format for the servings field: displays the fraction
+    /// label, parses decimals ("1.25", "1,25") and fraction glyphs ("1¼").
+    struct ServingsFormat: ParseableFormatStyle {
+        struct ParseError: Error {}
+
+        struct Strategy: ParseStrategy {
+            func parse(_ value: String) throws -> Double {
+                var text = value.trimmingCharacters(in: .whitespaces)
+                var total = 0.0
+                for (glyph, amount) in [("¼", 0.25), ("½", 0.5), ("¾", 0.75)] {
+                    if text.hasSuffix(glyph) {
+                        total += amount
+                        text.removeLast()
+                        break
+                    }
+                }
+                if !text.isEmpty {
+                    guard let number = Double(text.replacingOccurrences(of: ",", with: ".")) else {
+                        throw ParseError()
+                    }
+                    total += number
+                }
+                return total
+            }
+        }
+
+        var parseStrategy: Strategy { Strategy() }
+
+        func format(_ value: Double) -> String { Portion.label(for: value) }
     }
 }
 
@@ -429,19 +476,17 @@ struct PortionSheet: View {
         NavigationStack {
             Form {
                 Section(target.name) {
-                    HStack {
-                        ForEach(Portion.quickOptions, id: \.self) { option in
-                            Button(Portion.label(for: option)) {
-                                quantity = option
-                            }
-                            .buttonStyle(.bordered)
-                            .tint(quantity == option ? .riceToast : .secondary)
+                    // One control instead of six fraction chips (Micheal's
+                    // call): step by quarters, or type any amount — the
+                    // field shows tidy fractions ("1¼").
+                    Stepper(value: $quantity, in: 0.25...50, step: 0.25) {
+                        LabeledContent("Servings") {
+                            TextField("1", value: $quantity, format: Portion.ServingsFormat())
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(maxWidth: 80)
                         }
-                    }
-                    LabeledContent("Servings") {
-                        TextField("1", value: $quantity, format: .number)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
+                        .padding(.trailing, 8)
                     }
                     if !target.serving.isEmpty {
                         LabeledContent("One serving") {

@@ -164,8 +164,13 @@ final class OnigiriUITests: XCTestCase {
             forDuration: 0.1,
             thenDragTo: waterStart.withOffset(CGVector(dx: -300, dy: 0))
         )
+        // Deletes confirm now (library-consistent): a centered alert.
+        let confirmDelete = app.alerts.buttons["Delete"]
+        XCTAssertTrue(confirmDelete.waitForExistence(timeout: 5),
+                      "Full swipe should ask for confirmation")
+        confirmDelete.tap()
         XCTAssertTrue(app.staticTexts["24 / 64 oz water"].waitForExistence(timeout: 10),
-                      "Swiping a water row left should delete it")
+                      "Confirming should delete the water row")
         XCTAssertTrue(app.navigationBars["Today"].exists,
                       "A row swipe must not page to another day")
 
@@ -186,10 +191,11 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(editShake.waitForExistence(timeout: 5),
                       "Right-swiping a log row should reveal Edit")
         editShake.tap()
-        let twoServings = app.buttons["2"]
-        XCTAssertTrue(twoServings.waitForExistence(timeout: 5),
-                      "Edit should open the portion sheet")
-        twoServings.tap()
+        // The stepper replaced the fraction chips: 4 quarter-steps = 2×.
+        let increment = app.buttons["Increment"].firstMatch
+        XCTAssertTrue(increment.waitForExistence(timeout: 5),
+                      "Edit should open the portion sheet with the stepper")
+        for _ in 0..<4 { increment.tap() }
         app.buttons["Log"].tap()
         XCTAssertTrue(app.staticTexts["360 kcal"].waitForExistence(timeout: 10),
                       "Editing to 2 servings should double the logged entry")

@@ -155,22 +155,13 @@ enum LogActions {
         }
     }
 
-    /// Removes a log entry; Undo re-logs the same values at the same time
-    /// (trans fat is the one detail HealthKit can't give back).
+    /// Removes a log entry. No Undo: the caller confirms first (the
+    /// Today alert), so an accidental delete can't reach here.
     static func deleteFoodEntry(_ entry: FoodLogEntry) async {
         do {
             try await HealthKitService().deleteFoodEntry(id: entry.id)
             didMutate(haptic: nil)
-            ToastCenter.shared.show("Removed \(entry.name) ✓") {
-                Task {
-                    try? await HealthKitService().logFood(
-                        name: entry.name, kcal: entry.kcal, sodiumMg: entry.sodiumMg,
-                        nutrients: entry.nutrients, category: entry.category,
-                        date: entry.date
-                    )
-                    didMutate(haptic: nil)
-                }
-            }
+            ToastCenter.shared.show("Removed \(entry.name) ✓")
         } catch {
             ToastCenter.shared.show("Couldn't delete: \(error.localizedDescription)")
         }
@@ -181,12 +172,7 @@ enum LogActions {
             try await HealthKitService().deleteWaterEntry(id: entry.id)
             didMutate(haptic: nil)
             let amount = entry.oz.formatted(.number.precision(.fractionLength(0)))
-            ToastCenter.shared.show("Removed \(amount) oz ✓") {
-                Task {
-                    try? await HealthKitService().logWater(oz: entry.oz, date: entry.date)
-                    didMutate(haptic: nil)
-                }
-            }
+            ToastCenter.shared.show("Removed \(amount) oz ✓")
         } catch {
             ToastCenter.shared.show("Couldn't delete: \(error.localizedDescription)")
         }

@@ -71,9 +71,18 @@ public struct OpenFoodFactsClient: Sendable {
 
     /// Free-text search of the same database — for foods without barcodes
     /// (produce, home cooking staples). Uses the CDN-backed
-    /// search.openfoodfacts.org service (the legacy cgi endpoint throttles
-    /// with 503s).
+    /// search.openfoodfacts.org service first (the legacy cgi endpoint
+    /// throttles with 503s under load), but that service has real outages
+    /// (502s observed 2026-07-10) — the legacy endpoint is the fallback.
     public func search(query: String, limit: Int = 20) async throws -> [SearchResult] {
+        do {
+            return try await searchALicious(query: query, limit: limit)
+        } catch {
+            return try await legacySearch(query: query, limit: limit)
+        }
+    }
+
+    private func searchALicious(query: String, limit: Int) async throws -> [SearchResult] {
         var components = URLComponents(string: "https://search.openfoodfacts.org/search")!
         components.queryItems = [
             .init(name: "q", value: query),
@@ -82,6 +91,21 @@ public struct OpenFoodFactsClient: Sendable {
         guard let url = components.url else { throw OpenFoodFactsError.badResponse }
         let data = try await fetch(url)
         return try Self.parseSearch(data: data)
+    }
+
+    private func legacySearch(query: String, limit: Int) async throws -> [SearchResult] {
+        var components = URLComponents(string: "https://world.openfoodfacts.org/cgi/search.pl")!
+        components.queryItems = [
+            .init(name: "search_terms", value: query),
+            .init(name: "search_simple", value: "1"),
+            .init(name: "action", value: "process"),
+            .init(name: "json", value: "1"),
+            .init(name: "page_size", value: String(limit)),
+            .init(name: "fields", value: "code,product_name,brands"),
+        ]
+        guard let url = components.url else { throw OpenFoodFactsError.badResponse }
+        let data = try await fetch(url)
+        return try Self.parseLegacySearch(data: data)
     }
 
     private func fetch(_ url: URL) async throws -> Data {
@@ -109,6 +133,33 @@ public struct OpenFoodFactsClient: Sendable {
                   let name = hit.productName ?? hit.genericName,
                   !name.isEmpty else { return nil }
             return SearchResult(barcode: code, name: name, brand: hit.brands?.first)
+        }
+    }
+
+    /// The legacy CGI response: products with comma-joined brand strings.
+    static func parseLegacySearch(data: Data) throws -> [SearchResult] {
+        struct LegacyResponse: Decodable {
+            struct LegacyProduct: Decodable {
+                let code: String?
+                let productName: String?
+                let brands: String?
+
+                enum CodingKeys: String, CodingKey {
+                    case code, brands
+                    case productName = "product_name"
+                }
+            }
+            let products: [LegacyProduct]
+        }
+        let decoded = try JSONDecoder().decode(LegacyResponse.self, from: data)
+        return decoded.products.compactMap { product in
+            guard let code = product.code, !code.isEmpty,
+                  let name = product.productName?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !name.isEmpty else { return nil }
+            let brand = product.brands?
+                .split(separator: ",").first
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            return SearchResult(barcode: code, name: name, brand: brand)
         }
     }
 

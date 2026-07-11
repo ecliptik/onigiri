@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 import UserNotifications
 import OnigiriKit
 
@@ -132,11 +133,13 @@ struct SettingsView: View {
     ]
 
     private var backupCaption: String {
+        // Files names the local location after the device ("On My iPad").
+        let location = "Files → On My \(UIDevice.current.model) → Onigiri"
         guard let last = BackupService.lastBackupDate else {
-            return "Backs up daily to Files → On My iPhone → Onigiri."
+            return "Backs up daily to \(location)."
         }
         let stamp = last.formatted(.dateTime.month(.abbreviated).day().hour().minute())
-        return "Last backup \(stamp), Files → On My iPhone → Onigiri."
+        return "Last backup \(stamp), \(location)."
     }
 
     var body: some View {
@@ -258,20 +261,7 @@ struct SettingsView: View {
                 }
             }
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
-                switch result {
-                case .success(let url):
-                    do {
-                        let scoped = url.startAccessingSecurityScopedResource()
-                        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                        let data = try Data(contentsOf: url)
-                        transferMessage = try LibraryTransfer.importData(data, into: context)
-                        PhoneSyncService.shared.push(from: context)
-                    } catch {
-                        transferMessage = "Import failed: \(error.localizedDescription)"
-                    }
-                case .failure(let error):
-                    transferMessage = "Import failed: \(error.localizedDescription)"
-                }
+                transferMessage = LibraryTransfer.handlePickedFile(result, context: context)
             }
         }
     }

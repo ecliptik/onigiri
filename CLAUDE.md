@@ -62,6 +62,11 @@ cd Packages/OnigiriKit && swift test     # pure-logic tests; ALSO needs the
   widget on the simulator home screen.
 - The iPhone and Watch sims are PAIRED and share Health data — erase BOTH before
   running the flow test, or seeded totals will be off (`simctl erase <both udids>`).
+  Same for the iPad sim: every `--seed-sample-data` launch ADDS samples, so after
+  a few QA runs the flow test's total assertions fail on stale data — erase first.
+- UI-test capture runs leave the sim in their last orientation; tests that
+  assume portrait must set `XCUIDevice.shared.orientation` themselves (the flow
+  and QA tests now do).
 - Watch-window clicks need the window focused first (click its title bar); clicks
   silently stop landing after sheets open — relaunch the watch app to recover.
 

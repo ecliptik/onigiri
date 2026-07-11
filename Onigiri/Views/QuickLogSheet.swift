@@ -13,6 +13,7 @@ struct QuickLogSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.modelContext) private var context
     @Query(sort: \Meal.name) private var meals: [Meal]
     @Query(sort: \Food.name) private var foods: [Food]
     @State private var kind: QuickActions.QuickLogKind = .all
@@ -26,6 +27,7 @@ struct QuickLogSheet: View {
     @State private var formPrefill: ProductPrefill?
     @State private var editingFood: Food?
     @State private var editingMeal: Meal?
+    @State private var showLibraryImporter = false
     /// Last week's distinct logged foods, newest first (HealthKit history).
     @State private var recents: [FoodLogEntry] = []
 
@@ -170,13 +172,26 @@ struct QuickLogSheet: View {
                     if visible.isEmpty {
                         // Accurate copy: this sheet can create foods itself
                         // via the scan button and online search above.
-                        ContentUnavailableView(
-                            items.isEmpty ? "No saved foods yet" : "No matches",
-                            systemImage: items.isEmpty ? "fork.knife" : "magnifyingglass",
-                            description: Text(items.isEmpty
-                                ? "Scan a barcode or search online above — logged foods are saved for next time."
-                                : "Try different words, or search online below.")
-                        )
+                        if items.isEmpty {
+                            ContentUnavailableView {
+                                Label("No saved foods yet", systemImage: "fork.knife")
+                            } description: {
+                                Text("Scan a barcode or search online above — logged foods are saved for next time.\n\nOr bring your library from another device: export it there (Settings → Export library) and import the file here.")
+                            } actions: {
+                                // Text-only: with a systemImage, iOS 26
+                                // collapses the label to a bare icon here.
+                                Button("Import library…") {
+                                    showLibraryImporter = true
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                        } else {
+                            ContentUnavailableView(
+                                "No matches",
+                                systemImage: "magnifyingglass",
+                                description: Text("Try different words, or search online below.")
+                            )
+                        }
                     }
                 }
 
@@ -248,6 +263,9 @@ struct QuickLogSheet: View {
             }
             .sheet(item: $editingFood) { FoodFormView(food: $0) }
             .sheet(item: $editingMeal) { MealFormView(meal: $0) }
+            .fileImporter(isPresented: $showLibraryImporter, allowedContentTypes: [.json]) { result in
+                ToastCenter.shared.show(LibraryTransfer.handlePickedFile(result, context: context))
+            }
         }
         .toastHost()
     }

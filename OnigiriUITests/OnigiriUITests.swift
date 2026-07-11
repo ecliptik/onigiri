@@ -22,6 +22,9 @@ final class OnigiriUITests: XCTestCase {
     @MainActor
     func testSeedGrantAndLogFlow() throws {
         let app = XCUIApplication()
+        // Capture runs can leave the sim rotated; the flow's coordinate
+        // taps assume portrait.
+        XCUIDevice.shared.orientation = .portrait
         app.launchArguments = ["--seed-sample-data"]
         app.launch()
 
@@ -351,6 +354,12 @@ final class OnigiriUITests: XCTestCase {
                 "-UIPreferredContentSizeCategoryName", sizeCategory,
             ]
         }
+        // iPad pass: QA_ORIENTATION=landscape rotates before launch so
+        // every stop is captured wide. Orientation persists on the sim
+        // between runs, so default back to portrait explicitly.
+        XCUIDevice.shared.orientation =
+            ProcessInfo.processInfo.environment["QA_ORIENTATION"] == "landscape"
+                ? .landscapeLeft : .portrait
 
         func shot(_ name: String, settle: TimeInterval = 0.8) {
             Thread.sleep(forTimeInterval: settle)
@@ -869,9 +878,11 @@ final class OnigiriUITests: XCTestCase {
                 Thread.sleep(forTimeInterval: 1)
                 browse.tap()
             }
-            let onMyIphone = app.staticTexts["On My iPhone"]
-            if onMyIphone.waitForExistence(timeout: 4) {
-                onMyIphone.tap()
+            let onMyDevice = app.staticTexts.matching(
+                NSPredicate(format: "label BEGINSWITH 'On My'")
+            ).firstMatch
+            if onMyDevice.waitForExistence(timeout: 4) {
+                onMyDevice.tap()
             }
         }
         if fileCell.waitForExistence(timeout: 6) {
@@ -902,6 +913,63 @@ final class OnigiriUITests: XCTestCase {
             }
         }
         XCTAssertTrue(confirmation.waitForExistence(timeout: 10), "Import summary message")
+    }
+
+    /// Empty-library onboarding (opt-in via EMPTY_IMPORT=1): on a FRESH
+    /// install (run after `simctl uninstall` — an exported onigiri-library
+    /// file must already sit in Files from a prior EXPORT_IMPORT run), the
+    /// Foods empty state offers Import inline; picking the file fills the
+    /// library without a trip through Settings.
+    @MainActor
+    func testEmptyStateImport() throws {
+        guard ProcessInfo.processInfo.environment["EMPTY_IMPORT"] == "1" else {
+            throw XCTSkip("Set EMPTY_IMPORT=1 to run the empty-state import test")
+        }
+        let app = XCUIApplication()
+        app.launch()
+        grantHealthAccess(in: app, timeout: 10)
+
+        switchTab(in: app, to: "Foods")
+        let importButton = app.buttons["Import library…"]
+        XCTAssertTrue(importButton.waitForExistence(timeout: 10), "Empty-state import button")
+        attachShot(named: "empty-state")
+        importButton.tap()
+
+        // Same picker dance as the Settings round trip.
+        let fileCell = app.cells.matching(
+            NSPredicate(format: "label CONTAINS[c] 'onigiri-library'")
+        ).firstMatch
+        if !fileCell.waitForExistence(timeout: 6) {
+            let browse = app.buttons["Browse"]
+            if browse.exists {
+                browse.tap()
+                Thread.sleep(forTimeInterval: 1)
+                browse.tap()
+            }
+            let onMyDevice = app.staticTexts.matching(
+                NSPredicate(format: "label BEGINSWITH 'On My'")
+            ).firstMatch
+            if onMyDevice.waitForExistence(timeout: 4) {
+                onMyDevice.tap()
+            }
+        }
+        XCTAssertTrue(fileCell.waitForExistence(timeout: 6), "Exported file in picker")
+        fileCell.tap()
+
+        // Proof over toast: the imported library renders in the list.
+        XCTAssertTrue(
+            app.staticTexts["Protein shake"].waitForExistence(timeout: 10),
+            "Imported food appears in Foods"
+        )
+        attachShot(named: "imported")
+    }
+
+    private func attachShot(named name: String, settle: TimeInterval = 0.8) {
+        Thread.sleep(forTimeInterval: settle)
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     /// One-off: grants whatever Health sheet is pending, without seeding.

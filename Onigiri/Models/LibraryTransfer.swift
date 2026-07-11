@@ -95,7 +95,30 @@ enum LibraryTransfer {
         SharedStore.defaults.set(export.water.goalOz, forKey: SharedStore.waterGoalKey)
 
         try context.save()
-        return "Imported \(addedFoods) foods and \(addedMeals) meals ✓"
+        let foodsPart = "\(addedFoods) food\(addedFoods == 1 ? "" : "s")"
+        let mealsPart = "\(addedMeals) meal\(addedMeals == 1 ? "" : "s")"
+        return "Imported \(foodsPart) and \(mealsPart) ✓"
+    }
+
+    /// Shared fileImporter completion — security-scoped read, import, sync
+    /// push — returning the outcome line for whichever surface ran it.
+    @MainActor
+    static func handlePickedFile(_ result: Result<URL, Error>, context: ModelContext) -> String {
+        switch result {
+        case .success(let url):
+            do {
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                let data = try Data(contentsOf: url)
+                let message = try importData(data, into: context)
+                PhoneSyncService.shared.push(from: context)
+                return message
+            } catch {
+                return "Import failed: \(error.localizedDescription)"
+            }
+        case .failure(let error):
+            return "Import failed: \(error.localizedDescription)"
+        }
     }
 }
 

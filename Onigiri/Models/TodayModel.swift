@@ -140,17 +140,17 @@ final class TodayModel {
 
     /// Nil for sodium/water — the caller reuses the day summary's values.
     private func trackedTotal(slot: Int) async throws -> Double? {
-        let nutrient = SharedStore.trackedNutrient(slot: slot)
-        switch nutrient {
-        case .sodium, .water: return nil
-        default: return try await health.dayTotal(of: nutrient, for: selectedDate)
+        switch SharedStore.trackedNutrient(slot: slot) {
+        case nil: return 0 // slot is off — nothing to fetch
+        case .sodium?, .water?: return nil
+        case .some(let nutrient): return try await health.dayTotal(of: nutrient, for: selectedDate)
         }
     }
 
     private func slotSummaryValue(slot: Int, from summary: DailyEnergySummary) -> Double {
         switch SharedStore.trackedNutrient(slot: slot) {
-        case .sodium: summary.sodiumMg
-        case .water: summary.waterOz
+        case .sodium?: summary.sodiumMg
+        case .water?: summary.waterOz
         default: 0
         }
     }

@@ -17,14 +17,14 @@ struct SettingsView: View {
     @AppStorage(SharedStore.waterServingKey, store: SharedStore.defaults) private var waterServingOz = 12.0
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.progressGaugesKey, store: SharedStore.defaults) private var progressGauges = false
-    @AppStorage(SharedStore.showSodiumKey, store: SharedStore.defaults) private var showSodium = true
-    @AppStorage(SharedStore.showWaterKey, store: SharedStore.defaults) private var showWater = true
     @AppStorage(SharedStore.trackedMetric1Key, store: SharedStore.defaults) private var trackedMetric1 = "sodium"
     @AppStorage(SharedStore.trackedMetric1ModeKey, store: SharedStore.defaults) private var trackedMetric1Mode = ""
     @AppStorage(SharedStore.trackedMetric1TargetKey, store: SharedStore.defaults) private var trackedMetric1Target = 0.0
+    @AppStorage(SharedStore.trackedMetric1IconKey, store: SharedStore.defaults) private var trackedMetric1Icon = ""
     @AppStorage(SharedStore.trackedMetric2Key, store: SharedStore.defaults) private var trackedMetric2 = "water"
     @AppStorage(SharedStore.trackedMetric2ModeKey, store: SharedStore.defaults) private var trackedMetric2Mode = ""
     @AppStorage(SharedStore.trackedMetric2TargetKey, store: SharedStore.defaults) private var trackedMetric2Target = 0.0
+    @AppStorage(SharedStore.trackedMetric2IconKey, store: SharedStore.defaults) private var trackedMetric2Icon = ""
     @AppStorage(SharedStore.remindMealsKey, store: SharedStore.defaults) private var remindMeals = false
     @AppStorage(SharedStore.remindWaterKey, store: SharedStore.defaults) private var remindWater = false
     @AppStorage(SharedStore.remindStreakKey, store: SharedStore.defaults) private var remindStreak = false
@@ -46,6 +46,8 @@ struct SettingsView: View {
         case food = "Food icon"
         case water = "Water icon"
         case reward = "Goal badge"
+        case metric1 = "First metric icon"
+        case metric2 = "Second metric icon"
         var id: String { rawValue }
     }
 
@@ -226,6 +228,8 @@ struct SettingsView: View {
         case .food: SharedStore.foodEmoji(for: raw)
         case .water: SharedStore.waterEmoji(for: raw)
         case .reward: SharedStore.rewardEmoji(for: raw)
+        case .metric1: SharedStore.customEmojiOrDefault(raw, for: slotNutrient(1))
+        case .metric2: SharedStore.customEmojiOrDefault(raw, for: slotNutrient(2))
         }
     }
 
@@ -234,6 +238,8 @@ struct SettingsView: View {
         case .food: foodIcon = value
         case .water: waterIcon = value
         case .reward: rewardIcon = value
+        case .metric1: trackedMetric1Icon = value
+        case .metric2: trackedMetric2Icon = value
         }
     }
 
@@ -304,14 +310,22 @@ struct SettingsView: View {
             // The gauge widgets and complications render the badge.
             WidgetCenter.shared.reloadAllTimelines()
         }
-        // A new nutrient starts from its own defaults, not the old one's.
+        // A new metric starts from its own defaults, not the old one's.
         .onChange(of: trackedMetric1) {
             trackedMetric1Mode = ""
             trackedMetric1Target = 0
+            trackedMetric1Icon = ""
         }
         .onChange(of: trackedMetric2) {
             trackedMetric2Mode = ""
             trackedMetric2Target = 0
+            trackedMetric2Icon = ""
+        }
+        .onChange(of: trackedMetric1Icon) { old, new in
+            if new == "custom" { iconChanged(.metric1, from: old, to: new) }
+        }
+        .onChange(of: trackedMetric2Icon) { old, new in
+            if new == "custom" { iconChanged(.metric2, from: old, to: new) }
         }
     }
 
@@ -335,60 +349,101 @@ struct SettingsView: View {
         .pickerStyle(.navigationLink)
     }
 
-    /// One of Today's two tracked-metric slots: which nutrient, whether
-    /// its target is a ceiling or a floor, the target itself (sodium and
-    /// water keep their dedicated sections below as the single source),
-    /// the water metric's icon picker, and the metric's Show toggle —
-    /// labels stay "Show sodium"/"Show water" for the defaults.
+    /// The slot's nutrient; nil when set to None (the slot is off).
+    private func slotNutrient(_ slot: Int) -> TrackedNutrient? {
+        let raw = slot == 1 ? trackedMetric1 : trackedMetric2
+        if raw == SharedStore.trackedMetricNone { return nil }
+        return TrackedNutrient(key: raw) ?? (slot == 1 ? .sodium : .water)
+    }
+
+    /// One of Today's two tracked-metric slots: metric (or None), type,
+    /// target, icon. Sodium and water targets stay on their long-standing
+    /// keys (nutrition detail, calendar, and reminders read those); water
+    /// also brings the app-wide water icon picker. A None slot shows only
+    /// the Metric row.
+    @ViewBuilder
     private func trackedMetricSection(slot: Int) -> some View {
-        let nutrient = TrackedNutrient(key: slot == 1 ? trackedMetric1 : trackedMetric2)
-            ?? (slot == 1 ? .sodium : .water)
-        return Section(slot == 1 ? "First tracked metric" : "Second tracked metric") {
+        let nutrient = slotNutrient(slot)
+        Section(slot == 1 ? "First tracked metric" : "Second tracked metric") {
             NavigationLink {
                 NutrientPickerView(selectionKey: slot == 1 ? $trackedMetric1 : $trackedMetric2)
             } label: {
-                LabeledContent("Nutrient") { Text(nutrient.displayName) }
+                LabeledContent("Metric") { Text(nutrient?.displayName ?? "None") }
             }
-            // Menu, not segmented: segments ignore Dynamic Type.
-            Picker("Type", selection: modeBinding(slot: slot, nutrient: nutrient)) {
-                Text("Limit").tag(TrackedMetricMode.limit.rawValue)
-                Text("Goal").tag(TrackedMetricMode.goal.rawValue)
-            }
-            .pickerStyle(.menu)
-            switch nutrient {
-            case .sodium:
-                Stepper(value: $sodiumLimitMg, in: 500...6000, step: 100) {
+            if let nutrient {
+                // Menu, not segmented: segments ignore Dynamic Type.
+                Picker("Type", selection: modeBinding(slot: slot, nutrient: nutrient)) {
+                    Text("Limit").tag(TrackedMetricMode.limit.rawValue)
+                    Text("Goal").tag(TrackedMetricMode.goal.rawValue)
+                }
+                .pickerStyle(.menu)
+                switch nutrient {
+                case .sodium:
+                    // Generic in presentation; the value stays on the
+                    // long-standing sodium-limit key.
                     LabeledContent("Target") {
-                        Text("\(sodiumLimitMg, format: .number.precision(.fractionLength(0))) mg")
+                        HStack(spacing: 4) {
+                            TextField("0", value: $sodiumLimitMg, format: .number)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(maxWidth: 100)
+                            Text(nutrient.unitSymbol)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                case .water:
+                    Text("Water's target is the daily goal in the Water section below.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                default:
+                    LabeledContent("Target") {
+                        HStack(spacing: 4) {
+                            TextField("0", value: targetBinding(slot: slot, nutrient: nutrient), format: .number)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(maxWidth: 100)
+                            Text(nutrient.unitSymbol)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
-                Text("The FDA guideline is 2,300 mg sodium for adults.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            case .water:
-                Text("Water's target is the daily goal in the Water section below.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            default:
-                LabeledContent("Target") {
-                    HStack(spacing: 4) {
-                        TextField("0", value: targetBinding(slot: slot, nutrient: nutrient), format: .number)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(maxWidth: 100)
-                        Text(nutrient.unitSymbol)
-                            .foregroundStyle(.secondary)
-                    }
+                if nutrient == .water {
+                    // The app-wide water icon (watch and log buttons too).
+                    waterIconPicker
+                } else {
+                    metricIconPicker(slot: slot, nutrient: nutrient)
                 }
             }
-            // The metric's emoji rides with its section (only water has
-            // icon options; sodium's 🧂 is fixed).
-            if nutrient == .water {
-                waterIconPicker
-            }
-            // Hides the metric itself on Today, not just its fill bar.
-            Toggle("Show \(nutrient.inlineName)", isOn: slot == 1 ? $showSodium : $showWater)
         }
+    }
+
+    /// Default emoji or a custom pick — same prompt as the goal badge.
+    private func metricIconPicker(slot: Int, nutrient: TrackedNutrient) -> some View {
+        let stored = slot == 1 ? trackedMetric1Icon : trackedMetric2Icon
+        return Picker("Icon", selection: slot == 1 ? $trackedMetric1Icon : $trackedMetric2Icon) {
+            HStack(spacing: 10) {
+                Text(nutrient.defaultEmoji)
+                    .frame(width: 28)
+                Text("Default")
+            }
+            .tag("")
+            if SharedStore.isCustomEmoji(stored) {
+                HStack(spacing: 10) {
+                    Text(stored)
+                        .frame(width: 28)
+                    Text("Custom")
+                }
+                .tag(stored)
+            }
+            HStack(spacing: 10) {
+                Image(systemName: "face.smiling")
+                    .frame(width: 28)
+                    .foregroundStyle(.secondary)
+                Text("Choose custom…")
+            }
+            .tag("custom")
+        }
+        .pickerStyle(.navigationLink)
     }
 
     /// Empty stored mode means "the nutrient's default".

@@ -190,6 +190,28 @@ public enum TrackedNutrient: Hashable, Sendable, Identifiable {
         }
     }
 
+    /// The metric's default icon; a custom emoji per slot can override
+    /// it. Water's actual icon is the app-wide water icon (SF droplet by
+    /// default) — this emoji is only its fallback representation.
+    public var defaultEmoji: String {
+        switch self {
+        case .water: "💧"
+        case .sodium: "🧂"
+        case .protein: "🥩"
+        case .carbs: "🍞"
+        case .fiber: "🌾"
+        case .sugar: "🍬"
+        case .fat: "🧈"
+        case .saturatedFat: "🥓"
+        case .polyunsaturatedFat: "🐟"
+        case .monounsaturatedFat: "🫒"
+        case .cholesterol: "🥚"
+        case .caffeine: "☕"
+        case .micro(let micro):
+            Micronutrient.minerals.contains(micro) ? "🪨" : "💊"
+        }
+    }
+
     /// Inline label for Today's metric row and the Show toggles: sodium
     /// and water keep their long-standing lowercase copy; other nutrients
     /// read as named ("Fiber", "Vitamin B12").

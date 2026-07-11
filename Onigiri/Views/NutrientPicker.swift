@@ -10,6 +10,27 @@ struct NutrientPickerView: View {
 
     var body: some View {
         List {
+            // "None" switches the slot off — Today and the calendar day
+            // card simply drop it.
+            if searchText.isEmpty {
+                Section {
+                    Button {
+                        selectionKey = SharedStore.trackedMetricNone
+                        dismiss()
+                    } label: {
+                        HStack {
+                            Text("None")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            if selectionKey == SharedStore.trackedMetricNone {
+                                Image(systemName: "checkmark")
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                        }
+                    }
+                }
+            }
             group("General", TrackedNutrient.general)
             group("Macronutrients", TrackedNutrient.macros)
             group("Minerals", Micronutrient.minerals.map(TrackedNutrient.micro))

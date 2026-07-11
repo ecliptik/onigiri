@@ -33,6 +33,16 @@ struct TrackedNutrientTests {
         }
     }
 
+    @Test func defaultEmojiCoversEveryNutrient() {
+        for nutrient in TrackedNutrient.all {
+            #expect(SharedStore.isCustomEmoji(nutrient.defaultEmoji), "\(nutrient.key)")
+        }
+        #expect(TrackedNutrient.sodium.defaultEmoji == "🧂")
+        #expect(TrackedNutrient.water.defaultEmoji == "💧")
+        #expect(TrackedNutrient.micro(.iron).defaultEmoji == "🪨")
+        #expect(TrackedNutrient.micro(.vitaminC).defaultEmoji == "💊")
+    }
+
     @Test func inlineNamesKeepHistoricCopy() {
         #expect(TrackedNutrient.sodium.inlineName == "sodium")
         #expect(TrackedNutrient.water.inlineName == "water")

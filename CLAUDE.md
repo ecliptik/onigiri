@@ -34,6 +34,14 @@ cd Packages/OnigiriKit && swift test     # pure-logic tests; ALSO needs the
   Fix: `pkill -f CoreDeviceService` (no sudo needed), wait ~15 s for the
   watch to reach "connecting/connected", then install. Don't send the user
   chasing watch reboots until this is ruled out.
+- **If 4000/RemotePairingError-1001 persists past the daemon reset (watch
+  "available (paired)", BT on, VPN exonerated): keep making contact and
+  POLL.** The watch's "preparation errors" state clears with repeated
+  attempts; once the error shifts to "Device is busy (Connecting…)", loop
+  `devicectl list devices` every ~10 s until the state reads "connected"
+  (it bounces available↔connecting↔connected) and build+install in that
+  window. A patience loop succeeds where one-shot attempts time out
+  (2026-07-11: ~an hour of identical failures, then connected on poll 7).
 - **Watch discovery requires Mac BLUETOOTH ON.** Two days of debugging
   (reboots, re-pairing, trust resets, cache wipes, VPN toggles) and the watch
   never appeared in Xcode/devicectl until the Mac's Bluetooth was enabled —

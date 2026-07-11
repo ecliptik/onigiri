@@ -507,15 +507,14 @@ final class OnigiriUITests: XCTestCase {
             if gauges.exists {
                 gauges.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
             }
-            // Hide the water metric: today-final shows sodium only.
-            var waterGauge = app.switches["Show water"].firstMatch
-            if !waterGauge.waitForExistence(timeout: 2) {
-                waterGauge = app.descendants(matching: .any)
-                    .matching(NSPredicate(format: "label == 'Show water'")).firstMatch
-                _ = waterGauge.waitForExistence(timeout: 2)
-            }
-            if waterGauge.exists {
-                waterGauge.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+            // Hide the water metric via the second slot's None option:
+            // today-final shows sodium only.
+            let metricRows = app.staticTexts.matching(identifier: "Metric")
+            if metricRows.count >= 2 {
+                metricRows.element(boundBy: 1).tap()
+                if tapIfExists(app.staticTexts["None"]) {
+                    shot("settings-metric-none", settle: 0.5)
+                }
             }
             shot("settings-gauges-on", settle: 0.5)
             if tapIfExists(app.staticTexts["Food icon"]) {
@@ -1087,22 +1086,47 @@ final class OnigiriUITests: XCTestCase {
 
         switchTab(in: app, to: "Today")
         app.buttons["Settings"].tap()
-        // Both slots render a "Nutrient" row; the first belongs to slot 1.
-        let nutrientRow = app.staticTexts["Nutrient"].firstMatch
-        XCTAssertTrue(nutrientRow.waitForExistence(timeout: 10), "Slot 1 nutrient row")
-        nutrientRow.tap()
+        // Both slots render a "Metric" row; the first belongs to slot 1.
+        let metricRow = app.staticTexts["Metric"].firstMatch
+        XCTAssertTrue(metricRow.waitForExistence(timeout: 10), "Slot 1 metric row")
+        metricRow.tap()
         let fiber = app.staticTexts["Fiber"]
         XCTAssertTrue(fiber.waitForExistence(timeout: 5), "Fiber in the picker")
         fiber.tap()
         attachShot(named: "metric-slot-settings")
         app.buttons["Done"].tap()
 
-        // Seeded foods carry fiber; the row reads "x / 28 g Fiber".
+        // Seeded foods carry fiber; the row reads "🌾 x / 28 g Fiber".
         let fiberMetric = app.descendants(matching: .any).matching(
             NSPredicate(format: "label CONTAINS '28 g Fiber'")
         ).firstMatch
         XCTAssertTrue(fiberMetric.waitForExistence(timeout: 10), "Today shows the fiber metric")
         attachShot(named: "metric-today-fiber")
+
+        // The calendar day card mirrors the slots.
+        switchTab(in: app, to: "Calendar")
+        let calendarFiber = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS '28 g'")
+        ).firstMatch
+        XCTAssertTrue(calendarFiber.waitForExistence(timeout: 10), "Calendar day card shows the fiber metric")
+        attachShot(named: "metric-calendar-fiber")
+
+        // None empties the slot everywhere.
+        switchTab(in: app, to: "Today")
+        app.buttons["Settings"].tap()
+        XCTAssertTrue(metricRow.waitForExistence(timeout: 10))
+        metricRow.tap()
+        // Single-text rows flatten to a Button with no StaticText child.
+        let none = app.buttons["None"].firstMatch
+        XCTAssertTrue(none.waitForExistence(timeout: 5), "None in the picker")
+        none.tap()
+        app.buttons["Done"].tap()
+        let fiberGone = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS 'g Fiber'")
+        ).firstMatch
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertFalse(fiberGone.exists, "None removes the metric from Today")
+        attachShot(named: "metric-today-none")
     }
 
     /// One-off: grants whatever Health sheet is pending, without seeding.

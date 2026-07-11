@@ -187,32 +187,51 @@ public enum SharedStore {
     public static let trackedMetric1Key = "trackedMetric1"
     public static let trackedMetric1ModeKey = "trackedMetric1Mode"
     public static let trackedMetric1TargetKey = "trackedMetric1Target"
+    public static let trackedMetric1IconKey = "trackedMetric1Icon"
     public static let trackedMetric2Key = "trackedMetric2"
     public static let trackedMetric2ModeKey = "trackedMetric2Mode"
     public static let trackedMetric2TargetKey = "trackedMetric2Target"
+    public static let trackedMetric2IconKey = "trackedMetric2Icon"
+    /// The stored value that switches a slot off.
+    public static let trackedMetricNone = "none"
 
-    /// Slot 1 defaults to sodium, slot 2 to water.
-    public static func trackedNutrient(slot: Int) -> TrackedNutrient {
+    /// Slot 1 defaults to sodium, slot 2 to water; nil = "None" (off).
+    public static func trackedNutrient(slot: Int) -> TrackedNutrient? {
         let key = defaults.string(forKey: slot == 1 ? trackedMetric1Key : trackedMetric2Key)
+        if key == trackedMetricNone { return nil }
         return key.flatMap(TrackedNutrient.init(key:)) ?? (slot == 1 ? .sodium : .water)
     }
 
-    public static func trackedMode(slot: Int) -> TrackedMetricMode {
+    public static func trackedMode(slot: Int, nutrient: TrackedNutrient) -> TrackedMetricMode {
         let raw = defaults.string(forKey: slot == 1 ? trackedMetric1ModeKey : trackedMetric2ModeKey)
-        return raw.flatMap(TrackedMetricMode.init(rawValue:)) ?? trackedNutrient(slot: slot).defaultMode
+        return raw.flatMap(TrackedMetricMode.init(rawValue:)) ?? nutrient.defaultMode
     }
 
     /// Sodium and water targets stay wired to their long-standing keys —
     /// the calendar day cards, nutrition detail, and water reminders all
     /// read those; one source of truth.
-    public static func trackedTarget(slot: Int) -> Double {
-        switch trackedNutrient(slot: slot) {
+    public static func trackedTarget(slot: Int, nutrient: TrackedNutrient) -> Double {
+        switch nutrient {
         case .sodium: return sodiumLimitMg
         case .water: return waterGoalOz
         default:
             let value = defaults.double(forKey: slot == 1 ? trackedMetric1TargetKey : trackedMetric2TargetKey)
-            return value > 0 ? value : trackedNutrient(slot: slot).defaultTarget
+            return value > 0 ? value : nutrient.defaultTarget
         }
+    }
+
+    /// The slot's display emoji: the custom pick, else the nutrient's
+    /// default. Water renders through WaterIconView with the app-wide
+    /// water icon instead; this is its text fallback.
+    public static func trackedEmoji(slot: Int, nutrient: TrackedNutrient) -> String {
+        let stored = defaults.string(forKey: slot == 1 ? trackedMetric1IconKey : trackedMetric2IconKey)
+        return customEmoji(stored) ?? nutrient.defaultEmoji
+    }
+
+    /// A raw icon value resolved against a slot's nutrient default —
+    /// the emoji-prompt prefill for metric icon slots.
+    public static func customEmojiOrDefault(_ raw: String, for nutrient: TrackedNutrient?) -> String {
+        customEmoji(raw) ?? nutrient?.defaultEmoji ?? "🙂"
     }
 
     /// What the big Today/watch number shows: "balance" (± intake − burn,

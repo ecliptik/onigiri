@@ -15,6 +15,12 @@ struct CalendarView: View {
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
+    @AppStorage(SharedStore.trackedMetric1Key, store: SharedStore.defaults) private var trackedMetric1 = "sodium"
+    @AppStorage(SharedStore.trackedMetric1IconKey, store: SharedStore.defaults) private var trackedMetric1Icon = ""
+    @AppStorage(SharedStore.trackedMetric2Key, store: SharedStore.defaults) private var trackedMetric2 = "water"
+    @AppStorage(SharedStore.trackedMetric2IconKey, store: SharedStore.defaults) private var trackedMetric2Icon = ""
+    /// Per-day totals for non-sodium/water slots (those ride the summary).
+    @State private var slotTotals: [Double?] = [nil, nil]
 
     private let calendar = Calendar.current
 
@@ -76,7 +82,17 @@ struct CalendarView: View {
         .onAppear { Task { await refresh() } }
         .refreshable { await refresh() }
         .onChange(of: selectedDay) { _, day in
-            Task { await model.loadDaySummary(for: day) }
+            Task {
+                await model.loadDaySummary(for: day)
+                await loadSlotTotals()
+            }
+        }
+        // Slot changes in Settings need fresh Health queries here too.
+        .onChange(of: trackedMetric1) { _, _ in
+            Task { await loadSlotTotals() }
+        }
+        .onChange(of: trackedMetric2) { _, _ in
+            Task { await loadSlotTotals() }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
@@ -95,6 +111,7 @@ struct CalendarView: View {
         }
         await model.refresh(goal: goal)
         await model.loadDaySummary(for: selectedDay)
+        await loadSlotTotals()
     }
 
     // MARK: - Pieces
@@ -245,21 +262,22 @@ struct CalendarView: View {
             .font(.subheadline)
             .monospacedDigit()
 
-            let summary = model.selectedDaySummary
-            HStack(spacing: 0) {
-                metric(icon: { Text("🧂") },
-                       text: summary.map { "\(Int($0.sodiumMg.rounded())) mg" } ?? "—",
-                       color: summary.map { Color.sodiumStatus(mg: $0.sodiumMg, limitMg: SharedStore.sodiumLimitMg) } ?? .secondary)
-                metric(icon: { WaterIconView(raw: waterIcon) },
-                       text: summary.map {
-                           "\(Int($0.waterOz.rounded())) / \(Int(SharedStore.waterGoalOz)) oz"
-                       } ?? "—",
-                       color: (summary?.waterOz ?? 0) >= SharedStore.waterGoalOz ? .green : .primary)
-                Spacer()
-                    .frame(maxWidth: .infinity)
+            // The two tracked-metric slots, mirroring Today's row (a None
+            // slot drops out; both None drops the line).
+            if slotNutrient(1) != nil || slotNutrient(2) != nil {
+                HStack(spacing: 0) {
+                    if let nutrient = slotNutrient(1) {
+                        slotMetric(slot: 1, nutrient: nutrient)
+                    }
+                    if let nutrient = slotNutrient(2) {
+                        slotMetric(slot: 2, nutrient: nutrient)
+                    }
+                    Spacer()
+                        .frame(maxWidth: .infinity)
+                }
+                .font(.subheadline)
+                .monospacedDigit()
             }
-            .font(.subheadline)
-            .monospacedDigit()
 
             if let target = model.targetDeficitKcal {
                 // Same vocabulary as Today's "Daily goal" card.
@@ -279,6 +297,66 @@ struct CalendarView: View {
         .accessibilityAddTraits(.isButton)
         .accessibilityHint("Opens this day on Today")
         .animation(.snappy, value: selectedDay)
+    }
+
+    /// A slot's nutrient from the reactive raw key; nil when set to None.
+    private func slotNutrient(_ slot: Int) -> TrackedNutrient? {
+        let raw = slot == 1 ? trackedMetric1 : trackedMetric2
+        if raw == SharedStore.trackedMetricNone { return nil }
+        return TrackedNutrient(key: raw) ?? (slot == 1 ? .sodium : .water)
+    }
+
+    /// The browsed day's total for a slot: sodium/water ride the day
+    /// summary; anything else was fetched into slotTotals for this day.
+    /// nil (untracked day) renders as "—" like the energy columns.
+    private func slotValue(slot: Int, nutrient: TrackedNutrient) -> Double? {
+        switch nutrient {
+        case .sodium: model.selectedDaySummary?.sodiumMg
+        case .water: model.selectedDaySummary?.waterOz
+        default: model.selectedDaySummary == nil ? nil : slotTotals[slot - 1]
+        }
+    }
+
+    /// One tracked metric column, same read as Today's row: limit mode
+    /// shows the total colored toward the ceiling; goal mode "x / target",
+    /// green when met.
+    private func slotMetric(slot: Int, nutrient: TrackedNutrient) -> some View {
+        let mode = SharedStore.trackedMode(slot: slot, nutrient: nutrient)
+        let target = SharedStore.trackedTarget(slot: slot, nutrient: nutrient)
+        let value = slotValue(slot: slot, nutrient: nutrient)
+        let text: String = value.map { total in
+            mode == .limit
+                ? "\(Int(total.rounded())) \(nutrient.unitSymbol)"
+                : "\(Int(total.rounded())) / \(Int(target)) \(nutrient.unitSymbol)"
+        } ?? "—"
+        let color: Color = value.map { total in
+            mode == .limit
+                ? Color.sodiumStatus(mg: total, limitMg: target)
+                : (total >= target ? .green : .primary)
+        } ?? .secondary
+        return metric(icon: { slotIcon(slot: slot, nutrient: nutrient) },
+                      text: text, color: color)
+    }
+
+    @ViewBuilder
+    private func slotIcon(slot: Int, nutrient: TrackedNutrient) -> some View {
+        if nutrient == .water {
+            WaterIconView(raw: waterIcon)
+        } else {
+            let stored = slot == 1 ? trackedMetric1Icon : trackedMetric2Icon
+            Text(SharedStore.isCustomEmoji(stored) ? stored : nutrient.defaultEmoji)
+        }
+    }
+
+    /// Non-sodium/water slot totals for the selected day.
+    private func loadSlotTotals() async {
+        var totals: [Double?] = [nil, nil]
+        for slot in 1...2 {
+            if let nutrient = slotNutrient(slot), nutrient != .sodium, nutrient != .water {
+                totals[slot - 1] = (try? await HealthKitService().dayTotal(of: nutrient, for: selectedDay)) ?? 0
+            }
+        }
+        slotTotals = totals
     }
 
     /// One equal-width column with a fixed-width icon slot, so SF Symbol

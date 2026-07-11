@@ -20,16 +20,16 @@ struct TodayView: View {
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
     @AppStorage(SharedStore.progressGaugesKey, store: SharedStore.defaults) private var progressGauges = false
-    @AppStorage(SharedStore.showSodiumKey, store: SharedStore.defaults) private var showSodium = true
-    @AppStorage(SharedStore.showWaterKey, store: SharedStore.defaults) private var showWater = true
     // The two tracked-metric slots; @AppStorage so a Settings change
     // re-renders the row (SharedStore reads alone wouldn't).
     @AppStorage(SharedStore.trackedMetric1Key, store: SharedStore.defaults) private var trackedMetric1 = "sodium"
     @AppStorage(SharedStore.trackedMetric1ModeKey, store: SharedStore.defaults) private var trackedMetric1Mode = ""
     @AppStorage(SharedStore.trackedMetric1TargetKey, store: SharedStore.defaults) private var trackedMetric1Target = 0.0
+    @AppStorage(SharedStore.trackedMetric1IconKey, store: SharedStore.defaults) private var trackedMetric1Icon = ""
     @AppStorage(SharedStore.trackedMetric2Key, store: SharedStore.defaults) private var trackedMetric2 = "water"
     @AppStorage(SharedStore.trackedMetric2ModeKey, store: SharedStore.defaults) private var trackedMetric2Mode = ""
     @AppStorage(SharedStore.trackedMetric2TargetKey, store: SharedStore.defaults) private var trackedMetric2Target = 0.0
+    @AppStorage(SharedStore.trackedMetric2IconKey, store: SharedStore.defaults) private var trackedMetric2Icon = ""
     @State private var activeSheet: TodaySheet?
     @State private var quickActions = QuickActions.shared
     @State private var toastCenter = ToastCenter.shared
@@ -505,18 +505,28 @@ struct TodayView: View {
         .padding(.horizontal)
     }
 
+    /// A slot's nutrient from the reactive raw key; nil when set to None.
+    private func slotNutrient(_ slot: Int) -> TrackedNutrient? {
+        let raw = slot == 1 ? trackedMetric1 : trackedMetric2
+        if raw == SharedStore.trackedMetricNone { return nil }
+        return TrackedNutrient(key: raw) ?? (slot == 1 ? .sodium : .water)
+    }
+
     /// The two configurable tracked-metric readouts (sodium and water by
-    /// default) — each hideable in Settings (the metric itself, not just
-    /// its fill bar). A lone survivor centers.
+    /// default) — a slot set to None disappears; a lone survivor centers.
     @ViewBuilder
     private var hydrationRow: some View {
-        if showSodium || showWater {
+        let first = slotNutrient(1)
+        let second = slotNutrient(2)
+        if first != nil || second != nil {
             HStack(spacing: 12) {
-                if showSodium {
-                    trackedMetricView(slot: 1, alignment: showWater ? .leading : .center)
+                if let first {
+                    trackedMetricView(slot: 1, nutrient: first,
+                                      alignment: second != nil ? .leading : .center)
                 }
-                if showWater {
-                    trackedMetricView(slot: 2, alignment: showSodium ? .trailing : .center)
+                if let second {
+                    trackedMetricView(slot: 2, nutrient: second,
+                                      alignment: first != nil ? .trailing : .center)
                 }
             }
             .font(.subheadline)
@@ -530,9 +540,7 @@ struct TodayView: View {
     /// water ("x / target", green when met). Fill grows from the left in
     /// both (matching fill direction beats mirrored symmetry).
     @ViewBuilder
-    private func trackedMetricView(slot: Int, alignment: Alignment) -> some View {
-        let nutrient = TrackedNutrient(key: slot == 1 ? trackedMetric1 : trackedMetric2)
-            ?? (slot == 1 ? .sodium : .water)
+    private func trackedMetricView(slot: Int, nutrient: TrackedNutrient, alignment: Alignment) -> some View {
         let storedMode = slot == 1 ? trackedMetric1Mode : trackedMetric2Mode
         let mode = TrackedMetricMode(rawValue: storedMode) ?? nutrient.defaultMode
         let target = trackedTarget(slot: slot, nutrient: nutrient)
@@ -554,7 +562,7 @@ struct TodayView: View {
                     .fontWeight(met ? .medium : .regular)
             }
         } icon: {
-            metricIcon(nutrient)
+            metricIcon(slot: slot, nutrient: nutrient)
         }
         .frame(maxWidth: .infinity, alignment: alignment)
         .gaugeFill(
@@ -580,14 +588,16 @@ struct TodayView: View {
         nutrient.inlineName
     }
 
+    /// Water renders the app-wide water icon (SF droplet option incl.);
+    /// every other metric shows its slot emoji — the custom pick or the
+    /// nutrient's default (🧂 for sodium, as always).
     @ViewBuilder
-    private func metricIcon(_ nutrient: TrackedNutrient) -> some View {
-        switch nutrient {
-        // Salt shaker, matching the emoji water icon beside it
-        // (aqi.medium was an air-quality glyph).
-        case .sodium: Text("🧂")
-        case .water: WaterIconView(raw: waterIcon)
-        default: EmptyView()
+    private func metricIcon(slot: Int, nutrient: TrackedNutrient) -> some View {
+        if nutrient == .water {
+            WaterIconView(raw: waterIcon)
+        } else {
+            let stored = slot == 1 ? trackedMetric1Icon : trackedMetric2Icon
+            Text(SharedStore.isCustomEmoji(stored) ? stored : nutrient.defaultEmoji)
         }
     }
 

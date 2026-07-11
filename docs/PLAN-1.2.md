@@ -74,6 +74,9 @@ may stay inline; judge per case, note choices in the commit.
    from all history, replace team ID + device UDIDs/names in historical
    blobs; tags carried over; force-push main + tags to Forgejo; verify
    with a fresh clone + build.
+7. Publication is a **GitHub mirror** (github.com/ecliptik/onigiri) fed
+   from Forgejo — pushes keep going to Forgejo only. Settings footer and
+   README point at the GitHub URL.
 
 ## Out of scope
 

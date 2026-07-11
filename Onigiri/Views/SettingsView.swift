@@ -98,8 +98,10 @@ struct SettingsView: View {
             VStack(spacing: 2) {
                 Text("Onigiri \(Bundle.main.appVersion)")
                 Text("© 2026 Micheal Waltz")
-                Link("https://forgejo.ecliptik.com/ecliptik/onigiri",
-                     destination: URL(string: "https://forgejo.ecliptik.com/ecliptik/onigiri")!)
+                // The public mirror — Forgejo is the push origin, GitHub
+                // is the face.
+                Link("https://github.com/ecliptik/onigiri",
+                     destination: URL(string: "https://github.com/ecliptik/onigiri")!)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 8)
@@ -206,6 +208,13 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .onChange(of: balanceStyle) {
                 // The watch mirrors this setting; sync it right away.
+                PhoneSyncService.shared.push(from: context)
+            }
+            .onChange(of: foodIcon) {
+                // Icon personalization syncs to the watch too.
+                PhoneSyncService.shared.push(from: context)
+            }
+            .onChange(of: waterIcon) {
                 PhoneSyncService.shared.push(from: context)
             }
             .onChange(of: waterServingOz) {

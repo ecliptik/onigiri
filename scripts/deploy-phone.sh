@@ -10,7 +10,15 @@ cd "$(dirname "$0")/.."
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
 
 DEVICES_FILE="scripts/local-devices.env"
+# Caller env beats the file — including explicitly-empty WATCH_* to skip
+# the watch. Remember what was set before the file overwrites it.
+DEVICE_NAME_SET=${DEVICE_NAME+1};     DEVICE_NAME_ENV=${DEVICE_NAME-}
+WATCH_BUILD_SET=${WATCH_BUILD_ID+1};  WATCH_BUILD_ENV=${WATCH_BUILD_ID-}
+WATCH_INSTALL_SET=${WATCH_INSTALL_ID+1}; WATCH_INSTALL_ENV=${WATCH_INSTALL_ID-}
 [[ -f "$DEVICES_FILE" ]] && source "$DEVICES_FILE"
+[[ -n "$DEVICE_NAME_SET" ]] && DEVICE_NAME=$DEVICE_NAME_ENV
+[[ -n "$WATCH_BUILD_SET" ]] && WATCH_BUILD_ID=$WATCH_BUILD_ENV
+[[ -n "$WATCH_INSTALL_SET" ]] && WATCH_INSTALL_ID=$WATCH_INSTALL_ENV
 DEVICE_NAME=${DEVICE_NAME:-}
 WATCH_BUILD_ID=${WATCH_BUILD_ID:-}
 WATCH_INSTALL_ID=${WATCH_INSTALL_ID:-}

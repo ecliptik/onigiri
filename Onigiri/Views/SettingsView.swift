@@ -14,8 +14,8 @@ struct SettingsView: View {
     @AppStorage(SharedStore.waterServingKey, store: SharedStore.defaults) private var waterServingOz = 12.0
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.progressGaugesKey, store: SharedStore.defaults) private var progressGauges = false
-    @AppStorage(SharedStore.showSodiumGaugeKey, store: SharedStore.defaults) private var showSodiumGauge = true
-    @AppStorage(SharedStore.showWaterGaugeKey, store: SharedStore.defaults) private var showWaterGauge = true
+    @AppStorage(SharedStore.showSodiumKey, store: SharedStore.defaults) private var showSodium = true
+    @AppStorage(SharedStore.showWaterKey, store: SharedStore.defaults) private var showWater = true
     @AppStorage(SharedStore.remindMealsKey, store: SharedStore.defaults) private var remindMeals = false
     @AppStorage(SharedStore.remindWaterKey, store: SharedStore.defaults) private var remindWater = false
     @AppStorage(SharedStore.remindStreakKey, store: SharedStore.defaults) private var remindStreak = false
@@ -174,8 +174,10 @@ struct SettingsView: View {
                         Text("kcal left").tag("remaining")
                     }
                     Toggle("Progress gauges", isOn: $progressGauges)
-                    Toggle("Show sodium gauge", isOn: $showSodiumGauge)
-                    Toggle("Show water gauge", isOn: $showWaterGauge)
+                    // These hide the metrics themselves on Today, not
+                    // their fill bars (that misread cost a debug session).
+                    Toggle("Show sodium", isOn: $showSodium)
+                    Toggle("Show water", isOn: $showWater)
                 }
 
                 remindersSection

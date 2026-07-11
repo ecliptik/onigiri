@@ -20,8 +20,8 @@ struct TodayView: View {
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
     @AppStorage(SharedStore.progressGaugesKey, store: SharedStore.defaults) private var progressGauges = false
-    @AppStorage(SharedStore.showSodiumGaugeKey, store: SharedStore.defaults) private var showSodiumGauge = true
-    @AppStorage(SharedStore.showWaterGaugeKey, store: SharedStore.defaults) private var showWaterGauge = true
+    @AppStorage(SharedStore.showSodiumKey, store: SharedStore.defaults) private var showSodium = true
+    @AppStorage(SharedStore.showWaterKey, store: SharedStore.defaults) private var showWater = true
     @State private var activeSheet: TodaySheet?
     @State private var quickActions = QuickActions.shared
     @State private var toastCenter = ToastCenter.shared
@@ -481,42 +481,51 @@ struct TodayView: View {
         .padding(.horizontal)
     }
 
+    /// Sodium and water readouts — each hideable in Settings (the metric
+    /// itself, not just its fill bar). A lone survivor centers.
+    @ViewBuilder
     private var hydrationRow: some View {
-        HStack(spacing: 12) {
-            Label {
-                Text("\(model.summary.sodiumMg, format: .number.precision(.fractionLength(0))) mg sodium")
-                    .foregroundStyle(Color.sodiumStatus(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg))
-                    .fontWeight(.medium)
-            } icon: {
-                // Salt shaker, matching the emoji water icon beside it
-                // (aqi.medium was an air-quality glyph).
-                Text("🧂")
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .gaugeFill(
-                enabled: progressGauges && showSodiumGauge,
-                fraction: sodiumLimitMg > 0 ? model.summary.sodiumMg / sodiumLimitMg : 0,
-                tint: Color.sodiumStatus(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg)
-            )
+        if showSodium || showWater {
+            HStack(spacing: 12) {
+                if showSodium {
+                    Label {
+                        Text("\(model.summary.sodiumMg, format: .number.precision(.fractionLength(0))) mg sodium")
+                            .foregroundStyle(Color.sodiumStatus(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg))
+                            .fontWeight(.medium)
+                    } icon: {
+                        // Salt shaker, matching the emoji water icon beside
+                        // it (aqi.medium was an air-quality glyph).
+                        Text("🧂")
+                    }
+                    .frame(maxWidth: .infinity, alignment: showWater ? .leading : .center)
+                    .gaugeFill(
+                        enabled: progressGauges,
+                        fraction: sodiumLimitMg > 0 ? model.summary.sodiumMg / sodiumLimitMg : 0,
+                        tint: Color.sodiumStatus(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg)
+                    )
+                }
 
-            Label {
-                Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(waterGoalOz, format: .number.precision(.fractionLength(0))) oz water")
-                    .foregroundStyle(model.summary.waterOz >= waterGoalOz ? Color.green : Color.secondary)
-                    .fontWeight(model.summary.waterOz >= waterGoalOz ? .medium : .regular)
-            } icon: {
-                WaterIconView(raw: waterIcon)
+                if showWater {
+                    Label {
+                        Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(waterGoalOz, format: .number.precision(.fractionLength(0))) oz water")
+                            .foregroundStyle(model.summary.waterOz >= waterGoalOz ? Color.green : Color.secondary)
+                            .fontWeight(model.summary.waterOz >= waterGoalOz ? .medium : .regular)
+                    } icon: {
+                        WaterIconView(raw: waterIcon)
+                    }
+                    .frame(maxWidth: .infinity, alignment: showSodium ? .trailing : .center)
+                    .gaugeFill(
+                        enabled: progressGauges,
+                        fraction: waterGoalOz > 0 ? model.summary.waterOz / waterGoalOz : 0,
+                        tint: .blue,
+                        anchor: showSodium ? .trailing : .leading
+                    )
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            .gaugeFill(
-                enabled: progressGauges && showWaterGauge,
-                fraction: waterGoalOz > 0 ? model.summary.waterOz / waterGoalOz : 0,
-                tint: .blue,
-                anchor: .trailing
-            )
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, progressGauges ? 20 : 28)
         }
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, progressGauges ? 20 : 28)
     }
 
     private var loggedSection: some View {

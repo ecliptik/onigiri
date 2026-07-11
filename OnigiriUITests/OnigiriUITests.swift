@@ -492,12 +492,11 @@ final class OnigiriUITests: XCTestCase {
             if gauges.exists {
                 gauges.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
             }
-            // Water sub-gauge OFF: today-final must show the sodium fill
-            // only (reproduces/regresses the dead-toggle report).
-            var waterGauge = app.switches["Show water gauge"].firstMatch
+            // Hide the water metric: today-final shows sodium only.
+            var waterGauge = app.switches["Show water"].firstMatch
             if !waterGauge.waitForExistence(timeout: 2) {
                 waterGauge = app.descendants(matching: .any)
-                    .matching(NSPredicate(format: "label == 'Show water gauge'")).firstMatch
+                    .matching(NSPredicate(format: "label == 'Show water'")).firstMatch
                 _ = waterGauge.waitForExistence(timeout: 2)
             }
             if waterGauge.exists {

@@ -1,22 +1,12 @@
 # Onigiri 🍙
 
-A personal calorie, sodium, and water tracker for iPhone + Apple Watch, built with SwiftUI and deeply integrated with Apple Health.
-
-**Goal:** support losing 20 lb by making daily energy balance (calories in − calories out) effortless to see and log.
+A personal calorie, nutrition, and water tracker for iPhone + Apple Watch, built with SwiftUI and deeply integrated with Apple Health.
 
 ## Screenshots
 
-| Today | Nutrition detail | Log sheet | Portion |
+| Today | Foods | Goal | Calendar |
 |---|---|---|---|
-| ![Today: balance headline, hydration, goal gauge, meters, log](docs/showcase/light/today.png) | ![Day nutrition detail with macro and micronutrient groups](docs/showcase/light/nutrition.png) | ![Log sheet: Recents, Favorites, meals tagged](docs/showcase/light/logsheet.png) | ![Portion sheet confirming servings and meal slot](docs/showcase/light/portion.png) |
-
-| Calendar | Month detail | Goal | Foods |
-|---|---|---|---|
-| ![Calendar: month grid of earned onigiri and streaks](docs/showcase/light/calendar.png) | ![Month detail: total deficit, predicted vs scale change](docs/showcase/light/month.png) | ![Goal: daily plan with predicted vs actual](docs/showcase/light/goal.png) | ![Food library with meals and foods](docs/showcase/light/foods.png) |
-
-| Dark: Today | Dark: Nutrition | Dark: Calendar | Dark: Settings |
-|---|---|---|---|
-| ![Today in dark mode](docs/showcase/dark/today.png) | ![Nutrition detail in dark mode](docs/showcase/dark/nutrition.png) | ![Calendar in dark mode](docs/showcase/dark/calendar.png) | ![Settings with reminder toggles in dark mode](docs/showcase/dark/settings.png) |
+| ![Today: balance headline, hydration, goal gauge, meters, log](docs/showcase/light/today.png) | ![Food library with meals and foods, dark mode](docs/showcase/dark/foods.png) | ![Goal: daily plan with predicted vs actual](docs/showcase/light/goal.png) | ![Calendar: month grid of earned onigiri and streaks, dark mode](docs/showcase/dark/calendar.png) |
 
 ## Features
 

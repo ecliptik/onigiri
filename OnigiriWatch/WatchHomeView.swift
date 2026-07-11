@@ -7,6 +7,11 @@ struct WatchHomeView: View {
     @State private var model = WatchModel()
     @State private var showMeals = false
     @Environment(\.scenePhase) private var scenePhase
+    // AppStorage so an icon sync re-renders immediately (the values land
+    // in the shared defaults via WatchSync.store).
+    @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
+    @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
+    @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
 
     var body: some View {
         NavigationStack {
@@ -17,13 +22,18 @@ struct WatchHomeView: View {
             ScrollView {
                 VStack(spacing: 6) {
                     headlineNumber
+                    waterProgress
 
                     Button {
                         showMeals = true
                     } label: {
-                        Label("Log a meal", systemImage: "fork.knife")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
+                        Label {
+                            Text("Log a meal")
+                        } icon: {
+                            FoodIconView(raw: foodIcon)
+                        }
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.orange)
@@ -31,9 +41,13 @@ struct WatchHomeView: View {
                     Button {
                         Task { await model.logWater() }
                     } label: {
-                        Label("Log \(model.waterServingOz, format: .number.precision(.fractionLength(0))) oz", systemImage: "drop.fill")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
+                        Label {
+                            Text("Log \(model.waterServingOz, format: .number.precision(.fractionLength(0))) oz")
+                        } icon: {
+                            WaterIconView(raw: waterIcon)
+                        }
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.blue)
@@ -52,6 +66,19 @@ struct WatchHomeView: View {
             if phase == .active {
                 Task { await model.refresh() }
             }
+        }
+    }
+
+    /// Water progress under the headline — the phone's hydration row,
+    /// compressed to one line. Green once the goal is met.
+    private var waterProgress: some View {
+        HStack(spacing: 3) {
+            WaterIconView(raw: waterIcon)
+                .font(.caption2)
+            Text("\(model.state.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
+                .font(.caption2)
+                .monospacedDigit()
+                .foregroundStyle(model.state.summary.waterOz >= waterGoalOz ? .green : .secondary)
         }
     }
 

@@ -18,7 +18,9 @@ struct WatchSyncTests {
             goal: goal,
             waterServingOz: 12,
             waterGoalOz: 64,
-            balanceStyle: "remaining"
+            balanceStyle: "remaining",
+            foodIcon: "bento",
+            waterIcon: "wave"
         )
         let payload = WatchSync.parse(context)
 
@@ -27,6 +29,15 @@ struct WatchSyncTests {
         #expect(payload.waterServingOz == 12)
         #expect(payload.waterGoalOz == 64)
         #expect(payload.balanceStyle == "remaining")
+        #expect(payload.foodIcon == "bento")
+        #expect(payload.waterIcon == "wave")
+    }
+
+    @Test func iconsDefaultToSFSymbols() {
+        let context = WatchSync.makeContext(meals: [], goal: nil, waterServingOz: 12, waterGoalOz: 64)
+        let payload = WatchSync.parse(context)
+        #expect(payload.foodIcon == "sfFork")
+        #expect(payload.waterIcon == "sfDrop")
     }
 
     @Test func balanceStyleDefaultsToBalance() {

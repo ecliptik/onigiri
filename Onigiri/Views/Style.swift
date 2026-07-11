@@ -16,33 +16,8 @@ extension View {
     }
 }
 
-/// The user's chosen food icon: the classic orange fork.knife SF symbol
-/// (default) or one of the emoji options.
-struct FoodIconView: View {
-    let raw: String
-
-    var body: some View {
-        if raw == "sfFork" || raw.isEmpty {
-            Image(systemName: "fork.knife").foregroundStyle(.orange)
-        } else {
-            Text(SharedStore.foodEmoji(for: raw))
-        }
-    }
-}
-
-/// The user's chosen water icon: the blue drop.fill SF symbol (default,
-/// matching the watch) or one of the emoji options.
-struct WaterIconView: View {
-    let raw: String
-
-    var body: some View {
-        if raw == "sfDrop" || raw.isEmpty {
-            Image(systemName: "drop.fill").foregroundStyle(.blue)
-        } else {
-            Text(SharedStore.waterEmoji(for: raw))
-        }
-    }
-}
+// FoodIconView / WaterIconView moved to OnigiriKit so the watch renders
+// the same personalization.
 
 extension Font {
     /// Section headers on scroll screens (Today's "Log", Water's day list) —

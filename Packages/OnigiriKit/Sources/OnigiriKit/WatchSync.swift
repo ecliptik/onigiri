@@ -57,19 +57,26 @@ public struct SyncPayload: Sendable {
     public let waterServingOz: Double?
     public let waterGoalOz: Double?
     public let balanceStyle: String?
+    /// Icon personalization rides along so the watch matches the phone.
+    public let foodIcon: String?
+    public let waterIcon: String?
 
     public init(
         meals: [SyncedMeal]?,
         goal: GoalUpdate,
         waterServingOz: Double?,
         waterGoalOz: Double?,
-        balanceStyle: String? = nil
+        balanceStyle: String? = nil,
+        foodIcon: String? = nil,
+        waterIcon: String? = nil
     ) {
         self.meals = meals
         self.goal = goal
         self.waterServingOz = waterServingOz
         self.waterGoalOz = waterGoalOz
         self.balanceStyle = balanceStyle
+        self.foodIcon = foodIcon
+        self.waterIcon = waterIcon
     }
 }
 
@@ -86,12 +93,16 @@ public enum WatchSync {
         goal: SyncedGoal?,
         waterServingOz: Double,
         waterGoalOz: Double,
-        balanceStyle: String = "balance"
+        balanceStyle: String = "balance",
+        foodIcon: String = "sfFork",
+        waterIcon: String = "sfDrop"
     ) -> [String: Any] {
         var context: [String: Any] = [
             SharedStore.waterServingKey: waterServingOz,
             SharedStore.waterGoalKey: waterGoalOz,
             SharedStore.balanceStyleKey: balanceStyle,
+            SharedStore.foodIconKey: foodIcon,
+            SharedStore.waterIconKey: waterIcon,
         ]
         if let data = try? JSONEncoder().encode(meals) {
             context[mealsKey] = data
@@ -119,7 +130,9 @@ public enum WatchSync {
             goal: goal,
             waterServingOz: context[SharedStore.waterServingKey] as? Double,
             waterGoalOz: context[SharedStore.waterGoalKey] as? Double,
-            balanceStyle: context[SharedStore.balanceStyleKey] as? String
+            balanceStyle: context[SharedStore.balanceStyleKey] as? String,
+            foodIcon: context[SharedStore.foodIconKey] as? String,
+            waterIcon: context[SharedStore.waterIconKey] as? String
         )
     }
 
@@ -146,6 +159,12 @@ public enum WatchSync {
         }
         if let style = payload.balanceStyle {
             defaults.set(style, forKey: SharedStore.balanceStyleKey)
+        }
+        if let foodIcon = payload.foodIcon {
+            defaults.set(foodIcon, forKey: SharedStore.foodIconKey)
+        }
+        if let waterIcon = payload.waterIcon {
+            defaults.set(waterIcon, forKey: SharedStore.waterIconKey)
         }
     }
 

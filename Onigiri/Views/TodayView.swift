@@ -544,8 +544,8 @@ struct TodayView: View {
                     Text("\(entry.oz, format: .number.precision(.fractionLength(0))) oz")
                         .monospacedDigit()
                 }
-                .padding(.vertical, 10)
-                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .padding(.horizontal, 20)
                 .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
                 .logRowSwipeActions(
                     active: $rowSwipeActive,
@@ -615,8 +615,8 @@ struct TodayView: View {
                             .monospacedDigit()
                     }
                 }
-                .padding(.vertical, 10)
-                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .padding(.horizontal, 20)
                 .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
                 .logRowSwipeActions(
                     active: $rowSwipeActive,

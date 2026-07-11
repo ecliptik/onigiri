@@ -77,18 +77,18 @@ struct EmojiPromptSheet: View {
 
     var body: some View {
         NavigationStack {
+            // Top-aligned and keyboard-immune: on device the keyboard
+            // pushed centered content out of the visible strip above it.
             VStack(spacing: 12) {
-                Text("One emoji — it becomes the \(title.lowercased()).")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
                 // The preview IS the state: what's here is what Save keeps.
                 Text(input.isEmpty ? " " : input)
                     .font(.system(size: 56))
                 EmojiTextField(text: $input, onSubmit: onUse)
                     .frame(width: 96, height: 40)
+                Spacer(minLength: 0)
             }
             .padding()
+            .ignoresSafeArea(.keyboard, edges: .bottom)
             .navigationTitle("Custom Emoji")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -100,6 +100,6 @@ struct EmojiPromptSheet: View {
                 }
             }
         }
-        .presentationDetents([.height(280)])
+        .presentationDetents([.height(240)])
     }
 }

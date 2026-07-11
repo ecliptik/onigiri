@@ -19,6 +19,12 @@ struct SettingsView: View {
     @AppStorage(SharedStore.progressGaugesKey, store: SharedStore.defaults) private var progressGauges = false
     @AppStorage(SharedStore.showSodiumKey, store: SharedStore.defaults) private var showSodium = true
     @AppStorage(SharedStore.showWaterKey, store: SharedStore.defaults) private var showWater = true
+    @AppStorage(SharedStore.trackedMetric1Key, store: SharedStore.defaults) private var trackedMetric1 = "sodium"
+    @AppStorage(SharedStore.trackedMetric1ModeKey, store: SharedStore.defaults) private var trackedMetric1Mode = ""
+    @AppStorage(SharedStore.trackedMetric1TargetKey, store: SharedStore.defaults) private var trackedMetric1Target = 0.0
+    @AppStorage(SharedStore.trackedMetric2Key, store: SharedStore.defaults) private var trackedMetric2 = "water"
+    @AppStorage(SharedStore.trackedMetric2ModeKey, store: SharedStore.defaults) private var trackedMetric2Mode = ""
+    @AppStorage(SharedStore.trackedMetric2TargetKey, store: SharedStore.defaults) private var trackedMetric2Target = 0.0
     @AppStorage(SharedStore.remindMealsKey, store: SharedStore.defaults) private var remindMeals = false
     @AppStorage(SharedStore.remindWaterKey, store: SharedStore.defaults) private var remindWater = false
     @AppStorage(SharedStore.remindStreakKey, store: SharedStore.defaults) private var remindStreak = false
@@ -183,23 +189,34 @@ struct SettingsView: View {
 
     /// Selecting "custom" opens the prompt — prefilled with the slot's
     /// current emoji, which the field selects so one keystroke replaces
-    /// it. Any real selection syncs to the watch like before.
+    /// it. Storage never rests on the "custom" sentinel: the selection
+    /// snaps straight back to the previous value and only Save writes
+    /// the emoji, so a dismissed (or never-presented) sheet can't leave
+    /// a checked-but-empty "Choose custom…" row behind.
     private func iconChanged(_ slot: IconSlot, from old: String, to new: String) {
         if new == "custom" {
             customIconPrevious = old
             customEmojiInput = resolvedEmoji(for: slot, raw: old)
-            customIconSlot = slot
+            // Wait out the picker's pop before touching anything: writing
+            // the selection back mid-pop aborts the pop, and the deferred
+            // pop then tears down the freshly presented sheet.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(600))
+                setIcon(slot, to: old)
+                customIconSlot = slot
+            }
         } else {
             PhoneSyncService.shared.push(from: context)
         }
     }
 
+    /// Empty input is a cancellation, per Micheal — the previous choice
+    /// simply stays. Only a non-empty non-emoji earns the toast.
     private func commitCustomEmoji(for slot: IconSlot) {
         let value = customEmojiInput.trimmingCharacters(in: .whitespaces)
         if SharedStore.isCustomEmoji(value) {
             setIcon(slot, to: value)
-        } else {
-            setIcon(slot, to: customIconPrevious)
+        } else if !value.isEmpty {
             ToastCenter.shared.show("One emoji only — keeping the old icon.")
         }
     }
@@ -209,14 +226,6 @@ struct SettingsView: View {
         case .food: SharedStore.foodEmoji(for: raw)
         case .water: SharedStore.waterEmoji(for: raw)
         case .reward: SharedStore.rewardEmoji(for: raw)
-        }
-    }
-
-    private func iconRaw(for slot: IconSlot) -> String {
-        switch slot {
-        case .food: foodIcon
-        case .water: waterIcon
-        case .reward: rewardIcon
         }
     }
 
@@ -287,10 +296,6 @@ struct SettingsView: View {
                 Text("kcal left").tag("remaining")
             }
             Toggle("Progress gauges", isOn: $progressGauges)
-            // These hide the metrics themselves on Today, not
-            // their fill bars (that misread cost a debug session).
-            Toggle("Show sodium", isOn: $showSodium)
-            Toggle("Show water", isOn: $showWater)
         }
         // The icon plumbing lives here, off the body's modifier chain —
         // adding it there pushed the whole Form past the type-checker.
@@ -305,27 +310,97 @@ struct SettingsView: View {
             // The gauge widgets and complications render the badge.
             WidgetCenter.shared.reloadAllTimelines()
         }
-        .sheet(item: $customIconSlot) { slot in
-            EmojiPromptSheet(
-                title: slot.rawValue,
-                input: $customEmojiInput,
-                onUse: { commitCustomEmoji(for: slot); customIconSlot = nil },
-                onCancel: { customIconSlot = nil }
-            )
-            // Swiping the sheet away counts as Cancel; commit already
-            // rewrote the selection, so restoring is a no-op then.
-            .onDisappear {
-                if iconRaw(for: slot) == "custom" {
-                    setIcon(slot, to: customIconPrevious)
+        // A new nutrient starts from its own defaults, not the old one's.
+        .onChange(of: trackedMetric1) {
+            trackedMetric1Mode = ""
+            trackedMetric1Target = 0
+        }
+        .onChange(of: trackedMetric2) {
+            trackedMetric2Mode = ""
+            trackedMetric2Target = 0
+        }
+    }
+
+    /// One of Today's two tracked-metric slots: which nutrient, whether
+    /// its target is a ceiling or a floor, the target itself (sodium and
+    /// water keep their dedicated sections below as the single source),
+    /// and the metric's Show toggle — labels stay "Show sodium"/"Show
+    /// water" for the defaults.
+    private func trackedMetricSection(slot: Int) -> some View {
+        let nutrient = TrackedNutrient(key: slot == 1 ? trackedMetric1 : trackedMetric2)
+            ?? (slot == 1 ? .sodium : .water)
+        return Section(slot == 1 ? "First tracked metric" : "Second tracked metric") {
+            NavigationLink {
+                NutrientPickerView(selectionKey: slot == 1 ? $trackedMetric1 : $trackedMetric2)
+            } label: {
+                LabeledContent("Nutrient") { Text(nutrient.displayName) }
+            }
+            // Menu, not segmented: segments ignore Dynamic Type.
+            Picker("Type", selection: modeBinding(slot: slot, nutrient: nutrient)) {
+                Text("Limit").tag(TrackedMetricMode.limit.rawValue)
+                Text("Goal").tag(TrackedMetricMode.goal.rawValue)
+            }
+            .pickerStyle(.menu)
+            switch nutrient {
+            case .sodium:
+                Text("Sodium's target is the limit in the Sodium section below.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            case .water:
+                Text("Water's target is the daily goal in the Water section below.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            default:
+                LabeledContent("Target") {
+                    HStack(spacing: 4) {
+                        TextField("0", value: targetBinding(slot: slot, nutrient: nutrient), format: .number)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 100)
+                        Text(nutrient.unitSymbol)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
+            // Hides the metric itself on Today, not just its fill bar.
+            Toggle("Show \(nutrient.inlineName)", isOn: slot == 1 ? $showSodium : $showWater)
         }
+    }
+
+    /// Empty stored mode means "the nutrient's default".
+    private func modeBinding(slot: Int, nutrient: TrackedNutrient) -> Binding<String> {
+        Binding(
+            get: {
+                let stored = slot == 1 ? trackedMetric1Mode : trackedMetric2Mode
+                return stored.isEmpty ? nutrient.defaultMode.rawValue : stored
+            },
+            set: { value in
+                if slot == 1 { trackedMetric1Mode = value } else { trackedMetric2Mode = value }
+            }
+        )
+    }
+
+    /// Zero stored target means "the nutrient's default" (an FDA daily
+    /// value seed the user overwrites with their own number).
+    private func targetBinding(slot: Int, nutrient: TrackedNutrient) -> Binding<Double> {
+        Binding(
+            get: {
+                let stored = slot == 1 ? trackedMetric1Target : trackedMetric2Target
+                return stored > 0 ? stored : nutrient.defaultTarget
+            },
+            set: { value in
+                if slot == 1 { trackedMetric1Target = value } else { trackedMetric2Target = value }
+            }
+        )
     }
 
     var body: some View {
         NavigationStack {
             Form {
                 appearanceSection
+
+                trackedMetricSection(slot: 1)
+                trackedMetricSection(slot: 2)
 
                 remindersSection
 
@@ -400,6 +475,19 @@ struct SettingsView: View {
             }
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
                 transferMessage = LibraryTransfer.handlePickedFile(result, context: context)
+            }
+            // On the outer chain deliberately: presenting from a Form
+            // section tore down the whole Settings sheet moments after
+            // this one appeared (the codebase's presentation landmine).
+            .sheet(item: $customIconSlot) { slot in
+                // The selection already snapped back before presenting;
+                // only Save writes anything, so Cancel needs no cleanup.
+                EmojiPromptSheet(
+                    title: slot.rawValue,
+                    input: $customEmojiInput,
+                    onUse: { commitCustomEmoji(for: slot); customIconSlot = nil },
+                    onCancel: { customIconSlot = nil }
+                )
             }
         }
     }

@@ -114,9 +114,16 @@ struct FoodsView: View {
                                 }
                                 .tint(.yellow)
                             }
-                        }
-                        .onDelete { offsets in
-                            pendingMealDeletes = offsets.map { visibleMeals[$0] }
+                            // Explicit trailing action (not .onDelete) so
+                            // the reveal shows the same trash icon as the
+                            // Today log's swipe — one delete look app-wide.
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    pendingMealDeletes = [meal]
+                                } label: {
+                                    Label("Delete", systemImage: "trash.fill")
+                                }
+                            }
                         }
                     }
                 }
@@ -158,9 +165,13 @@ struct FoodsView: View {
                             }
                             .tint(.yellow)
                         }
-                    }
-                    .onDelete { offsets in
-                        pendingFoodDeletes = offsets.map { visibleFoods[$0] }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                pendingFoodDeletes = [food]
+                            } label: {
+                                Label("Delete", systemImage: "trash.fill")
+                            }
+                        }
                     }
 
                     if foods.isEmpty {

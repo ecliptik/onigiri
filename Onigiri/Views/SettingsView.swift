@@ -13,6 +13,7 @@ struct SettingsView: View {
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
     @AppStorage(SharedStore.waterServingKey, store: SharedStore.defaults) private var waterServingOz = 12.0
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
+    @AppStorage(SharedStore.progressGaugesKey, store: SharedStore.defaults) private var progressGauges = false
     @AppStorage(SharedStore.remindMealsKey, store: SharedStore.defaults) private var remindMeals = false
     @AppStorage(SharedStore.remindWaterKey, store: SharedStore.defaults) private var remindWater = false
     @AppStorage(SharedStore.remindStreakKey, store: SharedStore.defaults) private var remindStreak = false
@@ -170,6 +171,10 @@ struct SettingsView: View {
                         Text("kcal balance").tag("balance")
                         Text("kcal left").tag("remaining")
                     }
+                    Toggle("Progress gauges", isOn: $progressGauges)
+                    Text("Draws a ring around Today's headline and fill bars behind water and sodium.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     Text("kcal left counts down what you can still eat today while staying on your deficit goal. kcal balance shows intake minus burn.")
                         .font(.caption)
                         .foregroundStyle(.secondary)

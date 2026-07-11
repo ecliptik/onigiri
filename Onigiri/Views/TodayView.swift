@@ -19,6 +19,7 @@ struct TodayView: View {
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
+    @AppStorage(SharedStore.progressGaugesKey, store: SharedStore.defaults) private var progressGauges = false
     @State private var activeSheet: TodaySheet?
     @State private var quickActions = QuickActions.shared
     @State private var toastCenter = ToastCenter.shared
@@ -88,7 +89,11 @@ struct TodayView: View {
                     // The meters are display-only.
                     nutritionLink {
                         VStack(spacing: 8) {
-                            balanceHeadline
+                            if progressGauges {
+                                gaugedHeadline
+                            } else {
+                                balanceHeadline
+                            }
                             HStack(spacing: 4) {
                                 Text("Nutrition details")
                                 Image(systemName: "chevron.right")
@@ -329,6 +334,35 @@ struct TodayView: View {
         return plan.dailyBudget - model.summary.intakeKcal
     }
 
+    /// Progress-gauges mode: the headline wears a ring showing how much
+    /// of the day's calorie budget is eaten (needs a plan; without one
+    /// the plain headline renders).
+    @ViewBuilder
+    private var gaugedHeadline: some View {
+        if let goal = goals.first, let plan = plan(for: goal), plan.dailyBudget > 0 {
+            let eaten = min(1, max(0, model.summary.intakeKcal / plan.dailyBudget))
+            let over = model.summary.intakeKcal > plan.dailyBudget
+            ZStack {
+                Circle()
+                    .stroke(.quaternary, lineWidth: 6)
+                Circle()
+                    .trim(from: 0, to: eaten)
+                    .stroke(
+                        over ? Color.orange : Color.riceToast,
+                        style: StrokeStyle(lineWidth: 6, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                balanceHeadline
+                    .padding(24)
+            }
+            .frame(width: 190, height: 190)
+            .accessibilityElement(children: .combine)
+            .accessibilityValue("\(Int(eaten * 100)) percent of today's budget eaten")
+        } else {
+            balanceHeadline
+        }
+    }
+
     private var balanceHeadline: some View {
         VStack(spacing: 4) {
             if let remaining = remainingHeadlineKcal {
@@ -453,6 +487,11 @@ struct TodayView: View {
                 Text("🧂")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .gaugeFill(
+                enabled: progressGauges,
+                fraction: sodiumLimitMg > 0 ? model.summary.sodiumMg / sodiumLimitMg : 0,
+                tint: Color.sodiumStatus(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg)
+            )
 
             Label {
                 Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(waterGoalOz, format: .number.precision(.fractionLength(0))) oz water")
@@ -462,10 +501,15 @@ struct TodayView: View {
                 WaterIconView(raw: waterIcon)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .gaugeFill(
+                enabled: progressGauges,
+                fraction: waterGoalOz > 0 ? model.summary.waterOz / waterGoalOz : 0,
+                tint: .blue
+            )
         }
         .font(.subheadline)
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 28)
+        .padding(.horizontal, progressGauges ? 20 : 28)
     }
 
     private var loggedSection: some View {
@@ -680,6 +724,28 @@ struct TodayView: View {
 }
 
 private extension View {
+    /// Progress-gauges mode: a soft fill bar behind a metric, its width
+    /// the fraction of the goal/limit reached. No-op when the toggle is
+    /// off so the default layout stays byte-identical.
+    @ViewBuilder
+    func gaugeFill(enabled: Bool, fraction: Double, tint: Color) -> some View {
+        if enabled {
+            self
+                .padding(.vertical, 5)
+                .padding(.horizontal, 8)
+                .background {
+                    GeometryReader { geo in
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(tint.opacity(0.18))
+                            .frame(width: geo.size.width * min(1, max(0, fraction)))
+                    }
+                }
+                .background(.quaternary.opacity(0.35), in: .rect(cornerRadius: 8))
+        } else {
+            self
+        }
+    }
+
     func logRowSwipeActions(
         active: Binding<Bool>,
         itemName: String,

@@ -482,6 +482,15 @@ struct PortionSheet: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+            // Select-all on focus, like the food form: the prefilled "1"
+            // is usually replaced, not appended to. This sheet has one
+            // text field and no sub-sheets, so no scoping guards needed.
+            .onReceive(NotificationCenter.default.publisher(
+                for: UITextField.textDidBeginEditingNotification
+            )) { note in
+                guard let field = note.object as? UITextField else { return }
+                DispatchQueue.main.async { field.selectAll(nil) }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

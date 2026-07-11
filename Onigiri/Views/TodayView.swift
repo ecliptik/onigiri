@@ -506,11 +506,12 @@ struct TodayView: View {
             } icon: {
                 WaterIconView(raw: waterIcon)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .trailing)
             .gaugeFill(
                 enabled: progressGauges && showWaterGauge,
                 fraction: waterGoalOz > 0 ? model.summary.waterOz / waterGoalOz : 0,
-                tint: .blue
+                tint: .blue,
+                anchor: .trailing
             )
         }
         .font(.subheadline)
@@ -731,10 +732,11 @@ struct TodayView: View {
 
 private extension View {
     /// Progress-gauges mode: a soft fill bar behind a metric, its width
-    /// the fraction of the goal/limit reached. No-op when the toggle is
-    /// off so the default layout stays byte-identical.
+    /// the fraction of the goal/limit reached. `anchor` picks which edge
+    /// the fill grows from (water mirrors sodium from the trailing side).
+    /// No-op when the toggle is off so the default layout stays intact.
     @ViewBuilder
-    func gaugeFill(enabled: Bool, fraction: Double, tint: Color) -> some View {
+    func gaugeFill(enabled: Bool, fraction: Double, tint: Color, anchor: Alignment = .leading) -> some View {
         if enabled {
             self
                 .padding(.vertical, 5)
@@ -744,6 +746,7 @@ private extension View {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(tint.opacity(0.18))
                             .frame(width: geo.size.width * min(1, max(0, fraction)))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: anchor)
                     }
                 }
                 .background(.quaternary.opacity(0.35), in: .rect(cornerRadius: 8))

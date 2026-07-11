@@ -18,7 +18,6 @@ struct QuickLogSheet: View {
     @State private var kind: QuickActions.QuickLogKind = .all
     @State private var kindLoaded = false
     @State private var searchText = ""
-    @State private var errorMessage: String?
     @State private var isLogging = false
     @State private var portionTarget: PortionTarget?
     @State private var onlineSearch = OnlineFoodSearch()
@@ -148,11 +147,6 @@ struct QuickLogSheet: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                }
                 // What you actually ate lately beats any sort order — but it
                 // yields to search, which is about finding something else.
                 if searchText.isEmpty, !visibleRecents.isEmpty {
@@ -255,6 +249,7 @@ struct QuickLogSheet: View {
             .sheet(item: $editingFood) { FoodFormView(food: $0) }
             .sheet(item: $editingMeal) { MealFormView(meal: $0) }
         }
+        .toastHost()
     }
 
     /// The fast portion sheet for a barcode the library already knows.
@@ -284,7 +279,6 @@ struct QuickLogSheet: View {
     /// fetch also gives the scanner sheet time to finish dismissing before
     /// the next sheet presents.
     private func lookUpBarcode(_ code: String) {
-        errorMessage = nil
         if let target = libraryTarget(forBarcode: code) {
             portionTarget = target
             return
@@ -296,7 +290,10 @@ struct QuickLogSheet: View {
                 let product = try await OpenFoodFactsClient().product(barcode: code)
                 formPrefill = ProductPrefill(product: product)
             } catch {
-                errorMessage = error.localizedDescription
+                // Transient failures toast, like everything else; the
+                // sheet has its own toastHost (the root's renders behind
+                // presented sheets).
+                ToastCenter.shared.show(error.localizedDescription)
             }
         }
     }

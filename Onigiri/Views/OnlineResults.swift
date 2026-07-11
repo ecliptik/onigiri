@@ -40,11 +40,13 @@ final class OnlineFoodSearch {
             }
         } catch {
             guard lastQuery == trimmed else { return }
-            // OFF errors already read as full sentences ("OpenFoodFacts
-            // is busy — wait a minute…"); don't prefix them with "failed".
-            message = error is OpenFoodFactsError
-                ? error.localizedDescription
-                : "Online search failed: \(error.localizedDescription)"
+            // Transient failures toast (hosts on each sheet); the inline
+            // message stays for result states like "no matches".
+            ToastCenter.shared.show(
+                error is OpenFoodFactsError
+                    ? error.localizedDescription
+                    : "Online search failed: \(error.localizedDescription)"
+            )
         }
         isSearching = false
     }

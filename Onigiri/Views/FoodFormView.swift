@@ -276,6 +276,7 @@ struct FoodFormView: View {
                 }
             }
         }
+        .toastHost()
     }
 
     /// Duplicate-food guard: fires only for NEW foods whose prefilled
@@ -375,13 +376,15 @@ struct FoodFormView: View {
     private func lookup(_ code: String) async {
         isLookingUp = true
         lookupMessage = nil
+        defer { isLookingUp = false }
         do {
             let product = try await OpenFoodFactsClient().product(barcode: code)
             apply(product)
         } catch {
-            lookupMessage = error.localizedDescription
+            // Transient lookup failures toast; lookupMessage stays for
+            // the persistent "no calorie data" hint tied to the fields.
+            ToastCenter.shared.show(error.localizedDescription)
         }
-        isLookingUp = false
     }
 
     private func apply(_ product: ScannedProduct) {

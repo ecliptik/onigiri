@@ -117,10 +117,12 @@ final class TodayModel {
             self.summary = loadedSummary
             self.foodLog = loadedFood
             self.waterLog = loadedWater
-            errorMessage = nil
         } catch {
             guard generation == refreshGeneration else { return }
-            errorMessage = "Couldn't read Health data: \(error.localizedDescription)"
+            // Transient read failures toast like every other transient
+            // failure; errorMessage stays for the persistent start()
+            // states (Health unavailable, authorization failed).
+            ToastCenter.shared.show("Couldn't read Health data: \(error.localizedDescription)")
             print("[onigiri] refresh FAILED: \(error)")
         }
     }

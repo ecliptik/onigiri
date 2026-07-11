@@ -68,5 +68,6 @@ struct FoodSearchSheet: View {
                 searchFocused = true
             }
         }
+        .toastHost()
     }
 }

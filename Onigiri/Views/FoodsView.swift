@@ -475,6 +475,9 @@ struct LibraryRow: View {
     let kcal: Double
     let sodiumMg: Double
     var isFavorite = false
+    /// Shown where meals and foods share one list (the Log sheet) —
+    /// the Foods tab's sections already say which is which.
+    var isMeal = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
@@ -487,6 +490,14 @@ struct LibraryRow: View {
                     }
                     Text(name)
                         .foregroundStyle(.primary)
+                    if isMeal {
+                        Text("Meal")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.quaternary.opacity(0.6), in: .capsule)
+                    }
                 }
                 if !detail.isEmpty {
                     Text(detail)

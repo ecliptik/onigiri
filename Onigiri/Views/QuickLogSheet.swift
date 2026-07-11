@@ -283,7 +283,8 @@ struct QuickLogSheet: View {
                 detail: item.detail,
                 kcal: item.kcal,
                 sodiumMg: item.sodiumMg,
-                isFavorite: item.isFavorite
+                isFavorite: item.isFavorite,
+                isMeal: item.isMeal
             )
             LogButton(name: item.name) {
                 if item.isMeal {

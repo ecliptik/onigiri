@@ -1070,6 +1070,41 @@ final class OnigiriUITests: XCTestCase {
         )
     }
 
+    /// Tracked-metric swap (opt-in via TRACKED_METRIC=1, seeded sims):
+    /// points the first slot at Fiber and checks Today's metric row
+    /// follows with the goal format and FDA-default target.
+    @MainActor
+    func testTrackedMetricSwap() throws {
+        guard ProcessInfo.processInfo.environment["TRACKED_METRIC"] == "1" else {
+            throw XCTSkip("Set TRACKED_METRIC=1 to run the tracked-metric test")
+        }
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--seed-sample-data"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        switchTab(in: app, to: "Today")
+        app.buttons["Settings"].tap()
+        // Both slots render a "Nutrient" row; the first belongs to slot 1.
+        let nutrientRow = app.staticTexts["Nutrient"].firstMatch
+        XCTAssertTrue(nutrientRow.waitForExistence(timeout: 10), "Slot 1 nutrient row")
+        nutrientRow.tap()
+        let fiber = app.staticTexts["Fiber"]
+        XCTAssertTrue(fiber.waitForExistence(timeout: 5), "Fiber in the picker")
+        fiber.tap()
+        attachShot(named: "metric-slot-settings")
+        app.buttons["Done"].tap()
+
+        // Seeded foods carry fiber; the row reads "x / 28 g Fiber".
+        let fiberMetric = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS '28 g Fiber'")
+        ).firstMatch
+        XCTAssertTrue(fiberMetric.waitForExistence(timeout: 10), "Today shows the fiber metric")
+        attachShot(named: "metric-today-fiber")
+    }
+
     /// One-off: grants whatever Health sheet is pending, without seeding.
     @MainActor
     func testGrantPendingAccess() throws {

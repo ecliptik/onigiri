@@ -110,6 +110,163 @@ public enum MicronutrientUnit: Sendable {
     }
 }
 
+/// A nutrient (or water) that can occupy one of Today's tracked-metric
+/// slots. Day totals come from Health, so only nutrients with a dietary
+/// type qualify — which excludes trans fat (app-only). Keys are stable
+/// storage strings; micro cases reuse the Micronutrient raw values.
+public enum TrackedNutrient: Hashable, Sendable, Identifiable {
+    case water, sodium
+    case fat, saturatedFat, polyunsaturatedFat, monounsaturatedFat
+    case cholesterol, carbs, protein, fiber, sugar, caffeine
+    case micro(Micronutrient)
+
+    public var id: String { key }
+
+    /// Picker groups, in display order.
+    public static let general: [TrackedNutrient] = [.water, .sodium]
+    public static let macros: [TrackedNutrient] = [
+        .protein, .carbs, .fiber, .sugar, .fat, .saturatedFat,
+        .polyunsaturatedFat, .monounsaturatedFat, .cholesterol, .caffeine,
+    ]
+    public static var all: [TrackedNutrient] {
+        general + macros + Micronutrient.allCases.map(Self.micro)
+    }
+
+    public var key: String {
+        switch self {
+        case .water: "water"
+        case .sodium: "sodium"
+        case .fat: "fat"
+        case .saturatedFat: "saturatedFat"
+        case .polyunsaturatedFat: "polyunsaturatedFat"
+        case .monounsaturatedFat: "monounsaturatedFat"
+        case .cholesterol: "cholesterol"
+        case .carbs: "carbs"
+        case .protein: "protein"
+        case .fiber: "fiber"
+        case .sugar: "sugar"
+        case .caffeine: "caffeine"
+        case .micro(let micro): micro.rawValue
+        }
+    }
+
+    public init?(key: String) {
+        if let match = (Self.general + Self.macros).first(where: { $0.key == key }) {
+            self = match
+        } else if let micro = Micronutrient(rawValue: key) {
+            self = .micro(micro)
+        } else {
+            return nil
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .water: "Water"
+        case .sodium: "Sodium"
+        case .fat: "Fat"
+        case .saturatedFat: "Saturated fat"
+        case .polyunsaturatedFat: "Polyunsaturated fat"
+        case .monounsaturatedFat: "Monounsaturated fat"
+        case .cholesterol: "Cholesterol"
+        case .carbs: "Carbohydrates"
+        case .protein: "Protein"
+        case .fiber: "Fiber"
+        case .sugar: "Sugar"
+        case .caffeine: "Caffeine"
+        case .micro(let micro): micro.displayName
+        }
+    }
+
+    /// The nutrient's label/Health unit, used for the target and the
+    /// Today readout.
+    public var unitSymbol: String {
+        switch self {
+        case .water: "oz"
+        case .sodium, .cholesterol, .caffeine: "mg"
+        case .fat, .saturatedFat, .polyunsaturatedFat, .monounsaturatedFat,
+             .carbs, .protein, .fiber, .sugar: "g"
+        case .micro(let micro): micro.unit.symbol
+        }
+    }
+
+    /// Inline label for Today's metric row and the Show toggles: sodium
+    /// and water keep their long-standing lowercase copy; other nutrients
+    /// read as named ("Fiber", "Vitamin B12").
+    public var inlineName: String {
+        switch self {
+        case .sodium: "sodium"
+        case .water: "water"
+        default: displayName
+        }
+    }
+
+    /// Whether picking this nutrient starts as a ceiling (limit) or a
+    /// floor (goal); the user can flip it.
+    public var defaultMode: TrackedMetricMode {
+        switch self {
+        case .sodium, .sugar, .fat, .saturatedFat, .cholesterol, .caffeine:
+            .limit
+        default:
+            .goal
+        }
+    }
+
+    /// Seed target when first picked — FDA adult daily values (water is
+    /// the app's long-standing 64 oz). A starting point, not advice; the
+    /// user sets their own number in Settings.
+    public var defaultTarget: Double {
+        switch self {
+        case .water: 64
+        case .sodium: 2300
+        case .fat: 78
+        case .saturatedFat: 20
+        case .polyunsaturatedFat: 22
+        case .monounsaturatedFat: 44
+        case .cholesterol: 300
+        case .carbs: 275
+        case .protein: 50
+        case .fiber: 28
+        case .sugar: 50
+        case .caffeine: 400
+        case .micro(let micro):
+            switch micro {
+            case .potassium: 4700
+            case .calcium: 1300
+            case .iron: 18
+            case .magnesium: 420
+            case .zinc: 11
+            case .phosphorus: 1250
+            case .selenium: 55
+            case .copper: 0.9
+            case .manganese: 2.3
+            case .iodine: 150
+            case .chromium: 35
+            case .molybdenum: 45
+            case .chloride: 2300
+            case .vitaminA: 900
+            case .vitaminC: 90
+            case .vitaminD: 20
+            case .vitaminE: 15
+            case .vitaminB6: 1.7
+            case .vitaminB12: 2.4
+            case .folate: 400
+            case .vitaminK: 120
+            case .thiamin: 1.2
+            case .riboflavin: 1.3
+            case .niacin: 16
+            case .pantothenicAcid: 5
+            case .biotin: 30
+            }
+        }
+    }
+}
+
+/// Whether a tracked metric's target is a ceiling or a floor.
+public enum TrackedMetricMode: String, Sendable {
+    case limit, goal
+}
+
 /// Optional extended nutrients. Calories and sodium remain the first-class
 /// fields; macros (grams), cholesterol (mg), and micronutrients ride along
 /// when known. Trans fat is app-only: Apple Health has no dietary type

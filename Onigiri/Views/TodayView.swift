@@ -22,6 +22,14 @@ struct TodayView: View {
     @AppStorage(SharedStore.progressGaugesKey, store: SharedStore.defaults) private var progressGauges = false
     @AppStorage(SharedStore.showSodiumKey, store: SharedStore.defaults) private var showSodium = true
     @AppStorage(SharedStore.showWaterKey, store: SharedStore.defaults) private var showWater = true
+    // The two tracked-metric slots; @AppStorage so a Settings change
+    // re-renders the row (SharedStore reads alone wouldn't).
+    @AppStorage(SharedStore.trackedMetric1Key, store: SharedStore.defaults) private var trackedMetric1 = "sodium"
+    @AppStorage(SharedStore.trackedMetric1ModeKey, store: SharedStore.defaults) private var trackedMetric1Mode = ""
+    @AppStorage(SharedStore.trackedMetric1TargetKey, store: SharedStore.defaults) private var trackedMetric1Target = 0.0
+    @AppStorage(SharedStore.trackedMetric2Key, store: SharedStore.defaults) private var trackedMetric2 = "water"
+    @AppStorage(SharedStore.trackedMetric2ModeKey, store: SharedStore.defaults) private var trackedMetric2Mode = ""
+    @AppStorage(SharedStore.trackedMetric2TargetKey, store: SharedStore.defaults) private var trackedMetric2Target = 0.0
     @State private var activeSheet: TodaySheet?
     @State private var quickActions = QuickActions.shared
     @State private var toastCenter = ToastCenter.shared
@@ -249,6 +257,14 @@ struct TodayView: View {
         }
         .task { await model.start() }
         .onChange(of: toastCenter.mutationVersion) { _, _ in
+            Task { await model.refresh() }
+        }
+        // A slot's nutrient changed in Settings: its day total needs a
+        // fresh Health query.
+        .onChange(of: trackedMetric1) { _, _ in
+            Task { await model.refresh() }
+        }
+        .onChange(of: trackedMetric2) { _, _ in
             Task { await model.refresh() }
         }
         .refreshable { await model.refresh() }
@@ -489,51 +505,89 @@ struct TodayView: View {
         .padding(.horizontal)
     }
 
-    /// Sodium and water readouts — each hideable in Settings (the metric
-    /// itself, not just its fill bar). A lone survivor centers.
+    /// The two configurable tracked-metric readouts (sodium and water by
+    /// default) — each hideable in Settings (the metric itself, not just
+    /// its fill bar). A lone survivor centers.
     @ViewBuilder
     private var hydrationRow: some View {
         if showSodium || showWater {
             HStack(spacing: 12) {
                 if showSodium {
-                    Label {
-                        Text("\(model.summary.sodiumMg, format: .number.precision(.fractionLength(0))) mg sodium")
-                            .foregroundStyle(Color.sodiumStatus(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg))
-                            .fontWeight(.medium)
-                    } icon: {
-                        // Salt shaker, matching the emoji water icon beside
-                        // it (aqi.medium was an air-quality glyph).
-                        Text("🧂")
-                    }
-                    .frame(maxWidth: .infinity, alignment: showWater ? .leading : .center)
-                    .gaugeFill(
-                        enabled: progressGauges,
-                        fraction: sodiumLimitMg > 0 ? model.summary.sodiumMg / sodiumLimitMg : 0,
-                        tint: Color.sodiumStatus(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg)
-                    )
+                    trackedMetricView(slot: 1, alignment: showWater ? .leading : .center)
                 }
-
                 if showWater {
-                    Label {
-                        Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(waterGoalOz, format: .number.precision(.fractionLength(0))) oz water")
-                            .foregroundStyle(model.summary.waterOz >= waterGoalOz ? Color.green : Color.secondary)
-                            .fontWeight(model.summary.waterOz >= waterGoalOz ? .medium : .regular)
-                    } icon: {
-                        WaterIconView(raw: waterIcon)
-                    }
-                    .frame(maxWidth: .infinity, alignment: showSodium ? .trailing : .center)
-                    // Fill grows from the left like sodium's (Micheal:
-                    // matching fill direction beats mirrored symmetry).
-                    .gaugeFill(
-                        enabled: progressGauges,
-                        fraction: waterGoalOz > 0 ? model.summary.waterOz / waterGoalOz : 0,
-                        tint: .blue
-                    )
+                    trackedMetricView(slot: 2, alignment: showSodium ? .trailing : .center)
                 }
             }
             .font(.subheadline)
             .foregroundStyle(.secondary)
             .padding(.horizontal, progressGauges ? 20 : 28)
+        }
+    }
+
+    /// One tracked metric: limit mode reads and colors like sodium always
+    /// has (total only, green → red as the ceiling nears); goal mode like
+    /// water ("x / target", green when met). Fill grows from the left in
+    /// both (matching fill direction beats mirrored symmetry).
+    @ViewBuilder
+    private func trackedMetricView(slot: Int, alignment: Alignment) -> some View {
+        let nutrient = TrackedNutrient(key: slot == 1 ? trackedMetric1 : trackedMetric2)
+            ?? (slot == 1 ? .sodium : .water)
+        let storedMode = slot == 1 ? trackedMetric1Mode : trackedMetric2Mode
+        let mode = TrackedMetricMode(rawValue: storedMode) ?? nutrient.defaultMode
+        let target = trackedTarget(slot: slot, nutrient: nutrient)
+        let total = model.trackedTotals[slot - 1]
+        let met = total >= target
+        let tint: Color = mode == .limit
+            ? Color.sodiumStatus(mg: total, limitMg: target)
+            : (nutrient == .water ? .blue : .green)
+
+        Label {
+            switch mode {
+            case .limit:
+                Text("\(total, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(metricName(nutrient))")
+                    .foregroundStyle(Color.sodiumStatus(mg: total, limitMg: target))
+                    .fontWeight(.medium)
+            case .goal:
+                Text("\(total, format: .number.precision(.fractionLength(0))) / \(target, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(metricName(nutrient))")
+                    .foregroundStyle(met ? Color.green : Color.secondary)
+                    .fontWeight(met ? .medium : .regular)
+            }
+        } icon: {
+            metricIcon(nutrient)
+        }
+        .frame(maxWidth: .infinity, alignment: alignment)
+        .gaugeFill(
+            enabled: progressGauges,
+            fraction: target > 0 ? total / target : 0,
+            tint: tint
+        )
+    }
+
+    /// Sodium/water targets live on their long-standing keys (one source
+    /// with the calendar, nutrition detail, and reminders).
+    private func trackedTarget(slot: Int, nutrient: TrackedNutrient) -> Double {
+        switch nutrient {
+        case .sodium: return sodiumLimitMg
+        case .water: return waterGoalOz
+        default:
+            let stored = slot == 1 ? trackedMetric1Target : trackedMetric2Target
+            return stored > 0 ? stored : nutrient.defaultTarget
+        }
+    }
+
+    private func metricName(_ nutrient: TrackedNutrient) -> String {
+        nutrient.inlineName
+    }
+
+    @ViewBuilder
+    private func metricIcon(_ nutrient: TrackedNutrient) -> some View {
+        switch nutrient {
+        // Salt shaker, matching the emoji water icon beside it
+        // (aqi.medium was an air-quality glyph).
+        case .sodium: Text("🧂")
+        case .water: WaterIconView(raw: waterIcon)
+        default: EmptyView()
         }
     }
 

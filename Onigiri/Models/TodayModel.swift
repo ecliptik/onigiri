@@ -6,6 +6,9 @@ final class TodayModel {
     private(set) var summary: DailyEnergySummary = .zero
     private(set) var foodLog: [FoodLogEntry] = []
     private(set) var waterLog: [WaterLogEntry] = []
+    /// Day totals for the two configurable tracked-metric slots, in each
+    /// nutrient's label unit (sodium/water reuse the summary's numbers).
+    private(set) var trackedTotals: [Double] = [0, 0]
     private(set) var currentWeightLb: Double?
     private(set) var averageBurnKcal: Double?
     private(set) var errorMessage: String?
@@ -111,12 +114,20 @@ final class TodayModel {
             async let summary = health.daySummary(for: selectedDate)
             async let foodLog = health.foodEntries(on: selectedDate)
             async let waterLog = health.waterEntries(on: selectedDate)
-            let (loadedSummary, loadedFood, loadedWater) =
-                try await (summary, foodLog, waterLog)
+            async let tracked1 = trackedTotal(slot: 1)
+            async let tracked2 = trackedTotal(slot: 2)
+            let (loadedSummary, loadedFood, loadedWater, loaded1, loaded2) =
+                try await (summary, foodLog, waterLog, tracked1, tracked2)
             guard generation == refreshGeneration else { return }
             self.summary = loadedSummary
             self.foodLog = loadedFood
             self.waterLog = loadedWater
+            // Sodium/water ride the summary — no second query, and the
+            // numbers can't disagree with the rest of the screen.
+            self.trackedTotals = [
+                loaded1 ?? slotSummaryValue(slot: 1, from: loadedSummary),
+                loaded2 ?? slotSummaryValue(slot: 2, from: loadedSummary),
+            ]
         } catch {
             guard generation == refreshGeneration else { return }
             // Transient read failures toast like every other transient
@@ -124,6 +135,23 @@ final class TodayModel {
             // states (Health unavailable, authorization failed).
             ToastCenter.shared.show("Couldn't read Health data: \(error.localizedDescription)")
             print("[onigiri] refresh FAILED: \(error)")
+        }
+    }
+
+    /// Nil for sodium/water — the caller reuses the day summary's values.
+    private func trackedTotal(slot: Int) async throws -> Double? {
+        let nutrient = SharedStore.trackedNutrient(slot: slot)
+        switch nutrient {
+        case .sodium, .water: return nil
+        default: return try await health.dayTotal(of: nutrient, for: selectedDate)
+        }
+    }
+
+    private func slotSummaryValue(slot: Int, from summary: DailyEnergySummary) -> Double {
+        switch SharedStore.trackedNutrient(slot: slot) {
+        case .sodium: summary.sodiumMg
+        case .water: summary.waterOz
+        default: 0
         }
     }
 }

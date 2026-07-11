@@ -110,6 +110,13 @@ public final class HealthKitService {
         DayBounds.range(for: date, now: now)
     }
 
+    /// A day's all-sources total for one tracked nutrient, in its label
+    /// unit — Today's configurable metric slots read this.
+    public func dayTotal(of nutrient: TrackedNutrient, for date: Date = .now, now: Date = .now) async throws -> Double {
+        let (start, end) = Self.dayRange(for: date, now: now)
+        return try await sum(nutrient.healthKitIdentifier, unit: nutrient.healthKitUnit, start: start, end: end)
+    }
+
     private func sum(
         _ identifier: HKQuantityTypeIdentifier, unit: HKUnit, start: Date, end: Date
     ) async throws -> Double {
@@ -529,6 +536,36 @@ public final class HealthKitService {
         }
     }
     #endif
+}
+
+extension TrackedNutrient {
+    var healthKitIdentifier: HKQuantityTypeIdentifier {
+        switch self {
+        case .water: .dietaryWater
+        case .sodium: .dietarySodium
+        case .fat: .dietaryFatTotal
+        case .saturatedFat: .dietaryFatSaturated
+        case .polyunsaturatedFat: .dietaryFatPolyunsaturated
+        case .monounsaturatedFat: .dietaryFatMonounsaturated
+        case .cholesterol: .dietaryCholesterol
+        case .carbs: .dietaryCarbohydrates
+        case .protein: .dietaryProtein
+        case .fiber: .dietaryFiber
+        case .sugar: .dietarySugar
+        case .caffeine: .dietaryCaffeine
+        case .micro(let micro): micro.healthKitIdentifier
+        }
+    }
+
+    var healthKitUnit: HKUnit {
+        switch self {
+        case .water: .fluidOunceUS()
+        case .sodium, .cholesterol, .caffeine: .gramUnit(with: .milli)
+        case .fat, .saturatedFat, .polyunsaturatedFat, .monounsaturatedFat,
+             .carbs, .protein, .fiber, .sugar: .gram()
+        case .micro(let micro): micro.healthKitUnit
+        }
+    }
 }
 
 extension Micronutrient {

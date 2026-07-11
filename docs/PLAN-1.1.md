@@ -3,11 +3,14 @@
 Plan agreed 2026-07-10 (scope fine-tuned with Micheal). Read `CLAUDE.md` for
 build/deploy mechanics and `docs/POST-1.0.md` for the source roadmap.
 
-Status 2026-07-10 evening: M1–M6 implemented, kit-tested (79 pre-M4 → 83
-tests), and sim-verified via the extended seeded flow test; committed
-individually on main. Remaining: device deploy + Micheal's verification
-pass (incl. reminders via the DEBUG preview row and a Dynamic Type look at
-accessibility sizes), then M7 showcase assets + the 1.1.0 tag.
+SHIPPED 2026-07-10: v1.1.0 tagged (all milestones + Micheal's feedback
+rounds: metric drill-ins from headline/goal card, collapsible nutrition
+groups, Recents meal tags, swipe right-to-edit/left-to-delete log rows
+with library-consistent pill reveals and matched row metrics, full
+dietary read authorization). Showcase assets live in docs/showcase/
+(reel.mp4 + autoplaying reel.gif + 13 light/13 dark screenshots, wired
+into README.md); regenerate via testShowcaseTour (TEST_RUNNER_SHOWCASE=1)
+— see the commit for the VFR image-matching caption pipeline.
 
 Scope decisions:
 

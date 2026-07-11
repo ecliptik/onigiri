@@ -4,16 +4,6 @@ A personal calorie, sodium, and water tracker for iPhone + Apple Watch, built wi
 
 **Goal:** support losing 20 lb by making daily energy balance (calories in − calories out) effortless to see and log.
 
-## Tour
-
-<div align="center">
-
-![Autoplaying 75-second tour of Onigiri: the daily balance, nutrition detail, fast logging, swipe editing, the streak calendar, predicted-vs-scale weight change, goal planning, and reminders.](docs/showcase/reel.gif)
-
-*Full quality: [reel.mp4](docs/showcase/reel.mp4)*
-
-</div>
-
 ## Screenshots
 
 | Today | Nutrition detail | Log sheet | Portion |

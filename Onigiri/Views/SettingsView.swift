@@ -176,7 +176,7 @@ struct SettingsView: View {
             Image(systemName: "face.smiling")
                 .frame(width: 28)
                 .foregroundStyle(.secondary)
-            Text("Choose your own…")
+            Text("Choose custom…")
         }
         .tag("custom")
     }

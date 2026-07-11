@@ -1016,7 +1016,7 @@ final class OnigiriUITests: XCTestCase {
         app.buttons["Settings"].tap()
         XCTAssertTrue(badgeRow.waitForExistence(timeout: 10))
         badgeRow.tap()
-        app.staticTexts["Choose your own…"].tap()
+        app.staticTexts["Choose custom…"].tap()
         // The prompt sheet's field focuses itself with the current emoji
         // selected — typing replaces it, no tap (a tap would deselect).
         // Target by identifier: the emoji keyboard's own "Search Emoji"
@@ -1026,7 +1026,7 @@ final class OnigiriUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 1.5)
         field.typeText("🦄")
         attachShot(named: "badge-custom-prompt")
-        app.buttons["Use it"].tap()
+        app.buttons["Save"].tap()
         app.buttons["Done"].tap()
         switchTab(in: app, to: "Calendar")
         dayEight.tap()

@@ -26,7 +26,7 @@ private struct EmojiTextField: UIViewRepresentable {
         field.text = text
         field.accessibilityIdentifier = "emojiPromptField"
         field.delegate = context.coordinator
-        field.font = .systemFont(ofSize: 44)
+        field.font = .systemFont(ofSize: 24)
         field.textAlignment = .center
         field.borderStyle = .roundedRect
         field.addTarget(context.coordinator, action: #selector(Coordinator.changed), for: .editingChanged)
@@ -46,7 +46,12 @@ private struct EmojiTextField: UIViewRepresentable {
         init(_ parent: EmojiTextField) { self.parent = parent }
 
         @objc func changed(_ field: UITextField) {
-            parent.text = field.text ?? ""
+            // Keep only the newest emoji: picking another replaces the
+            // current one — no backspace, and never two in the field.
+            let value = field.text ?? ""
+            let latest = value.count > 1 ? String(value.suffix(1)) : value
+            if latest != value { field.text = latest }
+            parent.text = latest
         }
 
         func textFieldDidBeginEditing(_ field: UITextField) {
@@ -61,8 +66,9 @@ private struct EmojiTextField: UIViewRepresentable {
     }
 }
 
-/// The "Choose your own…" prompt: current emoji shown selected, emoji
-/// keyboard up front, Use it / Cancel.
+/// The "Choose custom…" prompt: the chosen emoji previewed large above
+/// the keyboard (the field itself is just the input conduit), emoji
+/// keyboard up front, Save / Cancel.
 struct EmojiPromptSheet: View {
     let title: String
     @Binding var input: String
@@ -71,26 +77,29 @@ struct EmojiPromptSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
+            VStack(spacing: 12) {
                 Text("One emoji — it becomes the \(title.lowercased()).")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                // The preview IS the state: what's here is what Save keeps.
+                Text(input.isEmpty ? " " : input)
+                    .font(.system(size: 56))
                 EmojiTextField(text: $input, onSubmit: onUse)
-                    .frame(width: 96, height: 64)
+                    .frame(width: 96, height: 40)
             }
             .padding()
-            .navigationTitle("Your own emoji")
+            .navigationTitle("Custom Emoji")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { onCancel() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Use it") { onUse() }
+                    Button("Save") { onUse() }
                 }
             }
         }
-        .presentationDetents([.height(220)])
+        .presentationDetents([.height(280)])
     }
 }

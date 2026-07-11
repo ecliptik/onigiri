@@ -1,4 +1,9 @@
 name: Onigiri
+# local.yml (gitignored) carries per-developer settings — the signing
+# team. Required by xcodegen; create it once:
+#   cp local.yml.example local.yml
+include:
+  - local.yml
 options:
   bundleIdPrefix: com.ecliptik
   deploymentTarget:
@@ -16,7 +21,6 @@ settings:
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
     SWIFT_APPROACHABLE_CONCURRENCY: YES
     CODE_SIGN_STYLE: Automatic
-    DEVELOPMENT_TEAM: YOUR_TEAM_ID
     CURRENT_PROJECT_VERSION: 1
     MARKETING_VERSION: "1.1.2"
 

@@ -40,9 +40,10 @@ cd Packages/OnigiriKit && swift test     # pure-logic tests; ALSO needs the
   the Mac↔watch developer channel bootstraps over BT/AWDL. Check this FIRST.
 - Address the watch by ID, not display name (the curly apostrophe matches
   neither tool): xcodebuild wants the hardware UDID, devicectl wants the
-  CoreDevice identifier. Both are baked into the deploy script.
+  CoreDevice identifier. Both live in scripts/local-devices.env (gitignored;
+  copy the .example).
 
-- `scripts/deploy-phone.sh` builds and installs on BOTH "My iPhone" and the
+- `scripts/deploy-phone.sh` builds and installs on BOTH the configured iPhone and the
   watch (override with `DEVICE_NAME=…` / `WATCH_BUILD_ID=…` / `WATCH_INSTALL_ID=…`).
   Run weekly — free-team provisioning expires after 7 days. Works over the
   network tunnel; phone and watch must be unlocked (watch on wrist, near the Mac).

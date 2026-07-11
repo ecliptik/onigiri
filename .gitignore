@@ -15,3 +15,10 @@ build/
 
 # macOS
 .DS_Store
+
+# Test artifacts
+*.xcresult
+
+# Local, per-developer configuration (never committed)
+local.yml
+scripts/local-devices.env

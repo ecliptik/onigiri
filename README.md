@@ -46,8 +46,14 @@ See [docs/PLAN.md](docs/PLAN.md) for the full design and roadmap.
    xcodebuild -downloadPlatform iOS -downloadPlatform watchOS
    ```
 2. `brew install xcodegen`
-3. `xcodegen generate` in the repo root, open `Onigiri.xcodeproj`
-4. Xcode → Settings → Accounts → add your Apple ID (free personal team is fine)
-5. On iPhone and Watch: Settings → Privacy & Security → Developer Mode → on
+3. `cp local.yml.example local.yml` (set your team ID there for device builds; the empty default builds for the simulator)
+4. `xcodegen generate` in the repo root, open `Onigiri.xcodeproj`
+5. Xcode → Settings → Accounts → add your Apple ID (free personal team is fine)
+6. On iPhone and Watch: Settings → Privacy & Security → Developer Mode → on
+7. For `scripts/deploy-phone.sh`: `cp scripts/local-devices.env.example scripts/local-devices.env` and fill in your device name and watch IDs
 
-**Free personal team note:** apps expire after 7 days — re-deploy weekly (⌘R with your phone connected).
+**Free personal team note:** apps expire after 7 days — re-deploy weekly (⌘R with your phone connected, or `scripts/deploy-phone.sh`).
+
+## License
+
+MIT — see [LICENSE](LICENSE).

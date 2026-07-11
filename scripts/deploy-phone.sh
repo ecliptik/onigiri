@@ -7,6 +7,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
+
 DEVICES_FILE="scripts/local-devices.env"
 [[ -f "$DEVICES_FILE" ]] && source "$DEVICES_FILE"
 DEVICE_NAME=${DEVICE_NAME:-}

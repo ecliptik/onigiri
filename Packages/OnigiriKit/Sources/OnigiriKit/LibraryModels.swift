@@ -154,6 +154,17 @@ public final class GoalSettings {
     }
 }
 
+/// The duplicate-food guard's name matching: scanning a product whose
+/// name is already in the library should offer editing it, not mint a
+/// twin. Case- and whitespace-insensitive equality — deliberately not
+/// fuzzy (see PLAN-1.2).
+public enum LibraryDuplicate {
+    public static func nameMatches(_ lhs: String, _ rhs: String) -> Bool {
+        lhs.trimmingCharacters(in: .whitespaces)
+            .localizedCaseInsensitiveCompare(rhs.trimmingCharacters(in: .whitespaces)) == .orderedSame
+    }
+}
+
 /// Storage shared between the app and its widget extension via the App Group.
 public enum SharedStore {
     public static let appGroupID = "group.com.ecliptik.Onigiri"

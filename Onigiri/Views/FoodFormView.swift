@@ -10,6 +10,7 @@ import OnigiriKit
 struct FoodFormView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Query private var libraryFoods: [Food]
 
     let food: Food?
     /// Open the barcode scanner immediately (quick-action entry point).
@@ -51,6 +52,9 @@ struct FoodFormView: View {
     @State private var portionDidLog = false
     /// The post-save "Log it?" prompt for new foods.
     @State private var askToLog = false
+    /// Duplicate-food guard: a prefill whose name is already in the
+    /// library offers editing that food instead of minting a twin.
+    @State private var duplicateMatch: Food?
     /// A new food inserted by the Log action, so a second save updates it
     /// instead of inserting a duplicate.
     @State private var createdFood: Food?
@@ -162,7 +166,7 @@ struct FoodFormView: View {
 
             }
             .compactSections()
-            .navigationTitle(food == nil ? "New Food" : "Edit Food")
+            .navigationTitle(food == nil && createdFood == nil ? "New Food" : "Edit Food")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -210,6 +214,23 @@ struct FoodFormView: View {
                       let field = note.object as? UITextField else { return }
                 DispatchQueue.main.async { field.selectAll(nil) }
             }
+            // On a background layer: two .alert modifiers chained on the
+            // same view compete, like the .sheet landmine.
+            .background {
+                Color.clear.alert(
+                    "“\(duplicateMatch?.name ?? "")” is already in your library",
+                    isPresented: .init(
+                        get: { duplicateMatch != nil },
+                        set: { if !$0 { duplicateMatch = nil } }
+                    ),
+                    presenting: duplicateMatch
+                ) { match in
+                    Button("Edit Existing") { adopt(match) }
+                    Button("Create New") {}
+                } message: { _ in
+                    Text("Edit keeps your saved values and attaches this barcode; Create New makes a separate food.")
+                }
+            }
             .alert(
                 "Log “\(name.trimmingCharacters(in: .whitespaces))”?",
                 isPresented: $askToLog
@@ -247,25 +268,7 @@ struct FoodFormView: View {
             }
             .onAppear {
                 if let food {
-                    name = food.name
-                    kcal = food.kcal
-                    sodiumMg = food.sodiumMg
-                    serving = food.servingDescription
-                    barcode = food.barcode
-                    fatG = food.fatG
-                    saturatedFatG = food.saturatedFatG
-                    transFatG = food.transFatG
-                    polyunsaturatedFatG = food.polyunsaturatedFatG
-                    monounsaturatedFatG = food.monounsaturatedFatG
-                    cholesterolMg = food.cholesterolMg
-                    carbsG = food.carbsG
-                    proteinG = food.proteinG
-                    fiberG = food.fiberG
-                    sugarG = food.sugarG
-                    caffeineMg = food.caffeineMg
-                    micros = food.micros ?? [:]
-                    category = food.category
-                    isFavorite = food.isFavorite
+                    loadFields(from: food)
                 } else if let prefill {
                     apply(prefill)
                 } else if startScanning {
@@ -273,6 +276,50 @@ struct FoodFormView: View {
                 }
             }
         }
+    }
+
+    /// Duplicate-food guard: fires only for NEW foods whose prefilled
+    /// name is already in the library (Micheal's manual-entry-then-scan
+    /// case). Manual typing is not guarded — that's deliberate.
+    private func checkForDuplicate() {
+        guard food == nil, createdFood == nil else { return }
+        duplicateMatch = libraryFoods.first {
+            LibraryDuplicate.nameMatches($0.name, name)
+        }
+    }
+
+    /// "Edit Existing": the form becomes an editor for the matched food —
+    /// library values win (the rescan quirk, deliberately), and the
+    /// scanned barcode is attached so future scans take the fast path.
+    private func adopt(_ match: Food) {
+        let scannedBarcode = barcode
+        loadFields(from: match)
+        if barcode == nil || barcode?.isEmpty == true {
+            barcode = scannedBarcode
+        }
+        createdFood = match
+    }
+
+    private func loadFields(from food: Food) {
+        name = food.name
+        kcal = food.kcal
+        sodiumMg = food.sodiumMg
+        serving = food.servingDescription
+        barcode = food.barcode
+        fatG = food.fatG
+        saturatedFatG = food.saturatedFatG
+        transFatG = food.transFatG
+        polyunsaturatedFatG = food.polyunsaturatedFatG
+        monounsaturatedFatG = food.monounsaturatedFatG
+        cholesterolMg = food.cholesterolMg
+        carbsG = food.carbsG
+        proteinG = food.proteinG
+        fiberG = food.fiberG
+        sugarG = food.sugarG
+        caffeineMg = food.caffeineMg
+        micros = food.micros ?? [:]
+        category = food.category
+        isFavorite = food.isFavorite
     }
 
     /// Zero is "nothing on the label", not data worth advertising —
@@ -358,6 +405,9 @@ struct FoodFormView: View {
         lookupMessage = product.kcal == nil
             ? "Found it, but no calorie data — check the label."
             : nil
+        // Every prefill path funnels through here: onAppear prefill,
+        // in-form barcode lookup, and the online search pick.
+        checkForDuplicate()
     }
 
     private func save() {

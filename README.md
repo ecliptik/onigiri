@@ -4,6 +4,35 @@ A personal calorie, sodium, and water tracker for iPhone + Apple Watch, built wi
 
 **Goal:** support losing 20 lb by making daily energy balance (calories in − calories out) effortless to see and log.
 
+## Tour
+
+<p align="center">
+  <img src="docs/showcase/reel.gif" width="320" alt="Autoplaying 100-second tour of Onigiri: the daily balance, nutrition detail, fast logging, swipe editing, the streak calendar, predicted-vs-scale weight change, goal planning, and reminders.">
+</p>
+
+<p align="center"><em>Full quality: <a href="docs/showcase/reel.mp4">reel.mp4</a></em></p>
+
+## Screenshots
+
+<p>
+  <img src="docs/showcase/light/today.png" width="24%" alt="Today: balance headline, hydration, goal gauge, meters, log">
+  <img src="docs/showcase/light/nutrition.png" width="24%" alt="Day nutrition detail with macro and micronutrient groups">
+  <img src="docs/showcase/light/logsheet.png" width="24%" alt="Log sheet: Recents, Favorites, meals tagged">
+  <img src="docs/showcase/light/portion.png" width="24%" alt="Portion sheet confirming servings and meal slot">
+</p>
+<p>
+  <img src="docs/showcase/light/calendar.png" width="24%" alt="Calendar: month grid of earned onigiri and streaks">
+  <img src="docs/showcase/light/month.png" width="24%" alt="Month detail: total deficit, predicted vs scale change">
+  <img src="docs/showcase/light/goal.png" width="24%" alt="Goal: daily plan with predicted vs actual">
+  <img src="docs/showcase/light/foods.png" width="24%" alt="Food library with meals and foods">
+</p>
+<p>
+  <img src="docs/showcase/dark/today.png" width="24%" alt="Today in dark mode">
+  <img src="docs/showcase/dark/nutrition.png" width="24%" alt="Nutrition detail in dark mode">
+  <img src="docs/showcase/dark/calendar.png" width="24%" alt="Calendar in dark mode">
+  <img src="docs/showcase/dark/settings.png" width="24%" alt="Settings with reminder toggles in dark mode">
+</p>
+
 ## Features
 
 - **Daily calorie meter** — front and center: `Intake − (Active + Resting energy)` from Apple Health, plus remaining budget for the day

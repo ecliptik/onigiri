@@ -214,6 +214,108 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(scaleRow.exists, "Month detail should show the scale change in lb")
     }
 
+    /// Showcase tour (opt-in via TEST_RUNNER_SHOWCASE=1): walks every
+    /// feature at reading pace on seeded data, attaching a named
+    /// screenshot per scene plus a JSON of wall-clock scene timings — an
+    /// external `simctl io recordVideo` can be captioned against those
+    /// epochs. Erase the paired sims first.
+    @MainActor
+    func testShowcaseTour() throws {
+        guard ProcessInfo.processInfo.environment["SHOWCASE"] == "1" else {
+            throw XCTSkip("Set TEST_RUNNER_SHOWCASE=1 to run the showcase tour")
+        }
+        let app = XCUIApplication()
+        app.launchArguments = ["--seed-sample-data"]
+        var timings: [[String: Any]] = []
+
+        func scene(_ name: String, settle: TimeInterval = 1.0, hold: TimeInterval = 4.5) {
+            Thread.sleep(forTimeInterval: settle)
+            timings.append(["name": name, "epoch": Date().timeIntervalSince1970])
+            let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            shot.name = "shot-\(name)"
+            shot.lifetime = .keepAlways
+            add(shot)
+            Thread.sleep(forTimeInterval: hold)
+        }
+
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+        app.tabBars.buttons["Foods"].tap()
+        app.tabBars.buttons["Today"].tap()
+        _ = app.buttons.matching(collapsedSectionPredicate).firstMatch.waitForExistence(timeout: 20)
+        expandMealSections(in: app)
+        scene("today")
+
+        app.staticTexts["Nutrition details"].tap()
+        let macros = app.staticTexts["Macronutrients"]
+        if macros.waitForExistence(timeout: 5) {
+            macros.tap()
+            Thread.sleep(forTimeInterval: 0.6)
+            let minerals = app.staticTexts["Minerals"]
+            if minerals.isHittable { minerals.tap() }
+        }
+        scene("nutrition")
+        app.navigationBars["Nutrition"].buttons.firstMatch.tap()
+        app.swipeDown()
+
+        app.buttons["Log food or meal"].tap()
+        _ = app.staticTexts["Recent"].waitForExistence(timeout: 10)
+        scene("logsheet")
+        // The row's Log button is unique to the sheet — the row text also
+        // matches Today's log behind the sheet and isn't hittable there.
+        app.buttons["Log Two eggs & toast"].tap()
+        _ = app.buttons["Log"].waitForExistence(timeout: 5)
+        scene("portion", hold: 3)
+        app.buttons["Log"].tap()
+
+        Thread.sleep(forTimeInterval: 1.5)
+        expandMealSections(in: app)
+        let burrito = app.staticTexts["Chicken burrito"].firstMatch
+        for _ in 0..<2 where !burrito.isHittable {
+            app.swipeUp()
+        }
+        if burrito.isHittable {
+            let start = burrito.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 120, dy: 0)))
+            scene("swipe-edit", settle: 0.3, hold: 2.5)
+            burrito.tap()
+            Thread.sleep(forTimeInterval: 0.5)
+            start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: -120, dy: 0)))
+            scene("swipe-delete", settle: 0.3, hold: 2)
+            burrito.tap()
+        }
+
+        app.tabBars.buttons["Foods"].tap()
+        scene("foods")
+
+        app.tabBars.buttons["Calendar"].tap()
+        _ = app.staticTexts["Month details"].waitForExistence(timeout: 10)
+        scene("calendar")
+        app.staticTexts["Month details"].tap()
+        scene("month", hold: 3.5)
+        app.navigationBars.buttons.firstMatch.tap()
+
+        app.tabBars.buttons["Goal"].tap()
+        scene("goal")
+        app.swipeUp()
+        scene("goal-trend", hold: 3)
+        app.swipeDown()
+
+        app.tabBars.buttons["Today"].tap()
+        app.buttons["Settings"].tap()
+        _ = app.staticTexts["Reminders"].waitForExistence(timeout: 5)
+        scene("settings", hold: 3.5)
+        app.buttons["Done"].tap()
+        scene("finale", hold: 3)
+
+        let data = try JSONSerialization.data(withJSONObject: timings)
+        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+        attachment.name = "scene-timings"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     /// Today's meal-slot sections start collapsed; their header buttons say
     /// so in the accessibility label ("Lunch, 680 kcal, collapsed").
     private var collapsedSectionPredicate: NSPredicate {

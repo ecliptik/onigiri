@@ -389,6 +389,19 @@ private struct DayCell: View {
                 .stroke(isToday ? Color.accentColor : .clear, lineWidth: 1.5)
         )
         .contentShape(.rect)
+        // The cell is tap-driven (parent gesture) with purely visual state —
+        // VoiceOver needs the story spelled out and a button to press.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityHint(isFuture ? "" : "Shows this day's summary")
+    }
+
+    private var accessibilitySummary: String {
+        let date = day.formatted(.dateTime.weekday(.wide).month(.wide).day())
+        if isFuture { return "\(date), upcoming" }
+        let status = earned ? "goal met" : "goal not met"
+        return isToday ? "Today, \(date), \(status)" : "\(date), \(status)"
     }
 }
 

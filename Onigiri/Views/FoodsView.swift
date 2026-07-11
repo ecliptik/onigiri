@@ -388,6 +388,8 @@ struct LogButton: View {
             .overlay(
                 Circle().strokeBorder(Color.riceToast.opacity(0.5), lineWidth: 1)
             )
+            // The long-press affordance, reachable without the gesture.
+            .accessibilityAction(named: "Custom portion") { onCustomPortion() }
             // HIG minimum touch target; the visible circle stays small.
             .frame(minWidth: 44, minHeight: 44)
             .contentShape(.rect)

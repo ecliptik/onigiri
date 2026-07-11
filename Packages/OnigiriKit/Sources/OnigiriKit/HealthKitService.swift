@@ -37,14 +37,21 @@ public final class HealthKitService {
         return types
     }()
 
-    private static let readTypes: Set<HKObjectType> = [
-        HKQuantityType(.dietaryEnergyConsumed),
-        HKQuantityType(.dietarySodium),
-        HKQuantityType(.dietaryWater),
-        HKQuantityType(.activeEnergyBurned),
-        HKQuantityType(.basalEnergyBurned),
-        HKQuantityType(.bodyMass),
-    ]
+    /// Read covers everything we write, plus burn and weight. A real
+    /// device (unlike the simulator) strips never-requested-for-read
+    /// sample types out of read-back correlations — the day detail came
+    /// back with no macros/micros on hardware until read was requested.
+    private static let readTypes: Set<HKObjectType> = {
+        var types: Set<HKObjectType> = [
+            HKQuantityType(.activeEnergyBurned),
+            HKQuantityType(.basalEnergyBurned),
+            HKQuantityType(.bodyMass),
+        ]
+        for sample in shareTypes {
+            types.insert(sample)
+        }
+        return types
+    }()
 
     /// Whether the system would show the permission sheet if we asked.
     public func shouldRequestAuthorization() async throws -> Bool {

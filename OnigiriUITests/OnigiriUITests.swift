@@ -43,6 +43,12 @@ final class OnigiriUITests: XCTestCase {
         app.buttons["Snack"].tap()
         confirmLog.tap()
 
+        // A library MEAL logs one-tap and must carry its foods' combined
+        // nutrients into HealthKit (the day detail reads them back).
+        let logMeal = app.buttons["Log Chicken & rice"]
+        XCTAssertTrue(logMeal.waitForExistence(timeout: 10), "Seeded library should list meals")
+        logMeal.tap()
+
         app.tabBars.buttons["Today"].tap()
         XCTAssertTrue(app.staticTexts["Snack"].waitForExistence(timeout: 10),
                       "Entry should land in its meal-slot section")
@@ -80,6 +86,13 @@ final class OnigiriUITests: XCTestCase {
         macroGroup.tap()
         XCTAssertTrue(app.staticTexts["Protein"].waitForExistence(timeout: 5),
                       "Expanding macros should reveal the rows")
+        // 154 g = seeded breakfast 24 + lunch 42 + shake 30 + the Chicken
+        // & rice meal's 58 — only adds up if the one-tap meal wrote its
+        // foods' combined nutrients to Health and they read back.
+        let proteinTotal = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS '154 g'")).firstMatch
+        XCTAssertTrue(proteinTotal.waitForExistence(timeout: 5),
+                      "Protein total should include the logged meal's nutrients")
         app.swipeUp()
         let mineralsGroup = app.staticTexts["Minerals"]
         XCTAssertTrue(mineralsGroup.waitForExistence(timeout: 5),

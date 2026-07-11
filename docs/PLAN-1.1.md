@@ -3,6 +3,12 @@
 Plan agreed 2026-07-10 (scope fine-tuned with Micheal). Read `CLAUDE.md` for
 build/deploy mechanics and `docs/POST-1.0.md` for the source roadmap.
 
+Status 2026-07-10 evening: M1–M6 implemented, kit-tested (79 pre-M4 → 83
+tests), and sim-verified via the extended seeded flow test; committed
+individually on main. Remaining: device deploy + Micheal's verification
+pass (incl. reminders via the DEBUG preview row and a Dynamic Type look at
+accessibility sizes), then M7 showcase assets + the 1.1.0 tag.
+
 Scope decisions:
 
 - All four features: day nutrition detail, Recents in the Log sheet,

@@ -267,18 +267,12 @@ struct SettingsView: View {
                 customIconRows(current: foodIcon)
             }
             .pickerStyle(.navigationLink)
-            Picker("Water icon", selection: $waterIcon) {
-                ForEach(Self.waterIconOptions, id: \.tag) { option in
-                    HStack(spacing: 10) {
-                        WaterIconView(raw: option.tag)
-                            .frame(width: 28)
-                        Text(option.name)
-                    }
-                    .tag(option.tag)
-                }
-                customIconRows(current: waterIcon)
+            // The water icon rides with the water metric's section below;
+            // it only lives here when neither slot tracks water (it still
+            // drives the log buttons and the watch).
+            if !slotTracksWater {
+                waterIconPicker
             }
-            .pickerStyle(.navigationLink)
             Picker("Goal badge", selection: $rewardIcon) {
                 ForEach(Self.rewardIconOptions, id: \.tag) { option in
                     HStack(spacing: 10) {
@@ -321,11 +315,31 @@ struct SettingsView: View {
         }
     }
 
+    private var slotTracksWater: Bool {
+        TrackedNutrient(key: trackedMetric1) == .water
+            || TrackedNutrient(key: trackedMetric2) == .water
+    }
+
+    private var waterIconPicker: some View {
+        Picker("Water icon", selection: $waterIcon) {
+            ForEach(Self.waterIconOptions, id: \.tag) { option in
+                HStack(spacing: 10) {
+                    WaterIconView(raw: option.tag)
+                        .frame(width: 28)
+                    Text(option.name)
+                }
+                .tag(option.tag)
+            }
+            customIconRows(current: waterIcon)
+        }
+        .pickerStyle(.navigationLink)
+    }
+
     /// One of Today's two tracked-metric slots: which nutrient, whether
     /// its target is a ceiling or a floor, the target itself (sodium and
     /// water keep their dedicated sections below as the single source),
-    /// and the metric's Show toggle — labels stay "Show sodium"/"Show
-    /// water" for the defaults.
+    /// the water metric's icon picker, and the metric's Show toggle —
+    /// labels stay "Show sodium"/"Show water" for the defaults.
     private func trackedMetricSection(slot: Int) -> some View {
         let nutrient = TrackedNutrient(key: slot == 1 ? trackedMetric1 : trackedMetric2)
             ?? (slot == 1 ? .sodium : .water)
@@ -343,7 +357,12 @@ struct SettingsView: View {
             .pickerStyle(.menu)
             switch nutrient {
             case .sodium:
-                Text("Sodium's target is the limit in the Sodium section below.")
+                Stepper(value: $sodiumLimitMg, in: 500...6000, step: 100) {
+                    LabeledContent("Target") {
+                        Text("\(sodiumLimitMg, format: .number.precision(.fractionLength(0))) mg")
+                    }
+                }
+                Text("The FDA guideline is 2,300 mg sodium for adults.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             case .water:
@@ -361,6 +380,11 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+            }
+            // The metric's emoji rides with its section (only water has
+            // icon options; sodium's 🧂 is fixed).
+            if nutrient == .water {
+                waterIconPicker
             }
             // Hides the metric itself on Today, not just its fill bar.
             Toggle("Show \(nutrient.inlineName)", isOn: slot == 1 ? $showSodium : $showWater)
@@ -404,6 +428,9 @@ struct SettingsView: View {
 
                 remindersSection
 
+                // The sodium limit lives inside its tracked-metric section
+                // now; water keeps its own section — serving size is about
+                // the log buttons, and the goal rides with it (Micheal).
                 Section("Water") {
                     Stepper(value: $waterServingOz, in: 4...40, step: 2) {
                         LabeledContent("Serving size") {
@@ -415,17 +442,6 @@ struct SettingsView: View {
                             Text("\(waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
                         }
                     }
-                }
-
-                Section("Sodium") {
-                    Stepper(value: $sodiumLimitMg, in: 500...6000, step: 100) {
-                        LabeledContent("Daily limit") {
-                            Text("\(sodiumLimitMg, format: .number.precision(.fractionLength(0))) mg")
-                        }
-                    }
-                    Text("The FDA guideline is 2,300 mg sodium for adults.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
 
                 dataSection

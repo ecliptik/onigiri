@@ -32,6 +32,8 @@ targets:
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # iPhone + iPad — explicit since 1.3 (was xcodegen's silent default).
+        TARGETED_DEVICE_FAMILY: "1,2"
     dependencies:
       - package: OnigiriKit
       - target: OnigiriWatch
@@ -44,6 +46,13 @@ targets:
         # told to reference the build setting.
         CFBundleShortVersionString: $(MARKETING_VERSION)
         UILaunchScreen: {}
+        # Full multitasking on iPad (Split View/Slide Over/Stage
+        # Manager) requires supporting all four orientations.
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         # Backups live in Documents/Backups — visible in the Files app.
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true

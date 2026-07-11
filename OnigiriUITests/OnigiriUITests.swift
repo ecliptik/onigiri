@@ -2,6 +2,21 @@ import XCTest
 
 /// Drives the seeded app end to end: grants Health access sheets, verifies
 /// the seeded log renders on Today, and logs a food from the library.
+
+/// Tab switching that survives both idioms: the iPhone's bottom TabBar
+/// and the iPad's top bar, which exposes NO TabBar element at all.
+@MainActor
+func switchTab(in app: XCUIApplication, to name: String) {
+    let phoneTab = app.tabBars.buttons[name]
+    if phoneTab.waitForExistence(timeout: 2), phoneTab.isHittable {
+        phoneTab.tap()
+        return
+    }
+    let anyTab = app.buttons[name].firstMatch
+    _ = anyTab.waitForExistence(timeout: 5)
+    anyTab.tap()
+}
+
 final class OnigiriUITests: XCTestCase {
 
     @MainActor
@@ -16,8 +31,8 @@ final class OnigiriUITests: XCTestCase {
         grantHealthAccess(in: app, timeout: 10)
 
         // Bounce tabs to trigger a Today refresh now that access is granted.
-        app.tabBars.buttons["Foods"].tap()
-        app.tabBars.buttons["Today"].tap()
+        switchTab(in: app, to: "Foods")
+        switchTab(in: app, to: "Today")
 
         // Seeded food correlations should appear in the Today log. Meal
         // sections start collapsed, so expand them to see the entry rows.
@@ -34,7 +49,7 @@ final class OnigiriUITests: XCTestCase {
 
         // Deliberate logging via the row's Log button (row taps open Edit).
         // Foods confirm through the portion sheet: pick a slot and Log.
-        app.tabBars.buttons["Foods"].tap()
+        switchTab(in: app, to: "Foods")
         let logShake = app.buttons["Log Protein shake"]
         XCTAssertTrue(logShake.waitForExistence(timeout: 10), "Seeded library should list foods")
         logShake.tap()
@@ -49,7 +64,7 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(logMeal.waitForExistence(timeout: 10), "Seeded library should list meals")
         logMeal.tap()
 
-        app.tabBars.buttons["Today"].tap()
+        switchTab(in: app, to: "Today")
         XCTAssertTrue(app.staticTexts["Snack"].waitForExistence(timeout: 10),
                       "Entry should land in its meal-slot section")
         expandMealSections(in: app)
@@ -134,10 +149,7 @@ final class OnigiriUITests: XCTestCase {
 
         // Streak calendar: the three seeded history days each earned an
         // onigiri (750 kcal deficit vs ~618 target), so the streak is 3.
-        let calendarTab = app.tabBars.buttons["Calendar"]
-        XCTAssertTrue(calendarTab.waitForExistence(timeout: 5),
-                      "Tab bar should be back after the sheet dismisses")
-        calendarTab.tap()
+        switchTab(in: app, to: "Calendar")
         XCTAssertTrue(
             app.staticTexts["3 days"].waitForExistence(timeout: 10),
             "Seeded history should produce a 3-day streak"
@@ -147,7 +159,7 @@ final class OnigiriUITests: XCTestCase {
         // gone). Water was 36 oz across three 12 oz rows; deleting one
         // brings the hydration row back to 24 — and the day-paging swipe
         // must stand down, so the title stays "Today".
-        app.tabBars.buttons["Today"].tap()
+        switchTab(in: app, to: "Today")
         expandMealSections(in: app)
         let waterRow = app.staticTexts["12 oz"].firstMatch
         XCTAssertTrue(waterRow.waitForExistence(timeout: 10),
@@ -201,9 +213,7 @@ final class OnigiriUITests: XCTestCase {
                       "Editing to 2 servings should double the logged entry")
         // Scroll back up so the minimized tab bar re-expands.
         app.swipeDown()
-        let calendarTabAgain = app.tabBars.buttons["Calendar"]
-        XCTAssertTrue(calendarTabAgain.waitForExistence(timeout: 5))
-        calendarTabAgain.tap()
+        switchTab(in: app, to: "Calendar")
 
         // Predicted vs actual moved off the card into the pushed month
         // detail. Seeded data has a month of weigh-ins and deficit days,
@@ -247,8 +257,8 @@ final class OnigiriUITests: XCTestCase {
         app.launch()
         grantHealthAccess(in: app, timeout: 30)
         grantHealthAccess(in: app, timeout: 10)
-        app.tabBars.buttons["Foods"].tap()
-        app.tabBars.buttons["Today"].tap()
+        switchTab(in: app, to: "Foods")
+        switchTab(in: app, to: "Today")
         _ = app.buttons.matching(collapsedSectionPredicate).firstMatch.waitForExistence(timeout: 20)
         expandMealSections(in: app)
         scene("today")
@@ -294,25 +304,23 @@ final class OnigiriUITests: XCTestCase {
 
         // The row drags can minimize the iOS 26 tab bar; scroll up first.
         app.swipeDown()
-        let foodsTab = app.tabBars.buttons["Foods"]
-        _ = foodsTab.waitForExistence(timeout: 5)
-        foodsTab.tap()
+        switchTab(in: app, to: "Foods")
         scene("foods")
 
-        app.tabBars.buttons["Calendar"].tap()
+        switchTab(in: app, to: "Calendar")
         _ = app.staticTexts["Month details"].waitForExistence(timeout: 10)
         scene("calendar")
         app.staticTexts["Month details"].tap()
         scene("month", hold: 3.5)
         app.navigationBars.buttons.firstMatch.tap()
 
-        app.tabBars.buttons["Goal"].tap()
+        switchTab(in: app, to: "Goal")
         scene("goal")
         app.swipeUp()
         scene("goal-trend", hold: 3)
         app.swipeDown()
 
-        app.tabBars.buttons["Today"].tap()
+        switchTab(in: app, to: "Today")
         app.buttons["Settings"].tap()
         _ = app.staticTexts["Reminders"].waitForExistence(timeout: 5)
         scene("settings", hold: 3.5)
@@ -353,9 +361,7 @@ final class OnigiriUITests: XCTestCase {
         }
         func tab(_ name: String) {
             app.swipeDown()
-            let button = app.tabBars.buttons[name]
-            _ = button.waitForExistence(timeout: 5)
-            button.tap()
+            switchTab(in: app, to: name)
         }
         // The walkthrough must always finish — a missed optional control
         // skips its shots rather than failing the whole capture.
@@ -369,8 +375,8 @@ final class OnigiriUITests: XCTestCase {
         app.launch()
         grantHealthAccess(in: app, timeout: 30)
         grantHealthAccess(in: app, timeout: 10)
-        app.tabBars.buttons["Foods"].tap()
-        app.tabBars.buttons["Today"].tap()
+        switchTab(in: app, to: "Foods")
+        switchTab(in: app, to: "Today")
         _ = app.buttons.matching(collapsedSectionPredicate).firstMatch.waitForExistence(timeout: 20)
         shot("today-collapsed")
         expandMealSections(in: app)
@@ -538,7 +544,7 @@ final class OnigiriUITests: XCTestCase {
         app.launch()
         grantHealthAccess(in: app, timeout: 10)
 
-        app.tabBars.buttons["Goal"].tap()
+        switchTab(in: app, to: "Goal")
         let field = app.textFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 10), "Weight field should exist")
         field.tap()
@@ -558,7 +564,7 @@ final class OnigiriUITests: XCTestCase {
         app.launch()
         grantHealthAccess(in: app, timeout: 10)
 
-        app.tabBars.buttons["Foods"].tap()
+        switchTab(in: app, to: "Foods")
         let addMenu = app.buttons["Add food or meal"]
         XCTAssertTrue(addMenu.waitForExistence(timeout: 10), "Add menu")
         addMenu.tap()
@@ -788,7 +794,7 @@ final class OnigiriUITests: XCTestCase {
 
         // Warm path: with the app still running, the shortcut goes through
         // the scene delegate instead of launch options.
-        app.tabBars.buttons["Today"].tap()
+        switchTab(in: app, to: "Today")
         XCUIDevice.shared.press(.home)
         Thread.sleep(forTimeInterval: 2)
         var warmOpened = false
@@ -824,7 +830,7 @@ final class OnigiriUITests: XCTestCase {
         grantHealthAccess(in: app, timeout: 10)
 
         // Data tools live in Settings (gear on the Today tab).
-        app.tabBars.buttons["Today"].tap()
+        switchTab(in: app, to: "Today")
         let gear = app.buttons["Settings"]
         XCTAssertTrue(gear.waitForExistence(timeout: 10), "Settings gear")
         gear.tap()
@@ -912,8 +918,16 @@ final class OnigiriUITests: XCTestCase {
     /// stable UIA.Health.* identifiers.
     @MainActor
     private func grantHealthAccess(in app: XCUIApplication, timeout: TimeInterval) {
+        // iPads without Health iCloud sync interpose an "iCloud Health
+        // Data Sync is Off" sheet around the grant flow — clear it
+        // wherever it lands.
+        dismissHealthSyncPrompt(in: app)
+
         let sheet = app.navigationBars["Health Access"]
-        guard sheet.waitForExistence(timeout: timeout) else { return }
+        guard sheet.waitForExistence(timeout: timeout) else {
+            dismissHealthSyncPrompt(in: app)
+            return
+        }
 
         let turnOnAll = app.cells["UIA.Health.AuthSheet.AllCategoryButton"]
         if turnOnAll.waitForExistence(timeout: 5) {
@@ -924,5 +938,14 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(allow.waitForExistence(timeout: 5), "Allow should enable after Turn On All")
         allow.tap()
         _ = sheet.waitForNonExistence(timeout: 10)
+        dismissHealthSyncPrompt(in: app)
+    }
+
+    @MainActor
+    private func dismissHealthSyncPrompt(in app: XCUIApplication) {
+        let notNow = app.buttons["Not Now"]
+        if notNow.waitForExistence(timeout: 2), notNow.isHittable {
+            notNow.tap()
+        }
     }
 }

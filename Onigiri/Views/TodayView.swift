@@ -514,11 +514,12 @@ struct TodayView: View {
                         WaterIconView(raw: waterIcon)
                     }
                     .frame(maxWidth: .infinity, alignment: showSodium ? .trailing : .center)
+                    // Fill grows from the left like sodium's (Micheal:
+                    // matching fill direction beats mirrored symmetry).
                     .gaugeFill(
                         enabled: progressGauges,
                         fraction: waterGoalOz > 0 ? model.summary.waterOz / waterGoalOz : 0,
-                        tint: .blue,
-                        anchor: showSodium ? .trailing : .leading
+                        tint: .blue
                     )
                 }
             }

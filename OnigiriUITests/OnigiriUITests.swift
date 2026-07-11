@@ -292,7 +292,11 @@ final class OnigiriUITests: XCTestCase {
             burrito.tap()
         }
 
-        app.tabBars.buttons["Foods"].tap()
+        // The row drags can minimize the iOS 26 tab bar; scroll up first.
+        app.swipeDown()
+        let foodsTab = app.tabBars.buttons["Foods"]
+        _ = foodsTab.waitForExistence(timeout: 5)
+        foodsTab.tap()
         scene("foods")
 
         app.tabBars.buttons["Calendar"].tap()
@@ -320,6 +324,153 @@ final class OnigiriUITests: XCTestCase {
         attachment.name = "scene-timings"
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    /// QA walkthrough (opt-in via TEST_RUNNER_QA=1): visits the states the
+    /// showcase tour skips — empty days, no-match search, the forms and
+    /// pickers, month edges — attaching a named screenshot per stop for
+    /// visual review. Assertions are deliberately loose; the screenshots
+    /// are the product. Erase the paired sims first.
+    @MainActor
+    func testQAWalkthrough() throws {
+        guard ProcessInfo.processInfo.environment["QA"] == "1" else {
+            throw XCTSkip("Set TEST_RUNNER_QA=1 to run the QA walkthrough")
+        }
+        let app = XCUIApplication()
+        app.launchArguments = ["--seed-sample-data"]
+        if let sizeCategory = ProcessInfo.processInfo.environment["QA_TEXT_SIZE"] {
+            app.launchArguments += [
+                "-UIPreferredContentSizeCategoryName", sizeCategory,
+            ]
+        }
+
+        func shot(_ name: String, settle: TimeInterval = 0.8) {
+            Thread.sleep(forTimeInterval: settle)
+            let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            attachment.name = "qa-\(name)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        func tab(_ name: String) {
+            app.swipeDown()
+            let button = app.tabBars.buttons[name]
+            _ = button.waitForExistence(timeout: 5)
+            button.tap()
+        }
+
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+        app.tabBars.buttons["Foods"].tap()
+        app.tabBars.buttons["Today"].tap()
+        _ = app.buttons.matching(collapsedSectionPredicate).firstMatch.waitForExistence(timeout: 20)
+        shot("today-collapsed")
+        expandMealSections(in: app)
+        shot("today-expanded")
+
+        // Past days: seeded day-3 has entries; day-5 is empty.
+        for _ in 0..<3 { app.buttons["Previous day"].tap() }
+        shot("past-day-with-data")
+        app.staticTexts["Nutrition details"].tap()
+        shot("nutrition-past-day")
+        app.navigationBars["Nutrition"].buttons.firstMatch.tap()
+        for _ in 0..<2 { app.buttons["Previous day"].tap() }
+        shot("past-day-empty")
+        app.staticTexts["Nutrition details"].tap()
+        shot("nutrition-empty-day")
+        app.navigationBars["Nutrition"].buttons.firstMatch.tap()
+
+        // Jump-to-date sheet, then home.
+        app.navigationBars.firstMatch.staticTexts.firstMatch.tap()
+        if app.buttons["Jump to date…"].waitForExistence(timeout: 3) {
+            app.buttons["Jump to date…"].tap()
+            shot("day-jump-sheet")
+            app.buttons["Cancel"].firstMatch.tap()
+        }
+        app.navigationBars.firstMatch.staticTexts.firstMatch.tap()
+        if app.buttons["Go to today"].waitForExistence(timeout: 3) {
+            app.buttons["Go to today"].tap()
+        }
+
+        // Log sheet: kinds, no-match search, portion sheet.
+        app.buttons["Log food or meal"].tap()
+        _ = app.staticTexts["Recent"].waitForExistence(timeout: 10)
+        shot("logsheet-all")
+        // Scoped to the segmented picker: "Foods"/"Meals" also name tabs.
+        let kindPicker = app.segmentedControls.firstMatch
+        kindPicker.buttons["Meals"].tap()
+        shot("logsheet-meals")
+        kindPicker.buttons["Foods"].tap()
+        shot("logsheet-foods")
+        let searchField = app.searchFields.firstMatch
+        if searchField.waitForExistence(timeout: 5) {
+            searchField.tap()
+            searchField.typeText("zzzz")
+            shot("logsheet-no-matches", settle: 1.2)
+            searchField.buttons["Clear text"].firstMatch.tap()
+        }
+        app.buttons["Log Protein shake"].firstMatch.tap()
+        shot("portion-sheet")
+        app.buttons["Cancel"].firstMatch.tap()
+        app.navigationBars["Log"].buttons["Cancel"].tap()
+
+        // Foods: filter menu, add menu, forms.
+        tab("Foods")
+        shot("foods")
+        app.buttons["Filter by category"].tap()
+        shot("foods-filter-menu")
+        app.buttons["Breakfast"].firstMatch.tap()
+        shot("foods-filtered-breakfast")
+        app.buttons["Filter by category"].tap()
+        app.buttons["All"].firstMatch.tap()
+        app.buttons["Add food or meal"].tap()
+        shot("foods-add-menu")
+        app.buttons["Add Food"].tap()
+        shot("food-form-new", settle: 1.2)
+        app.buttons["Cancel"].firstMatch.tap()
+        // Edit an existing food (row tap).
+        app.staticTexts["Protein shake"].firstMatch.tap()
+        shot("food-form-edit", settle: 1.2)
+        app.buttons["Cancel"].firstMatch.tap()
+        // Meal editor.
+        app.staticTexts["Chicken & rice"].firstMatch.tap()
+        shot("meal-form-edit", settle: 1.2)
+        app.buttons["Cancel"].firstMatch.tap()
+
+        // Goal, including the focused-keyboard state.
+        tab("Goal")
+        shot("goal")
+        let targetField = app.textFields.firstMatch
+        if targetField.waitForExistence(timeout: 3) {
+            targetField.tap()
+            shot("goal-keyboard")
+            if app.buttons["Done"].firstMatch.waitForExistence(timeout: 2) {
+                app.buttons["Done"].firstMatch.tap()
+            }
+        }
+
+        // Calendar: previous month (little data), day picking, month detail.
+        tab("Calendar")
+        shot("calendar")
+        app.buttons["Previous month"].tap()
+        shot("calendar-previous-month")
+        app.staticTexts["Month details"].tap()
+        shot("month-detail-sparse", settle: 1.0)
+        app.navigationBars.buttons.firstMatch.tap()
+        app.buttons["Next month"].tap()
+
+        // Settings: pushed icon picker + data section.
+        tab("Today")
+        app.buttons["Settings"].tap()
+        _ = app.staticTexts["Reminders"].waitForExistence(timeout: 5)
+        shot("settings-top")
+        app.staticTexts["Food icon"].tap()
+        shot("settings-food-icon-picker")
+        app.navigationBars.buttons.firstMatch.tap()
+        app.swipeUp()
+        shot("settings-bottom")
+        app.buttons["Done"].tap()
+        shot("today-final")
     }
 
     /// Today's meal-slot sections start collapsed; their header buttons say

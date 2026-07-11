@@ -36,6 +36,7 @@ struct DayNutritionView: View {
                 }
             }
         }
+        .readableContentWidth()
         .navigationTitle("Nutrition")
     }
 

@@ -124,6 +124,7 @@ struct TodayView: View {
                 }
                 .padding(.bottom, 24)
             }
+            .readableContentWidth()
             .navigationTitle(dayTitle)
             // Tapping the title offers fast day jumps (Calendar-style
             // picker) and a way home from deep browsing.
@@ -381,6 +382,10 @@ struct TodayView: View {
                     .contentTransition(.numericText())
                 Text(headline.caption)
                     .font(.subheadline)
+                    // Scale down inside the ring at accessibility sizes,
+                    // like the number above — truncated to "kcal bala…".
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
                     .foregroundStyle(.secondary)
             } else {
                 Text(model.summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
@@ -391,6 +396,8 @@ struct TodayView: View {
                     .contentTransition(.numericText())
                 Text("kcal balance")
                     .font(.subheadline)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
                     .foregroundStyle(.secondary)
             }
         }

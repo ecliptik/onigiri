@@ -116,6 +116,7 @@ struct GoalView: View {
                 trendSection
             }
             .compactSections()
+            .readableContentWidth()
             .navigationTitle("Goal")
             .scrollDismissesKeyboard(.interactively)
             .toolbar {

@@ -27,6 +27,7 @@ struct FoodsView: View {
     @State private var portionTarget: PortionTarget?
     @State private var onlineSearch = OnlineFoodSearch()
     @State private var formPrefill: ProductPrefill?
+    @State private var showLibraryImporter = false
 
     /// Favorites first, then items whose category matches the current meal
     /// slot (breakfast in the morning, dinner in the evening…), then name.
@@ -181,11 +182,18 @@ struct FoodsView: View {
                     }
 
                     if foods.isEmpty {
-                        ContentUnavailableView(
-                            "No foods yet",
-                            systemImage: "fork.knife",
-                            description: Text("Add a food once — calories and sodium off the label — then log it any day with a tap.")
-                        )
+                        ContentUnavailableView {
+                            Label("No foods yet", systemImage: "fork.knife")
+                        } description: {
+                            Text("Add a food once — calories and sodium off the label — then log it any day with a tap.\n\nAlready tracking on another device? Export its library (Settings → Export library), save the file, and import it here.")
+                        } actions: {
+                            // Text-only: with a systemImage, iOS 26 collapses
+                            // the label to a bare icon here (as in toolbars).
+                            Button("Import library…") {
+                                showLibraryImporter = true
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
                     } else if visibleFoods.isEmpty && visibleMeals.isEmpty {
                         ContentUnavailableView.search(text: searchText)
                     }
@@ -206,8 +214,12 @@ struct FoodsView: View {
                 }
             }
             .compactSections()
+            .readableContentWidth()
             .navigationTitle("Foods")
-            .searchable(text: $searchText, prompt: "Search foods, meals, and online")
+            .fileImporter(isPresented: $showLibraryImporter, allowedContentTypes: [.json]) { result in
+                ToastCenter.shared.show(LibraryTransfer.handlePickedFile(result, context: context))
+            }
+            .searchable(text: $searchText, prompt: "Search library and online")
             .onSubmit(of: .search) {
                 Task { await onlineSearch.search(searchText) }
             }

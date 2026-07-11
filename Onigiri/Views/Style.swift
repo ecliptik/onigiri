@@ -14,6 +14,29 @@ extension View {
     func compactSections() -> some View {
         listSectionSpacing(10)
     }
+
+    /// Caps scrollable content at a readable width and centers it —
+    /// iPhone layouts are untouched (margin math yields 0), iPad stops
+    /// stretching rows edge to edge across 1024pt. Apply to ScrollViews
+    /// and Lists/Forms alike (contentMargins reaches both).
+    func readableContentWidth(max maxWidth: CGFloat = 700) -> some View {
+        modifier(ReadableContentWidth(maxWidth: maxWidth))
+    }
+}
+
+private struct ReadableContentWidth: ViewModifier {
+    let maxWidth: CGFloat
+
+    func body(content: Content) -> some View {
+        GeometryReader { geo in
+            content
+                .contentMargins(
+                    .horizontal,
+                    max(0, (geo.size.width - maxWidth) / 2),
+                    for: .scrollContent
+                )
+        }
+    }
 }
 
 // FoodIconView / WaterIconView moved to OnigiriKit so the watch renders

@@ -46,6 +46,7 @@ struct CalendarView: View {
                 }
                 .padding(.horizontal)
             }
+            .readableContentWidth()
             // Month chevrons in the nav bar with the month as the title —
             // the same browsing pattern as Today.
             .navigationTitle(displayedMonth.formatted(.dateTime.month(.wide).year()))
@@ -379,6 +380,7 @@ struct MonthDetailView: View {
                 }
             }
         }
+        .readableContentWidth()
         .navigationTitle(month.formatted(.dateTime.month(.wide).year()))
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -395,6 +397,12 @@ private struct DayCell: View {
     let isFuture: Bool
     let isSelected: Bool
 
+    // Scaled with the day number's font: at accessibility sizes a fixed
+    // 44pt cell left the onigiri hanging outside the selection tint.
+    @ScaledMetric(relativeTo: .caption2) private var cellHeight = 44.0
+    @ScaledMetric(relativeTo: .caption2) private var markerHeight = 20.0
+    @ScaledMetric(relativeTo: .caption2) private var emojiSize = 15.0
+
     var body: some View {
         VStack(spacing: 2) {
             Text(day, format: .dateTime.day())
@@ -402,17 +410,21 @@ private struct DayCell: View {
                 .foregroundStyle(isToday ? Color.accentColor : (isFuture ? Color.secondary.opacity(0.4) : Color.secondary))
                 .fontWeight(isToday ? .bold : .regular)
             if earned {
+                // Sized into the same box as the dot branch: emoji glyphs
+                // draw past their line height, and at 18pt the rice ball
+                // bled into the row below on iPad's wide grid.
                 Text("🍙")
-                    .font(.system(size: 18))
+                    .font(.system(size: emojiSize))
+                    .frame(height: markerHeight)
             } else {
                 Circle()
                     .fill(.quaternary)
                     .frame(width: 5, height: 5)
                     .opacity(isFuture ? 0 : 1)
-                    .frame(height: 20)
+                    .frame(height: markerHeight)
             }
         }
-        .frame(height: 44)
+        .frame(height: cellHeight)
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 8)

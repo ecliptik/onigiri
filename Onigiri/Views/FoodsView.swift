@@ -523,6 +523,11 @@ struct PortionSheet: View {
                 }
             }
         }
+        // Frosted, not flat: stacked over the food form (or the Log
+        // sheet) the default background blends into the sheet behind —
+        // in dark mode only the grabber separated them. The material
+        // renders as an elevated layer in both modes.
+        .presentationBackground(.thickMaterial)
     }
 }
 

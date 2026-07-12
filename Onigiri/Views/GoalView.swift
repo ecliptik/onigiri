@@ -49,6 +49,10 @@ struct GoalView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // The trend leads: where you ARE against the goal is the
+                // screen's headline; the knobs to change it come after.
+                trendSection
+
                 Section("Current weight") {
                     if let healthWeightLb {
                         LabeledContent("From Apple Health") {
@@ -112,8 +116,6 @@ struct GoalView: View {
                         }
                     }
                 }
-
-                trendSection
             }
             .compactSections()
             .readableContentWidth()
@@ -203,7 +205,9 @@ struct GoalView: View {
 
     @ViewBuilder
     private var trendSection: some View {
-        Section("Weight trend") {
+        // No header: it leads the screen now, and the chart speaks for
+        // itself.
+        Section {
             if weightHistory.count >= 2 {
                 Chart {
                     ForEach(Array(weightHistory.enumerated()), id: \.offset) { _, point in

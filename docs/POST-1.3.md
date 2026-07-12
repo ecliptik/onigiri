@@ -39,19 +39,12 @@ re-deploy required (free team, 7-day provisioning).
    TestFlight distribution both hang on this; free-team provisioning
    forces the weekly re-deploy.
 
-3. **Watch parity for tracked metrics.** The phone's two metric slots
-   can track any of 38 nutrients; the watch doesn't know the slots
-   exist — its home screen and complications show the original fixed
-   pair (kcal gauge + a hardcoded "oz water" line), so a phone tracking
-   Fiber + Iron still shows water on the wrist. Scoped out deliberately:
-   the settings SYNC path is easy (slot keys ride the WatchConnectivity
-   payload like the icons already do), but the NUMBERS need the watch
-   to run its own HealthKit day-total queries per nutrient (the kit
-   query code is shared, so this is wiring, not new math), plus a
-   rework of the tiny complication layouts to render "10/28 g 🌾"-style
-   lines. The real cost: watch UI has zero automated coverage — every
-   layout change means Micheal eyeballing it on-wrist. Effort: a solid
-   session.
+3. **Watch parity for tracked metrics — SHIPPED 2026-07-12** (3dcc6ba):
+   a horizontal page swipe from watch home reveals the Tracked screen
+   mirroring the phone's slots; slot settings ride the sync payload,
+   totals come from the watch's own Health store. Complications stay on
+   the kcal headline + water line BY CHOICE (Micheal: "I like how it is
+   now") — revisit only if he asks for slot-aware complications.
 
 4. **Portion sheet presentation.** `.presentationBackground(.thickMaterial)`
    fixed the worst of the dark-mode black-on-black blending when the

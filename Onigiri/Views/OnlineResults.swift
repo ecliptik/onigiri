@@ -20,6 +20,10 @@ final class OnlineFoodSearch {
     private var detailsInFlight: Set<String> = []
     private var page = 1
     private var hasMore = false
+    /// Barcodes whose product carries no calorie data at all — weeded
+    /// from results (useless for logging) and kept out of later pages.
+    /// A literal 0 kcal stays: that's real data (water, diet soda).
+    private var rejected: Set<String> = []
 
     private static let pageSize = 10
     private let client = OpenFoodFactsClient()
@@ -43,7 +47,7 @@ final class OnlineFoodSearch {
         do {
             let hits = try await client.search(query: trimmed, limit: Self.pageSize)
             guard lastQuery == trimmed else { return } // superseded
-            results = hits
+            results = hits.filter { !rejected.contains($0.barcode) }
             hasMore = hits.count == Self.pageSize
             if hits.isEmpty {
                 message = "No online matches — try different words."
@@ -73,9 +77,10 @@ final class OnlineFoodSearch {
             guard lastQuery == query else { return } // superseded
             page += 1
             hasMore = hits.count == Self.pageSize
-            // OFF pages can shift between requests — drop repeats.
+            // OFF pages can shift between requests — drop repeats (and
+            // anything already weeded for missing calories).
             let known = Set(results.map(\.barcode))
-            let fresh = hits.filter { !known.contains($0.barcode) }
+            let fresh = hits.filter { !known.contains($0.barcode) && !rejected.contains($0.barcode) }
             if fresh.isEmpty && !hits.isEmpty { hasMore = false }
             results += fresh
         } catch {
@@ -97,6 +102,7 @@ final class OnlineFoodSearch {
         isLoadingMore = false
         page = 1
         hasMore = false
+        rejected = []
     }
 
     /// Unstructured on purpose: the row's .task would cancel the fetch
@@ -109,6 +115,15 @@ final class OnlineFoodSearch {
             defer { detailsInFlight.remove(barcode) }
             if let product = try? await client.product(barcode: barcode) {
                 products[barcode] = product
+                // No calorie data at all — weed it, and backfill a page
+                // if weeding emptied the list.
+                if product.kcal == nil {
+                    rejected.insert(barcode)
+                    results.removeAll { $0.barcode == barcode }
+                    if results.isEmpty, hasMore, !isSearching {
+                        await loadMore()
+                    }
+                }
             } else {
                 detailFailures.insert(barcode)
             }
@@ -195,6 +210,9 @@ struct OnlineResultsSection: View {
     let query: String
     let search: OnlineFoodSearch
     let onPick: (ScannedProduct) -> Void
+    /// A dead-end search (no matches, or the database was unreachable)
+    /// offers manual entry — the new-food form prefilled with the query.
+    var onAddManually: ((String) -> Void)?
 
     var body: some View {
         Section("Online") {
@@ -220,6 +238,18 @@ struct OnlineResultsSection: View {
                 Text(message)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            }
+            // The searched-and-came-up-empty state — no matches or a
+            // failed search alike: the label is still a fine food name.
+            if let onAddManually,
+               !search.isSearching,
+               search.results.isEmpty,
+               query.trimmingCharacters(in: .whitespaces) == search.lastQuery {
+                Button {
+                    onAddManually(search.lastQuery)
+                } label: {
+                    Label("Add Food", systemImage: "plus")
+                }
             }
             ForEach(search.results) { result in
                 OnlineResultRow(result: result, search: search) {

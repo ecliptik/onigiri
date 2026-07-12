@@ -1058,13 +1058,15 @@ final class OnigiriUITests: XCTestCase {
             app.swipeUp(velocity: .fast)
             swipes += 1
             if throttled.exists { break }
-            if firstRowCount(app) > max(before, 10) { break }
+            if firstRowCount(app) > before { break }
         }
         Thread.sleep(forTimeInterval: 3)
         let after = firstRowCount(app)
         attachShot(named: "paging-bottom")
+        // No fixed floor: weeding drops calorie-less rows, so page sizes
+        // vary — growth or the graceful throttle both prove the paging.
         XCTAssertTrue(
-            after > max(before, 10) || throttled.exists,
+            after > before || throttled.exists,
             "Second page loaded (\(before)→\(after)) or throttle footnote shown"
         )
     }
@@ -1127,6 +1129,39 @@ final class OnigiriUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 2)
         XCTAssertFalse(fiberGone.exists, "None removes the metric from Today")
         attachShot(named: "metric-today-none")
+    }
+
+    /// Dead-end search → Add Food (opt-in via ADD_FROM_SEARCH=1, seeded
+    /// sims): a gibberish query returns nothing (or errors — either way),
+    /// the Add Food button appears, and the new-food form opens with the
+    /// query as the name.
+    @MainActor
+    func testAddFoodFromEmptySearch() throws {
+        guard ProcessInfo.processInfo.environment["ADD_FROM_SEARCH"] == "1" else {
+            throw XCTSkip("Set ADD_FROM_SEARCH=1 to run the add-from-search test")
+        }
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--seed-sample-data"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        switchTab(in: app, to: "Foods")
+        let searchField = app.searchFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 10), "Search field")
+        searchField.tap()
+        searchField.typeText("zzqxvbnfood\n")
+
+        let addFood = app.buttons["Add Food"].firstMatch
+        XCTAssertTrue(addFood.waitForExistence(timeout: 20), "Add Food after dead-end search")
+        attachShot(named: "search-add-food")
+        addFood.tap()
+
+        // The new-food form opens with the query prefilled as the name.
+        let nameField = app.textFields["zzqxvbnfood"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5), "Form prefilled with the query")
+        attachShot(named: "search-add-food-form")
     }
 
     /// One-off: grants whatever Health sheet is pending, without seeding.

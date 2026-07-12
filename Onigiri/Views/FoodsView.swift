@@ -202,7 +202,7 @@ struct FoodsView: View {
                 // Saved items always rank first; the online database is one
                 // more section below — a quick log/add without the food form.
                 if !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
-                    OnlineResultsSection(query: searchText, search: onlineSearch) { product in
+                    OnlineResultsSection(query: searchText, search: onlineSearch, onPick: { product in
                         // Known barcodes log fast; new foods go through the
                         // full prefilled form (Save / Save & Log).
                         if let existing = foods.first(where: { $0.barcode == product.barcode }) {
@@ -210,7 +210,12 @@ struct FoodsView: View {
                         } else {
                             formPrefill = ProductPrefill(product: product)
                         }
-                    }
+                    }, onAddManually: { name in
+                        formPrefill = ProductPrefill(product: ScannedProduct(
+                            barcode: "", name: name, kcal: nil, sodiumMg: nil,
+                            servingDescription: "", nutrients: NutrientValues()
+                        ))
+                    })
                 }
             }
             .compactSections()

@@ -198,9 +198,14 @@ struct QuickLogSheet: View {
                 // Saved items rank first; the online database follows so a
                 // one-off food can be logged without saving it.
                 if !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
-                    OnlineResultsSection(query: searchText, search: onlineSearch) { product in
+                    OnlineResultsSection(query: searchText, search: onlineSearch, onPick: { product in
                         route(product)
-                    }
+                    }, onAddManually: { name in
+                        formPrefill = ProductPrefill(product: ScannedProduct(
+                            barcode: "", name: name, kcal: nil, sodiumMg: nil,
+                            servingDescription: "", nutrients: NutrientValues()
+                        ))
+                    })
                 }
             }
             .compactSections()

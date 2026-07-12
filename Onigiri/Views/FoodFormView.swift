@@ -405,7 +405,9 @@ struct FoodFormView: View {
         sugarG = product.nutrients.sugarG
         caffeineMg = product.nutrients.caffeineMg
         micros = product.nutrients.micros
-        lookupMessage = product.kcal == nil
+        // Only for real lookups (barcode present): a manual "Add Food"
+        // prefill carries just the searched name, which isn't a finding.
+        lookupMessage = product.kcal == nil && !product.barcode.isEmpty
             ? "Found it, but no calorie data — check the label."
             : nil
         // Every prefill path funnels through here: onAppear prefill,

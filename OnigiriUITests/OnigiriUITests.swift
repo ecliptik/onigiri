@@ -1169,6 +1169,60 @@ final class OnigiriUITests: XCTestCase {
         attachShot(named: "search-add-food-form")
     }
 
+    /// Form search paging (opt-in via FORM_PAGING=1, seeded sims): the
+    /// food form's Search Database sheet pages past 10 like the other
+    /// search surfaces.
+    @MainActor
+    func testFormSearchPaging() throws {
+        guard ProcessInfo.processInfo.environment["FORM_PAGING"] == "1" else {
+            throw XCTSkip("Set FORM_PAGING=1 to run the form-paging test")
+        }
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--seed-sample-data"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        switchTab(in: app, to: "Foods")
+        let addMenu = app.buttons["Add food or meal"]
+        XCTAssertTrue(addMenu.waitForExistence(timeout: 10), "Add menu")
+        addMenu.tap()
+        app.buttons["Add Food"].tap()
+        let dbSearch = app.buttons["Search database"]
+        XCTAssertTrue(dbSearch.waitForExistence(timeout: 10), "Form search row")
+        dbSearch.tap()
+        let field = app.searchFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "Search sheet field")
+        field.tap()
+        field.typeText("chicken\n")
+
+        let rowCount = { (app: XCUIApplication) -> Int in
+            app.buttons.matching(
+                NSPredicate(format: "label CONTAINS[c] 'kcal' OR label CONTAINS[c] 'no data'")
+            ).count
+        }
+        Thread.sleep(forTimeInterval: 5)
+        let before = rowCount(app)
+        let throttled = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS[c] 'busy' OR label CONTAINS[c] 'more results'")
+        ).firstMatch
+        var swipes = 0
+        while swipes < 12 {
+            app.swipeUp(velocity: .fast)
+            swipes += 1
+            if throttled.exists { break }
+            if rowCount(app) > before { break }
+        }
+        Thread.sleep(forTimeInterval: 3)
+        let after = rowCount(app)
+        attachShot(named: "form-paging-bottom")
+        XCTAssertTrue(
+            after > before || throttled.exists,
+            "Form search paged (\(before)→\(after)) or throttled gracefully"
+        )
+    }
+
     /// One-off: grants whatever Health sheet is pending, without seeding.
     @MainActor
     func testGrantPendingAccess() throws {

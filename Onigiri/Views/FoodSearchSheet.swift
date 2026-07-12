@@ -35,6 +35,24 @@ struct FoodSearchSheet: View {
                             dismiss()
                         }
                     }
+                    .onAppear {
+                        // Same paging as the Foods/Log search sections:
+                        // the last row pulls the next page.
+                        if result.id == search.results.last?.id {
+                            Task { await search.loadMore() }
+                        }
+                    }
+                }
+                if search.isLoadingMore {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("Searching…")
+                            .foregroundStyle(.secondary)
+                    }
+                } else if let more = search.moreMessage {
+                    Text(more)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
             .compactSections()

@@ -27,6 +27,7 @@ struct WatchMetricsView: View {
             // title renders blank on-device.
             ScrollView {
                 VStack(spacing: 8) {
+                    goalLine
                     let first = slotNutrient(1)
                     let second = slotNutrient(2)
                     if first == nil && second == nil {
@@ -49,6 +50,28 @@ struct WatchMetricsView: View {
         }
         .onAppear {
             Task { await model.refresh() }
+        }
+    }
+
+    /// The goal card's one-liner, from state the page already loads.
+    @ViewBuilder
+    private var goalLine: some View {
+        if let target = model.state.deficitTargetKcal, target > 0 {
+            let banked = max(0, -model.state.summary.balanceKcal)
+            let percent = Int(min(1, banked / target) * 100)
+            VStack(spacing: 0) {
+                Text("Daily goal \(percent)%")
+                    .font(.headline)
+                    .foregroundStyle(percent >= 100 ? Color.green : Color.primary)
+                Text("\(banked, format: .number.precision(.fractionLength(0))) of \(target, format: .number.precision(.fractionLength(0))) kcal deficit")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .minimumScaleFactor(0.8)
+                    .lineLimit(1)
+            }
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 10))
         }
     }
 

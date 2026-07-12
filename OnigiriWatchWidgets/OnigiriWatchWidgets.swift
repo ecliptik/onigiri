@@ -123,7 +123,15 @@ struct BalanceComplicationView: View {
                 Spacer(minLength: 0)
             }
         default:
-            Gauge(value: entry.state.gaugeProgress) {
+            // The ring mimics Today's headline ring: how much of the
+            // day's calorie budget is eaten, orange when over (it showed
+            // deficit-goal progress before — Micheal wanted one meaning).
+            // Without a plan it falls back to goal progress.
+            let eaten = entry.state.dailyBudgetKcal.map { budget in
+                budget > 0 ? min(1, entry.state.summary.intakeKcal / budget) : 0
+            }
+            let over = entry.state.dailyBudgetKcal.map { entry.state.summary.intakeKcal > $0 } ?? false
+            Gauge(value: eaten ?? entry.state.gaugeProgress) {
                 Text(SharedStore.rewardEmoji)
                     .font(.system(size: 12))
             } currentValueLabel: {
@@ -135,7 +143,7 @@ struct BalanceComplicationView: View {
                     .minimumScaleFactor(0.6)
             }
             .gaugeStyle(.accessoryCircular)
-            .tint(.green)
+            .tint(over ? .orange : .green)
         }
     }
 }

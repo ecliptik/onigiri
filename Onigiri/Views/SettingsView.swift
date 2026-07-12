@@ -25,6 +25,8 @@ struct SettingsView: View {
     @AppStorage(SharedStore.trackedMetric2ModeKey, store: SharedStore.defaults) private var trackedMetric2Mode = ""
     @AppStorage(SharedStore.trackedMetric2TargetKey, store: SharedStore.defaults) private var trackedMetric2Target = 0.0
     @AppStorage(SharedStore.trackedMetric2IconKey, store: SharedStore.defaults) private var trackedMetric2Icon = ""
+    @AppStorage(SharedStore.energyStatsStyleKey, store: SharedStore.defaults) private var energyStatsStyle = "cards"
+    @AppStorage(SharedStore.untrackedBelowKey, store: SharedStore.defaults) private var untrackedBelowKcal = 1000.0
     @AppStorage(SharedStore.remindMealsKey, store: SharedStore.defaults) private var remindMeals = false
     @AppStorage(SharedStore.remindWaterKey, store: SharedStore.defaults) private var remindWater = false
     @AppStorage(SharedStore.remindStreakKey, store: SharedStore.defaults) private var remindStreak = false
@@ -295,6 +297,12 @@ struct SettingsView: View {
                 Text("kcal balance").tag("balance")
                 Text("kcal left").tag("remaining")
             }
+            // "Compact" trades the Intake/Active/Resting cards for
+            // Burned/Eaten beside the headline — more room for the log.
+            Picker("Energy stats", selection: $energyStatsStyle) {
+                Text("Cards").tag("cards")
+                Text("Beside balance").tag("compact")
+            }
             Toggle("Progress gauges", isOn: $progressGauges)
         }
         // The icon plumbing lives here, off the body's modifier chain —
@@ -480,6 +488,21 @@ struct SettingsView: View {
 
                 trackedMetricSection(slot: 1)
                 trackedMetricSection(slot: 2)
+
+                Section {
+                    Stepper(value: $untrackedBelowKcal, in: 0...2000, step: 100) {
+                        LabeledContent("Counts as untracked") {
+                            Text(untrackedBelowKcal > 0
+                                ? "< \(untrackedBelowKcal, format: .number.precision(.fractionLength(0))) kcal"
+                                : "Off")
+                        }
+                    }
+                    Text("Days with less logged break the streak and stay out of the month's totals — sparse days skew them. 0 turns this off.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text("Untracked days")
+                }
 
                 remindersSection
 

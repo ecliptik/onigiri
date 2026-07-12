@@ -92,7 +92,7 @@ final class OnigiriUITests: XCTestCase {
 
         // The meter grid drills into the day's full nutrient breakdown,
         // summed from the seeded meals' extended nutrients.
-        app.staticTexts["Nutrition details"].tap()
+        app.staticTexts["Details"].tap()
         XCTAssertTrue(
             app.navigationBars["Nutrition"].waitForExistence(timeout: 10),
             "Meter grid should push the day nutrition detail"
@@ -102,6 +102,9 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(macroGroup.waitForExistence(timeout: 5),
                       "Seeded meals should produce a macro group")
         macroGroup.tap()
+        // The energy rows above (Active/Resting/Deficit) push the deep
+        // macro rows below the iPhone's fold — scroll them into view.
+        app.swipeUp()
         XCTAssertTrue(app.staticTexts["Protein"].waitForExistence(timeout: 5),
                       "Expanding macros should reveal the rows")
         // 154 g = seeded breakfast 24 + lunch 42 + shake 30 + the Chicken
@@ -186,7 +189,9 @@ final class OnigiriUITests: XCTestCase {
         confirmDelete.tap()
         XCTAssertTrue(app.staticTexts["24 / 64 oz water"].waitForExistence(timeout: 10),
                       "Confirming should delete the water row")
-        XCTAssertTrue(app.navigationBars["Today"].exists,
+        // The in-content title still reads "Today" (a page would say
+        // "Yesterday"); the nav bar no longer carries the day title.
+        XCTAssertTrue(app.buttons["dayTitleButton"].label.hasPrefix("Today"),
                       "A row swipe must not page to another day")
 
         // Swipe RIGHT on a food row reveals Edit (library-consistent);
@@ -221,7 +226,7 @@ final class OnigiriUITests: XCTestCase {
         // Predicted vs actual moved off the card into the pushed month
         // detail. Seeded data has a month of weigh-ins and deficit days,
         // so both rows should carry real values (assert on lb, not —).
-        app.staticTexts["Month details"].tap()
+        app.staticTexts["Details"].tap()
         let predictedRow = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label CONTAINS 'Predicted, by deficit' AND label CONTAINS 'lb'"))
             .firstMatch
@@ -266,7 +271,7 @@ final class OnigiriUITests: XCTestCase {
         expandMealSections(in: app)
         scene("today")
 
-        app.staticTexts["Nutrition details"].tap()
+        app.staticTexts["Details"].tap()
         let macros = app.staticTexts["Macronutrients"]
         if macros.waitForExistence(timeout: 5) {
             macros.tap()
@@ -311,9 +316,9 @@ final class OnigiriUITests: XCTestCase {
         scene("foods")
 
         switchTab(in: app, to: "Calendar")
-        _ = app.staticTexts["Month details"].waitForExistence(timeout: 10)
+        _ = app.staticTexts["Details"].waitForExistence(timeout: 10)
         scene("calendar")
-        app.staticTexts["Month details"].tap()
+        app.staticTexts["Details"].tap()
         scene("month", hold: 3.5)
         app.navigationBars.buttons.firstMatch.tap()
 
@@ -394,12 +399,12 @@ final class OnigiriUITests: XCTestCase {
         // Past days: seeded day-3 has entries; day-5 is empty.
         for _ in 0..<3 { app.buttons["Previous day"].tap() }
         shot("past-day-with-data")
-        app.staticTexts["Nutrition details"].tap()
+        app.staticTexts["Details"].tap()
         shot("nutrition-past-day")
         app.navigationBars["Nutrition"].buttons.firstMatch.tap()
         for _ in 0..<2 { app.buttons["Previous day"].tap() }
         shot("past-day-empty")
-        app.staticTexts["Nutrition details"].tap()
+        app.staticTexts["Details"].tap()
         shot("nutrition-empty-day")
         app.navigationBars["Nutrition"].buttons.firstMatch.tap()
 
@@ -484,7 +489,7 @@ final class OnigiriUITests: XCTestCase {
         if tapIfExists(app.buttons["Previous month"]) {
             shot("calendar-previous-month")
         }
-        if tapIfExists(app.staticTexts["Month details"]) {
+        if tapIfExists(app.staticTexts["Details"]) {
             shot("month-detail-sparse", settle: 1.0)
             tapIfExists(app.navigationBars.buttons.firstMatch)
         }

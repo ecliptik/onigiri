@@ -29,30 +29,28 @@ struct FoodsView: View {
     @State private var formPrefill: ProductPrefill?
     @State private var showLibraryImporter = false
 
-    /// Favorites first, then items whose category matches the current meal
-    /// slot (breakfast in the morning, dinner in the evening…), then name.
+    /// Favorites first, then by recency (last logged, falling back to
+    /// when it was added — Micheal: recent beats slot affinity), then
+    /// name for stability.
     private static func ranked(
-        _ lhs: (isFavorite: Bool, category: String?, name: String),
-        _ rhs: (isFavorite: Bool, category: String?, name: String)
+        _ lhs: (isFavorite: Bool, recency: Date, name: String),
+        _ rhs: (isFavorite: Bool, recency: Date, name: String)
     ) -> Bool {
         if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
-        let slot = FoodCategory.slot(for: .now).rawValue
-        let lhsNow = lhs.category == slot
-        let rhsNow = rhs.category == slot
-        if lhsNow != rhsNow { return lhsNow }
+        if lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
         return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
     }
 
     private var filteredMeals: [Meal] {
         meals
             .filter { matches(name: $0.name, category: $0.category) }
-            .sorted { Self.ranked(($0.isFavorite, $0.category, $0.name), ($1.isFavorite, $1.category, $1.name)) }
+            .sorted { Self.ranked(($0.isFavorite, $0.recencyDate, $0.name), ($1.isFavorite, $1.recencyDate, $1.name)) }
     }
 
     private var filteredFoods: [Food] {
         foods
             .filter { matches(name: $0.name, category: $0.category) }
-            .sorted { Self.ranked(($0.isFavorite, $0.category, $0.name), ($1.isFavorite, $1.category, $1.name)) }
+            .sorted { Self.ranked(($0.isFavorite, $0.recencyDate, $0.name), ($1.isFavorite, $1.recencyDate, $1.name)) }
     }
 
     private func matches(name: String, category: String?) -> Bool {
@@ -86,10 +84,12 @@ struct FoodsView: View {
                                 // Meals stay one-tap: their category rides
                                 // along; long-press still offers portions.
                                 LogButton(name: meal.name) {
+                                    meal.lastUsedAt = .now
                                     log(name: meal.name, kcal: meal.totalKcal,
                                         sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
                                         category: PortionTarget.category(from: meal.category))
                                 } onCustomPortion: {
+                                    meal.lastUsedAt = .now
                                     portionTarget = PortionTarget(
                                         name: meal.name, kcal: meal.totalKcal,
                                         sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
@@ -147,8 +147,10 @@ struct FoodsView: View {
                             // Foods always confirm through the portion sheet
                             // so the serving and meal slot are deliberate.
                             LogButton(name: food.name) {
+                                food.lastUsedAt = .now
                                 portionTarget = makePortionTarget(for: food)
                             } onCustomPortion: {
+                                food.lastUsedAt = .now
                                 portionTarget = makePortionTarget(for: food)
                             }
                         }

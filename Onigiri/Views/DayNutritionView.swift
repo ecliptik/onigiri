@@ -52,6 +52,24 @@ struct DayNutritionView: View {
                 Text("\(model.summary.intakeKcal, format: .number.precision(.fractionLength(0))) kcal")
                     .monospacedDigit()
             }
+            LabeledContent("Active burn") {
+                Text("\(model.summary.activeBurnKcal, format: .number.precision(.fractionLength(0))) kcal")
+                    .monospacedDigit()
+            }
+            LabeledContent("Resting burn") {
+                Text("\(model.summary.restingBurnKcal, format: .number.precision(.fractionLength(0))) kcal")
+                    .monospacedDigit()
+            }
+            // Same vocabulary as the calendar day card: positive is a
+            // deficit (good), negative reads as a surplus.
+            LabeledContent("Deficit") {
+                let deficit = -model.summary.balanceKcal
+                Text(deficit >= 0
+                    ? "\(deficit, format: .number.precision(.fractionLength(0))) kcal"
+                    : "\(-deficit, format: .number.precision(.fractionLength(0))) kcal surplus")
+                    .foregroundStyle(deficit >= 0 ? Color.green : Color.orange)
+                    .monospacedDigit()
+            }
             LabeledContent("Sodium") {
                 Text("\(model.summary.sodiumMg, format: .number.precision(.fractionLength(0))) / \(sodiumLimitMg, format: .number.precision(.fractionLength(0))) mg")
                     .foregroundStyle(Color.sodiumStatus(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg))

@@ -30,6 +30,7 @@ struct TodayView: View {
     @AppStorage(SharedStore.trackedMetric2ModeKey, store: SharedStore.defaults) private var trackedMetric2Mode = ""
     @AppStorage(SharedStore.trackedMetric2TargetKey, store: SharedStore.defaults) private var trackedMetric2Target = 0.0
     @AppStorage(SharedStore.trackedMetric2IconKey, store: SharedStore.defaults) private var trackedMetric2Icon = ""
+    @AppStorage(SharedStore.energyStatsStyleKey, store: SharedStore.defaults) private var energyStatsStyle = "cards"
     @State private var activeSheet: TodaySheet?
     @State private var quickActions = QuickActions.shared
     @State private var toastCenter = ToastCenter.shared
@@ -93,20 +94,32 @@ struct TodayView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Layout.screenSpacing) {
-                    // Two doors, split by meaning: "Nutrition details" is
-                    // what you ate (→ day detail), the goal card is how
-                    // the plan is going (→ the month story). Only the
-                    // caption is tappable — a link around the whole
-                    // headline swallowed half of the day-paging swipes.
+                    // The day title is the date-jump door (one tap to the
+                    // month grid); "Details" under the headline is the one
+                    // door to the day summary. Only captions are tappable —
+                    // a link around the whole headline swallowed half of
+                    // the day-paging swipes.
+                    dayTitleButton
                     VStack(spacing: 8) {
-                        if progressGauges {
-                            gaugedHeadline
-                        } else {
-                            balanceHeadline
+                        // Compact energy mode: Burned/Eaten flank the
+                        // headline and the meter cards below disappear —
+                        // one row less between the user and the log.
+                        HStack(spacing: 12) {
+                            if energyStatsStyle == "compact" {
+                                energyFlank(model.summary.totalBurnKcal, "Burned")
+                            }
+                            if progressGauges {
+                                gaugedHeadline
+                            } else {
+                                balanceHeadline
+                            }
+                            if energyStatsStyle == "compact" {
+                                energyFlank(model.summary.intakeKcal, "Eaten")
+                            }
                         }
                         nutritionLink {
                             HStack(spacing: 4) {
-                                Text("Nutrition details")
+                                Text("Details")
                                 Image(systemName: "chevron.right")
                                     .font(.caption2.weight(.semibold))
                             }
@@ -118,8 +131,12 @@ struct TodayView: View {
                         }
                     }
                     hydrationRow
-                    monthDetailLink { goalCard }
-                    meterGrid
+                    // Pure display: its numbers are on its face, and the
+                    // day summary already has its one door ("Details").
+                    goalCard
+                    if energyStatsStyle == "cards" {
+                        meterGrid
+                    }
                     loggedSection
 
                     if let message = model.errorMessage {
@@ -134,19 +151,12 @@ struct TodayView: View {
             }
             .readableContentWidth()
             .expandsTabBarAtTop()
-            .navigationTitle(dayTitle)
-            // Tapping the title offers fast day jumps (Calendar-style
-            // picker) and a way home from deep browsing.
-            .toolbarTitleMenu {
-                Button("Jump to date…", systemImage: "calendar") {
-                    activeSheet = .datePicker
-                }
-                if !model.isToday {
-                    Button("Go to today", systemImage: "arrow.uturn.backward") {
-                        Task { await model.select(day: .now) }
-                    }
-                }
-            }
+            // The large title is rendered in-content (dayTitleButton) so
+            // one tap opens the month grid directly — the system title
+            // menu forced an intermediate "Jump to date…" tap. The bar
+            // itself stays (day chevrons, gear); its title is empty.
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -184,8 +194,21 @@ struct TodayView: View {
                         logDate: DayBounds.logTimestamp(for: model.selectedDate)
                     )
                 case .datePicker:
-                    DayJumpSheet(selected: model.selectedDate) { day in
+                    DayJumpSheet(
+                        selected: model.selectedDate,
+                        earned: monthModel.earned
+                    ) { day in
                         Task { await model.select(day: day) }
+                    }
+                    // Earned badges for the grid; refreshes on present.
+                    .task {
+                        await monthModel.refresh(goal: goals.first.map {
+                            SyncedGoal(
+                                targetWeightLb: $0.targetWeightLb,
+                                targetDate: $0.targetDate,
+                                fallbackCurrentWeightLb: $0.fallbackCurrentWeightLb
+                            )
+                        })
                     }
                 case .portion(let target):
                     PortionSheet(target: target) { quantity, category in
@@ -350,6 +373,30 @@ struct TodayView: View {
         return model.selectedDate.formatted(.dateTime.weekday(.abbreviated).month(.wide).day())
     }
 
+    /// The large title, rendered in-content so it's a one-tap door to
+    /// the month grid (the system title menu forced a "Jump to date…"
+    /// intermediate tap).
+    private var dayTitleButton: some View {
+        Button {
+            activeSheet = .datePicker
+        } label: {
+            HStack(spacing: 8) {
+                Text(dayTitle)
+                    .font(.largeTitle.bold())
+                    .foregroundStyle(.primary)
+                Image(systemName: "chevron.down")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // The system large title's leading inset, matched.
+        .padding(.horizontal, 20)
+        .accessibilityLabel("\(dayTitle). Jump to date")
+        .accessibilityIdentifier("dayTitleButton")
+    }
+
     /// Budget remaining for the day, when the user prefers the countdown
     /// headline and a plan exists; nil falls back to the ± balance.
     private var remainingHeadlineKcal: Double? {
@@ -465,25 +512,18 @@ struct TodayView: View {
         .accessibilityHint("Shows the day's full nutrient breakdown")
     }
 
-    /// Push to the same month story Calendar's summary card shows; the
-    /// model refreshes on push so Today doesn't pay for it up front.
-    private func monthDetailLink(@ViewBuilder _ content: () -> some View) -> some View {
-        NavigationLink {
-            MonthDetailView(model: monthModel, month: .now)
-                .task {
-                    await monthModel.refresh(goal: goals.first.map {
-                        SyncedGoal(
-                            targetWeightLb: $0.targetWeightLb,
-                            targetDate: $0.targetDate,
-                            fallbackCurrentWeightLb: $0.fallbackCurrentWeightLb
-                        )
-                    })
-                }
-        } label: {
-            content()
+
+    /// One side of the compact energy mode: total burned or eaten kcal.
+    private func energyFlank(_ value: Double, _ label: String) -> some View {
+        VStack(spacing: 2) {
+            Text("\(value, format: .number.precision(.fractionLength(0)))")
+                .font(.title3.weight(.bold))
+                .monospacedDigit()
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
-        .buttonStyle(.plain)
-        .accessibilityHint("Shows this month's deficit, weight change, and records")
+        .frame(maxWidth: .infinity)
     }
 
     private var meterGrid: some View {
@@ -956,35 +996,69 @@ private struct LogRowSwipeActions: ViewModifier {
 
 /// Graphical date picker for jumping straight to a day's record.
 private struct DayJumpSheet: View {
-    @State var selected: Date
+    let selected: Date
+    let earned: Set<Date>
     let onPick: (Date) -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var displayedMonth: Date
+
+    private let calendar = Calendar.current
+
+    init(selected: Date, earned: Set<Date>, onPick: @escaping (Date) -> Void) {
+        self.selected = selected
+        self.earned = earned
+        self.onPick = onPick
+        _displayedMonth = State(initialValue: Calendar.current.startOfMonth(for: selected))
+    }
 
     var body: some View {
         NavigationStack {
-            DatePicker(
-                "Day",
-                selection: $selected,
-                in: ...Date.now,
-                displayedComponents: .date
+            // The Calendar tab's own grid — earned badges, selection
+            // tint — so day browsing looks the same everywhere. Tapping
+            // a day IS the pick; no confirm step.
+            MonthGridView(
+                month: displayedMonth,
+                earned: earned,
+                selectedDay: calendar.startOfDay(for: selected),
+                onSelect: { day in
+                    onPick(day)
+                    dismiss()
+                }
             )
-            .datePickerStyle(.graphical)
             .padding(.horizontal)
-            .navigationTitle("Jump to Date")
+            .navigationTitle(displayedMonth.formatted(.dateTime.month(.wide).year()))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        shiftMonth(-1)
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .accessibilityLabel("Previous month")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        shiftMonth(1)
+                    } label: {
+                        Image(systemName: "chevron.right")
+                    }
+                    .disabled(calendar.isDate(displayedMonth, equalTo: .now, toGranularity: .month))
+                    .accessibilityLabel("Next month")
+                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("View Day") {
-                        onPick(selected)
-                        dismiss()
-                    }
                 }
             }
         }
         .presentationDetents([.medium])
+        .presentationBackground(.thickMaterial)
+    }
+
+    private func shiftMonth(_ delta: Int) {
+        guard let month = calendar.date(byAdding: .month, value: delta, to: displayedMonth),
+              month <= calendar.startOfMonth(for: .now) else { return }
+        displayedMonth = month
     }
 }
 

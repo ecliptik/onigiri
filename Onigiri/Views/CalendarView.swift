@@ -33,10 +33,12 @@ struct CalendarView: View {
                     // Region-scoped swipes: the grid pages months, the day
                     // area pages days. Chevrons stay as the visible,
                     // accessible affordance for both.
-                    VStack(spacing: Layout.screenSpacing) {
-                        weekdayHeader
-                        monthGrid
-                    }
+                    MonthGridView(
+                        month: displayedMonth,
+                        earned: model.earned,
+                        selectedDay: selectedDay,
+                        onSelect: { selectedDay = $0 }
+                    )
                     .simultaneousGesture(horizontalSwipe { shiftMonth($0) })
                     VStack(spacing: Layout.screenSpacing) {
                         dayHeader
@@ -116,56 +118,8 @@ struct CalendarView: View {
 
     // MARK: - Pieces
 
-    private var weekdayHeader: some View {
-        let symbols = calendar.veryShortStandaloneWeekdaySymbols
-        // Rotate so the row starts on the calendar's first weekday.
-        let ordered = Array(symbols[(calendar.firstWeekday - 1)...] + symbols[..<(calendar.firstWeekday - 1)])
-        return HStack {
-            ForEach(Array(ordered.enumerated()), id: \.offset) { _, symbol in
-                Text(symbol)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-            }
-        }
-    }
-
-    private var monthGrid: some View {
-        let days = monthDays()
-        return LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 6) {
-            ForEach(Array(days.enumerated()), id: \.offset) { _, day in
-                if let day {
-                    let dayStart = calendar.startOfDay(for: day)
-                    DayCell(
-                        day: day,
-                        earned: model.earned.contains(dayStart),
-                        isToday: calendar.isDateInToday(day),
-                        isFuture: day > .now,
-                        isSelected: dayStart == selectedDay
-                    )
-                    .onTapGesture {
-                        if day <= .now {
-                            selectedDay = dayStart
-                        }
-                    }
-                } else {
-                    Color.clear.frame(height: 44)
-                }
-            }
-        }
-    }
-
-    /// The displayed month as day dates, padded with nil for grid alignment.
-    private func monthDays() -> [Date?] {
-        guard let range = calendar.range(of: .day, in: .month, for: displayedMonth) else { return [] }
-        let firstWeekday = calendar.component(.weekday, from: displayedMonth)
-        let leadingBlanks = (firstWeekday - calendar.firstWeekday + 7) % 7
-        var days: [Date?] = Array(repeating: nil, count: leadingBlanks)
-        for dayNumber in range {
-            days.append(calendar.date(byAdding: .day, value: dayNumber - 1, to: displayedMonth))
-        }
-        return days
-    }
+    // Weekday header, grid, and DayCell live in MonthGridView (shared
+    // with Today's day-jump sheet).
 
     /// Cycle the selected day like the month header cycles months; the
     /// grid follows across month boundaries.
@@ -397,7 +351,7 @@ struct CalendarView: View {
                     )
                 }
                 HStack(spacing: 4) {
-                    Text("Month details")
+                    Text("Details")
                     Image(systemName: "chevron.right")
                         .font(.caption2.weight(.semibold))
                 }
@@ -440,6 +394,24 @@ struct MonthDetailView: View {
                 LabeledContent("Days goal met") {
                     Text("\(SharedStore.rewardEmoji(for: rewardIcon)) \(model.earnedCount(inMonthOf: month))")
                 }
+                LabeledContent("Days tracked") {
+                    Text("\(model.daysTracked(inMonthOf: month))")
+                        .monospacedDigit()
+                }
+                LabeledContent("Foods logged") {
+                    Text(model.monthFoodEntries.map { "\($0)" } ?? "—")
+                        .monospacedDigit()
+                }
+                LabeledContent("Total calories") {
+                    Text("\(model.totalCalories(inMonthOf: month), format: .number.precision(.fractionLength(0))) kcal")
+                        .monospacedDigit()
+                }
+                LabeledContent("Total water") {
+                    Text(model.monthWaterOz.map {
+                        "\(Int($0.rounded())) oz"
+                    } ?? "—")
+                    .monospacedDigit()
+                }
                 LabeledContent("Total deficit") {
                     Text(model.totalDeficit(inMonthOf: month).map {
                         "\(Int($0.rounded())) kcal"
@@ -454,7 +426,7 @@ struct MonthDetailView: View {
                     Text(model.actualLb(inMonthOf: month).map(signedLb) ?? "—")
                         .monospacedDigit()
                 }
-                Text("Predicted spends the month's net deficit at 3,500 kcal per lb; scale change compares 7-day averages, so sparse weigh-ins show —.")
+                Text("Predicted = net deficit ÷ 3,500 kcal per lb. Scale change compares 7-day averages.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -471,6 +443,9 @@ struct MonthDetailView: View {
         .readableContentWidth()
         .navigationTitle(month.formatted(.dateTime.month(.wide).year()))
         .navigationBarTitleDisplayMode(.inline)
+        // Water total and food count need their own Health queries; the
+        // rest of the stats come from the already-loaded day totals.
+        .task(id: month) { await model.loadMonthStats(for: month) }
     }
 
     private func signedLb(_ value: Double) -> String {
@@ -478,73 +453,8 @@ struct MonthDetailView: View {
     }
 }
 
-private struct DayCell: View {
-    let day: Date
-    let earned: Bool
-    let isToday: Bool
-    let isFuture: Bool
-    let isSelected: Bool
-
-    // Scaled with the day number's font: at accessibility sizes a fixed
-    // 44pt cell left the onigiri hanging outside the selection tint.
-    @ScaledMetric(relativeTo: .caption2) private var cellHeight = 44.0
-    @ScaledMetric(relativeTo: .caption2) private var markerHeight = 20.0
-    @ScaledMetric(relativeTo: .caption2) private var emojiSize = 15.0
-    @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
-
-    var body: some View {
-        VStack(spacing: 2) {
-            Text(day, format: .dateTime.day())
-                .font(.caption2)
-                .foregroundStyle(isToday ? Color.accentColor : (isFuture ? Color.secondary.opacity(0.4) : Color.secondary))
-                .fontWeight(isToday ? .bold : .regular)
-            if earned {
-                // Sized into the same box as the dot branch: emoji glyphs
-                // draw past their line height, and at 18pt the rice ball
-                // bled into the row below on iPad's wide grid.
-                Text(SharedStore.rewardEmoji(for: rewardIcon))
-                    .font(.system(size: emojiSize))
-                    .frame(height: markerHeight)
-            } else {
-                Circle()
-                    .fill(.quaternary)
-                    .frame(width: 5, height: 5)
-                    .opacity(isFuture ? 0 : 1)
-                    .frame(height: markerHeight)
-            }
-        }
-        .frame(height: cellHeight)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected ? Color.ricePaper.opacity(0.45) : .clear)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(isToday ? Color.accentColor : .clear, lineWidth: 1.5)
-        )
-        .contentShape(.rect)
-        // The cell is tap-driven (parent gesture) with purely visual state —
-        // VoiceOver needs the story spelled out and a button to press.
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilitySummary)
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-        .accessibilityHint(isFuture ? "" : "Shows this day's summary")
-    }
-
-    private var accessibilitySummary: String {
-        let date = day.formatted(.dateTime.weekday(.wide).month(.wide).day())
-        if isFuture { return "\(date), upcoming" }
-        let status = earned ? "goal met" : "goal not met"
-        return isToday ? "Today, \(date), \(status)" : "\(date), \(status)"
-    }
-}
-
-private extension Calendar {
-    func startOfMonth(for date: Date) -> Date {
-        self.date(from: dateComponents([.year, .month], from: date)) ?? date
-    }
-}
+// Calendar.startOfMonth(for:) lives in MonthGrid.swift, shared with
+// Today's day-jump sheet.
 
 #Preview {
     CalendarView()

@@ -27,6 +27,11 @@ public final class Food {
     // Library organization.
     public var isFavorite: Bool = false
     public var category: String?
+    /// Bumped on every log — drives the recency sort under favorites.
+    /// Optional so pre-existing stores migrate lightweight; nil reads
+    /// as createdAt.
+    public var lastUsedAt: Date?
+    public var recencyDate: Date { lastUsedAt ?? createdAt }
     /// Inverse of MealItem.food (declared there): deleting a food nullifies
     /// the items that reference it instead of leaving a dangling pointer
     /// that traps SwiftData on the next property access.
@@ -117,6 +122,9 @@ public final class Meal {
     public var createdAt: Date
     public var isFavorite: Bool = false
     public var category: String?
+    /// Bumped on every log — drives the recency sort under favorites.
+    public var lastUsedAt: Date?
+    public var recencyDate: Date { lastUsedAt ?? createdAt }
 
     public init(name: String, items: [MealItem], isFavorite: Bool = false, category: String? = nil) {
         self.uuid = UUID()
@@ -244,6 +252,21 @@ public enum SharedStore {
     public static var sodiumLimitMg: Double {
         let value = defaults.double(forKey: sodiumLimitKey)
         return value > 0 ? value : 2300
+    }
+
+    public static let untrackedBelowKey = "untrackedBelowKcal"
+    /// "cards" (Intake/Active/Resting tiles, default) or "compact"
+    /// (Burned/Eaten flanking the balance headline — frees a row for
+    /// the log).
+    public static let energyStatsStyleKey = "energyStatsStyle"
+
+    /// Days with less intake logged count as untracked — streak-breaking,
+    /// excluded from month totals. Default 1,000; the user can set 0 to
+    /// disable (so unset and explicit-zero must be distinguishable).
+    public static var untrackedBelowKcal: Double {
+        defaults.object(forKey: untrackedBelowKey) == nil
+            ? 1000
+            : defaults.double(forKey: untrackedBelowKey)
     }
 
     /// One visible character that presents as emoji — keeps letters and

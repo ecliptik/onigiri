@@ -17,16 +17,29 @@ public struct DayEnergyTotals: Sendable, Equatable {
 
 /// The gamification rules: which days earned an onigiri, and the streak.
 public enum StreakCalendar {
-    /// A day earns an onigiri when food was actually logged (no credit for
-    /// not tracking) and the deficit met the target — or showed any deficit
-    /// at all when no goal is set.
+    /// A day counts as tracked when enough food was logged to trust its
+    /// numbers. Below the threshold it's a missed day: streak-breaking,
+    /// and excluded from the month's totals (sparse early-adoption days
+    /// were skewing them). 0 disables the threshold — any logging counts.
+    public static func isTracked(_ day: DayEnergyTotals, untrackedBelowKcal: Double) -> Bool {
+        day.intakeKcal > 0 && day.intakeKcal >= untrackedBelowKcal
+    }
+
+    /// A day earns an onigiri when it was tracked and the deficit met the
+    /// target — or showed any deficit at all when no goal is set. The
+    /// badge is awarded only once the day COMPLETES: a live "earned" at
+    /// breakfast (trivially at deficit) read as a broken meter.
     public static func earnedDays(
         totals: [DayEnergyTotals],
         targetDeficitKcal: Double?,
+        untrackedBelowKcal: Double = 0,
+        today: Date = .now,
         calendar: Calendar = .current
     ) -> Set<Date> {
         Set(totals.compactMap { day in
-            guard day.intakeKcal > 0 else { return nil }
+            guard !calendar.isDate(day.day, inSameDayAs: today),
+                  day.day < today,
+                  isTracked(day, untrackedBelowKcal: untrackedBelowKcal) else { return nil }
             let met: Bool
             if let target = targetDeficitKcal, target > 0 {
                 met = day.deficitKcal >= target

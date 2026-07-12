@@ -362,6 +362,30 @@ public final class HealthKitService {
         try await foodEntries(on: now, now: now)
     }
 
+    /// Month aggregates for the Month Details screen: total water and
+    /// how many eating events were logged.
+    public func monthStats(for month: Date, now: Date = .now) async throws -> (waterOz: Double, foodEntryCount: Int) {
+        let calendar = Calendar.current
+        let start = calendar.date(from: calendar.dateComponents([.year, .month], from: month)) ?? month
+        guard let nextMonth = calendar.date(byAdding: .month, value: 1, to: start) else {
+            return (0, 0)
+        }
+        let end = min(nextMonth, now)
+        async let water = sum(.dietaryWater, unit: .fluidOunceUS(), start: start, end: end)
+        let inMonth = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+        let descriptor = HKSampleQueryDescriptor(
+            predicates: [.correlation(type: HKCorrelationType(.food), predicate: inMonth)],
+            sortDescriptors: []
+        )
+        let count: Int
+        do {
+            count = try await descriptor.result(for: store).count
+        } catch let error as HKError where error.code == .errorAuthorizationNotDetermined {
+            count = 0
+        }
+        return try await (water, count)
+    }
+
     /// Logged eating events for any calendar day, newest first.
     public func foodEntries(on date: Date, now: Date = .now) async throws -> [FoodLogEntry] {
         let (start, end) = Self.dayRange(for: date, now: now)

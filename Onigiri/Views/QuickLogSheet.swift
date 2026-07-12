@@ -40,6 +40,7 @@ struct QuickLogSheet: View {
         let nutrients: NutrientValues
         let isFavorite: Bool
         let category: String?
+        var recency: Date = .distantPast
         var food: Food?
         var meal: Meal?
         var isMeal: Bool { meal != nil }
@@ -56,6 +57,7 @@ struct QuickLogSheet: View {
                 nutrients: meal.totalNutrients,
                 isFavorite: meal.isFavorite,
                 category: meal.category,
+                recency: meal.recencyDate,
                 meal: meal
             )
         }
@@ -69,6 +71,7 @@ struct QuickLogSheet: View {
                 nutrients: food.nutrients,
                 isFavorite: food.isFavorite,
                 category: food.category,
+                recency: food.recencyDate,
                 food: food
             )
         }
@@ -89,13 +92,11 @@ struct QuickLogSheet: View {
             if item.name.localizedCaseInsensitiveContains(searchText) { return true }
             return item.category?.localizedCaseInsensitiveContains(searchText) ?? false
         }
-        // Favorites first, then items matching the current meal slot, then name.
-        let slot = FoodCategory.slot(for: .now).rawValue
+        // Favorites first, then by recency (last logged, else added) —
+        // Micheal: recent beats slot affinity — then name for stability.
         return matched.sorted { lhs, rhs in
             if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
-            let lhsNow = lhs.category == slot
-            let rhsNow = rhs.category == slot
-            if lhsNow != rhsNow { return lhsNow }
+            if lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
             return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
     }
@@ -337,9 +338,14 @@ struct QuickLogSheet: View {
                 if item.isMeal {
                     log(item, quantity: 1, category: PortionTarget.category(from: item.category))
                 } else {
+                    // The portion sheet's log path loses the model ref —
+                    // bump recency at pick time.
+                    item.food?.lastUsedAt = .now
                     portionTarget = makePortionTarget(for: item)
                 }
             } onCustomPortion: {
+                item.food?.lastUsedAt = .now
+                item.meal?.lastUsedAt = .now
                 portionTarget = makePortionTarget(for: item)
             }
         }
@@ -410,6 +416,9 @@ struct QuickLogSheet: View {
 
     private func log(_ item: Item, quantity: Double, category: FoodCategory) {
         guard !isLogging else { return }
+        // Recency drives the sort under favorites.
+        item.food?.lastUsedAt = .now
+        item.meal?.lastUsedAt = .now
         isLogging = true
         Task {
             let logged = await LogActions.logFood(

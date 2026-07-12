@@ -12,6 +12,9 @@ final class CalendarModel {
     private(set) var selectedDaySummary: DailyEnergySummary?
     /// A year of weigh-ins so any browsable month can show its scale change.
     private(set) var weightHistory: [WeightTrend.Point] = []
+    /// Month-detail extras, loaded on push (nil while loading).
+    private(set) var monthWaterOz: Double?
+    private(set) var monthFoodEntries: Int?
 
     private let health = HealthKitService()
     private var summaryGeneration = 0
@@ -25,10 +28,25 @@ final class CalendarModel {
         totalsByDay = Dictionary(uniqueKeysWithValues: totals.map {
             (calendar.startOfDay(for: $0.day), $0)
         })
-        earned = StreakCalendar.earnedDays(totals: totals, targetDeficitKcal: plan.deficitTargetKcal)
+        // Badges are awarded when a day completes, and days under the
+        // untracked threshold never qualify.
+        earned = StreakCalendar.earnedDays(
+            totals: totals,
+            targetDeficitKcal: plan.deficitTargetKcal,
+            untrackedBelowKcal: SharedStore.untrackedBelowKcal
+        )
         streak = StreakCalendar.currentStreak(earned: earned)
         bestStreak = StreakCalendar.bestStreak(earned: earned)
         weightHistory = (try? await health.bodyMassHistory(days: 365)) ?? weightHistory
+    }
+
+    /// Water total and eating-event count for the month detail.
+    func loadMonthStats(for month: Date) async {
+        monthWaterOz = nil
+        monthFoodEntries = nil
+        let stats = try? await health.monthStats(for: month)
+        monthWaterOz = stats?.waterOz
+        monthFoodEntries = stats?.foodEntryCount
     }
 
     /// Predicted lb change for the month (its net deficit ÷ 3,500).
@@ -48,15 +66,31 @@ final class CalendarModel {
         )
     }
 
-    /// Net deficit summed across the month's recorded days (nil when none) —
-    /// the month's total "burned off" calories. Surplus days subtract.
-    func totalDeficit(inMonthOf month: Date) -> Double? {
+    /// The month's days that clear the untracked threshold — the set the
+    /// month stats are computed over.
+    private func trackedDays(inMonthOf month: Date) -> [DayEnergyTotals] {
         let calendar = Calendar.current
-        let deficits = totalsByDay
+        return totalsByDay
             .filter { calendar.isDate($0.key, equalTo: month, toGranularity: .month) }
-            .map(\.value.deficitKcal)
+            .map(\.value)
+            .filter { StreakCalendar.isTracked($0, untrackedBelowKcal: SharedStore.untrackedBelowKcal) }
+    }
+
+    /// Net deficit summed across the month's TRACKED days (nil when none) —
+    /// untracked days would skew it with phantom full-burn deficits.
+    /// Surplus days subtract.
+    func totalDeficit(inMonthOf month: Date) -> Double? {
+        let deficits = trackedDays(inMonthOf: month).map(\.deficitKcal)
         guard !deficits.isEmpty else { return nil }
         return deficits.reduce(0, +)
+    }
+
+    func daysTracked(inMonthOf month: Date) -> Int {
+        trackedDays(inMonthOf: month).count
+    }
+
+    func totalCalories(inMonthOf month: Date) -> Double {
+        trackedDays(inMonthOf: month).map(\.intakeKcal).reduce(0, +)
     }
 
     func earnedCount(inMonthOf month: Date) -> Int {

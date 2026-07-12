@@ -32,6 +32,32 @@ struct StreakCalendarTests {
         #expect(earned == [day(-2)])
     }
 
+    @Test func todayNeverEarnsMidDay() {
+        // A comfortable deficit right now still isn't a badge — the day
+        // has to COMPLETE (a live "earned" at breakfast read as broken).
+        let history = [
+            totals(0, intake: 1500, burn: 2400),
+            totals(-1, intake: 1500, burn: 2400),
+        ]
+        let earned = StreakCalendar.earnedDays(totals: history, targetDeficitKcal: 600)
+        #expect(earned == [day(-1)])
+    }
+
+    @Test func untrackedThresholdExcludesSparseDays() {
+        let history = [
+            totals(-2, intake: 400, burn: 2300),   // sparse: huge "deficit" but untracked
+            totals(-1, intake: 1500, burn: 2300),  // tracked, deficit 800 → earned
+        ]
+        let earned = StreakCalendar.earnedDays(
+            totals: history, targetDeficitKcal: 600, untrackedBelowKcal: 1000
+        )
+        #expect(earned == [day(-1)])
+        #expect(!StreakCalendar.isTracked(history[0], untrackedBelowKcal: 1000))
+        #expect(StreakCalendar.isTracked(history[1], untrackedBelowKcal: 1000))
+        // Threshold 0 keeps the old any-logging rule.
+        #expect(StreakCalendar.isTracked(history[0], untrackedBelowKcal: 0))
+    }
+
     @Test func streakCountsBackFromToday() {
         let earned: Set<Date> = [day(0), day(-1), day(-2)]
         #expect(StreakCalendar.currentStreak(earned: earned) == 3)

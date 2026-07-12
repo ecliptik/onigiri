@@ -426,9 +426,6 @@ struct MonthDetailView: View {
                     Text(model.actualLb(inMonthOf: month).map(signedLb) ?? "—")
                         .monospacedDigit()
                 }
-                Text("Predicted = net deficit ÷ 3,500 kcal per lb. Scale change compares 7-day averages.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
             Section("Streaks") {
                 LabeledContent("Current") {

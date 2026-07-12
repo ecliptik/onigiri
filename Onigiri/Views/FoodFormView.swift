@@ -40,6 +40,7 @@ struct FoodFormView: View {
     @State private var caffeineMg: Double?
     @State private var micros: [String: Double] = [:]
     @State private var microsExpanded = false
+    @State private var mineralsExpanded = false
     @State private var nutrientsExpanded = false
     @State private var category: String?
     @State private var isFavorite = false
@@ -145,22 +146,25 @@ struct FoodFormView: View {
                         nutrientRow("Protein (g)", value: $proteinG)
                         nutrientRow("Caffeine (mg)", value: $caffeineMg)
                     } label: {
-                        groupLabel("More nutrients", filled: nutrientFieldCount)
+                        // "Macronutrients", like the day detail and the
+                        // tracked-metric picker — one taxonomy app-wide.
+                        groupLabel("Macronutrients", filled: nutrientFieldCount)
+                    }
+                }
+
+                Section {
+                    DisclosureGroup(isExpanded: $mineralsExpanded) {
+                        microRows(Micronutrient.minerals)
+                    } label: {
+                        groupLabel("Minerals", filled: microFieldCount(Micronutrient.minerals))
                     }
                 }
 
                 Section {
                     DisclosureGroup(isExpanded: $microsExpanded) {
-                        ForEach(Micronutrient.allCases) { micro in
-                            LabeledContent("\(micro.displayName) (\(micro.unit.symbol))") {
-                                TextField("—", value: microBinding(micro), format: .number)
-                                    .keyboardType(.decimalPad)
-                                    .multilineTextAlignment(.trailing)
-                                    .focused($numberFieldFocused)
-                            }
-                        }
+                        microRows(Micronutrient.vitamins)
                     } label: {
-                        groupLabel("Vitamins & minerals", filled: microFieldCount)
+                        groupLabel("Vitamins", filled: microFieldCount(Micronutrient.vitamins))
                     }
                 }
 
@@ -331,8 +335,20 @@ struct FoodFormView: View {
             .count { ($0 ?? 0) > 0 }
     }
 
-    private var microFieldCount: Int {
-        micros.values.count { $0 > 0 }
+    private func microFieldCount(_ group: [Micronutrient]) -> Int {
+        group.count { (micros[$0.rawValue] ?? 0) > 0 }
+    }
+
+    @ViewBuilder
+    private func microRows(_ group: [Micronutrient]) -> some View {
+        ForEach(group) { micro in
+            LabeledContent("\(micro.displayName) (\(micro.unit.symbol))") {
+                TextField("—", value: microBinding(micro), format: .number)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .focused($numberFieldFocused)
+            }
+        }
     }
 
     private func groupLabel(_ title: String, filled: Int) -> some View {

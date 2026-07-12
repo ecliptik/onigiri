@@ -10,6 +10,8 @@ struct DayNutritionView: View {
     let model: TodayModel
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
+    @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
+    @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
 
     private var totals: NutrientValues { model.foodLog.totalNutrients }
 
@@ -37,7 +39,7 @@ struct DayNutritionView: View {
             }
         }
         .readableContentWidth()
-        .navigationTitle("Nutrition")
+        .navigationTitle("Details")
     }
 
     private var dayLabel: String {
@@ -48,20 +50,22 @@ struct DayNutritionView: View {
 
     private var summarySection: some View {
         Section(dayLabel) {
-            LabeledContent("Calories") {
+            // The same icons these numbers wear on Today.
+            iconRow("Calories", icon: { FoodIconView(raw: foodIcon) }) {
                 Text("\(model.summary.intakeKcal, format: .number.precision(.fractionLength(0))) kcal")
                     .monospacedDigit()
             }
-            LabeledContent("Active burn") {
+            iconRow("Active burn", icon: { Image(systemName: "flame.fill").foregroundStyle(.red) }) {
                 Text("\(model.summary.activeBurnKcal, format: .number.precision(.fractionLength(0))) kcal")
                     .monospacedDigit()
             }
-            LabeledContent("Resting burn") {
+            iconRow("Resting burn", icon: { Image(systemName: "bed.double.fill").foregroundStyle(.indigo) }) {
                 Text("\(model.summary.restingBurnKcal, format: .number.precision(.fractionLength(0))) kcal")
                     .monospacedDigit()
             }
             // Same vocabulary as the calendar day card: positive is a
-            // deficit (good), negative reads as a surplus.
+            // deficit (good), negative reads as a surplus. No icon on
+            // Today either — it's a derived number.
             LabeledContent("Deficit") {
                 let deficit = -model.summary.balanceKcal
                 Text(deficit >= 0
@@ -70,15 +74,33 @@ struct DayNutritionView: View {
                     .foregroundStyle(deficit >= 0 ? Color.green : Color.orange)
                     .monospacedDigit()
             }
-            LabeledContent("Sodium") {
+            iconRow("Sodium", icon: { Text("🧂") }) {
                 Text("\(model.summary.sodiumMg, format: .number.precision(.fractionLength(0))) / \(sodiumLimitMg, format: .number.precision(.fractionLength(0))) mg")
                     .foregroundStyle(Color.sodiumStatus(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg))
                     .monospacedDigit()
             }
-            LabeledContent("Water") {
+            iconRow("Water", icon: { WaterIconView(raw: waterIcon) }) {
                 Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
                     .foregroundStyle(model.summary.waterOz >= waterGoalOz ? Color.green : Color.secondary)
                     .monospacedDigit()
+            }
+        }
+    }
+
+    /// A LabeledContent whose label wears Today's icon for the metric,
+    /// in a fixed-width slot so the text column stays aligned.
+    private func iconRow(
+        _ title: String,
+        @ViewBuilder icon: () -> some View,
+        @ViewBuilder value: () -> some View
+    ) -> some View {
+        LabeledContent {
+            value()
+        } label: {
+            HStack(spacing: 8) {
+                icon()
+                    .frame(width: 24, alignment: .center)
+                Text(title)
             }
         }
     }

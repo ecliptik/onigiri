@@ -94,7 +94,7 @@ final class OnigiriUITests: XCTestCase {
         // summed from the seeded meals' extended nutrients.
         app.staticTexts["Details"].tap()
         XCTAssertTrue(
-            app.navigationBars["Nutrition"].waitForExistence(timeout: 10),
+            app.navigationBars["Details"].waitForExistence(timeout: 10),
             "Meter grid should push the day nutrition detail"
         )
         // Groups are collapsed by default; expand to reach the rows.
@@ -123,7 +123,7 @@ final class OnigiriUITests: XCTestCase {
             app.staticTexts["Calcium"].waitForExistence(timeout: 5),
             "Expanding Minerals should reveal its rows"
         )
-        app.navigationBars["Nutrition"].buttons.firstMatch.tap()
+        app.navigationBars["Details"].buttons.firstMatch.tap()
         // Scrolling the detail minimized the iOS 26 tab bar to just the
         // active tab; scrolling back up re-expands it.
         app.swipeDown()
@@ -280,7 +280,7 @@ final class OnigiriUITests: XCTestCase {
             if minerals.isHittable { minerals.tap() }
         }
         scene("nutrition")
-        app.navigationBars["Nutrition"].buttons.firstMatch.tap()
+        app.navigationBars["Details"].buttons.firstMatch.tap()
         app.swipeDown()
 
         app.buttons["Log food or meal"].tap()
@@ -401,12 +401,12 @@ final class OnigiriUITests: XCTestCase {
         shot("past-day-with-data")
         app.staticTexts["Details"].tap()
         shot("nutrition-past-day")
-        app.navigationBars["Nutrition"].buttons.firstMatch.tap()
+        app.navigationBars["Details"].buttons.firstMatch.tap()
         for _ in 0..<2 { app.buttons["Previous day"].tap() }
         shot("past-day-empty")
         app.staticTexts["Details"].tap()
         shot("nutrition-empty-day")
-        app.navigationBars["Nutrition"].buttons.firstMatch.tap()
+        app.navigationBars["Details"].buttons.firstMatch.tap()
 
         // Back to today via chevrons (the title menu isn't reliably
         // hittable from tests; the jump sheet is a stock DatePicker).

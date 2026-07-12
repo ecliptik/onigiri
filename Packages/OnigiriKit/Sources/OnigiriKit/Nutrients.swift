@@ -122,11 +122,12 @@ public enum TrackedNutrient: Hashable, Sendable, Identifiable {
 
     public var id: String { key }
 
-    /// Picker groups, in display order.
+    /// Picker groups, in display order — macros in nutrition-label
+    /// order, matching the food form and the day detail.
     public static let general: [TrackedNutrient] = [.water, .sodium]
     public static let macros: [TrackedNutrient] = [
-        .protein, .carbs, .fiber, .sugar, .fat, .saturatedFat,
-        .polyunsaturatedFat, .monounsaturatedFat, .cholesterol, .caffeine,
+        .fat, .saturatedFat, .polyunsaturatedFat, .monounsaturatedFat,
+        .cholesterol, .carbs, .fiber, .sugar, .protein, .caffeine,
     ]
     public static var all: [TrackedNutrient] {
         general + macros + Micronutrient.allCases.map(Self.micro)

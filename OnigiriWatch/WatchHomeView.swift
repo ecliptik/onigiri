@@ -4,7 +4,7 @@ import OnigiriKit
 /// Watch home: the day's headline number, with one-tap water and meal
 /// logging. Meals and settings sync from the iPhone.
 struct WatchHomeView: View {
-    @State private var model = WatchModel()
+    let model: WatchModel
     @State private var showMeals = false
     @Environment(\.scenePhase) private var scenePhase
     // AppStorage so an icon sync re-renders immediately (the values land
@@ -128,5 +128,5 @@ struct MealPickerView: View {
 }
 
 #Preview {
-    WatchHomeView()
+    WatchHomeView(model: WatchModel())
 }

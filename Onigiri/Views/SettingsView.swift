@@ -318,22 +318,38 @@ struct SettingsView: View {
             // The gauge widgets and complications render the badge.
             WidgetCenter.shared.reloadAllTimelines()
         }
-        // A new metric starts from its own defaults, not the old one's.
+        // A new metric starts from its own defaults, not the old one's —
+        // and every slot change syncs to the watch's metrics page.
         .onChange(of: trackedMetric1) {
             trackedMetric1Mode = ""
             trackedMetric1Target = 0
             trackedMetric1Icon = ""
+            PhoneSyncService.shared.push(from: context)
         }
         .onChange(of: trackedMetric2) {
             trackedMetric2Mode = ""
             trackedMetric2Target = 0
             trackedMetric2Icon = ""
+            PhoneSyncService.shared.push(from: context)
         }
+        .onChange(of: sodiumLimitMg) { PhoneSyncService.shared.push(from: context) }
+        .onChange(of: trackedMetric1Mode) { PhoneSyncService.shared.push(from: context) }
+        .onChange(of: trackedMetric2Mode) { PhoneSyncService.shared.push(from: context) }
+        .onChange(of: trackedMetric1Target) { PhoneSyncService.shared.push(from: context) }
+        .onChange(of: trackedMetric2Target) { PhoneSyncService.shared.push(from: context) }
         .onChange(of: trackedMetric1Icon) { old, new in
-            if new == "custom" { iconChanged(.metric1, from: old, to: new) }
+            if new == "custom" {
+                iconChanged(.metric1, from: old, to: new)
+            } else {
+                PhoneSyncService.shared.push(from: context)
+            }
         }
         .onChange(of: trackedMetric2Icon) { old, new in
-            if new == "custom" { iconChanged(.metric2, from: old, to: new) }
+            if new == "custom" {
+                iconChanged(.metric2, from: old, to: new)
+            } else {
+                PhoneSyncService.shared.push(from: context)
+            }
         }
     }
 

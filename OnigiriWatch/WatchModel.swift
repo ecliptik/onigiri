@@ -6,6 +6,10 @@ import OnigiriKit
 @Observable
 final class WatchModel {
     private(set) var state: DailyPlanLoader.State = .empty
+    /// Day totals for the phone-configured tracked-metric slots, in each
+    /// nutrient's label unit — the watch queries its own Health store
+    /// (the log itself syncs via Health).
+    private(set) var trackedTotals: [Double] = [0, 0]
     let sync = WatchSyncReceiver()
 
     private let health = HealthKitService()
@@ -32,6 +36,13 @@ final class WatchModel {
 
     func refresh() async {
         state = await DailyPlanLoader.load(goal: sync.goal)
+        var totals: [Double] = [0, 0]
+        for slot in 1...2 {
+            if let nutrient = SharedStore.trackedNutrient(slot: slot) {
+                totals[slot - 1] = (try? await health.dayTotal(of: nutrient)) ?? 0
+            }
+        }
+        trackedTotals = totals
     }
 
     func logWater() async {

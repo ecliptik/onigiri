@@ -43,6 +43,17 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         let foodIcon = SharedStore.defaults.string(forKey: SharedStore.foodIconKey) ?? "sfFork"
         let waterIcon = SharedStore.defaults.string(forKey: SharedStore.waterIconKey) ?? "sfDrop"
         let rewardIcon = SharedStore.defaults.string(forKey: SharedStore.rewardIconKey) ?? "onigiri"
+        // The tracked-metric slots ride verbatim (targets stringified);
+        // the watch's metrics page mirrors the phone's configuration.
+        let trackedSettings: [String: String] = Dictionary(
+            uniqueKeysWithValues: WatchSync.trackedMetricKeys.compactMap { key in
+                if let string = SharedStore.defaults.string(forKey: key) {
+                    return (key, string)
+                }
+                let number = SharedStore.defaults.double(forKey: key)
+                return number > 0 ? (key, String(number)) : nil
+            }
+        )
         WatchSync.store(SyncPayload(
             meals: meals,
             goal: goal.map(GoalUpdate.set) ?? .clear,
@@ -51,7 +62,9 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
             balanceStyle: balanceStyle,
             foodIcon: foodIcon,
             waterIcon: waterIcon,
-            rewardIcon: rewardIcon
+            rewardIcon: rewardIcon,
+            trackedMetricSettings: trackedSettings,
+            sodiumLimitMg: SharedStore.sodiumLimitMg
         ))
 
         guard WCSession.isSupported(),
@@ -67,7 +80,9 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
             balanceStyle: balanceStyle,
             foodIcon: foodIcon,
             waterIcon: waterIcon,
-            rewardIcon: rewardIcon
+            rewardIcon: rewardIcon,
+            trackedMetricSettings: trackedSettings,
+            sodiumLimitMg: SharedStore.sodiumLimitMg
         ))
     }
 

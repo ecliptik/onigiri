@@ -61,6 +61,11 @@ public struct SyncPayload: Sendable {
     public let foodIcon: String?
     public let waterIcon: String?
     public let rewardIcon: String?
+    /// The tracked-metric slots and the sodium limit their targets can
+    /// reference — the watch's metrics page mirrors the phone's slots.
+    /// Keyed by the SharedStore key, stored verbatim.
+    public let trackedMetricSettings: [String: String]?
+    public let sodiumLimitMg: Double?
 
     public init(
         meals: [SyncedMeal]?,
@@ -70,7 +75,9 @@ public struct SyncPayload: Sendable {
         balanceStyle: String? = nil,
         foodIcon: String? = nil,
         waterIcon: String? = nil,
-        rewardIcon: String? = nil
+        rewardIcon: String? = nil,
+        trackedMetricSettings: [String: String]? = nil,
+        sodiumLimitMg: Double? = nil
     ) {
         self.meals = meals
         self.goal = goal
@@ -80,6 +87,8 @@ public struct SyncPayload: Sendable {
         self.foodIcon = foodIcon
         self.waterIcon = waterIcon
         self.rewardIcon = rewardIcon
+        self.trackedMetricSettings = trackedMetricSettings
+        self.sodiumLimitMg = sodiumLimitMg
     }
 }
 
@@ -88,6 +97,21 @@ public struct SyncPayload: Sendable {
 public enum WatchSync {
     static let mealsKey = "sync.meals"
     static let goalKey = "sync.goal"
+    static let trackedKey = "sync.trackedMetrics"
+
+    /// The slot settings that ride the context, values stringified
+    /// (targets included — store() re-parses the numeric ones).
+    public static var trackedMetricKeys: [String] { [
+        SharedStore.trackedMetric1Key, SharedStore.trackedMetric1ModeKey,
+        SharedStore.trackedMetric1TargetKey, SharedStore.trackedMetric1IconKey,
+        SharedStore.trackedMetric2Key, SharedStore.trackedMetric2ModeKey,
+        SharedStore.trackedMetric2TargetKey, SharedStore.trackedMetric2IconKey,
+    ] }
+
+    /// Numeric slot keys — stored back as Doubles on the watch.
+    static var trackedNumericKeys: Set<String> { [
+        SharedStore.trackedMetric1TargetKey, SharedStore.trackedMetric2TargetKey,
+    ] }
 
     // MARK: Phone side
 
@@ -99,7 +123,9 @@ public enum WatchSync {
         balanceStyle: String = "balance",
         foodIcon: String = "sfFork",
         waterIcon: String = "sfDrop",
-        rewardIcon: String = "onigiri"
+        rewardIcon: String = "onigiri",
+        trackedMetricSettings: [String: String] = [:],
+        sodiumLimitMg: Double = 2300
     ) -> [String: Any] {
         var context: [String: Any] = [
             SharedStore.waterServingKey: waterServingOz,
@@ -108,6 +134,8 @@ public enum WatchSync {
             SharedStore.foodIconKey: foodIcon,
             SharedStore.waterIconKey: waterIcon,
             SharedStore.rewardIconKey: rewardIcon,
+            trackedKey: trackedMetricSettings,
+            SharedStore.sodiumLimitKey: sodiumLimitMg,
         ]
         if let data = try? JSONEncoder().encode(meals) {
             context[mealsKey] = data
@@ -138,7 +166,9 @@ public enum WatchSync {
             balanceStyle: context[SharedStore.balanceStyleKey] as? String,
             foodIcon: context[SharedStore.foodIconKey] as? String,
             waterIcon: context[SharedStore.waterIconKey] as? String,
-            rewardIcon: context[SharedStore.rewardIconKey] as? String
+            rewardIcon: context[SharedStore.rewardIconKey] as? String,
+            trackedMetricSettings: context[trackedKey] as? [String: String],
+            sodiumLimitMg: context[SharedStore.sodiumLimitKey] as? Double
         )
     }
 
@@ -174,6 +204,18 @@ public enum WatchSync {
         }
         if let rewardIcon = payload.rewardIcon {
             defaults.set(rewardIcon, forKey: SharedStore.rewardIconKey)
+        }
+        if let tracked = payload.trackedMetricSettings {
+            for (key, value) in tracked {
+                if trackedNumericKeys.contains(key) {
+                    defaults.set(Double(value) ?? 0, forKey: key)
+                } else {
+                    defaults.set(value, forKey: key)
+                }
+            }
+        }
+        if let sodiumLimit = payload.sodiumLimitMg {
+            defaults.set(sodiumLimit, forKey: SharedStore.sodiumLimitKey)
         }
     }
 

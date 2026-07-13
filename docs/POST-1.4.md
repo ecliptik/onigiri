@@ -1,4 +1,4 @@
-# Onigiri — post-1.3.5 polish plan
+# Onigiri — post-1.3.5 polish plan (RELEASED as v1.4.0, 2026-07-13)
 
 Written at the v1.3.5 tag (2026-07-12), from a full seven-angle review:
 onboarding, the logging loop, goals/settings, history/calendar, watch +

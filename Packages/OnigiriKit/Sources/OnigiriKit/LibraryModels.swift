@@ -291,6 +291,13 @@ public enum SharedStore {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// api.data.gov keys are 40 letters and digits; anything else is a
+    /// mis-paste. Gates SAVING in Settings, not requests — the server
+    /// still 403s a well-formed-but-wrong key, with actionable copy.
+    public static func isPlausibleFDCKey(_ key: String) -> Bool {
+        key.count == 40 && key.allSatisfy { $0.isLetter || $0.isNumber }
+    }
+
     /// Whether text search should hit FDC: the source is selected AND a
     /// key exists. FDC without a key falls back to OpenFoodFacts (the
     /// Settings hint says so).

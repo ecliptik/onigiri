@@ -31,6 +31,8 @@ struct SettingsView: View {
     @AppStorage(SharedStore.remindStreakKey, store: SharedStore.defaults) private var remindStreak = false
     @AppStorage(SharedStore.textSearchSourceKey, store: SharedStore.defaults) private var textSearchSource = SharedStore.textSearchSourceOFF
     @AppStorage(SharedStore.fdcAPIKeyKey, store: SharedStore.defaults) private var fdcAPIKey = ""
+    /// What the key field shows; only plausible keys flow to storage.
+    @State private var fdcAPIKeyDraft = SharedStore.fdcAPIKey
     @State private var notificationsDenied = false
     @State private var healthWriteDenied = false
 
@@ -107,28 +109,28 @@ struct SettingsView: View {
                 Text("USDA FoodData Central").tag(SharedStore.textSearchSourceFDC)
             }
             if textSearchSource == SharedStore.textSearchSourceFDC {
-                HStack {
-                    TextField("API key", text: $fdcAPIKey)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.asciiCapable)
-                        .font(.callout.monospaced())
-                    // Keys arrive by copy from a browser/email — the
-                    // system PasteButton needs no long-press hunting
-                    // (and no paste-permission banner). Trimmed: copied
-                    // keys drag whitespace/newlines along.
-                    PasteButton(payloadType: String.self) { strings in
-                        guard let key = strings.first else { return }
-                        Task { @MainActor in
-                            fdcAPIKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+                // A plain TextField keeps the standard long-press
+                // paste. It edits a DRAFT: only a plausible key (or a
+                // deliberate clear) reaches storage, so a mis-paste
+                // can't silently break search.
+                TextField("API key", text: $fdcAPIKeyDraft)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.asciiCapable)
+                    .font(.callout.monospaced())
+                    .onChange(of: fdcAPIKeyDraft) { _, raw in
+                        let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if key.isEmpty || SharedStore.isPlausibleFDCKey(key) {
+                            fdcAPIKey = key
                         }
                     }
-                    .labelStyle(.iconOnly)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.small)
-                }
-                if fdcAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let draft = fdcAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                if draft.isEmpty {
                     Text("An API key is required to use the USDA FoodData Central, go to [fdc.nal.usda.gov/api-guide](https://fdc.nal.usda.gov/api-guide) to request a key")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                } else if !SharedStore.isPlausibleFDCKey(draft) {
+                    Text("API keys are 40 letters and digits — this one is \(draft.count) and won't be saved.")
                         .font(.footnote)
                         .foregroundStyle(.orange)
                 }

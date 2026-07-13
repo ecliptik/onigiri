@@ -267,6 +267,15 @@ struct FoodDataCentralTests {
         #expect(FoodDataCentralClient.scaled(grapesPer100g, to: nil) == grapesPer100g)
     }
 
+    @Test func plausibleKeysAre40Alphanumerics() {
+        #expect(SharedStore.isPlausibleFDCKey(String(repeating: "aB3", count: 13) + "z"))
+        #expect(!SharedStore.isPlausibleFDCKey(""))
+        #expect(!SharedStore.isPlausibleFDCKey("DEMO_KEY"))
+        #expect(!SharedStore.isPlausibleFDCKey(String(repeating: "a", count: 39)))
+        #expect(!SharedStore.isPlausibleFDCKey(String(repeating: "a", count: 41)))
+        #expect(!SharedStore.isPlausibleFDCKey(String(repeating: "a", count: 39) + "-"))
+    }
+
     @Test func fdcCodeRoundTripsAndRejectsBarcodes() {
         #expect(FoodDataCentralClient.code(for: 2709237) == "fdc:2709237")
         #expect(FoodDataCentralClient.fdcId(fromCode: "fdc:2709237") == 2709237)

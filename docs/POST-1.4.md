@@ -451,7 +451,21 @@ widgets, and watch app; per PLAN.md it's "only a signing-team switch".
 grates, or (b) family wants the app — TestFlight is the clean way to
 give it to them. If neither, the free team keeps working.
 
-## Widget expansion plan (for review — nothing built yet)
+## Widget expansion plan — W1+W2+W3 BUILT 2026-07-13 (same day)
+
+Everything below shipped except item 10 (parked by ruling). The
+intents moved into OnigiriKit (`OnigiriKitIntents`, registered via
+`AppIntentsPackage` in the app and widget extension) so one definition
+serves widget buttons, Control Center, and Siri. New surfaces: gauge
+widget gained the Lock Screen families + a corner water-log button; a
+Water accessory widget; Streak (small + lock), Month (large/XL grid),
+Weight Trend (Charts, medium/large), Daily Progress combo (medium);
+a Control Center "Log Water" control; App Shortcuts for Siri. The
+accessory renderings live in the kit (`BalanceAccessoryView` /
+`WaterAccessoryView`) — watch complications and iPhone Lock Screen are
+one implementation. To use: long-press Lock Screen → add widgets;
+Control Center → add control; check the widget gallery for the four
+new home-screen widgets.
 
 Current inventory: iPhone home screen small (gauge) and medium (meter
 with interactive water/meal buttons, configurable meal); watch

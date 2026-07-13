@@ -24,19 +24,24 @@ struct WatchHomeView: View {
                 VStack(spacing: 6) {
                     headlineNumber
 
+                    // Micheal's scheme: meal = rice-paper cream with
+                    // dark content (the phone's prominent-Done recipe —
+                    // riceToast tan made the fork unreadable), water =
+                    // blue, as it always was.
                     Button {
                         showMeals = true
                     } label: {
                         Label {
                             Text("Log a meal")
                         } icon: {
-                            FoodIconView(raw: foodIcon)
+                            FoodIconView(raw: foodIcon, tint: Color.onRicePaper)
                         }
                         .font(.headline)
+                        .foregroundStyle(Color.onRicePaper)
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(.riceToast)
+                    .tint(.ricePaper)
 
                     Button {
                         Task { await model.logWater() }
@@ -52,7 +57,7 @@ struct WatchHomeView: View {
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(.riceToast)
+                    .tint(.blue)
 
                     // Success flash / failure hint: the haptic alone made
                     // a failed log look exactly like a working one.

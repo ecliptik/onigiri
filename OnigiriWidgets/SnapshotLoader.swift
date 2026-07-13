@@ -24,6 +24,17 @@ struct DaySnapshot {
         waterGoalOz: 64
     )
 
+    /// The plan-state view of this snapshot, for the shared accessory
+    /// views (budget reconstructed: remaining was budget − intake).
+    var planState: DailyPlanLoader.State {
+        DailyPlanLoader.State(
+            summary: summary,
+            deficitTargetKcal: deficitTargetKcal,
+            gaugeProgress: gaugeProgress,
+            dailyBudgetKcal: remainingKcal.map { $0 + summary.intakeKcal }
+        )
+    }
+
     /// The just-after-midnight render: nothing eaten or burned yet, the
     /// same plan. Pre-rendered into the timeline so yesterday's numbers
     /// never show into the new day while WidgetKit waits out its budget.

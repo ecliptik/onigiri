@@ -5,14 +5,19 @@ import SwiftUI
 /// renders the same personalization the phone does.
 public struct FoodIconView: View {
     let raw: String
+    /// Overrides the SF fork's orange — the watch's cream meal button
+    /// needs dark content (orange-on-warm was unreadable). Emoji icons
+    /// keep their own colors.
+    let tint: Color?
 
-    public init(raw: String) {
+    public init(raw: String, tint: Color? = nil) {
         self.raw = raw
+        self.tint = tint
     }
 
     public var body: some View {
         if raw == "sfFork" || raw.isEmpty {
-            Image(systemName: "fork.knife").foregroundStyle(.orange)
+            Image(systemName: "fork.knife").foregroundStyle(tint ?? .orange)
         } else {
             Text(SharedStore.foodEmoji(for: raw))
         }

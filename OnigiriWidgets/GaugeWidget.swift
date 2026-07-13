@@ -11,7 +11,9 @@ struct GaugeWidget: Widget {
         }
         .configurationDisplayName("Onigiri Gauge")
         .description("Daily goal progress at a glance.")
-        .supportedFamilies([.systemSmall])
+        // Accessory families put the balance on the iPhone Lock Screen
+        // — the same shared views the watch complications render.
+        .supportedFamilies([.systemSmall, .accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }
 
@@ -61,10 +63,18 @@ struct GaugeProvider: TimelineProvider {
 }
 
 struct GaugeWidgetView: View {
+    @Environment(\.widgetFamily) private var family
     let entry: GaugeEntry
 
     var body: some View {
-        if entry.snapshot.needsSetup {
+        if family != .systemSmall {
+            // Lock Screen families render the shared complication view.
+            BalanceAccessoryView(
+                state: entry.snapshot.planState,
+                showsRemaining: SharedStore.showsRemainingKcal,
+                needsSetup: entry.snapshot.needsSetup
+            )
+        } else if entry.snapshot.needsSetup {
             VStack(spacing: 6) {
                 OnigiriGauge(progress: 0)
                     .frame(width: 52, height: 52)
@@ -75,6 +85,18 @@ struct GaugeWidgetView: View {
             }
         } else {
             gauge
+                // W3: one-tap water without leaving the home screen —
+                // a small intent button riding the gauge's corner.
+                .overlay(alignment: .bottomTrailing) {
+                    Button(intent: LogWaterIntent()) {
+                        Image(systemName: "drop.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.blue)
+                            .padding(6)
+                            .background(.quaternary.opacity(0.6), in: .circle)
+                    }
+                    .buttonStyle(.plain)
+                }
         }
     }
 

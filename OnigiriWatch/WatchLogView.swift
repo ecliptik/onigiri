@@ -49,6 +49,7 @@ struct WatchLogView: View {
                 }
             }
             .navigationTitle("Log")
+            .navigationBarTitleDisplayMode(.inline)
             .sheet(item: $editing) { entry in
                 WatchEntryEditSheet(model: model, entry: entry)
             }

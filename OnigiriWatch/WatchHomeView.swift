@@ -158,6 +158,7 @@ struct MealPickerView: View {
                 }
             }
             .navigationTitle("Log")
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 
@@ -197,6 +198,7 @@ struct LogScopeView: View {
                 }
             }
             .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 }

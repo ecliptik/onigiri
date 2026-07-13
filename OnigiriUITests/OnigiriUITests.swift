@@ -976,6 +976,28 @@ final class OnigiriUITests: XCTestCase {
         attachShot(named: "imported")
     }
 
+    /// Opt-in (HEADER_SHOTS=1): one resting screenshot per tab plus the
+    /// Log sheet — for visual alignment/styling checks between screens.
+    @MainActor
+    func testHeaderShots() throws {
+        guard ProcessInfo.processInfo.environment["HEADER_SHOTS"] == "1" else {
+            throw XCTSkip("Set HEADER_SHOTS=1 to run the header-shots capture")
+        }
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--seed-sample-data"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+        for tab in ["Today", "Foods", "Goal", "Calendar"] {
+            switchTab(in: app, to: tab)
+            attachShot(named: "tab-\(tab.lowercased())", settle: 2)
+        }
+        switchTab(in: app, to: "Today")
+        switchTab(in: app, to: "Add")
+        attachShot(named: "log-sheet", settle: 2)
+    }
+
     private func attachShot(named name: String, settle: TimeInterval = 0.8) {
         Thread.sleep(forTimeInterval: settle)
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())

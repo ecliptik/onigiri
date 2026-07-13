@@ -332,8 +332,12 @@ struct TodayView: View {
         }
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // The system large title's leading inset, matched.
-        .padding(.horizontal, 20)
+        // Measured against Foods/Goal screenshots: the system large
+        // title sits at a 16pt leading inset and ~4pt lower than this
+        // in-content title's natural position — matched exactly so the
+        // header doesn't jump when switching tabs.
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
         .accessibilityLabel("\(dayTitle). Jump to date")
         .accessibilityIdentifier("dayTitleButton")
     }

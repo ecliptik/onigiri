@@ -229,6 +229,11 @@ struct FoodsView: View {
             .fileImporter(isPresented: $showLibraryImporter, allowedContentTypes: [.json]) { result in
                 ToastCenter.shared.show(LibraryTransfer.handlePickedFile(result, context: context))
             }
+            // Top drawer BY RULING: the corner Add pill occupies the
+            // system search-tab slot, and iOS reserves bottom search for
+            // that slot — so in-tab search renders as the title drawer
+            // (Apple Music's Library does the same). Micheal chose the
+            // pill over bottom search here; the Log sheet keeps bottom.
             .searchable(text: $searchText, prompt: "Foods, Meals, and More")
             .onSubmit(of: .search) {
                 Task { await onlineSearch.search(searchText) }
@@ -425,7 +430,9 @@ struct LogButton: View {
             .font(.subheadline.weight(.bold))
             .foregroundStyle(Color.riceToast)
             .padding(8)
-            .glassEffect(.regular.interactive(), in: .circle)
+            // A static fill, NOT glassEffect: a live glass layer on
+            // every list row made Foods stutter on scroll.
+            .background(.quaternary.opacity(0.5), in: .circle)
             .overlay(
                 Circle().strokeBorder(Color.riceToast.opacity(0.5), lineWidth: 1)
             )

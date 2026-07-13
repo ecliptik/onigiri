@@ -29,12 +29,18 @@ private struct ReadableContentWidth: ViewModifier {
 
     func body(content: Content) -> some View {
         GeometryReader { geo in
-            content
-                .contentMargins(
-                    .horizontal,
-                    max(0, (geo.size.width - maxWidth) / 2),
-                    for: .scrollContent
-                )
+            let margin = max(0, (geo.size.width - maxWidth) / 2)
+            if margin > 0 {
+                content
+                    .contentMargins(.horizontal, margin, for: .scrollContent)
+            } else {
+                // iPhone: no margin needed — and setting an explicit 0
+                // OVERRODE the system default margins, flattening every
+                // List/Form into edge-to-edge square sections (the
+                // "box-like" look Micheal flagged) instead of the
+                // rounded inset-grouped cards.
+                content
+            }
         }
     }
 }

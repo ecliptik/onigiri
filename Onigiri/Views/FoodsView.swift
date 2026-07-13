@@ -86,7 +86,7 @@ struct FoodsView: View {
                                     log(name: meal.name, kcal: meal.totalKcal,
                                         sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
                                         category: PortionTarget.category(from: meal.category))
-                                } onCustomPortion: {
+                                } onLongPress: {
                                     meal.lastUsedAt = .now
                                     portionTarget = PortionTarget(
                                         name: meal.name, kcal: meal.totalKcal,
@@ -145,14 +145,19 @@ struct FoodsView: View {
                                 sodiumMg: food.sodiumMg,
                                 isFavorite: food.isFavorite
                             )
-                            // Foods always confirm through the portion sheet
-                            // so the serving and meal slot are deliberate.
-                            LogButton(name: food.name) {
+                            // Foods confirm through the portion sheet on
+                            // tap (serving and meal slot stay deliberate);
+                            // a long press skips it and logs the default
+                            // portion — the fast path when the label
+                            // serving is the serving.
+                            LogButton(name: food.name, longPressName: "Log default portion") {
                                 food.lastUsedAt = .now
                                 portionTarget = makePortionTarget(for: food)
-                            } onCustomPortion: {
+                            } onLongPress: {
                                 food.lastUsedAt = .now
-                                portionTarget = makePortionTarget(for: food)
+                                log(name: food.name, kcal: food.kcal,
+                                    sodiumMg: food.sodiumMg, nutrients: food.nutrients,
+                                    category: PortionTarget.category(from: food.category))
                             }
                         }
                         .contentShape(.rect)
@@ -422,8 +427,12 @@ struct PortionTarget: Identifiable {
 /// quick-log sheet: rows tap to edit, this button logs.
 struct LogButton: View {
     let name: String
+    /// What the long press does, for the a11y action — "Custom portion"
+    /// on meal rows, "Log default portion" on food rows (each type's
+    /// long press is the OTHER type's tap).
+    var longPressName = "Custom portion"
     let action: () -> Void
-    let onCustomPortion: () -> Void
+    let onLongPress: () -> Void
 
     var body: some View {
         Image(systemName: "plus")
@@ -437,12 +446,12 @@ struct LogButton: View {
                 Circle().strokeBorder(Color.riceToast.opacity(0.5), lineWidth: 1)
             )
             // The long-press affordance, reachable without the gesture.
-            .accessibilityAction(named: "Custom portion") { onCustomPortion() }
+            .accessibilityAction(named: longPressName) { onLongPress() }
             // HIG minimum touch target; the visible circle stays small.
             .frame(minWidth: 44, minHeight: 44)
             .contentShape(.rect)
             .onTapGesture { action() }
-            .onLongPressGesture(minimumDuration: 0.4) { onCustomPortion() }
+            .onLongPressGesture(minimumDuration: 0.4) { onLongPress() }
             .accessibilityLabel("Log \(name)")
             .accessibilityAddTraits(.isButton)
     }

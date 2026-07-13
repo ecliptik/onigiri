@@ -484,7 +484,10 @@ struct QuickLogSheet: View {
                 isFavorite: item.isFavorite,
                 isMeal: item.isMeal
             )
-            LogButton(name: item.name) {
+            LogButton(
+                name: item.name,
+                longPressName: item.isMeal ? "Custom portion" : "Log default portion"
+            ) {
                 if item.isMeal {
                     log(item, quantity: 1, category: PortionTarget.category(from: item.category))
                 } else {
@@ -493,10 +496,17 @@ struct QuickLogSheet: View {
                     item.food?.lastUsedAt = .now
                     activeSheet = .portion(makePortionTarget(for: item))
                 }
-            } onCustomPortion: {
+            } onLongPress: {
+                // Each type's long press is the other's tap: meals get
+                // the portion sheet, foods skip it and log the default
+                // portion (matching the Foods screen).
                 item.food?.lastUsedAt = .now
                 item.meal?.lastUsedAt = .now
-                activeSheet = .portion(makePortionTarget(for: item))
+                if item.isMeal {
+                    activeSheet = .portion(makePortionTarget(for: item))
+                } else {
+                    log(item, quantity: 1, category: PortionTarget.category(from: item.category))
+                }
             }
         }
         .contentShape(.rect)

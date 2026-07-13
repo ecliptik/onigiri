@@ -15,13 +15,15 @@ struct OnigiriWatchApp: App {
     var body: some Scene {
         WindowGroup {
             // Horizontal pages: home (headline + quick log buttons,
-            // always immediate on open), Metrics, then the three browse
-            // pages mirroring the phone Log sheet's scopes. watchOS's
-            // default TabView style IS horizontal paging with dots, so
-            // the pages' own vertical scrolling stays crown-friendly.
+            // always immediate on open), Metrics, today's Log (edit or
+            // remove entries), then the three browse pages mirroring the
+            // phone Log sheet's scopes. watchOS's default TabView style
+            // IS horizontal paging with dots, so the pages' own vertical
+            // scrolling stays crown-friendly.
             TabView {
                 WatchHomeView(model: model)
                 WatchMetricsView(model: model)
+                WatchLogView(model: model)
                 LogScopeView(
                     model: model, title: "Favorites",
                     items: model.sync.favorites,

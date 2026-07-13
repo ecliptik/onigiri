@@ -10,6 +10,8 @@ final class WatchModel {
     /// nutrient's label unit — the watch queries its own Health store
     /// (the log itself syncs via Health).
     private(set) var trackedTotals: [Double] = [0, 0]
+    /// Today's food entries for the Log page, newest first.
+    private(set) var foodLog: [FoodLogEntry] = []
     let sync = WatchSyncReceiver()
 
     private let health = HealthKitService()
@@ -52,6 +54,58 @@ final class WatchModel {
             }
         }
         trackedTotals = totals
+        foodLog = ((try? await health.todayFoodEntries()) ?? []).sorted { $0.date > $1.date }
+    }
+
+    /// Rescale a logged entry to a new calorie count — sodium and the
+    /// extended nutrients scale with it (the phone's write-before-delete
+    /// edit, kcal-first).
+    @discardableResult
+    func editEntry(_ entry: FoodLogEntry, kcal: Double) async -> Bool {
+        guard !isLogging else { return false }
+        isLogging = true
+        defer { isLogging = false }
+        do {
+            let scale = entry.kcal > 0 ? kcal / entry.kcal : 1
+            _ = try await health.logFood(
+                name: entry.name,
+                kcal: kcal,
+                sodiumMg: entry.sodiumMg * scale,
+                nutrients: entry.nutrients.scaled(by: scale),
+                category: entry.category,
+                date: entry.date
+            )
+            try await health.deleteFoodEntry(id: entry.id)
+            WKInterfaceDevice.current().play(.success)
+            showFlash("✓ \(entry.name) updated", isError: false)
+            await refresh()
+            WidgetCenter.shared.reloadAllTimelines()
+            return true
+        } catch {
+            WKInterfaceDevice.current().play(.failure)
+            showFlash("Couldn't save — check Health access", isError: true)
+            await refresh()
+            return false
+        }
+    }
+
+    @discardableResult
+    func deleteEntry(_ entry: FoodLogEntry) async -> Bool {
+        guard !isLogging else { return false }
+        isLogging = true
+        defer { isLogging = false }
+        do {
+            try await health.deleteFoodEntry(id: entry.id)
+            WKInterfaceDevice.current().play(.success)
+            showFlash("Removed \(entry.name)", isError: false)
+            await refresh()
+            WidgetCenter.shared.reloadAllTimelines()
+            return true
+        } catch {
+            WKInterfaceDevice.current().play(.failure)
+            showFlash("Couldn't remove — check Health access", isError: true)
+            return false
+        }
     }
 
     @discardableResult

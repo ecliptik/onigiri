@@ -32,12 +32,31 @@ struct MeterProvider: AppIntentTimelineProvider {
     }
 
     func snapshot(for configuration: MeterWidgetConfiguration, in context: Context) async -> MeterEntry {
-        MeterEntry(date: .now, snapshot: await SnapshotLoader.load(), meal: configuration.meal)
+        // The gallery gets the flattering placeholder, not a fresh
+        // install's zeros (or a watchdog fallback from a slow query).
+        if context.isPreview {
+            return MeterEntry(date: .now, snapshot: .placeholder, meal: configuration.meal)
+        }
+        return MeterEntry(date: .now, snapshot: await SnapshotLoader.load(), meal: configuration.meal)
     }
 
     func timeline(for configuration: MeterWidgetConfiguration, in context: Context) async -> Timeline<MeterEntry> {
-        let entry = MeterEntry(date: .now, snapshot: await SnapshotLoader.load(), meal: configuration.meal)
-        return Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(30 * 60)))
+        let now = Date()
+        let snapshot = await SnapshotLoader.load()
+        let refresh = now.addingTimeInterval(30 * 60)
+        if let midnight = nextMidnight(after: now), midnight <= refresh {
+            return Timeline(
+                entries: [
+                    MeterEntry(date: now, snapshot: snapshot, meal: configuration.meal),
+                    MeterEntry(date: midnight, snapshot: snapshot.newDay, meal: configuration.meal),
+                ],
+                policy: .after(midnight)
+            )
+        }
+        return Timeline(
+            entries: [MeterEntry(date: now, snapshot: snapshot, meal: configuration.meal)],
+            policy: .after(refresh)
+        )
     }
 }
 

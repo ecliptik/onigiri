@@ -29,9 +29,14 @@ public enum StreakCalendar {
     /// target — or showed any deficit at all when no goal is set. The
     /// badge is awarded only once the day COMPLETES: a live "earned" at
     /// breakfast (trivially at deficit) read as a broken meter.
+    ///
+    /// `targetsByDay` (start-of-day keyed) judges each day by the target
+    /// in force THAT day (a snapshot of 0 means the no-goal any-deficit
+    /// rule); days without a snapshot fall back to `targetDeficitKcal`.
     public static func earnedDays(
         totals: [DayEnergyTotals],
         targetDeficitKcal: Double?,
+        targetsByDay: [Date: Double] = [:],
         untrackedBelowKcal: Double = 0,
         today: Date = .now,
         calendar: Calendar = .current
@@ -40,13 +45,15 @@ public enum StreakCalendar {
             guard !calendar.isDate(day.day, inSameDayAs: today),
                   day.day < today,
                   isTracked(day, untrackedBelowKcal: untrackedBelowKcal) else { return nil }
+            let dayStart = calendar.startOfDay(for: day.day)
+            let target = targetsByDay[dayStart] ?? targetDeficitKcal
             let met: Bool
-            if let target = targetDeficitKcal, target > 0 {
+            if let target, target > 0 {
                 met = day.deficitKcal >= target
             } else {
                 met = day.deficitKcal > 0
             }
-            return met ? calendar.startOfDay(for: day.day) : nil
+            return met ? dayStart : nil
         })
     }
 

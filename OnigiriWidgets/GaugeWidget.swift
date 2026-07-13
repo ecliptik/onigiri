@@ -26,6 +26,12 @@ struct GaugeProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (GaugeEntry) -> Void) {
+        // The gallery gets the flattering placeholder, not a fresh
+        // install's zeros (or a watchdog fallback from a slow query).
+        if context.isPreview {
+            completion(GaugeEntry(date: .now, snapshot: .placeholder))
+            return
+        }
         Task { @MainActor in
             completion(GaugeEntry(date: .now, snapshot: await SnapshotLoader.load()))
         }
@@ -33,8 +39,23 @@ struct GaugeProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<GaugeEntry>) -> Void) {
         Task { @MainActor in
-            let entry = GaugeEntry(date: .now, snapshot: await SnapshotLoader.load())
-            completion(Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(30 * 60))))
+            let now = Date()
+            let snapshot = await SnapshotLoader.load()
+            let refresh = now.addingTimeInterval(30 * 60)
+            if let midnight = nextMidnight(after: now), midnight <= refresh {
+                completion(Timeline(
+                    entries: [
+                        GaugeEntry(date: now, snapshot: snapshot),
+                        GaugeEntry(date: midnight, snapshot: snapshot.newDay),
+                    ],
+                    policy: .after(midnight)
+                ))
+            } else {
+                completion(Timeline(
+                    entries: [GaugeEntry(date: now, snapshot: snapshot)],
+                    policy: .after(refresh)
+                ))
+            }
         }
     }
 }

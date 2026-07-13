@@ -19,8 +19,6 @@ struct CalendarView: View {
     @AppStorage(SharedStore.trackedMetric1IconKey, store: SharedStore.defaults) private var trackedMetric1Icon = ""
     @AppStorage(SharedStore.trackedMetric2Key, store: SharedStore.defaults) private var trackedMetric2 = "water"
     @AppStorage(SharedStore.trackedMetric2IconKey, store: SharedStore.defaults) private var trackedMetric2Icon = ""
-    /// Per-day totals for non-sodium/water slots (those ride the summary).
-    @State private var slotTotals: [Double?] = [nil, nil]
 
     private let calendar = Calendar.current
 
@@ -81,20 +79,21 @@ struct CalendarView: View {
             }
         }
         .task { await refresh() }
-        .onAppear { Task { await refresh() } }
         .refreshable { await refresh() }
+        // Months beyond the preloaded window load on demand — otherwise
+        // they render every day as "goal not met" with a "—" day card.
+        .task(id: displayedMonth) {
+            await model.ensureTotals(forMonthOf: displayedMonth)
+        }
         .onChange(of: selectedDay) { _, day in
-            Task {
-                await model.loadDaySummary(for: day)
-                await loadSlotTotals()
-            }
+            Task { await model.loadDaySummary(for: day) }
         }
         // Slot changes in Settings need fresh Health queries here too.
         .onChange(of: trackedMetric1) { _, _ in
-            Task { await loadSlotTotals() }
+            Task { await model.loadDaySummary(for: selectedDay) }
         }
         .onChange(of: trackedMetric2) { _, _ in
-            Task { await loadSlotTotals() }
+            Task { await model.loadDaySummary(for: selectedDay) }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
@@ -113,7 +112,6 @@ struct CalendarView: View {
         }
         await model.refresh(goal: goal)
         await model.loadDaySummary(for: selectedDay)
-        await loadSlotTotals()
     }
 
     // MARK: - Pieces
@@ -233,7 +231,10 @@ struct CalendarView: View {
                 .monospacedDigit()
             }
 
-            if let target = model.targetDeficitKcal {
+            // The day's own snapshotted target when one was recorded
+            // (history is judged by it); today's target otherwise. A 0
+            // snapshot means the day ran goal-less — no line.
+            if let target = model.targetDeficit(for: selectedDay), target > 0 {
                 // Same vocabulary as Today's "Daily goal" card.
                 Text("Daily goal: \(target, format: .number.precision(.fractionLength(0))) kcal deficit")
                     .font(.caption)
@@ -261,13 +262,14 @@ struct CalendarView: View {
     }
 
     /// The browsed day's total for a slot: sodium/water ride the day
-    /// summary; anything else was fetched into slotTotals for this day.
-    /// nil (untracked day) renders as "—" like the energy columns.
+    /// summary; anything else was fetched with it into the model.
+    /// nil (untracked day, failed read) renders as "—" like the energy
+    /// columns.
     private func slotValue(slot: Int, nutrient: TrackedNutrient) -> Double? {
         switch nutrient {
         case .sodium: model.selectedDaySummary?.sodiumMg
         case .water: model.selectedDaySummary?.waterOz
-        default: model.selectedDaySummary == nil ? nil : slotTotals[slot - 1]
+        default: model.selectedDaySlotTotals[slot - 1]
         }
     }
 
@@ -301,17 +303,6 @@ struct CalendarView: View {
             let stored = slot == 1 ? trackedMetric1Icon : trackedMetric2Icon
             Text(SharedStore.isCustomEmoji(stored) ? stored : nutrient.defaultEmoji)
         }
-    }
-
-    /// Non-sodium/water slot totals for the selected day.
-    private func loadSlotTotals() async {
-        var totals: [Double?] = [nil, nil]
-        for slot in 1...2 {
-            if let nutrient = slotNutrient(slot), nutrient != .sodium, nutrient != .water {
-                totals[slot - 1] = (try? await HealthKitService().dayTotal(of: nutrient, for: selectedDay)) ?? 0
-            }
-        }
-        slotTotals = totals
     }
 
     /// One equal-width column with a fixed-width icon slot, so SF Symbol

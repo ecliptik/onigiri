@@ -10,6 +10,9 @@ final class CalendarModel {
     private(set) var totalsByDay: [Date: DayEnergyTotals] = [:]
     /// Full summary (sodium, water) for the selected day's detail card.
     private(set) var selectedDaySummary: DailyEnergySummary?
+    /// The selected day's totals for non-sodium/water tracked slots
+    /// (loaded with the summary; sodium/water ride the summary itself).
+    private(set) var selectedDaySlotTotals: [Double?] = [nil, nil]
     /// A year of weigh-ins so any browsable month can show its scale change.
     private(set) var weightHistory: [WeightTrend.Point] = []
     /// Month-detail extras, loaded on push (nil while loading).
@@ -18,6 +21,10 @@ final class CalendarModel {
 
     private let health = HealthKitService()
     private var summaryGeneration = 0
+    /// Start of the preloaded trailing window; months before it load on
+    /// demand (`ensureTotals`) so browsing far back isn't half-empty.
+    private var windowStart: Date?
+    private var loadedMonths: Set<Date> = []
 
     func refresh(goal: SyncedGoal?) async {
         // Today's plan supplies the deficit target the calendar judges against.
@@ -25,19 +32,52 @@ final class CalendarModel {
         targetDeficitKcal = plan.deficitTargetKcal
         let totals = (try? await health.dailyEnergyTotals()) ?? []
         let calendar = Calendar.current
-        totalsByDay = Dictionary(uniqueKeysWithValues: totals.map {
-            (calendar.startOfDay(for: $0.day), $0)
-        })
-        // Badges are awarded when a day completes, and days under the
-        // untracked threshold never qualify.
+        windowStart = calendar.date(byAdding: .day, value: -92, to: calendar.startOfDay(for: .now))
+        // Merge (not replace): keep months loaded on demand while the
+        // trailing window refreshes.
+        for total in totals {
+            totalsByDay[calendar.startOfDay(for: total.day)] = total
+        }
+        recomputeBadges()
+        weightHistory = (try? await health.bodyMassHistory(days: 365)) ?? weightHistory
+    }
+
+    /// Load a browsed month that predates the trailing window, once.
+    func ensureTotals(forMonthOf month: Date) async {
+        let calendar = Calendar.current
+        guard let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: month)),
+              let monthEnd = calendar.date(byAdding: .month, value: 1, to: monthStart)
+        else { return }
+        guard let windowStart, monthStart < windowStart,
+              !loadedMonths.contains(monthStart) else { return }
+        guard let totals = try? await health.dailyEnergyTotals(
+            from: monthStart, to: min(monthEnd, .now)
+        ) else { return }
+        loadedMonths.insert(monthStart)
+        for total in totals {
+            totalsByDay[calendar.startOfDay(for: total.day)] = total
+        }
+        recomputeBadges()
+    }
+
+    /// Badges are awarded when a day completes, judged by that day's
+    /// snapshotted target (falling back to today's), and days under the
+    /// untracked threshold never qualify.
+    private func recomputeBadges() {
         earned = StreakCalendar.earnedDays(
-            totals: totals,
-            targetDeficitKcal: plan.deficitTargetKcal,
+            totals: Array(totalsByDay.values),
+            targetDeficitKcal: targetDeficitKcal,
+            targetsByDay: DeficitTargetHistory.targetsByDay(),
             untrackedBelowKcal: SharedStore.untrackedBelowKcal
         )
         streak = StreakCalendar.currentStreak(earned: earned)
         bestStreak = StreakCalendar.bestStreak(earned: earned)
-        weightHistory = (try? await health.bodyMassHistory(days: 365)) ?? weightHistory
+    }
+
+    /// The deficit target a day is judged against: its snapshot when one
+    /// was recorded, else today's target.
+    func targetDeficit(for day: Date) -> Double? {
+        DeficitTargetHistory.target(on: day) ?? targetDeficitKcal
     }
 
     /// Water total and eating-event count for the month detail.
@@ -97,13 +137,26 @@ final class CalendarModel {
         StreakCalendar.earnedCount(inMonthOf: month, earned: earned)
     }
 
-    /// Sodium/water for the selected day — the same numbers Today shows.
+    /// Sodium/water for the selected day — the same numbers Today shows —
+    /// plus the tracked-metric slot totals, under one generation guard so
+    /// fast day-swiping can't pair one day's slots with another's summary.
     func loadDaySummary(for day: Date) async {
         summaryGeneration += 1
         let generation = summaryGeneration
-        let summary = try? await health.daySummary(for: day)
+        async let summaryRead = health.daySummary(for: day)
+        // Non-sodium/water slots need their own day query; nil (slot off,
+        // sodium/water, or a failed read) renders as "—", never a fake 0.
+        var slots: [Double?] = [nil, nil]
+        for slot in 1...2 {
+            if let nutrient = SharedStore.trackedNutrient(slot: slot),
+               nutrient != .sodium, nutrient != .water {
+                slots[slot - 1] = try? await health.dayTotal(of: nutrient, for: day)
+            }
+        }
+        let summary = try? await summaryRead
         guard generation == summaryGeneration else { return }
         selectedDaySummary = summary
+        selectedDaySlotTotals = slots
     }
 
 }

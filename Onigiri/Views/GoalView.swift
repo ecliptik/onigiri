@@ -24,10 +24,15 @@ struct GoalView: View {
 
     private var currentWeightLb: Double? { healthWeightLb ?? manualWeightLb }
 
-    /// Save enables only when the form differs from the stored goal —
-    /// the tab has no Cancel, so an always-on Save would invite no-ops.
+    private var validation: GoalUpsert.Validation {
+        GoalUpsert.validate(targetLb: targetWeightLb, currentLb: currentWeightLb)
+    }
+
+    /// Save enables only when the form is valid AND differs from the
+    /// stored goal — the tab has no Cancel, so an always-on Save would
+    /// invite no-ops, and an invalid save used to slip through silently.
     private var isDirty: Bool {
-        guard targetWeightLb != nil, currentWeightLb != nil else { return false }
+        guard validation == .valid else { return false }
         guard let goal = goals.first else { return true }
         return goal.targetWeightLb != targetWeightLb
             || !Calendar.current.isDate(goal.targetDate, inSameDayAs: targetDate)
@@ -80,6 +85,13 @@ struct GoalView: View {
                             .focused($weightFieldFocused)
                     }
                     DatePicker("By date", selection: $targetDate, in: Date.now..., displayedComponents: .date)
+                    // Say WHY the plan is missing and Save is disabled —
+                    // it used to just silently vanish.
+                    if validation == .targetNotBelowCurrent {
+                        Text("Target must be below your current weight.")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 }
 
                 if let plan, let current = currentWeightLb, let target = targetWeightLb {
@@ -290,22 +302,16 @@ struct GoalView: View {
     }
 
     private func save() {
-        guard let target = targetWeightLb else { return }
-        if let goal = goals.first {
-            goal.targetWeightLb = target
-            goal.targetDate = targetDate
-            goal.fallbackCurrentWeightLb = healthWeightLb == nil ? manualWeightLb : nil
-        } else {
-            context.insert(GoalSettings(
-                targetWeightLb: target,
-                targetDate: targetDate,
-                fallbackCurrentWeightLb: healthWeightLb == nil ? manualWeightLb : nil
-            ))
-        }
+        guard validation == .valid, let target = targetWeightLb else { return }
+        GoalUpsert.save(
+            targetLb: target,
+            targetDate: targetDate,
+            healthWeightLb: healthWeightLb,
+            manualWeightLb: manualWeightLb,
+            goals: goals,
+            context: context
+        )
         weightFieldFocused = false
-        PhoneSyncService.shared.push(from: context)
-        // A new target changes tonight's streak-warning math.
-        ReminderScheduler.shared.replan()
         ToastCenter.shared.show("Goal saved ✓")
     }
 

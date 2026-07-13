@@ -131,9 +131,9 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
         } action: {
             VStack(spacing: 6) {
-                advanceButton(goalIsValid ? "Save Goal" : "Continue")
-                if !goalIsValid {
-                    Text("No goal set — any deficit earns the badge.")
+                advanceButton(goalValidation == .valid ? "Save Goal" : "Continue")
+                if let caption = goalCaption {
+                    Text(caption)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -214,21 +214,36 @@ struct OnboardingView: View {
         .tint(.riceToast)
     }
 
-    private var goalIsValid: Bool {
-        guard let target = targetWeightLb, target > 0 else { return false }
-        let current = healthWeightLb ?? manualWeightLb
-        return current.map { target < $0 } ?? true
+    /// Same rules as the Goal tab (one shared validator) — a goal used
+    /// to save here with NO current weight, a half-state GoalView then
+    /// couldn't edit.
+    private var goalValidation: GoalUpsert.Validation {
+        GoalUpsert.validate(targetLb: targetWeightLb, currentLb: healthWeightLb ?? manualWeightLb)
+    }
+
+    /// Say WHY the button reads "Continue" — the old copy claimed "no
+    /// goal set" even when the user had typed one that couldn't save.
+    private var goalCaption: String? {
+        switch goalValidation {
+        case .valid: nil
+        case .missingTarget: "No goal set — any deficit earns the badge."
+        case .missingCurrentWeight: "Enter your current weight to set a goal."
+        case .targetNotBelowCurrent: "Target must be below your current weight."
+        }
     }
 
     private func saveGoalIfValid() {
-        guard goalIsValid, let target = targetWeightLb, goals.isEmpty else { return }
-        context.insert(GoalSettings(
-            targetWeightLb: target,
+        guard goalValidation == .valid, let target = targetWeightLb else { return }
+        // Upsert, not insert-once: swiping back to edit and re-tapping
+        // "Save Goal" used to silently drop the change.
+        GoalUpsert.save(
+            targetLb: target,
             targetDate: targetDate,
-            fallbackCurrentWeightLb: healthWeightLb == nil ? manualWeightLb : nil
-        ))
-        try? context.save()
-        PhoneSyncService.shared.push(from: context)
+            healthWeightLb: healthWeightLb,
+            manualWeightLb: manualWeightLb,
+            goals: goals,
+            context: context
+        )
     }
 
     private func finish() {

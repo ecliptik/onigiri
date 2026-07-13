@@ -38,12 +38,35 @@ struct WatchEntry: TimelineEntry {
         ),
         waterGoalOz: 64
     )
+
+    /// The just-after-midnight render: nothing eaten or burned yet, the
+    /// same plan. Pre-rendered so yesterday's numbers never show into
+    /// the new day while WidgetKit waits out its refresh budget.
+    func newDay(at date: Date) -> WatchEntry {
+        WatchEntry(
+            date: date,
+            state: DailyPlanLoader.State(
+                summary: .zero,
+                deficitTargetKcal: state.deficitTargetKcal,
+                gaugeProgress: 0,
+                dailyBudgetKcal: state.dailyBudgetKcal
+            ),
+            waterGoalOz: waterGoalOz,
+            showsRemaining: showsRemaining
+        )
+    }
 }
 
 struct WatchProvider: TimelineProvider {
     func placeholder(in context: Context) -> WatchEntry { .placeholder }
 
     func getSnapshot(in context: Context, completion: @escaping (WatchEntry) -> Void) {
+        // The complication picker gets the flattering placeholder, not
+        // a fresh install's zeros (or a watchdog fallback).
+        if context.isPreview {
+            completion(.placeholder)
+            return
+        }
         Task { @MainActor in
             completion(await load())
         }
@@ -51,8 +74,20 @@ struct WatchProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<WatchEntry>) -> Void) {
         Task { @MainActor in
+            let now = Date()
             let entry = await load()
-            completion(Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(30 * 60))))
+            let refresh = now.addingTimeInterval(30 * 60)
+            let midnight = Calendar.current.date(
+                byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now)
+            )
+            if let midnight, midnight <= refresh {
+                completion(Timeline(
+                    entries: [entry, entry.newDay(at: midnight)],
+                    policy: .after(midnight)
+                ))
+            } else {
+                completion(Timeline(entries: [entry], policy: .after(refresh)))
+            }
         }
     }
 

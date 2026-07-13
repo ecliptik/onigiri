@@ -91,7 +91,22 @@ Tier 2 #14's main gap at the choke point.
    added before first launch "logs" nothing, no feedback. Fix: throw a
    user-visible error on lookup miss and on auth failure.
 
-## Tier 2 — correctness worth fixing soon
+## Tier 2 — correctness — ALL SHIPPED 2026-07-12 (same session)
+
+All seven landed: reminders judge today live (and the plan-load stamp
+runs on every replan even with reminders off); slot totals ride the
+day-summary generation guard; months past the 92-day window load on
+demand (`dailyEnergyTotals(from:to:)` + `ensureTotals(forMonthOf:)`);
+per-day deficit-target snapshots (`DeficitTargetHistory` — recorded by
+every `DailyPlanLoader.load`, judged by `StreakCalendar` per day, shown
+on the day card; 0 = the no-goal rule; unsnapshotted days fall back to
+the current target as before); import names its goal/water overwrite
+and skip counts, export failures surface; all three widget providers
+cut timelines at midnight with a pre-rendered zeroed entry and return
+the placeholder in gallery previews, and the appex/watch version
+strings now track MARKETING_VERSION; one shared `GoalUpsert`
+validation+save behind GoalView AND onboarding with inline
+"target must be below current weight" copy.
 
 9. **Streak reminders judge today wrong** — `ReminderScheduler.swift:77-87`.
    `todayGoalMet` is computed from `earnedDays`, which excludes today
@@ -134,15 +149,11 @@ Tier 2 #14's main gap at the choke point.
     and the import summary hides name-matched skips ("Imported 0 foods ✓"
     after restoring a full backup reads as failure).
 
-14. **Settings changes leave widgets stale — choke-point reload SHIPPED
-    2026-07-12** (`PhoneSyncService.push` now calls
-    `WidgetCenter.reloadAllTimelines()`). Still open from this item:
-    widget timelines never cut at midnight (yesterday's balance shows
-    into the new day; add a zeroed midnight entry), and gallery
-    snapshots ignore `context.isPreview` so the picker shows zeros
-    instead of the flattering placeholder. Also spotted while building:
-    the widget appex's CFBundleShortVersionString is stuck at 1.0 vs
-    the app's 1.3.5 (xcodebuild warns) — sync it in project.yml.
+14. **Settings changes leave widgets stale — FULLY SHIPPED 2026-07-12**:
+    choke-point reload in `PhoneSyncService.push`, midnight timeline cut
+    with a pre-rendered zeroed entry in all three providers, gallery
+    previews render the placeholder, and the appex/watch
+    CFBundleShortVersionString now tracks MARKETING_VERSION.
 
 15. **GoalView saves goals onboarding would reject** —
     `GoalView.swift:28-34` vs `OnboardingView.swift:217-221`. Target ≥

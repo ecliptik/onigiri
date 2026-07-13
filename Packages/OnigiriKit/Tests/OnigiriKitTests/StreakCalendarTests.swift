@@ -43,6 +43,23 @@ struct StreakCalendarTests {
         #expect(earned == [day(-1)])
     }
 
+    @Test func perDaySnapshotTargetsBeatTheCurrentTarget() {
+        let history = [
+            totals(-3, intake: 1500, burn: 2300),  // deficit 800
+            totals(-2, intake: 1500, burn: 2300),  // deficit 800
+            totals(-1, intake: 1900, burn: 2300),  // deficit 400
+        ]
+        // Today's target is a demanding 900 — but the days were lived
+        // under snapshotted targets of 600 (met), none (falls back to
+        // 900: missed), and 0 = the no-goal any-deficit rule (met).
+        let earned = StreakCalendar.earnedDays(
+            totals: history,
+            targetDeficitKcal: 900,
+            targetsByDay: [day(-3): 600, day(-1): 0]
+        )
+        #expect(earned == [day(-3), day(-1)])
+    }
+
     @Test func untrackedThresholdExcludesSparseDays() {
         let history = [
             totals(-2, intake: 400, burn: 2300),   // sparse: huge "deficit" but untracked

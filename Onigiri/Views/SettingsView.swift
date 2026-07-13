@@ -101,8 +101,16 @@ struct SettingsView: View {
     private var dataSection: some View {
         Section {
             Button("Export library…", systemImage: "square.and.arrow.up") {
-                exportDocument = (try? LibraryTransfer.export(from: context)).map(LibraryJSONDocument.init)
-                showExporter = exportDocument != nil
+                // Failure must say so — a button that silently does
+                // nothing reads as a dead button.
+                do {
+                    exportDocument = LibraryJSONDocument(data: try LibraryTransfer.export(from: context))
+                    transferMessage = nil
+                    showExporter = true
+                } catch {
+                    exportDocument = nil
+                    transferMessage = "Export failed: \(error.localizedDescription)"
+                }
             }
             Button("Import library…", systemImage: "square.and.arrow.down") {
                 showImporter = true
@@ -579,8 +587,11 @@ struct SettingsView: View {
                 contentType: .json,
                 defaultFilename: "onigiri-library"
             ) { result in
-                if case .success = result {
+                switch result {
+                case .success:
                     transferMessage = "Library exported ✓"
+                case .failure(let error):
+                    transferMessage = "Export failed: \(error.localizedDescription)"
                 }
             }
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in

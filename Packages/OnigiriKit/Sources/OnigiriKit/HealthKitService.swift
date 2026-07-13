@@ -217,9 +217,15 @@ public final class HealthKitService {
         guard let start = calendar.date(byAdding: .day, value: -days, to: calendar.startOfDay(for: now)) else {
             return []
         }
-        async let intakeTotals = dailyTotals(.dietaryEnergyConsumed, start: start, end: now)
-        async let activeTotals = dailyTotals(.activeEnergyBurned, start: start, end: now)
-        async let basalTotals = dailyTotals(.basalEnergyBurned, start: start, end: now)
+        return try await dailyEnergyTotals(from: start, to: now)
+    }
+
+    /// Per-day totals for an arbitrary range — the calendar loads months
+    /// browsed beyond the trailing window on demand.
+    public func dailyEnergyTotals(from start: Date, to end: Date) async throws -> [DayEnergyTotals] {
+        async let intakeTotals = dailyTotals(.dietaryEnergyConsumed, start: start, end: end)
+        async let activeTotals = dailyTotals(.activeEnergyBurned, start: start, end: end)
+        async let basalTotals = dailyTotals(.basalEnergyBurned, start: start, end: end)
         let (intake, active, basal) = try await (intakeTotals, activeTotals, basalTotals)
         let allDays = Set(intake.keys).union(active.keys).union(basal.keys)
         return allDays.sorted().map { day in

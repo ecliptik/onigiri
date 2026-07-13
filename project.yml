@@ -92,6 +92,9 @@ targets:
       path: OnigiriWidgets/Info.plist
       properties:
         CFBundleDisplayName: Onigiri
+        # Must track the app's version: xcodegen defaults to a literal
+        # "1.0" and xcodebuild warns on the mismatch.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     entitlements:
@@ -116,6 +119,7 @@ targets:
       path: OnigiriWatch/Info.plist
       properties:
         CFBundleDisplayName: Onigiri
+        CFBundleShortVersionString: $(MARKETING_VERSION)
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.ecliptik.Onigiri
         WKRunsIndependentlyOfCompanionApp: true
@@ -141,6 +145,7 @@ targets:
       path: OnigiriWatchWidgets/Info.plist
       properties:
         CFBundleDisplayName: Onigiri
+        CFBundleShortVersionString: $(MARKETING_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     entitlements:

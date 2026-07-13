@@ -97,7 +97,18 @@ enum LibraryTransfer {
         try context.save()
         let foodsPart = "\(addedFoods) food\(addedFoods == 1 ? "" : "s")"
         let mealsPart = "\(addedMeals) meal\(addedMeals == 1 ? "" : "s")"
-        return "Imported \(foodsPart) and \(mealsPart) ✓"
+        var summary = "Imported \(foodsPart) and \(mealsPart)"
+        // Skips would otherwise read as failure ("Imported 0 foods ✓"
+        // after restoring a full backup), and the goal/water overwrite
+        // is destructive enough to deserve naming.
+        let skipped = (export.foods.count - addedFoods) + (export.meals.count - addedMeals)
+        if skipped > 0 {
+            summary += " (\(skipped) already saved)"
+        }
+        summary += export.goal != nil
+            ? "; replaced goal and water settings ✓"
+            : "; replaced water settings ✓"
+        return summary
     }
 
     /// Shared fileImporter completion — security-scoped read, import, sync

@@ -34,6 +34,15 @@ public enum DailyPlanLoader {
     }
 
     public static func load(goal: SyncedGoal?) async -> State {
+        let state = await computePlan(goal: goal)
+        // Every plan load stamps today's target, so history keeps being
+        // judged by the goal in force that day even after the goal (or
+        // the weight behind it) changes.
+        DeficitTargetHistory.recordToday(targetKcal: state.deficitTargetKcal)
+        return state
+    }
+
+    private static func computePlan(goal: SyncedGoal?) async -> State {
         let health = HealthKitService()
         guard let goal else {
             let summary = (try? await health.todaySummary()) ?? .zero

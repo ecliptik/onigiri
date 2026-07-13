@@ -20,6 +20,27 @@ struct DaySnapshot {
         gaugeProgress: 0.38,
         waterGoalOz: 64
     )
+
+    /// The just-after-midnight render: nothing eaten or burned yet, the
+    /// same plan. Pre-rendered into the timeline so yesterday's numbers
+    /// never show into the new day while WidgetKit waits out its budget.
+    var newDay: DaySnapshot {
+        DaySnapshot(
+            summary: .zero,
+            deficitTargetKcal: deficitTargetKcal,
+            // The full budget again: remaining was budget − intake.
+            remainingKcal: remainingKcal.map { $0 + summary.intakeKcal },
+            gaugeProgress: 0,
+            waterGoalOz: waterGoalOz
+        )
+    }
+}
+
+/// Next midnight, and whether it lands inside the standard 30-minute
+/// refresh window (when it does, the timeline pre-renders the zeroed
+/// entry and reloads at midnight instead).
+func nextMidnight(after now: Date) -> Date? {
+    Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now))
 }
 
 @MainActor

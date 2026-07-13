@@ -186,10 +186,9 @@ public struct WaterAccessoryView: View {
 @MainActor
 public enum StreakLoader {
     public static func load() async -> (streak: Int, needsSetup: Bool) {
-        let health = HealthKitService()
-        let needsSetup = (try? await health.shouldRequestAuthorization()) == true
-        let state = await DailyPlanLoader.load(goal: WatchSync.loadGoal())
-        let totals = (try? await health.dailyEnergyTotals()) ?? []
+        let needsSetup = await PlanCache.needsSetup()
+        let state = await PlanCache.state(goal: WatchSync.loadGoal())
+        let totals = await PlanCache.energyTotals()
         let earned = StreakCalendar.earnedDays(
             totals: totals,
             targetDeficitKcal: state.deficitTargetKcal,

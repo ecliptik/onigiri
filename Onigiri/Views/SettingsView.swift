@@ -2,7 +2,6 @@ import SwiftUI
 import SwiftData
 import UIKit
 import UserNotifications
-import WidgetKit
 import OnigiriKit
 
 /// App-wide settings: appearance choices and data portability.
@@ -319,9 +318,9 @@ struct SettingsView: View {
             iconChanged(.water, from: old, to: new)
         }
         .onChange(of: rewardIcon) { old, new in
+            // The push mirrors the badge into the shared defaults and
+            // reloads the widgets when it actually changed.
             iconChanged(.reward, from: old, to: new)
-            // The gauge widgets and complications render the badge.
-            WidgetCenter.shared.reloadAllTimelines()
         }
         // A new metric starts from its own defaults, not the old one's —
         // and every slot change syncs to the watch's metrics page.

@@ -1,5 +1,5 @@
 import SwiftUI
-import WidgetKit
+import WatchKit
 import OnigiriKit
 
 @main
@@ -11,6 +11,7 @@ struct OnigiriWatchApp: App {
     /// arriving from the phone refreshes the complications, which
     /// otherwise stay stale until the next timeline turn or app open.
     @State private var logObserver = HealthKitService()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -42,9 +43,26 @@ struct OnigiriWatchApp: App {
             }
             .task {
                 logObserver.startObservingLogChanges {
+                    // Debounced funnel: one meal writes a burst of samples
+                    // (and phone logs sync in as bursts too) — coalesce
+                    // them into a single complication reload. This also
+                    // covers the watch's own logs, which used to reload
+                    // directly AND through this observer.
                     Task { @MainActor in
-                        WidgetCenter.shared.reloadAllTimelines()
+                        WidgetReloader.requestReload(kinds: WidgetKinds.watchAll)
+                        // A background wake can suspend before a debounced
+                        // flush would run — reload before the window closes.
+                        if WKApplication.shared().applicationState != .active {
+                            WidgetReloader.flushNow()
+                        }
                     }
+                }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                // Wrist-down right after logging: run the pending reload
+                // now — a suspended app never runs its sleeping flush task.
+                if phase != .active {
+                    WidgetReloader.flushNow()
                 }
             }
         }

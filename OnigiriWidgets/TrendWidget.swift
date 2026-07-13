@@ -54,9 +54,8 @@ struct TrendProvider: TimelineProvider {
 
     @MainActor
     private func load() async -> TrendEntry {
-        let health = HealthKitService()
-        let needsSetup = (try? await health.shouldRequestAuthorization()) == true
-        let points = (try? await health.bodyMassHistory(days: 90)) ?? []
+        let needsSetup = await PlanCache.needsSetup()
+        let points = (try? await HealthKitService().bodyMassHistory(days: 90)) ?? []
         return TrendEntry(
             date: .now,
             points: points,
@@ -183,7 +182,7 @@ struct ProgressProvider: TimelineProvider {
     @MainActor
     private func load() async -> ProgressEntry {
         let snapshot = await SnapshotLoader.load()
-        let totals = (try? await HealthKitService().dailyEnergyTotals()) ?? []
+        let totals = await PlanCache.energyTotals()
         let earned = StreakCalendar.earnedDays(
             totals: totals,
             targetDeficitKcal: snapshot.deficitTargetKcal,

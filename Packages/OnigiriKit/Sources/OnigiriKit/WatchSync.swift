@@ -27,7 +27,7 @@ public struct SyncedMeal: Codable, Identifiable, Sendable, Hashable {
 
 /// The weight goal as it travels to the watch; the watch combines it with
 /// its own HealthKit weight/burn data to compute the daily plan.
-public struct SyncedGoal: Codable, Sendable, Equatable {
+public struct SyncedGoal: Codable, Sendable, Equatable, Hashable {
     public let targetWeightLb: Double
     public let targetDate: Date
     public let fallbackCurrentWeightLb: Double?
@@ -57,14 +57,16 @@ public enum GoalMode {
 /// What a sync says to do with the watch's stored goal. "Absent from the
 /// context" means the phone has no goal (clear it); "present but
 /// undecodable" (version skew) must keep the last good copy, not wipe it.
-public enum GoalUpdate: Sendable, Equatable {
+public enum GoalUpdate: Sendable, Equatable, Hashable {
     case set(SyncedGoal)
     case clear
     case keep
 }
 
 /// Everything one WatchConnectivity application context carries.
-public struct SyncPayload: Sendable {
+/// Hashable so the phone's push can fingerprint the whole payload —
+/// a hand-enumerated field list silently missed future additions.
+public struct SyncPayload: Sendable, Hashable {
     /// nil when the meals data was missing or failed to decode — keep the
     /// watch's last good list.
     public let meals: [SyncedMeal]?

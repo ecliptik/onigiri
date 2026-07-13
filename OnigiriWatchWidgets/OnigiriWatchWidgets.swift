@@ -99,10 +99,9 @@ struct WatchProvider: TimelineProvider {
 
     @MainActor
     private func load() async -> WatchEntry {
-        let health = HealthKitService()
-        let needsSetup = (try? await health.shouldRequestAuthorization()) == true
+        let needsSetup = await PlanCache.needsSetup()
         // Goal and display settings sync from the phone into the shared defaults.
-        let state = await DailyPlanLoader.load(goal: WatchSync.loadGoal())
+        let state = await PlanCache.state(goal: WatchSync.loadGoal())
         return WatchEntry(
             date: .now,
             state: state,
@@ -261,8 +260,8 @@ struct SummaryProvider: TimelineProvider {
     @MainActor
     private func load() async -> SummaryEntry {
         let health = HealthKitService()
-        let needsSetup = (try? await health.shouldRequestAuthorization()) == true
-        let state = await DailyPlanLoader.load(goal: WatchSync.loadGoal())
+        let needsSetup = await PlanCache.needsSetup()
+        let state = await PlanCache.state(goal: WatchSync.loadGoal())
         // The phone's two tracked-metric slots, exactly as Settings has
         // them (they sync into the shared defaults).
         var slots: [SummarySlot] = []

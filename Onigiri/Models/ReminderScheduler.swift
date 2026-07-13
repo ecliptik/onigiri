@@ -37,17 +37,24 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
         return granted
     }
 
-    /// Recompute pending notifications from current state. Cheap enough to
-    /// fire on every mutation; each call fully replaces the pending set.
-    func replan() {
-        Task { await replanNow() }
+    /// Recompute pending notifications from current state; each call fully
+    /// replaces the pending set. Pass `afterMutation: true` from log paths:
+    /// a log can't move the deficit target (that's weight/goal/burn), so
+    /// with reminders off those replans skip HealthKit entirely.
+    func replan(afterMutation: Bool = false) {
+        Task { await replanNow(afterMutation: afterMutation) }
     }
 
-    private func replanNow() async {
+    private func replanNow(afterMutation: Bool) async {
         // Loading the plan stamps today's deficit-target snapshot (the
-        // calendar judges history by it), so it runs on every replan —
-        // every log and foreground — even with reminders off.
-        let plan = await DailyPlanLoader.load(goal: WatchSync.loadGoal())
+        // calendar judges history by it). Foreground replans always load —
+        // a weigh-in may have synced in and moved today's target, and the
+        // last stamp of the day is the one that stands. Mutation replans
+        // with reminders off only load when today has no stamp yet.
+        var plan: DailyPlanLoader.State?
+        if enabled.any || !afterMutation || DeficitTargetHistory.target(on: .now) == nil {
+            plan = await DailyPlanLoader.load(goal: WatchSync.loadGoal())
+        }
         let center = UNUserNotificationCenter.current()
         // Only OUR reminders — removeAll would nuke any future
         // notification type this app grows.
@@ -55,7 +62,7 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
             .map(\.identifier)
             .filter { $0.hasPrefix("onigiri.") }
         center.removePendingNotificationRequests(withIdentifiers: pendingIDs)
-        guard enabled.any else { return }
+        guard enabled.any, let plan else { return }
         let settings = await center.notificationSettings()
         guard settings.authorizationStatus == .authorized else { return }
         guard let state = await currentState(plan: plan) else { return }

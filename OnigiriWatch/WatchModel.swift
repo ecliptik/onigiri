@@ -1,6 +1,5 @@
 import Foundation
 import WatchKit
-import WidgetKit
 import OnigiriKit
 
 @Observable
@@ -79,7 +78,6 @@ final class WatchModel {
             WKInterfaceDevice.current().play(.success)
             showFlash("✓ \(entry.name) updated", isError: false)
             await refresh()
-            WidgetCenter.shared.reloadAllTimelines()
             return true
         } catch {
             WKInterfaceDevice.current().play(.failure)
@@ -99,7 +97,6 @@ final class WatchModel {
             WKInterfaceDevice.current().play(.success)
             showFlash("Removed \(entry.name)", isError: false)
             await refresh()
-            WidgetCenter.shared.reloadAllTimelines()
             return true
         } catch {
             WKInterfaceDevice.current().play(.failure)
@@ -121,7 +118,6 @@ final class WatchModel {
                 isError: false
             )
             await refresh()
-            WidgetCenter.shared.reloadAllTimelines()
             return true
         } catch {
             WKInterfaceDevice.current().play(.failure)
@@ -146,7 +142,6 @@ final class WatchModel {
             WKInterfaceDevice.current().play(.success)
             showFlash("✓ \(meal.name)", isError: false)
             await refresh()
-            WidgetCenter.shared.reloadAllTimelines()
             return true
         } catch {
             WKInterfaceDevice.current().play(.failure)

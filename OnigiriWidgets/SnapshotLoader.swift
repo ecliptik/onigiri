@@ -64,8 +64,8 @@ enum SnapshotLoader {
     /// The phone mirrors the goal into the App Group on every sync push;
     /// the shared DailyPlanLoader does the rest, like the watch.
     static func load() async -> DaySnapshot {
-        let needsSetup = (try? await HealthKitService().shouldRequestAuthorization()) == true
-        let state = await DailyPlanLoader.load(goal: WatchSync.loadGoal())
+        let needsSetup = await PlanCache.needsSetup()
+        let state = await PlanCache.state(goal: WatchSync.loadGoal())
         return DaySnapshot(
             summary: state.summary,
             deficitTargetKcal: state.deficitTargetKcal,

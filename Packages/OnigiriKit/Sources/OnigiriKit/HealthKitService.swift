@@ -10,6 +10,7 @@ public final class HealthKitService {
     public static var isAvailable: Bool { HKHealthStore.isHealthDataAvailable() }
 
     private let store = HKHealthStore()
+    private var isObservingLogChanges = false
 
     public init() {}
 
@@ -79,6 +80,10 @@ public final class HealthKitService {
     /// needs the healthkit.background-delivery entitlement; where it's
     /// unavailable the observer still covers the foreground.
     public func startObservingLogChanges(_ onChange: @escaping @Sendable () -> Void) {
+        // Idempotent: a second registration would double every observer
+        // fire (and its widget reload) for the process's lifetime.
+        guard !isObservingLogChanges else { return }
+        isObservingLogChanges = true
         for identifier in [HKQuantityTypeIdentifier.dietaryEnergyConsumed, .dietaryWater] {
             let type = HKQuantityType(identifier)
             let query = HKObserverQuery(sampleType: type, predicate: nil) { _, completion, _ in

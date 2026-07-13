@@ -85,7 +85,7 @@ struct CalendarView: View {
             }
         }
         .task { await refresh() }
-        .refreshable { await refresh() }
+        .refreshable { await refresh(forceWeights: true) }
         // Months beyond the preloaded window load on demand — otherwise
         // they render every day as "goal not met" with a "—" day card.
         .task(id: displayedMonth) {
@@ -102,13 +102,19 @@ struct CalendarView: View {
             Task { await model.loadDaySummary(for: selectedDay) }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
+            // Once visited, this view stays alive in the TabView, so this
+            // fires on every activation even with another tab frontmost —
+            // only refresh when the model says the data went stale.
+            if phase == .active,
+               model.shouldForegroundRefresh(
+                   healthWriteVersion: ToastCenter.shared.healthWriteVersion
+               ) {
                 Task { await refresh() }
             }
         }
     }
 
-    private func refresh() async {
+    private func refresh(forceWeights: Bool = false) async {
         let goal = goals.first.map {
             SyncedGoal(
                 targetWeightLb: $0.targetWeightLb,
@@ -117,7 +123,7 @@ struct CalendarView: View {
                 mode: $0.mode
             )
         }
-        await model.refresh(goal: goal)
+        await model.refresh(goal: goal, forceWeights: forceWeights)
         await model.loadDaySummary(for: selectedDay)
     }
 

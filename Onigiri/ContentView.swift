@@ -1,6 +1,6 @@
 import SwiftUI
 import SwiftData
-import WidgetKit
+import UIKit
 import OnigiriKit
 
 enum AppTab: Hashable {
@@ -74,8 +74,17 @@ struct ContentView: View {
             BackupService.backupIfDue(context: context)
             ReminderScheduler.shared.activate()
             logObserver.startObservingLogChanges {
+                // Debounced funnel: one meal writes a burst of samples (and
+                // the observer covers watch/third-party logs too) — coalesce
+                // them into a single kind-scoped reload.
                 Task { @MainActor in
-                    WidgetCenter.shared.reloadAllTimelines()
+                    ToastCenter.shared.noteHealthWrite()
+                    WidgetReloader.requestReload(kinds: WidgetKinds.phoneLogAffected)
+                    // A background wake can suspend before a debounced
+                    // flush would run — reload before the window closes.
+                    if UIApplication.shared.applicationState != .active {
+                        WidgetReloader.flushNow()
+                    }
                 }
             }
             // Existing installs never see onboarding: a goal means the
@@ -109,6 +118,11 @@ struct ContentView: View {
                     quickActions.pending = nil
                     handle(action)
                 }
+            } else {
+                // Leaving the foreground: run pending debounced work now —
+                // a suspended process never runs its sleeping flush tasks.
+                PhoneSyncService.shared.flushNow()
+                WidgetReloader.flushNow()
             }
         }
         .onChange(of: quickActions.pending) { _, action in

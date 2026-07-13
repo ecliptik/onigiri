@@ -167,9 +167,10 @@ struct TodayView: View {
                     .accessibilityLabel("Next day")
                 }
             }
-            .sheet(item: $activeSheet, onDismiss: {
-                Task { await model.refresh() }
-            }) { sheet in
+            // No onDismiss refresh: every mutation a sheet can make lands
+            // in didMutate → mutationVersion → refresh below; a second
+            // full refresh per dismissal was pure duplication.
+            .sheet(item: $activeSheet) { sheet in
                 switch sheet {
                 case .settings:
                     SettingsView()
@@ -264,16 +265,16 @@ struct TodayView: View {
             Task { await model.refresh() }
         }
         .refreshable { await model.refresh() }
+        // No refresh on appear: .task { start() } covers first appearance
+        // (and itself ends in a refresh), and the foreground gate covers
+        // re-activations — the onAppear refresh just doubled both.
         .onAppear {
-            Task { await model.refresh() }
             consumeQuickLogRequest()
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
-                Task {
-                    await model.loadStatic()
-                    await model.refresh()
-                }
+                let healthWriteVersion = toastCenter.healthWriteVersion
+                Task { await model.foregrounded(healthWriteVersion: healthWriteVersion) }
                 consumeQuickLogRequest()
             }
         }

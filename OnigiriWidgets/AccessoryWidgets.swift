@@ -170,10 +170,9 @@ struct MonthProvider: TimelineProvider {
     private func load() async -> MonthEntry {
         let calendar = Calendar.current
         let month = calendar.date(from: calendar.dateComponents([.year, .month], from: .now)) ?? .now
-        let health = HealthKitService()
-        let needsSetup = (try? await health.shouldRequestAuthorization()) == true
-        let state = await DailyPlanLoader.load(goal: WatchSync.loadGoal())
-        let totals = (try? await health.dailyEnergyTotals()) ?? []
+        let needsSetup = await PlanCache.needsSetup()
+        let state = await PlanCache.state(goal: WatchSync.loadGoal())
+        let totals = await PlanCache.energyTotals()
         let earned = StreakCalendar.earnedDays(
             totals: totals,
             targetDeficitKcal: state.deficitTargetKcal,

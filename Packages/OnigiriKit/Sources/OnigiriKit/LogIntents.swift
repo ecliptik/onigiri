@@ -1,6 +1,5 @@
 #if canImport(HealthKit) && canImport(WidgetKit)
 import AppIntents
-import WidgetKit
 import os
 
 // Logger is thread-safe; opt out of any MainActor default.
@@ -24,7 +23,12 @@ public struct LogWaterIntent: AppIntent {
     @MainActor
     public func perform() async throws -> some IntentResult {
         try await HealthKitService().logWater(oz: SharedStore.waterServingOz)
-        WidgetCenter.shared.reloadAllTimelines()
+        // Immediate and scoped: the intent process may die before a
+        // debounced flush, and a water log can't move the weight trend,
+        // streak, or month widgets.
+        WidgetReloader.reloadNow(kinds: [
+            WidgetKinds.meter, WidgetKinds.waterAccessory, WidgetKinds.progress,
+        ])
         return .result()
     }
 }
@@ -59,7 +63,12 @@ public struct LogMealIntent: AppIntent {
             nutrients: match.nutrients ?? NutrientValues(),
             category: match.category.flatMap(FoodCategory.init(rawValue:))
         )
-        WidgetCenter.shared.reloadAllTimelines()
+        // Immediate and scoped (see LogWaterIntent) — a meal touches every
+        // energy surface but not water or the weight trend.
+        WidgetReloader.reloadNow(kinds: [
+            WidgetKinds.gauge, WidgetKinds.meter, WidgetKinds.progress,
+            WidgetKinds.streak, WidgetKinds.month,
+        ])
         return .result()
     }
 }

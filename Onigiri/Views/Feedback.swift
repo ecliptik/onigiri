@@ -1,5 +1,4 @@
 import SwiftUI
-import WidgetKit
 import OnigiriKit
 
 /// One toast for the whole app, hosted at the root so every surface —
@@ -18,6 +17,11 @@ final class ToastCenter {
     private(set) var current: Item?
     /// Bumped on every log/delete/undo so open screens can refresh.
     private(set) var mutationVersion = 0
+    /// Bumped whenever the HealthKit observer reports a log change —
+    /// including writes this app never saw (widget intent buttons, the
+    /// watch, third-party apps). The foreground staleness gates compare
+    /// against it so an external write always forces a refresh.
+    private(set) var healthWriteVersion = 0
 
     func show(_ message: String, undo: (@MainActor () -> Void)? = nil) {
         let item = Item(message: message, undo: undo)
@@ -34,6 +38,10 @@ final class ToastCenter {
 
     func noteMutation() {
         mutationVersion += 1
+    }
+
+    func noteHealthWrite() {
+        healthWriteVersion += 1
     }
 
     fileprivate func performUndo(_ item: Item) {
@@ -251,12 +259,14 @@ enum LogActions {
     }
 
     private static func didMutate(haptic: UINotificationFeedbackGenerator.FeedbackType?) {
-        WidgetCenter.shared.reloadAllTimelines()
+        // No widget reload here: the HealthKit observer (ContentView) fires
+        // for this same write and reloads through the debounced funnel — a
+        // direct reload just doubled every log's widget storm.
         if let haptic {
             UINotificationFeedbackGenerator().notificationOccurred(haptic)
         }
         ToastCenter.shared.noteMutation()
         // A log can satisfy (or revive) pending reminders — replan.
-        ReminderScheduler.shared.replan()
+        ReminderScheduler.shared.replan(afterMutation: true)
     }
 }

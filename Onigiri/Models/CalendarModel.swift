@@ -24,12 +24,30 @@ final class CalendarModel {
 
     private let health = HealthKitService()
     private var summaryGeneration = 0
+    /// Foreground-gate stamps: once the tab has been visited it stays in
+    /// the TabView hierarchy, so its scenePhase handler fired the full
+    /// refresh (incl. a year of weigh-ins) on every app activation.
+    private var lastRefreshed: Date?
+    private var lastWeightLoad: Date?
+    private var seenHealthWriteVersion = 0
     /// Start of the preloaded trailing window; months before it load on
     /// demand (`ensureTotals`) so browsing far back isn't half-empty.
     private var windowStart: Date?
     private var loadedMonths: Set<Date> = []
 
-    func refresh(goal: SyncedGoal?) async {
+    /// Whether a foreground refresh is due: stale, the day rolled over, or
+    /// Health data changed while away (widget button, watch log). Records
+    /// the version it judged — the caller refreshes whenever this is true.
+    func shouldForegroundRefresh(healthWriteVersion: Int) -> Bool {
+        let healthChanged = healthWriteVersion != seenHealthWriteVersion
+        seenHealthWriteVersion = healthWriteVersion
+        guard let lastRefreshed else { return true }
+        return healthChanged
+            || !Calendar.current.isDate(lastRefreshed, inSameDayAs: .now)
+            || Date.now.timeIntervalSince(lastRefreshed) > 60
+    }
+
+    func refresh(goal: SyncedGoal?, forceWeights: Bool = false) async {
         // Today's plan supplies the deficit target the calendar judges against.
         let plan = await DailyPlanLoader.load(goal: goal)
         targetDeficitKcal = plan.deficitTargetKcal
@@ -42,7 +60,15 @@ final class CalendarModel {
             totalsByDay[calendar.startOfDay(for: total.day)] = total
         }
         recomputeBadges()
-        weightHistory = (try? await health.bodyMassHistory(days: 365)) ?? weightHistory
+        // The year of weigh-ins moves a few times a day at most — reload
+        // it hourly on the passive paths, always on an explicit
+        // pull-to-refresh (forceWeights).
+        if forceWeights || weightHistory.isEmpty
+            || lastWeightLoad.map({ Date.now.timeIntervalSince($0) > 3600 }) ?? true {
+            weightHistory = (try? await health.bodyMassHistory(days: 365)) ?? weightHistory
+            lastWeightLoad = .now
+        }
+        lastRefreshed = .now
     }
 
     /// Load a browsed month that predates the trailing window, once —

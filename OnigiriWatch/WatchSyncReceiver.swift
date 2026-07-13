@@ -1,6 +1,5 @@
 import Foundation
 import WatchConnectivity
-import WidgetKit
 import OnigiriKit
 
 /// Receives the library + settings pushed from the iPhone and persists them
@@ -21,6 +20,11 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
 
     @MainActor
     private func apply(_ payload: SyncPayload) {
+        // The phone pushes on every foreground; most contexts change
+        // nothing a complication renders (or nothing at all). Reload the
+        // complication timelines — each a full HealthKit fan-out — only
+        // when a complication-relevant value actually changed.
+        let before = Self.complicationFingerprint()
         WatchSync.store(payload)
         // nil/.keep mean the data was missing or undecodable (version
         // skew) — hold on to the last good copy.
@@ -38,7 +42,32 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         case .clear: self.goal = nil
         case .keep: break
         }
-        WidgetCenter.shared.reloadAllTimelines()
+        if Self.complicationFingerprint() != before {
+            WidgetReloader.requestReload(kinds: WidgetKinds.watchAll)
+        }
+    }
+
+    /// Everything the complications render out of the synced context: the
+    /// goal, the water goal, the calorie-display style, the badge emoji,
+    /// the tracked-metric slots, and the sodium limit. Meal/food lists
+    /// deliberately excluded — no complication shows them.
+    @MainActor
+    private static func complicationFingerprint() -> Int {
+        let defaults = SharedStore.defaults
+        var hasher = Hasher()
+        hasher.combine(WatchSync.loadGoal())
+        hasher.combine(SharedStore.waterGoalOz)
+        hasher.combine(defaults.string(forKey: SharedStore.balanceStyleKey))
+        hasher.combine(defaults.string(forKey: SharedStore.rewardIconKey))
+        hasher.combine(SharedStore.sodiumLimitMg)
+        for key in WatchSync.trackedMetricKeys {
+            if WatchSync.trackedNumericKeys.contains(key) {
+                hasher.combine(defaults.double(forKey: key))
+            } else {
+                hasher.combine(defaults.string(forKey: key))
+            }
+        }
+        return hasher.finalize()
     }
 
     // MARK: - WCSessionDelegate

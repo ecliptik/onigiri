@@ -1,7 +1,7 @@
 import Foundation
+import OSLog
 import SwiftData
 import WatchConnectivity
-import WidgetKit
 import OnigiriKit
 
 /// Pushes the library + settings to the watch as the WatchConnectivity
@@ -9,7 +9,26 @@ import OnigiriKit
 final class PhoneSyncService: NSObject, WCSessionDelegate {
     static let shared = PhoneSyncService()
 
+    private static let log = Logger(subsystem: "com.ecliptik.Onigiri", category: "sync")
+
+    /// The WATCH context caps meals (the pages show ten, only the meal
+    /// picker browses further) to stay well under the application-context
+    /// size cap. The local App Group mirror stays uncapped — the widget
+    /// meal buttons and Shortcuts resolve meals from it, and a capped
+    /// mirror turned older meals into "no longer a saved meal" errors.
+    private static let maxSyncedMeals = 30
+
     private var onActivate: (@MainActor () -> Void)?
+
+    @MainActor private var pendingContext: ModelContext?
+    @MainActor private var pushTask: Task<Void, Never>?
+    /// Fingerprints of what was last mirrored locally / actually sent to
+    /// the watch — repeat pushes with nothing changed (every foreground,
+    /// chained Settings onChange handlers) skip the mirror write, widget
+    /// reload, and radio. Tracked separately: a send skipped because the
+    /// session wasn't ready yet must not suppress the retry.
+    @MainActor private var lastMirroredFingerprint: Int?
+    @MainActor private var lastSentFingerprint: Int?
 
     func activate(onActivate: @escaping @MainActor () -> Void) {
         guard WCSession.isSupported() else { return }
@@ -23,11 +42,41 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         }
     }
 
+    /// Coalesce bursts (Settings steppers, chained onChange handlers, a
+    /// foreground push racing a mutation's) into one push a second later.
+    @MainActor
+    func push(from context: ModelContext) {
+        pendingContext = context
+        guard pushTask == nil else { return }
+        pushTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            pushTask = nil
+            if let context = pendingContext {
+                pendingContext = nil
+                pushNow(from: context)
+            }
+        }
+    }
+
+    /// Run any pending push immediately. Call when the scene leaves the
+    /// foreground: a suspended (or terminated) process never runs the
+    /// sleeping debounce task, and the change would be silently dropped.
+    @MainActor
+    func flushNow() {
+        pushTask?.cancel()
+        pushTask = nil
+        if let context = pendingContext {
+            pendingContext = nil
+            pushNow(from: context)
+        }
+    }
+
     /// Snapshot meals, goal, and water settings; mirror them into the App
     /// Group defaults (the widget extension reads that — keeps SwiftData out
     /// of its memory-capped process), and send them to the watch if paired.
     @MainActor
-    func push(from context: ModelContext) {
+    private func pushNow(from context: ModelContext) {
         // Recency order everywhere, matching the phone Log sheet's sort —
         // the watch pages show the first ten of each list.
         let allMeals = ((try? context.fetch(FetchDescriptor<Meal>())) ?? [])
@@ -83,7 +132,13 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
                 return SharedStore.defaults.string(forKey: key).map { (key, $0) }
             }
         )
-        WatchSync.store(SyncPayload(
+        // Fingerprint the whole payload (SyncPayload is Hashable, so a
+        // future field can't be silently missed): pushes where nothing
+        // changed — every foreground, chained Settings onChange handlers —
+        // skip the mirror write, the widget reload, and the radio.
+        // In-memory fingerprints: the first push per launch always goes
+        // through, which doubles as recovery from a failed earlier send.
+        let mirrorPayload = SyncPayload(
             meals: meals,
             recentFoods: recentFoods,
             favorites: favorites,
@@ -96,31 +151,52 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
             rewardIcon: rewardIcon,
             trackedMetricSettings: trackedSettings,
             sodiumLimitMg: SharedStore.sodiumLimitMg
-        ))
-        // Widgets render from the mirror just written — every goal,
-        // settings, and library change lands here, so this is the one
-        // place a reload keeps them from going up to ~30 min stale.
-        WidgetCenter.shared.reloadAllTimelines()
+        )
+        let mirrorFingerprint = mirrorPayload.hashValue
+        if mirrorFingerprint != lastMirroredFingerprint {
+            lastMirroredFingerprint = mirrorFingerprint
+            WatchSync.store(mirrorPayload)
+            // Widgets render from the mirror just written — every goal,
+            // settings, and library change lands here, so this is the one
+            // place a reload keeps them from going up to ~30 min stale.
+            WidgetReloader.requestReloadAll()
+        }
 
+        // The send-side fingerprint latches only on a successful send: a
+        // push skipped here (session still activating, watch briefly
+        // unpaired) must retry when the next push comes around.
         guard WCSession.isSupported(),
               WCSession.default.activationState == .activated,
               WCSession.default.isPaired,
               WCSession.default.isWatchAppInstalled
         else { return }
-        try? WCSession.default.updateApplicationContext(WatchSync.makeContext(
-            meals: meals,
-            recentFoods: recentFoods,
-            favorites: favorites,
-            goal: goal,
-            waterServingOz: SharedStore.waterServingOz,
-            waterGoalOz: SharedStore.waterGoalOz,
-            balanceStyle: balanceStyle,
-            foodIcon: foodIcon,
-            waterIcon: waterIcon,
-            rewardIcon: rewardIcon,
-            trackedMetricSettings: trackedSettings,
-            sodiumLimitMg: SharedStore.sodiumLimitMg
-        ))
+        let contextMeals = Array(meals.prefix(Self.maxSyncedMeals))
+        var sendHasher = Hasher()
+        sendHasher.combine(mirrorPayload)
+        sendHasher.combine(contextMeals)
+        let sendFingerprint = sendHasher.finalize()
+        guard sendFingerprint != lastSentFingerprint else { return }
+        do {
+            try WCSession.default.updateApplicationContext(WatchSync.makeContext(
+                meals: contextMeals,
+                recentFoods: recentFoods,
+                favorites: favorites,
+                goal: goal,
+                waterServingOz: SharedStore.waterServingOz,
+                waterGoalOz: SharedStore.waterGoalOz,
+                balanceStyle: balanceStyle,
+                foodIcon: foodIcon,
+                waterIcon: waterIcon,
+                rewardIcon: rewardIcon,
+                trackedMetricSettings: trackedSettings,
+                sodiumLimitMg: SharedStore.sodiumLimitMg
+            ))
+            lastSentFingerprint = sendFingerprint
+        } catch {
+            // A payload-too-large here means the watch silently stops
+            // getting updates — it must at least be visible in the log.
+            Self.log.error("updateApplicationContext failed: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - WCSessionDelegate

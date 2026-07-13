@@ -25,6 +25,14 @@ final class TodayModel {
     /// Refreshes fire concurrently (task/appear/foreground/day swipes); only
     /// the newest may publish, or a slow old day overwrites the current one.
     private var refreshGeneration = 0
+    /// Completed-load stamps for the foreground gate: quick app switches
+    /// used to replay the full query set on every activation.
+    private var lastRefreshed: Date?
+    private var lastStaticLoad: Date?
+    /// The ToastCenter.healthWriteVersion this model last refreshed
+    /// against — a bump while backgrounded (widget button, watch log)
+    /// must beat the staleness gate.
+    private var seenHealthWriteVersion = 0
 
     var isToday: Bool { Calendar.current.isDateInToday(selectedDate) }
 
@@ -109,6 +117,28 @@ final class TodayModel {
         await refresh()
     }
 
+    /// Foreground (scenePhase) entry point: skip the query storm when the
+    /// data is fresh — unless the calendar day rolled over (which must
+    /// always re-anchor the view) or Health data changed while away
+    /// (widget button, watch log — `healthWriteVersion` moved). The
+    /// write-denied hint re-checks every time (a local status read).
+    func foregrounded(healthWriteVersion: Int) async {
+        healthWriteDenied = health.sharingDenied()
+        let now = Date.now
+        let dayRolled = lastRefreshed.map {
+            !Calendar.current.isDate($0, inSameDayAs: now)
+        } ?? true
+        let healthChanged = healthWriteVersion != seenHealthWriteVersion
+        if dayRolled || lastStaticLoad.map({ now.timeIntervalSince($0) > 300 }) ?? true {
+            await loadStatic()
+        }
+        if dayRolled || healthChanged
+            || lastRefreshed.map({ now.timeIntervalSince($0) > 30 }) ?? true {
+            seenHealthWriteVersion = healthWriteVersion
+            await refresh()
+        }
+    }
+
     /// Weight and average burn don't depend on the browsed day — loading
     /// them per chevron tap made day switching feel laggy. Fetched on
     /// start and on foregrounding instead.
@@ -127,6 +157,7 @@ final class TodayModel {
         // Re-checked on every foreground: the user may have just flipped
         // access in the Health app.
         healthWriteDenied = health.sharingDenied()
+        lastStaticLoad = .now
     }
 
     /// Day data only — fast enough that browsing feels immediate.
@@ -156,6 +187,7 @@ final class TodayModel {
                 loaded1 ?? slotSummaryValue(slot: 1, from: loadedSummary),
                 loaded2 ?? slotSummaryValue(slot: 2, from: loadedSummary),
             ]
+            lastRefreshed = .now
         } catch {
             guard generation == refreshGeneration else { return }
             // Transient read failures toast like every other transient

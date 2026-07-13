@@ -34,7 +34,6 @@ struct TodayView: View {
     // you want to inspect.
     @State private var collapsedSections: Set<FoodCategory> = Set(FoodCategory.allCases)
     @State private var waterCollapsed = true
-    @State private var isLoggingWater = false
     /// True while a log row is mid swipe-to-delete, so the day-paging
     /// swipe on the whole screen stands down.
     @State private var rowSwipeActive = false
@@ -276,19 +275,6 @@ struct TodayView: View {
                 }
                 consumeQuickLogRequest()
             }
-        }
-    }
-
-    /// Water logs into the browsed day (backfill included).
-    private func logWater(oz: Double) {
-        guard !isLoggingWater else { return }
-        isLoggingWater = true
-        Task {
-            defer { isLoggingWater = false }
-            await LogActions.logWater(
-                oz: oz,
-                date: DayBounds.logTimestamp(for: model.selectedDate)
-            )
         }
     }
 
@@ -588,40 +574,13 @@ struct TodayView: View {
 
     private var loggedSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // Food logging lives in the corner + pill; water keeps its
-            // capsule here (the tappable-metric experiment grew the
-            // gauge on tap — Micheal reverted it). Tap logs the default
-            // serving; long-press offers the other amounts.
+            // ALL logging lives behind the corner + pill now — water is
+            // the sheet's pinned top row (Micheal's final water home;
+            // widget/watch/app icon keep the 1-tap paths).
             HStack {
                 Text("Log")
                     .font(.sectionHeader)
                 Spacer()
-                Menu {
-                    ForEach([8.0, 12, 16, 20, 24, 32], id: \.self) { oz in
-                        Button("\(oz, format: .number.precision(.fractionLength(0))) oz") {
-                            logWater(oz: oz)
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "plus")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(Color.riceToast)
-                        WaterIconView(raw: waterIcon)
-                            .font(.title3)
-                    }
-                    .padding(.vertical, 8)
-                    .padding(.horizontal, 12)
-                    .glassEffect(.regular.interactive(), in: .capsule)
-                    .overlay(
-                        Capsule().strokeBorder(Color.riceToast.opacity(0.5), lineWidth: 1)
-                    )
-                } primaryAction: {
-                    logWater(oz: SharedStore.waterServingOz)
-                }
-                .buttonStyle(.plain)
-                .disabled(isLoggingWater)
-                .accessibilityLabel("Log \(SharedStore.waterServingOz.formatted(.number.precision(.fractionLength(0)))) ounces of water")
             }
             .padding(.horizontal)
 

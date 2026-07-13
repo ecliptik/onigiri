@@ -14,6 +14,8 @@ struct QuickLogSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.modelContext) private var context
+    @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
+    @State private var isLoggingWater = false
     @Query(sort: \Meal.name) private var meals: [Meal]
     @Query(sort: \Food.name) private var foods: [Food]
     @State private var kind: QuickActions.QuickLogKind = .foods
@@ -164,6 +166,37 @@ struct QuickLogSheet: View {
                         ProgressView()
                         Text("Looking up product…")
                             .foregroundStyle(.secondary)
+                    }
+                }
+                // Water leads the sheet, above Recent in every scope
+                // (Micheal moved it off Today's header — one + button,
+                // one place to log; widget/watch/app icon keep the
+                // 1-tap paths). Tap logs the default serving into the
+                // browsed day; long-press offers the other amounts.
+                if searchText.isEmpty {
+                    Section {
+                        Button {
+                            logWater(oz: SharedStore.waterServingOz)
+                        } label: {
+                            HStack(spacing: 10) {
+                                WaterIconView(raw: waterIcon)
+                                Text("Log Water")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Text("\(SharedStore.waterServingOz, format: .number.precision(.fractionLength(0))) oz")
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                            }
+                        }
+                        .disabled(isLoggingWater)
+                        .contextMenu {
+                            ForEach([8.0, 12, 16, 20, 24, 32], id: \.self) { oz in
+                                Button("\(oz, format: .number.precision(.fractionLength(0))) oz") {
+                                    logWater(oz: oz)
+                                }
+                            }
+                        }
+                        .accessibilityLabel("Log \(SharedStore.waterServingOz.formatted(.number.precision(.fractionLength(0)))) ounces of water")
                     }
                 }
                 if !searchText.isEmpty || kind == .favorites {
@@ -489,6 +522,17 @@ struct QuickLogSheet: View {
             nutrients: item.nutrients, serving: item.isHistory ? "as last logged" : item.detail,
             defaultCategory: PortionTarget.category(from: item.category)
         )
+    }
+
+    /// Water into the browsed day (backfill included), staying open
+    /// like every other log here.
+    private func logWater(oz: Double) {
+        guard !isLoggingWater else { return }
+        isLoggingWater = true
+        Task {
+            defer { isLoggingWater = false }
+            await LogActions.logWater(oz: oz, date: logDate)
+        }
     }
 
     /// Logs and STAYS OPEN — the toast confirms, and an ad-hoc

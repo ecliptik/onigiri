@@ -82,12 +82,18 @@ final class OnigiriUITests: XCTestCase {
             app.staticTexts["24 / 64 oz water"].waitForExistence(timeout: 10),
             "Seeded water total should show in the hydration row"
         )
+        // Water logs from the Log sheet's pinned top row now.
+        switchTab(in: app, to: "Add")
         let waterButton = app.buttons["Log 12 ounces of water"]
-        XCTAssertTrue(waterButton.waitForExistence(timeout: 10), "Today should show the +water button")
+        XCTAssertTrue(waterButton.waitForExistence(timeout: 10),
+                      "Log sheet should pin the water row on top")
         waterButton.tap()
+        let waterDone = app.buttons["Done"]
+        XCTAssertTrue(waterDone.waitForExistence(timeout: 5))
+        waterDone.tap()
         XCTAssertTrue(
             app.staticTexts["36 / 64 oz water"].waitForExistence(timeout: 10),
-            "Hydration total should update after the one-tap log"
+            "Hydration total should update after the water log"
         )
 
         // The meter grid drills into the day's full nutrient breakdown,

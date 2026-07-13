@@ -29,11 +29,12 @@ re-deploy required (free team, 7-day provisioning).
 
 ## The pool (unordered, unpromised)
 
-1. **First-run onboarding.** There is none: a new user gets the Health
-   sheet and empty states. A guided sequence — welcome → Health access
-   with context → goal weight/target date → water goal / tracked
-   metrics → done — would front-load what's currently discovered by
-   wandering. (Micheal raised it 2026-07-12.)
+1. **First-run onboarding — SHIPPED 2026-07-12** (9af0b4f): five
+   swipeable pages (welcome → Health with context → goal → water →
+   done), every step skippable, existing installs auto-flagged past it.
+   No in-app preview (Micheal: not needed) — the walkthrough test's
+   screenshots are the review. The Goal empty-state item below is
+   softened by this but not eliminated.
 
 2. **Paid developer account question.** iCloud/CloudKit sync and
    TestFlight distribution both hang on this; free-team provisioning

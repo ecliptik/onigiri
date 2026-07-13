@@ -150,15 +150,26 @@ public struct OpenFoodFactsClient: Sendable {
     /// Both endpoints match loosely ("roasted potatoes" surfaces "honey
     /// roasted oats"), so results re-rank client-side: whole-phrase
     /// matches first, then by how many query words the name contains,
-    /// keeping the server's order for ties.
+    /// keeping the server's order for ties. Brands count too — the
+    /// server matches them ("Kirkland", "McDonald's"), and scoring only
+    /// the name buried a brand's own products under name-word
+    /// coincidences — but at a lower weight, so food words in the NAME
+    /// still dominate.
     static func rank(_ results: [SearchResult], query: String) -> [SearchResult] {
         let phrase = query.lowercased().trimmingCharacters(in: .whitespaces)
         let words = phrase.split(separator: " ").map(String.init)
         guard !words.isEmpty else { return results }
         func score(_ result: SearchResult) -> Int {
             let name = result.name.lowercased()
+            let brand = result.brand?.lowercased() ?? ""
             var value = words.count { name.contains($0) } * 10
-            if name.contains(phrase) { value += 100 }
+            // A word already credited to the name doesn't double-dip.
+            value += words.count { !name.contains($0) && brand.contains($0) } * 5
+            if name.contains(phrase) {
+                value += 100
+            } else if brand.contains(phrase) {
+                value += 40
+            }
             return value
         }
         return results.enumerated()

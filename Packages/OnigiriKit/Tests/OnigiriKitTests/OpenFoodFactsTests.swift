@@ -146,6 +146,39 @@ struct OpenFoodFactsTests {
         #expect(ranked.map(\.name) == ["Roasted A", "Roasted B", "Roasted C"])
     }
 
+    @Test func rankCountsBrandMatchesBelowNameMatches() {
+        func result(_ name: String, _ brand: String?) -> OpenFoodFactsClient.SearchResult {
+            .init(barcode: name, name: name, brand: brand)
+        }
+        // "kirkland almond butter": the Kirkland-branded "Almond Butter"
+        // (2 name words + brand word) must beat a generic almond butter
+        // (2 name words, no brand), and a name containing the brand word
+        // outranks both via the name weight.
+        let ranked = OpenFoodFactsClient.rank([
+            result("Almond Butter", nil),
+            result("Almond Butter", "Kirkland Signature"),
+            result("Kirkland Almond Butter", nil),
+        ], query: "kirkland almond butter")
+        #expect(ranked[0].name == "Kirkland Almond Butter")
+        #expect(ranked[1].brand == "Kirkland Signature")
+        #expect(ranked[2].brand == nil)
+
+        // A pure brand query surfaces the brand's products at all.
+        let brandOnly = OpenFoodFactsClient.rank([
+            result("Fries", nil),
+            result("French Fries", "McDonald's"),
+        ], query: "mcdonalds")
+        // "mcdonalds" (no apostrophe) isn't contained in "mcdonald's" —
+        // ranking can't fix spelling, server order stands.
+        #expect(brandOnly.count == 2)
+
+        let brandExact = OpenFoodFactsClient.rank([
+            result("Fries", nil),
+            result("French Fries", "McDonald's"),
+        ], query: "mcdonald's")
+        #expect(brandExact[0].brand == "McDonald's")
+    }
+
     @Test func parsesSaturatedTransFatAndCholesterol() throws {
         let json = """
         {"status":1,"product":{"product_name":"Butter","serving_size":"1 tbsp",

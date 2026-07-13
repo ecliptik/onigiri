@@ -362,8 +362,14 @@ struct OnlineResultsSection: View {
                 Button {
                     Task { await search.search(query) }
                 } label: {
-                    Label("Search online for “\(query.trimmingCharacters(in: .whitespaces))”",
-                          systemImage: "magnifyingglass")
+                    // Names the source the NEXT search will hit (the
+                    // current setting), which can differ from what the
+                    // rows below came from — that's the point: the
+                    // button re-searches under the new setting.
+                    Label(
+                        "Search \(SharedStore.usesFDCTextSearch ? "FoodData Central" : "OpenFoodFacts") for “\(query.trimmingCharacters(in: .whitespaces))”",
+                        systemImage: "magnifyingglass"
+                    )
                 }
             }
             if let message = search.message {

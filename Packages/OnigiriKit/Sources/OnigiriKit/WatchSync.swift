@@ -71,6 +71,9 @@ public struct SyncPayload: Sendable {
     /// The phone's most recently used foods, SyncedMeal-shaped so the
     /// watch logs them through the same one-tap path. nil = keep.
     public let recentFoods: [SyncedMeal]?
+    /// Favorite foods and meals by recency — the watch's Favorites page
+    /// mirrors the phone Log sheet's scope. nil = keep.
+    public let favorites: [SyncedMeal]?
     public let goal: GoalUpdate
     public let waterServingOz: Double?
     public let waterGoalOz: Double?
@@ -88,6 +91,7 @@ public struct SyncPayload: Sendable {
     public init(
         meals: [SyncedMeal]?,
         recentFoods: [SyncedMeal]? = nil,
+        favorites: [SyncedMeal]? = nil,
         goal: GoalUpdate,
         waterServingOz: Double?,
         waterGoalOz: Double?,
@@ -100,6 +104,7 @@ public struct SyncPayload: Sendable {
     ) {
         self.meals = meals
         self.recentFoods = recentFoods
+        self.favorites = favorites
         self.goal = goal
         self.waterServingOz = waterServingOz
         self.waterGoalOz = waterGoalOz
@@ -117,6 +122,7 @@ public struct SyncPayload: Sendable {
 public enum WatchSync {
     static let mealsKey = "sync.meals"
     static let recentFoodsKey = "sync.recentFoods"
+    static let favoritesKey = "sync.favorites"
     static let goalKey = "sync.goal"
     static let trackedKey = "sync.trackedMetrics"
 
@@ -141,6 +147,7 @@ public enum WatchSync {
     public static func makeContext(
         meals: [SyncedMeal],
         recentFoods: [SyncedMeal] = [],
+        favorites: [SyncedMeal] = [],
         goal: SyncedGoal?,
         waterServingOz: Double,
         waterGoalOz: Double,
@@ -167,6 +174,9 @@ public enum WatchSync {
         if let data = try? JSONEncoder().encode(recentFoods) {
             context[recentFoodsKey] = data
         }
+        if let data = try? JSONEncoder().encode(favorites) {
+            context[favoritesKey] = data
+        }
         if let goal, let data = try? JSONEncoder().encode(goal) {
             context[goalKey] = data
         }
@@ -187,9 +197,12 @@ public enum WatchSync {
         }
         let recentFoods: [SyncedMeal]? = (context[recentFoodsKey] as? Data)
             .flatMap { try? JSONDecoder().decode([SyncedMeal].self, from: $0) }
+        let favorites: [SyncedMeal]? = (context[favoritesKey] as? Data)
+            .flatMap { try? JSONDecoder().decode([SyncedMeal].self, from: $0) }
         return SyncPayload(
             meals: meals,
             recentFoods: recentFoods,
+            favorites: favorites,
             goal: goal,
             waterServingOz: context[SharedStore.waterServingKey] as? Double,
             waterGoalOz: context[SharedStore.waterGoalKey] as? Double,
@@ -209,6 +222,9 @@ public enum WatchSync {
         }
         if let recents = payload.recentFoods, let data = try? JSONEncoder().encode(recents) {
             defaults.set(data, forKey: recentFoodsKey)
+        }
+        if let favorites = payload.favorites, let data = try? JSONEncoder().encode(favorites) {
+            defaults.set(data, forKey: favoritesKey)
         }
         switch payload.goal {
         case .set(let goal):
@@ -259,6 +275,11 @@ public enum WatchSync {
 
     public static func loadRecentFoods() -> [SyncedMeal] {
         guard let data = SharedStore.defaults.data(forKey: recentFoodsKey) else { return [] }
+        return (try? JSONDecoder().decode([SyncedMeal].self, from: data)) ?? []
+    }
+
+    public static func loadFavorites() -> [SyncedMeal] {
+        guard let data = SharedStore.defaults.data(forKey: favoritesKey) else { return [] }
         return (try? JSONDecoder().decode([SyncedMeal].self, from: data)) ?? []
     }
 

@@ -100,7 +100,7 @@ public enum ReminderPlanner {
                 planned.append(PlannedReminder(
                     kind: .water, fireDate: fire,
                     title: "Water check-in",
-                    body: "You're at \(Int(state.waterOz)) of \(Int(state.waterGoalOz)) oz — time for water."
+                    body: "You're at \(Int(state.waterOz)) of \(Int(state.waterGoalOz)) oz."
                 ))
             }
         }
@@ -128,14 +128,14 @@ public enum ReminderPlanner {
         PlannedReminder(
             kind: .meals, fireDate: fire,
             title: "Nothing logged yet",
-            body: "Log your meals to keep today's balance correct."
+            body: "Log your meals to keep today's balance up to date."
         )
     }
 
     private static func streakWarning(at fire: Date, streak: Int) -> PlannedReminder {
         PlannedReminder(
             kind: .streak, fireDate: fire,
-            title: "Streak on the line",
+            title: "Keep your streak going",
             body: "Your \(streak)-day streak ends at midnight — log your day."
         )
     }

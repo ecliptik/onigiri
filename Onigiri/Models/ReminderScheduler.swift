@@ -122,9 +122,9 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
             guard await requestPermission() else { return }
             let center = UNUserNotificationCenter.current()
             let samples: [(PlannedReminder.Kind, String, String)] = [
-                (.meals, "Nothing logged yet", "Log your meals to keep today's balance honest."),
-                (.water, "Water check-in", "You're at 12 of 64 oz — time for water."),
-                (.streak, "Streak on the line", "Your 3-day streak ends at midnight — log your day."),
+                (.meals, "Nothing logged yet", "Log your meals to keep today's balance up to date."),
+                (.water, "Water check-in", "You're at 12 of 64 oz."),
+                (.streak, "Keep your streak going", "Your 3-day streak ends at midnight — log your day."),
             ]
             for (index, sample) in samples.enumerated() {
                 let content = UNMutableNotificationContent()

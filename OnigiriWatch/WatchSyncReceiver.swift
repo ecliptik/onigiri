@@ -9,6 +9,7 @@ import OnigiriKit
 final class WatchSyncReceiver: NSObject, WCSessionDelegate {
     private(set) var meals: [SyncedMeal] = WatchSync.loadMeals()
     private(set) var recentFoods: [SyncedMeal] = WatchSync.loadRecentFoods()
+    private(set) var favorites: [SyncedMeal] = WatchSync.loadFavorites()
     private(set) var goal: SyncedGoal? = WatchSync.loadGoal()
 
     func activate() {
@@ -28,6 +29,9 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         }
         if let recents = payload.recentFoods {
             self.recentFoods = recents
+        }
+        if let favorites = payload.favorites {
+            self.favorites = favorites
         }
         switch payload.goal {
         case .set(let goal): self.goal = goal

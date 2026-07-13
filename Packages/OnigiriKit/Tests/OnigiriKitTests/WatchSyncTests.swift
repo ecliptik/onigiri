@@ -35,16 +35,18 @@ struct WatchSyncTests {
 
     @Test func recentFoodsAndGoalModeRoundTrip() {
         let recents = [SyncedMeal(id: UUID(), name: "Banana", kcal: 105, sodiumMg: 1)]
+        let favorites = [SyncedMeal(id: UUID(), name: "Protein shake", kcal: 180, sodiumMg: 230)]
         let goal = SyncedGoal(
             targetWeightLb: 170, targetDate: .distantFuture,
             fallbackCurrentWeightLb: nil, mode: GoalMode.maintain
         )
         let context = WatchSync.makeContext(
-            meals: [], recentFoods: recents, goal: goal,
+            meals: [], recentFoods: recents, favorites: favorites, goal: goal,
             waterServingOz: 12, waterGoalOz: 64
         )
         let payload = WatchSync.parse(context)
         #expect(payload.recentFoods == recents)
+        #expect(payload.favorites == favorites)
         guard case .set(let synced) = payload.goal else {
             Issue.record("goal did not round-trip")
             return

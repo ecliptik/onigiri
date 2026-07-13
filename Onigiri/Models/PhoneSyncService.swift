@@ -28,20 +28,36 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
     /// of its memory-capped process), and send them to the watch if paired.
     @MainActor
     func push(from context: ModelContext) {
-        let meals = ((try? context.fetch(FetchDescriptor<Meal>(sortBy: [SortDescriptor(\.name)]))) ?? [])
-            .map { SyncedMeal(
-                id: $0.uuid, name: $0.name, kcal: $0.totalKcal, sodiumMg: $0.totalSodiumMg,
-                category: $0.category, nutrients: $0.totalNutrients
-            ) }
-        // The watch's "Recent foods" — the same pure-recency order as the
-        // phone's Log sheet, capped small (the watch list is a glance).
-        let recentFoods = ((try? context.fetch(FetchDescriptor<Food>())) ?? [])
+        // Recency order everywhere, matching the phone Log sheet's sort —
+        // the watch pages show the first ten of each list.
+        let allMeals = ((try? context.fetch(FetchDescriptor<Meal>())) ?? [])
             .sorted { $0.recencyDate > $1.recencyDate }
-            .prefix(6)
-            .map { SyncedMeal(
-                id: UUID(), name: $0.name, kcal: $0.kcal, sodiumMg: $0.sodiumMg,
-                category: $0.category, nutrients: $0.nutrients
-            ) }
+        let allFoods = ((try? context.fetch(FetchDescriptor<Food>())) ?? [])
+            .sorted { $0.recencyDate > $1.recencyDate }
+        let meals = allMeals.map { SyncedMeal(
+            id: $0.uuid, name: $0.name, kcal: $0.totalKcal, sodiumMg: $0.totalSodiumMg,
+            category: $0.category, nutrients: $0.totalNutrients
+        ) }
+        let recentFoods = allFoods.prefix(10).map { SyncedMeal(
+            id: UUID(), name: $0.name, kcal: $0.kcal, sodiumMg: $0.sodiumMg,
+            category: $0.category, nutrients: $0.nutrients
+        ) }
+        // Favorites mix meals and foods like the phone's Favorites scope,
+        // interleaved by recency before the cap.
+        let favorites = (
+            allMeals.filter(\.isFavorite).map { meal in
+                (meal.recencyDate, SyncedMeal(
+                    id: meal.uuid, name: meal.name, kcal: meal.totalKcal, sodiumMg: meal.totalSodiumMg,
+                    category: meal.category, nutrients: meal.totalNutrients
+                ))
+            }
+            + allFoods.filter(\.isFavorite).map { food in
+                (food.recencyDate, SyncedMeal(
+                    id: UUID(), name: food.name, kcal: food.kcal, sodiumMg: food.sodiumMg,
+                    category: food.category, nutrients: food.nutrients
+                ))
+            }
+        ).sorted { $0.0 > $1.0 }.prefix(10).map(\.1)
         let goal = ((try? context.fetch(FetchDescriptor<GoalSettings>())) ?? []).first
             .map { SyncedGoal(
                 targetWeightLb: $0.targetWeightLb,
@@ -70,6 +86,7 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         WatchSync.store(SyncPayload(
             meals: meals,
             recentFoods: recentFoods,
+            favorites: favorites,
             goal: goal.map(GoalUpdate.set) ?? .clear,
             waterServingOz: SharedStore.waterServingOz,
             waterGoalOz: SharedStore.waterGoalOz,
@@ -93,6 +110,7 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         try? WCSession.default.updateApplicationContext(WatchSync.makeContext(
             meals: meals,
             recentFoods: recentFoods,
+            favorites: favorites,
             goal: goal,
             waterServingOz: SharedStore.waterServingOz,
             waterGoalOz: SharedStore.waterGoalOz,

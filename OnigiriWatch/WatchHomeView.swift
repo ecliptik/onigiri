@@ -119,12 +119,27 @@ struct WatchHomeView: View {
     }
 }
 
-/// Synced meals and the phone's recent foods, one tap to log.
+/// The watch Log picker: a quick first page (meals + recent foods, the
+/// original), then Foods / Meals / Favorites pages mirroring the phone
+/// Log sheet's scopes — each the ten most recent, one tap to log.
 struct MealPickerView: View {
     let model: WatchModel
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        TabView {
+            quickPage
+            scopePage("Foods", items: model.sync.recentFoods,
+                      empty: "Foods you log on your iPhone appear here.")
+            scopePage("Meals", items: Array(model.sync.meals.prefix(10)),
+                      empty: "Save meals on your iPhone and they'll appear here.")
+            scopePage("Favorites", items: model.sync.favorites,
+                      empty: "Favorites from your iPhone appear here.")
+        }
+    }
+
+    /// The original combined page — the fast path stays page one.
+    private var quickPage: some View {
         NavigationStack {
             List {
                 if model.sync.meals.isEmpty && model.sync.recentFoods.isEmpty {
@@ -132,11 +147,7 @@ struct MealPickerView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-                if model.flashIsError, let flash = model.flash {
-                    Text(flash)
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
-                }
+                errorRow
                 if !model.sync.meals.isEmpty {
                     Section(model.sync.recentFoods.isEmpty ? "" : "Meals") {
                         ForEach(model.sync.meals) { meal in
@@ -147,14 +158,41 @@ struct MealPickerView: View {
                 // The phone's most recently logged foods — one serving,
                 // one tap, same path as meals.
                 if !model.sync.recentFoods.isEmpty {
+                    // Six here as before — the Foods page has the full ten.
                     Section("Recent foods") {
-                        ForEach(model.sync.recentFoods) { food in
+                        ForEach(model.sync.recentFoods.prefix(6).map { $0 }) { food in
                             logRow(food)
                         }
                     }
                 }
             }
             .navigationTitle("Log")
+        }
+    }
+
+    private func scopePage(_ title: String, items: [SyncedMeal], empty: String) -> some View {
+        NavigationStack {
+            List {
+                if items.isEmpty {
+                    Text(empty)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                errorRow
+                ForEach(items) { item in
+                    logRow(item)
+                }
+            }
+            .navigationTitle(title)
+        }
+    }
+
+    @ViewBuilder
+    private var errorRow: some View {
+        if model.flashIsError, let flash = model.flash {
+            Text(flash)
+                .font(.footnote)
+                .foregroundStyle(.orange)
         }
     }
 

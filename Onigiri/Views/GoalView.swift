@@ -77,7 +77,7 @@ struct GoalView: View {
                     .pickerStyle(.segmented)
                 } footer: {
                     if isMaintenance {
-                        Text("Your daily budget is your average burn — eat within it to hold steady. Any deficit earns the day's badge.")
+                        Text("To hold steady, eat within your average daily burn. Any deficit earns the day's badge.")
                     }
                 }
 
@@ -178,7 +178,7 @@ struct GoalView: View {
                             confirmingGoalRemoval = true
                         }
                     } footer: {
-                        Text("Without a goal, any deficit earns the day's badge.")
+                        Text("If no goal is set, any deficit earns a daily badge.")
                     }
                 }
             }

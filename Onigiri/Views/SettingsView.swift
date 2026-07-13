@@ -113,22 +113,15 @@ struct SettingsView: View {
                     .keyboardType(.asciiCapable)
                     .font(.callout.monospaced())
                 if fdcAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("An API key is required to use the USDA FoodData Central")
-                            .foregroundStyle(.orange)
-                        Text("[fdc.nal.usda.gov/api-guide](https://fdc.nal.usda.gov/api-guide)")
-                    }
-                    .font(.footnote)
+                    Text("An API key is required to use the USDA FoodData Central, go to [fdc.nal.usda.gov/api-guide](https://fdc.nal.usda.gov/api-guide) to request a key")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
                 }
             }
         } header: {
             Text("Online Database")
         } footer: {
-            if textSearchSource == SharedStore.textSearchSourceFDC {
-                Text("Barcode scans always use OpenFoodFacts. USDA FoodData Central requires a free API key from [api.data.gov](https://api.data.gov).")
-            } else {
-                Text("Barcode scans always use OpenFoodFacts.")
-            }
+            Text("[OpenFoodFacts](https://world.openfoodfacts.org) is used for Barcode scans")
         }
     }
 

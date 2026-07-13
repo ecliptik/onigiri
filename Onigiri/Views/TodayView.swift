@@ -60,7 +60,7 @@ struct TodayView: View {
         var title: String {
             switch self {
             case .food(let entry): "Delete “\(entry.name)”?"
-            case .water(let entry): "Delete the \(Int(entry.oz)) oz water entry?"
+            case .water(let entry): "Delete the \(entry.oz.formatted(.number.precision(.fractionLength(0)))) oz water entry?"
             }
         }
     }
@@ -428,7 +428,7 @@ struct TodayView: View {
             }
             .frame(width: 190, height: 190)
             .accessibilityElement(children: .combine)
-            .accessibilityValue("\(Int(eaten * 100)) percent of today's budget eaten")
+            .accessibilityValue("\((eaten * 100).formatted(.number.precision(.fractionLength(0)))) percent of today's budget eaten")
         } else {
             balanceHeadline
         }
@@ -696,7 +696,7 @@ struct TodayView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isLoggingWater)
-                .accessibilityLabel("Log \(Int(SharedStore.waterServingOz)) ounces of water")
+                .accessibilityLabel("Log \(SharedStore.waterServingOz.formatted(.number.precision(.fractionLength(0)))) ounces of water")
             }
             .padding(.horizontal)
 
@@ -746,7 +746,7 @@ struct TodayView: View {
         }
         .buttonStyle(.plain)
         .padding(.horizontal)
-        .accessibilityLabel("Water, \(Int(model.summary.waterOz)) ounces, \(waterCollapsed ? "collapsed" : "expanded")")
+        .accessibilityLabel("Water, \(model.summary.waterOz.formatted(.number.precision(.fractionLength(0)))) ounces, \(waterCollapsed ? "collapsed" : "expanded")")
 
         if !waterCollapsed {
             ForEach(model.waterLog) { entry in
@@ -764,7 +764,7 @@ struct TodayView: View {
                 .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
                 .logRowSwipeActions(
                     active: $rowSwipeActive,
-                    itemName: "\(Int(entry.oz)) ounce entry"
+                    itemName: "\(entry.oz.formatted(.number.precision(.fractionLength(0)))) ounce entry"
                 ) {
                     pendingLogDelete = .water(entry)
                 }
@@ -809,7 +809,7 @@ struct TodayView: View {
         }
         .buttonStyle(.plain)
         .padding(.horizontal)
-        .accessibilityLabel("\(category.rawValue), \(Int(total)) kcal, \(isCollapsed ? "collapsed" : "expanded")")
+        .accessibilityLabel("\(category.rawValue), \(total.formatted(.number.precision(.fractionLength(0)))) kcal, \(isCollapsed ? "collapsed" : "expanded")")
 
         if !isCollapsed {
             ForEach(entries) { entry in
@@ -1085,7 +1085,7 @@ struct DailyGoalCard: View {
                 HStack(spacing: 6) {
                     Text("Daily goal")
                         .font(.headline)
-                    Text("\(Int((max(0, min(1, progress))) * 100))%")
+                    Text("\(((max(0, min(1, progress))) * 100).formatted(.number.precision(.fractionLength(0))))%")
                         .font(.headline)
                         .foregroundStyle(progress >= 1 ? Color.green : Color.secondary)
                 }

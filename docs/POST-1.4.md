@@ -1,0 +1,342 @@
+# Onigiri — post-1.3.5 polish plan
+
+Written at the v1.3.5 tag (2026-07-12), from a full seven-angle review:
+onboarding, the logging loop, goals/settings, history/calendar, watch +
+widgets, a style-consistency audit, and a dedicated bug sweep. Read
+`CLAUDE.md` first (build/deploy/test mechanics, landmines) and
+`docs/PLAN.md` for design history. The rhythm: fix → test (package +
+affected UI tests on ERASED sims) → commit → push → deploy to phone AND
+watch → say exactly what to verify on device.
+
+What the review did NOT find: crashes in normal use, softlocked
+onboarding, day-bounds/DST bugs, silent HealthKit failures on the phone
+(everything funnels through `LogActions` with toast+haptic+undo), or
+divergent goal math between surfaces. The core loop is sound — water is
+one tap, backfill is first-class, undo works. The items below are the
+gap between "works" and "polished".
+
+## Tier 1 — bugs & softlocks — ALL SHIPPED 2026-07-12 (same session as this doc)
+
+All eight landed together: write-then-delete edits (undo restores before
+deleting, with a rollback if the original's delete fails), the search
+generation counter (also fixes a resubmit-same-query race the string
+compare couldn't see), the `followsToday` intent flag, the portion
+clamp + every HealthKit-fed `Int(Double)` cast swapped to `formatted()`
+(which also fixed Tier 6 #35's "12000 vs 12,000" for free), the
+`MealItem.meal` inverse with package tests covering the trap scenario,
+QuickLogSheet's single enum sheet slot, GoalView's confirmed Remove
+Goal row (plus `ReminderScheduler.replan()` on save — Tier 2 #9's
+scheduling half), and the meal-intent name fallback + thrown error.
+Bonus: `PhoneSyncService.push` now reloads widget timelines, closing
+Tier 2 #14's main gap at the choke point.
+
+1. **Edit-entry can lose the entry** — `Feedback.swift:130-152`.
+   `editFoodEntry` deletes the original HealthKit correlation, THEN
+   writes the replacement; a write failure after the delete loses the
+   entry with only a "Couldn't update" toast. The undo closure has the
+   same delete-first shape with a `try?` re-log. Fix: write-then-delete
+   in both directions, and toast if restoration fails.
+
+2. **Online-search paging softlock** — `OnlineResults.swift:71-94`.
+   `loadMore()`'s superseded-query guard returns before resetting
+   `isLoadingMore`; a new search submitted while page 2 is in flight
+   leaves a permanent "Searching…" row and paging dead until the field
+   passes through empty (the Foods tab's search object is long-lived).
+   Fix: reset `isLoadingMore` unconditionally; same hygiene for
+   `isSearching`.
+
+3. **Today never rolls past midnight** — `TodayModel.swift:106-110`.
+   The roll-forward branch is gated on `isToday`, which is already
+   false once the date changes — dead code. App open (or resumed)
+   across midnight stays on yesterday, and a quick log then gets the
+   backfill noon-of-yesterday timestamp: food eaten after midnight
+   lands on the wrong day at a fabricated time. Fix: track "following
+   today" intent (cleared only by explicit day navigation) instead of
+   comparing dates.
+
+4. **Unbounded portion quantity can trap** — `FoodsView` PortionSheet
+   quantity `TextField` bypasses the stepper's 0.01…100 clamp; an
+   absurd typed value (e.g. `1e18`) logs an entry whose kcal overflow
+   `Int(Double)` casts in row/accessibility labels and crash-loops the
+   Today tab until the entry is deleted in Health. Fix: clamp on
+   commit; audit `Int(…)` casts on HealthKit-sourced doubles.
+
+5. **`Meal.items` violates the inverse rule** — `LibraryModels.swift:121`,
+   `MealFormView.swift:127-128`. No inverse on the cascade
+   relationship, and MealFormView deletes old items before unlinking —
+   the exact preconditions of the documented "backing data could no
+   longer be found" process-kill; currently safe only because every
+   call site happens to detach first. Fix: add the `MealItem.meal`
+   inverse; unlink before delete.
+
+6. **QuickLogSheet stacks five chained `.sheet`s** —
+   `QuickLogSheet.swift:246-271`. The documented landmine class TodayView
+   was refactored away from. Concrete casualty: scanning a barcode
+   already in the library sets `portionTarget` while the scanner sheet
+   is still dismissing, so the portion sheet can silently fail to
+   appear — the scan is eaten. Fix: consolidate into one enum-driven
+   `.sheet(item:)`.
+
+7. **A goal can never be removed** — `GoalView.swift:272-288`. No
+   delete path exists anywhere (`GoalUpdate.clear` in the sync layer is
+   unreachable). Hitting the target or quitting the diet leaves the
+   deficit budget, gauge, and streak judging active forever. Fix:
+   destructive "Remove Goal" row (confirmed) that deletes
+   `GoalSettings`, pushes sync, replans reminders, reloads widgets.
+
+8. **Widget meal button can silently no-op** — `LogIntents.swift:32-44`.
+   A configured meal deleted/re-created on the phone leaves the widget
+   button live but doing nothing (`return .result()` on lookup miss),
+   and neither intent checks Health write authorization — a widget
+   added before first launch "logs" nothing, no feedback. Fix: throw a
+   user-visible error on lookup miss and on auth failure.
+
+## Tier 2 — correctness worth fixing soon
+
+9. **Streak reminders judge today wrong** — `ReminderScheduler.swift:77-87`.
+   `todayGoalMet` is computed from `earnedDays`, which excludes today
+   by design, so it is constitutionally false: the 8 PM "streak on the
+   line" warning fires even when today is already banked, and the
+   tomorrow-pre-plan branch in `ReminderPlanner` is dead code. Also
+   passes no `untrackedBelowKcal`, so the reminder's streak length can
+   disagree with the Calendar tab's. Fix: judge today live from the
+   plan summary; pass the shared threshold.
+
+10. **Calendar slot totals race + error-as-zero** —
+    `CalendarView.swift:306-314`. `loadSlotTotals` lacks the generation
+    guard its sibling has (fast day-swiping can display a previous
+    day's protein next to the current day's calories) and renders a
+    failed read as "0 mg" instead of "—". Fix: fold into
+    `loadDaySummary` under `summaryGeneration`; keep nil on error.
+
+11. **The 92-day data cliff** — `CalendarModel.swift:26`,
+    `HealthKitService.swift:215`. Months older than ~3 months render
+    half-empty: every day "goal not met" (VoiceOver says so too), day
+    cards show "—", Month Detail says "Days tracked: 0" beside real
+    foods-logged/water numbers queried directly. Fix: fetch totals for
+    the displayed month on demand, or stop paging at the horizon with
+    "History starts <date>".
+
+12. **Past days are judged against today's goal** —
+    `CalendarModel.swift:24-37`, `DayNutritionView.swift:11-12`. The
+    deficit target recomputes from current weight/date/burn and applies
+    retroactively — losing weight or editing the goal silently rewrites
+    which past days earned an onigiri; streaks shrink overnight with no
+    entry changing. Real fix: snapshot the day's target when the day
+    closes. Stopgap: label history cards "vs current goal".
+
+13. **Import silently overwrites goal + water settings** —
+    `LibraryTransfer.swift:81-95`. Foods/meals import additively, but a
+    restore quietly regresses the goal to a stale target date (which
+    can then demand a huge daily deficit). Fix: confirm or opt-in the
+    goal/water portion; name it in the result message. Also: export
+    failures are completely silent (`try?` at `SettingsView.swift:103-106`)
+    and the import summary hides name-matched skips ("Imported 0 foods ✓"
+    after restoring a full backup reads as failure).
+
+14. **Settings changes leave widgets stale — choke-point reload SHIPPED
+    2026-07-12** (`PhoneSyncService.push` now calls
+    `WidgetCenter.reloadAllTimelines()`). Still open from this item:
+    widget timelines never cut at midnight (yesterday's balance shows
+    into the new day; add a zeroed midnight entry), and gallery
+    snapshots ignore `context.isPreview` so the picker shows zeros
+    instead of the flattering placeholder. Also spotted while building:
+    the widget appex's CFBundleShortVersionString is stuck at 1.0 vs
+    the app's 1.3.5 (xcodebuild warns) — sync it in project.yml.
+
+15. **GoalView saves goals onboarding would reject** —
+    `GoalView.swift:28-34` vs `OnboardingView.swift:217-221`. Target ≥
+    current weight saves silently; the plan section just vanishes and
+    `DailyPlanLoader` renders a full gauge. Onboarding has the inverse
+    bugs: re-saving after a back-swipe no-ops under a button that says
+    "Save Goal" (`saveGoalIfValid` guards on `goals.isEmpty`), an
+    invalid target shows "No goal set" copy, and a goal can save with
+    NO current weight at all — a half-state GoalView then can't edit
+    (Save stays disabled). Fix: one shared upsert + validation for both
+    surfaces, with inline "target must be below current weight" copy.
+
+## Tier 3 — daily-loop friction (highest UX value per hour)
+
+16. **Delete should be one swipe + undo, not four gestures + alert.**
+    `TodayView.swift:243-262`. The safety models are inverted: a cheap
+    accidental log gets an Undo toast; delete gets a modal claiming
+    "This can't be undone" — false, re-logging the captured values is
+    exactly what edit-undo already does. Drop the alert, delete
+    immediately, show the 5-second Undo toast.
+
+17. **Today's "Scan barcode" routes to the wrong scanner** —
+    `TodayView.swift:673-675` → Foods tab's new-food form. It skips the
+    library-barcode fast path (known product = 1-tap portion sheet in
+    QuickLogSheet's scanner), loses the browsed-day `logDate` (a scan
+    while viewing Tuesday logs to NOW), and strands the user on the
+    Foods tab. Route to the Log sheet with an auto-open-scanner flag.
+
+18. **An entry's time/date can't be changed, ever** — edit is
+    rescale+slot only (`Feedback.swift:130`); water entries have no
+    edit at all. "Logged dinner at 11 pm that belonged to yesterday" =
+    delete + re-log. `editFoodEntry` is already delete-and-recreate, so
+    threading a new date through is nearly free; give water rows the
+    same swipe with an amount field.
+
+19. **PortionSheet typed-quantity commit race** — `FoodsView.swift:465-471`.
+    `TextField(value:format:)` commits on focus resignation, the
+    decimal pad has no return key, and PortionSheet has no
+    `@FocusState`/Done (FoodFormView solved this exact problem). Typing
+    0.5 then tapping Log plausibly logs 1.0. Resign focus inside the
+    Log action; add the Done affordance. (Same mechanics make
+    FoodFormView's Save look dead while kcal is uncommitted.)
+
+20. **"Save & Log" instead of the post-save alert** —
+    `FoodFormView.swift:442-445`. Every online pick funnels through
+    save → "Log?" alert → portion sheet; the alert is a whole modal for
+    a yes/no, and "log a one-off without saving" (which a comment
+    claims exists) doesn't. Toolbar Save / Save & Log; consider a true
+    one-off path. The stale "(Save / Save & Log)" comment at
+    `FoodsView.swift:209` gets fixed for free.
+
+21. **Cancel/swipe-down silently discards a fully-typed food form** —
+    `FoodFormView.swift`, `MealFormView.swift`. No dirty-check, no
+    `interactiveDismissDisabled`. Twelve typed nutrient fields vanish
+    on a stray drag. Confirm discard when dirty (PortionSheet/scanner
+    are cheap to lose — leave them).
+
+22. **One log per Log-sheet visit** — `QuickLogSheet.swift:424-437`
+    dismisses on success; an ad-hoc 3-item lunch is three full
+    round-trips. Stay open after a log (toast already confirms) with
+    Done to leave.
+
+23. **The two online-search lists have drifted** (the CLAUDE.md rule).
+    `FoodSearchSheet` lacks: the stale-query "Search online for …"
+    button, clear-on-empty, any failure state (blank list after the
+    toast fades), and the dead-end "Add Food" fallback. Move all four
+    into the shared component.
+
+24. **Mixed row-tap semantics in the Log sheet** — library rows open
+    the EDITOR on tap while Recent rows open the portion sheet
+    (`QuickLogSheet.swift:352-386`), visually identical. In a sheet
+    named "Log", tap = log everywhere; demote edit to swipe. Related
+    discoverability: Today's log rows do nothing on tap (edit hides
+    behind swipe-right).
+
+25. **Duplicate guard is name-only** — `FoodFormView.swift:289-294`.
+    Scanning a barcode already saved under a different name mints a
+    twin; match barcode first like QuickLogSheet's scanner does.
+
+## Tier 4 — onboarding & goal polish
+
+26. **No recovery path from denied Health permission, anywhere.** The
+    request is one-shot; denial leaves all-zero meters, raw "Couldn't
+    log" toasts, and no Health row in Settings (notifications-denied
+    got one). Write-auth IS detectable. Add a Settings "Apple Health"
+    row + Today banner when sharing is denied, with go-to-Health-app
+    instructions.
+
+27. **Onboarding goal page**: no keyboard dismissal (regressed
+    GoalView's Done fix), swiping past the Health page skips the
+    permission request so it fires contextlessly on Today later, no
+    guardrail/plan preview (GoalView would warn "that pace is
+    aggressive"; onboarding commits blind), fixed 48–72 pt icons ignore
+    Dynamic Type, and the Health button lacks an in-flight guard
+    (double-tap = two auth flows; completion yanks `selection` back).
+
+28. **Goal screen thin states**: average-burn fallback (2000 kcal)
+    presented indistinguishably from measured data; disabled Save gives
+    no reason; the empty state is still the single gray sentence
+    (carried from POST-1.3 #5).
+
+29. **Tracked-metric settings edge cases**: both slots can select the
+    same nutrient (two Settings sections then edit the same target);
+    untracking sodium orphans the sodium limit (still drives calendar/
+    detail/reminder colors with no UI to edit it); sections never say
+    where the metrics appear; a target reset to 0 on the phone never
+    reaches the watch (`PhoneSyncService.swift:48-56` drops ≤0 keys —
+    send "0" explicitly). Water reminders keep firing for untracked
+    water (goal can't go below 16 oz); `GoalView.save()` never replans
+    reminders.
+
+## Tier 5 — history & watch polish
+
+30. **Month grid legend + third state.** The gray dot conflates
+    missed / untracked / pre-install / outside-window; VoiceOver says
+    "goal not met" for a day with zero data; past missed days show NO
+    status line on the day card (reads as loading failure). Add a
+    hollow-dot "tracked, missed" vs no-dot "untracked" distinction, a
+    one-line legend, and the two missing status branches.
+
+31. **Calendar→Today jump is an unlabeled one-way teleport** —
+    `CalendarView.swift:248-250`. The tab switch is discoverable only
+    via VoiceOver hint. Minimum: caption the card "View & edit on
+    Today ›".
+
+32. **Deficit/surplus vocabulary**: Today shows "+320 balance"
+    (orange), Calendar "320 deficit" (green), Details a row labeled
+    "Deficit" that can read "surplus". Pick deficit/surplus everywhere
+    history is shown. Also: DayNutritionView never discloses that the
+    headline is all-sources HealthKit while the breakdown is
+    Onigiri-only ("Nothing logged this day." under 1,800 kcal);
+    summary caption says "this month" while browsing March; double
+    refresh on Calendar appear; streaks break on untracked days while
+    the goal card insists "an untracked day isn't a failed day" —
+    align the copy or surface the break honestly.
+
+33. **Watch feedback is haptic-only, and failure looks like success.**
+    Meal-log failure still dismisses the picker; water logging changes
+    nothing visible on the kcal-only home; denied Health on the watch
+    = zeros forever with no hint. Success flash ("+12 oz ✓"), keep the
+    sheet open on failure with a message, label the water button with
+    the serving ("Log water (12 oz)" — synced value is already there),
+    and a footnote when auth is undetermined/denied. Also: watch
+    buttons are `.orange`/`.blue` — the only surfaces skipping the
+    riceToast brand; `showsRemainingKcal` is a plain read in `body`
+    (not `@AppStorage` like the icons) so a synced style flip doesn't
+    repaint a foregrounded watch home.
+
+34. **Widget/complication gaps**: no `accessoryCorner` family (the
+    most numerous slots on popular faces); pre-setup surfaces show a
+    confident green "0 kcal" instead of "Open Onigiri to set up"
+    (check `statusForAuthorizationRequest` in the snapshot loaders).
+
+## Tier 6 — consistency & copy sweep (one mechanical pass)
+
+35. **Numbers**: replace `"\(Int(x.rounded()))"` interpolations with
+    `Text(value, format:)` (CalendarView:208-210, 283-284, 331-333,
+    411-417; WatchMetricsView:99-100 — also an unrounded `Int(target)`
+    truncation). "12000" vs "12,000" on the screens a tracker user
+    checks daily.
+
+36. **Feedback parity**: editing a saved food/meal succeeds silently
+    (every log toasts); favorite toggles silent; goal save toasts but
+    skips the haptic; Settings import/export uses inline text where
+    Foods/QuickLog toast the same operation; toasts are invisible to
+    VoiceOver (post `.announcement` — the Undo affordance is currently
+    sighted-only).
+
+37. **Copy case**: settle Title Case for buttons ("Import library…",
+    "Back up now", "Scan barcode", "Search database" vs "Add Food",
+    "Look Up", "Scan Barcode"); "Nothing Logged"/"Nothing was logged
+    this day." mismatch inside one ternary (TodayView:704); "No foods
+    yet" vs "No saved foods yet"; Delete alerts → "Removed" toasts.
+
+38. **One-offs**: keyboard-Done lands in `.principal` in FoodFormView
+    but `.topBarTrailing` in GoalView; QuickLogSheet's dismiss button
+    says "Cancel" (nothing is cancelled — logging already committed);
+    duplicate-food alert has no cancel-role button; ⭐ emoji in Today's
+    long-press menu vs `star.fill` everywhere else; MealFormView's
+    empty-filter state is plain Text (third style for that state) and
+    shows `No foods match “”.` when the library is empty; EmojiPrompt
+    ignores its `title` parameter (all five icon slots present as
+    "Custom Emoji"); meal builder is integer-only (`step: 1`) while
+    PortionSheet celebrates 0.85 servings; hard-coded
+    `.foregroundStyle(.black)` on ricePaper Done buttons deserves a
+    semantic `onRicePaper` color; `removeAllPendingNotificationRequests`
+    wipes ALL notifications, not just reminder-prefixed IDs.
+
+## Deliberately not doing
+
+- **Metric units** (kg/ml): personal US app; revisit only if it grows
+  an audience. Storage stays lb/oz either way.
+- **Circular vs rectangular complication semantics** (budget-eaten ring
+  vs banked-deficit onigiri): deliberate per the code comment; the
+  visuals are distinct. Document, don't converge.
+- **Watch one-tap logging without confirmation**: consistent with the
+  phone's meal fast path; mis-taps are fixable on the phone.

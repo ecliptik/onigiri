@@ -29,8 +29,14 @@ struct LogMealIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        guard let match = WatchSync.loadMeals().first(where: { $0.id.uuidString == meal.id }) else {
-            return .result()
+        // Meals re-created on the phone get new UUIDs; fall back to the
+        // name so a stale widget configuration keeps working. A true
+        // miss must throw — returning .result() reads as success and
+        // the widget button becomes a permanent silent no-op.
+        let meals = WatchSync.loadMeals()
+        guard let match = meals.first(where: { $0.id.uuidString == meal.id })
+            ?? meals.first(where: { $0.name == meal.name }) else {
+            throw LogIntentError.mealMissing(meal.name)
         }
         try await HealthKitService().logFood(
             name: match.name,
@@ -41,6 +47,17 @@ struct LogMealIntent: AppIntent {
         )
         WidgetCenter.shared.reloadAllTimelines()
         return .result()
+    }
+}
+
+private enum LogIntentError: LocalizedError {
+    case mealMissing(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .mealMissing(let name):
+            "“\(name)” is no longer a saved meal — edit the widget to pick another."
+        }
     }
 }
 

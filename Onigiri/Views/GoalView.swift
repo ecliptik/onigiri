@@ -17,6 +17,7 @@ struct GoalView: View {
     @State private var weightHistory: [WeightTrend.Point] = []
     @State private var dailyTotals: [DayEnergyTotals] = []
     @State private var loaded = false
+    @State private var confirmingGoalRemoval = false
     @FocusState private var weightFieldFocused: Bool
 
     private let health = HealthKitService()
@@ -116,6 +117,25 @@ struct GoalView: View {
                         }
                     }
                 }
+
+                // Goals used to be edit-only: hitting the target (or
+                // quitting the diet) left the deficit budget and streak
+                // judging on forever.
+                if !goals.isEmpty {
+                    Section {
+                        Button("Remove Goal", role: .destructive) {
+                            confirmingGoalRemoval = true
+                        }
+                    } footer: {
+                        Text("Without a goal, any deficit earns the day's badge.")
+                    }
+                }
+            }
+            .alert("Remove your goal?", isPresented: $confirmingGoalRemoval) {
+                Button("Remove", role: .destructive) { removeGoal() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The deficit target and daily budget go away. Your logs aren't touched.")
             }
             .compactSections()
             .readableContentWidth()
@@ -284,6 +304,18 @@ struct GoalView: View {
         }
         weightFieldFocused = false
         PhoneSyncService.shared.push(from: context)
+        // A new target changes tonight's streak-warning math.
+        ReminderScheduler.shared.replan()
         ToastCenter.shared.show("Goal saved ✓")
+    }
+
+    private func removeGoal() {
+        goals.forEach(context.delete)
+        targetWeightLb = nil
+        weightFieldFocused = false
+        // push sends GoalUpdate.clear to the watch and reloads widgets.
+        PhoneSyncService.shared.push(from: context)
+        ReminderScheduler.shared.replan()
+        ToastCenter.shared.show("Goal removed ✓")
     }
 }

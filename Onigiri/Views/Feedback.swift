@@ -129,7 +129,10 @@ enum LogActions {
     /// original time. Undo restores the original entry.
     static func editFoodEntry(_ entry: FoodLogEntry, quantity: Double, category: FoodCategory) async {
         do {
-            try await HealthKitService().deleteFoodEntry(id: entry.id)
+            // Replacement is written before the original is deleted (and
+            // undo restores before it deletes): a failed write can then
+            // never lose the entry, only leave both — and the rollback
+            // below covers the delete-failed case.
             let newId = try await HealthKitService().logFood(
                 name: entry.name,
                 kcal: entry.kcal * quantity,
@@ -138,16 +141,26 @@ enum LogActions {
                 category: category,
                 date: entry.date
             )
+            do {
+                try await HealthKitService().deleteFoodEntry(id: entry.id)
+            } catch {
+                try? await HealthKitService().deleteFoodEntry(id: newId)
+                throw error
+            }
             didMutate(haptic: .success)
             ToastCenter.shared.show("Updated \(entry.name) ✓") {
                 Task {
-                    try? await HealthKitService().deleteFoodEntry(id: newId)
-                    try? await HealthKitService().logFood(
-                        name: entry.name, kcal: entry.kcal, sodiumMg: entry.sodiumMg,
-                        nutrients: entry.nutrients, category: entry.category,
-                        date: entry.date
-                    )
-                    didMutate(haptic: nil)
+                    do {
+                        try await HealthKitService().logFood(
+                            name: entry.name, kcal: entry.kcal, sodiumMg: entry.sodiumMg,
+                            nutrients: entry.nutrients, category: entry.category,
+                            date: entry.date
+                        )
+                        try? await HealthKitService().deleteFoodEntry(id: newId)
+                        didMutate(haptic: nil)
+                    } catch {
+                        ToastCenter.shared.show("Couldn't undo: \(error.localizedDescription)")
+                    }
                 }
             }
         } catch {

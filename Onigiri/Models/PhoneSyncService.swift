@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import WatchConnectivity
+import WidgetKit
 import OnigiriKit
 
 /// Pushes the library + settings to the watch as the WatchConnectivity
@@ -66,6 +67,10 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
             trackedMetricSettings: trackedSettings,
             sodiumLimitMg: SharedStore.sodiumLimitMg
         ))
+        // Widgets render from the mirror just written — every goal,
+        // settings, and library change lands here, so this is the one
+        // place a reload keeps them from going up to ~30 min stale.
+        WidgetCenter.shared.reloadAllTimelines()
 
         guard WCSession.isSupported(),
               WCSession.default.activationState == .activated,

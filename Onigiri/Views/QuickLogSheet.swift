@@ -20,14 +20,32 @@ struct QuickLogSheet: View {
     @State private var kindLoaded = false
     @State private var searchText = ""
     @State private var isLogging = false
-    @State private var portionTarget: PortionTarget?
     @State private var onlineSearch = OnlineFoodSearch()
-    @State private var showScanner = false
     @State private var isLookingUpBarcode = false
-    @State private var formPrefill: ProductPrefill?
-    @State private var editingFood: Food?
-    @State private var editingMeal: Meal?
+    /// One sheet slot, like TodayView's: chained .sheet modifiers on one
+    /// view compete, and the known-barcode scan path set the portion
+    /// sheet while the scanner was still dismissing — it could silently
+    /// fail to present, eating the scan.
+    @State private var activeSheet: ActiveSheet?
     @State private var showLibraryImporter = false
+
+    private enum ActiveSheet: Identifiable {
+        case portion(PortionTarget)
+        case scanner
+        case form(ProductPrefill)
+        case editFood(Food)
+        case editMeal(Meal)
+
+        var id: String {
+            switch self {
+            case .portion(let target): "portion-\(target.name)"
+            case .scanner: "scanner"
+            case .form(let prefill): "form-\(prefill.id)"
+            case .editFood(let food): "editFood-\(food.persistentModelID.hashValue)"
+            case .editMeal(let meal): "editMeal-\(meal.uuid.uuidString)"
+            }
+        }
+    }
     /// Last week's distinct logged foods, newest first (HealthKit history).
     @State private var recents: [FoodLogEntry] = []
 
@@ -202,10 +220,10 @@ struct QuickLogSheet: View {
                     OnlineResultsSection(query: searchText, search: onlineSearch, onPick: { product in
                         route(product)
                     }, onAddManually: { name in
-                        formPrefill = ProductPrefill(product: ScannedProduct(
+                        activeSheet = .form(ProductPrefill(product: ScannedProduct(
                             barcode: "", name: name, kcal: nil, sodiumMg: nil,
                             servingDescription: "", nutrients: NutrientValues()
-                        ))
+                        )))
                     })
                 }
             }
@@ -229,7 +247,7 @@ struct QuickLogSheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        showScanner = true
+                        activeSheet = .scanner
                     } label: {
                         Image(systemName: "barcode.viewfinder")
                     }
@@ -243,32 +261,35 @@ struct QuickLogSheet: View {
                 }
                 recents = (try? await HealthKitService().recentFoodEntries()) ?? []
             }
-            .sheet(item: $portionTarget) { target in
-                PortionSheet(target: target) { quantity, category in
-                    log(
-                        Item(id: target.name, name: target.name, detail: target.serving,
-                             kcal: target.kcal, sodiumMg: target.sodiumMg,
-                             nutrients: target.nutrients, isFavorite: false, category: nil),
-                        quantity: quantity,
-                        category: category
-                    )
+            .sheet(item: $activeSheet) { sheet in
+                switch sheet {
+                case .portion(let target):
+                    PortionSheet(target: target) { quantity, category in
+                        log(
+                            Item(id: target.name, name: target.name, detail: target.serving,
+                                 kcal: target.kcal, sodiumMg: target.sodiumMg,
+                                 nutrients: target.nutrients, isFavorite: false, category: nil),
+                            quantity: quantity,
+                            category: category
+                        )
+                    }
+                    .presentationDetents([.medium, .large])
+                case .scanner:
+                    BarcodeScannerSheet { code in
+                        lookUpBarcode(code)
+                    }
+                case .form(let prefill):
+                    // New foods go through the full form — reviewable, complete,
+                    // and saved to the library. Its Log action finishes the log.
+                    FoodFormView(food: nil, prefill: prefill.product, logDate: logDate) {
+                        dismiss()
+                    }
+                case .editFood(let food):
+                    FoodFormView(food: food)
+                case .editMeal(let meal):
+                    MealFormView(meal: meal)
                 }
-                .presentationDetents([.medium, .large])
             }
-            .sheet(isPresented: $showScanner) {
-                BarcodeScannerSheet { code in
-                    lookUpBarcode(code)
-                }
-            }
-            .sheet(item: $formPrefill) { prefill in
-                // New foods go through the full form — reviewable, complete,
-                // and saved to the library. Its Log action finishes the log.
-                FoodFormView(food: nil, prefill: prefill.product, logDate: logDate) {
-                    dismiss()
-                }
-            }
-            .sheet(item: $editingFood) { FoodFormView(food: $0) }
-            .sheet(item: $editingMeal) { MealFormView(meal: $0) }
             .fileImporter(isPresented: $showLibraryImporter, allowedContentTypes: [.json]) { result in
                 ToastCenter.shared.show(LibraryTransfer.handlePickedFile(result, context: context))
             }
@@ -293,18 +314,18 @@ struct QuickLogSheet: View {
     /// new opens the prefilled food form.
     private func route(_ product: ScannedProduct) {
         if let target = libraryTarget(forBarcode: product.barcode) {
-            portionTarget = target
+            activeSheet = .portion(target)
         } else {
-            formPrefill = ProductPrefill(product: product)
+            activeSheet = .form(ProductPrefill(product: product))
         }
     }
 
-    /// Scan → library check → fetch the product if it's new. The network
-    /// fetch also gives the scanner sheet time to finish dismissing before
-    /// the next sheet presents.
+    /// Scan → library check → fetch the product if it's new. The single
+    /// sheet slot re-presents on the item change, so a known barcode can
+    /// hand the dismissing scanner off to the portion sheet directly.
     private func lookUpBarcode(_ code: String) {
         if let target = libraryTarget(forBarcode: code) {
-            portionTarget = target
+            activeSheet = .portion(target)
             return
         }
         isLookingUpBarcode = true
@@ -312,7 +333,7 @@ struct QuickLogSheet: View {
             defer { isLookingUpBarcode = false }
             do {
                 let product = try await OpenFoodFactsClient().product(barcode: code)
-                formPrefill = ProductPrefill(product: product)
+                activeSheet = .form(ProductPrefill(product: product))
             } catch {
                 // Transient failures toast, like everything else; the
                 // sheet has its own toastHost (the root's renders behind
@@ -341,20 +362,20 @@ struct QuickLogSheet: View {
                     // The portion sheet's log path loses the model ref —
                     // bump recency at pick time.
                     item.food?.lastUsedAt = .now
-                    portionTarget = makePortionTarget(for: item)
+                    activeSheet = .portion(makePortionTarget(for: item))
                 }
             } onCustomPortion: {
                 item.food?.lastUsedAt = .now
                 item.meal?.lastUsedAt = .now
-                portionTarget = makePortionTarget(for: item)
+                activeSheet = .portion(makePortionTarget(for: item))
             }
         }
         .contentShape(.rect)
         .onTapGesture {
             if let meal = item.meal {
-                editingMeal = meal
+                activeSheet = .editMeal(meal)
             } else if let food = item.food {
-                editingFood = food
+                activeSheet = .editFood(food)
             }
         }
         .accessibilityAddTraits(.isButton)
@@ -374,14 +395,14 @@ struct QuickLogSheet: View {
                 isMeal: isMealName(entry.name)
             )
             LogButton(name: entry.name) {
-                portionTarget = recentTarget(for: entry)
+                activeSheet = .portion(recentTarget(for: entry))
             } onCustomPortion: {
-                portionTarget = recentTarget(for: entry)
+                activeSheet = .portion(recentTarget(for: entry))
             }
         }
         .contentShape(.rect)
         .onTapGesture {
-            portionTarget = recentTarget(for: entry)
+            activeSheet = .portion(recentTarget(for: entry))
         }
         .accessibilityAddTraits(.isButton)
     }

@@ -205,9 +205,9 @@ struct CalendarView: View {
             let totals = model.totalsByDay[selectedDay]
             HStack(spacing: 0) {
                 metric(icon: { FoodIconView(raw: foodIcon) },
-                       text: totals.map { "\(Int($0.intakeKcal.rounded())) in" } ?? "—")
+                       text: totals.map { "\($0.intakeKcal.formatted(.number.precision(.fractionLength(0)))) in" } ?? "—")
                 metric(icon: { Image(systemName: "flame.fill").foregroundStyle(.red) },
-                       text: totals.map { "\(Int($0.burnKcal.rounded())) out" } ?? "—")
+                       text: totals.map { "\($0.burnKcal.formatted(.number.precision(.fractionLength(0)))) out" } ?? "—")
                 Text(totals.map(deficitText(for:)) ?? "—")
                     .fontWeight(.semibold)
                     .foregroundStyle((totals?.deficitKcal ?? 0) > 0 ? Color.green : Color.orange)
@@ -279,9 +279,10 @@ struct CalendarView: View {
         let target = SharedStore.trackedTarget(slot: slot, nutrient: nutrient)
         let value = slotValue(slot: slot, nutrient: nutrient)
         let text: String = value.map { total in
-            mode == .limit
-                ? "\(Int(total.rounded())) \(nutrient.unitSymbol)"
-                : "\(Int(total.rounded())) / \(Int(target)) \(nutrient.unitSymbol)"
+            let totalText = total.formatted(.number.precision(.fractionLength(0)))
+            return mode == .limit
+                ? "\(totalText) \(nutrient.unitSymbol)"
+                : "\(totalText) / \(target.formatted(.number.precision(.fractionLength(0)))) \(nutrient.unitSymbol)"
         } ?? "—"
         let color: Color = value.map { total in
             mode == .limit
@@ -329,8 +330,9 @@ struct CalendarView: View {
     }
 
     private func deficitText(for totals: DayEnergyTotals) -> String {
-        let deficit = Int(totals.deficitKcal.rounded())
-        return deficit >= 0 ? "\(deficit) deficit" : "\(-deficit) surplus"
+        let deficit = totals.deficitKcal.rounded()
+        let amount = abs(deficit).formatted(.number.precision(.fractionLength(0)))
+        return deficit >= 0 ? "\(amount) deficit" : "\(amount) surplus"
     }
 
     /// Highlights only — the full month story (deficit, predicted vs
@@ -408,13 +410,13 @@ struct MonthDetailView: View {
                 }
                 LabeledContent("Total water") {
                     Text(model.monthWaterOz.map {
-                        "\(Int($0.rounded())) oz"
+                        "\($0.formatted(.number.precision(.fractionLength(0)))) oz"
                     } ?? "—")
                     .monospacedDigit()
                 }
                 LabeledContent("Total deficit") {
                     Text(model.totalDeficit(inMonthOf: month).map {
-                        "\(Int($0.rounded())) kcal"
+                        "\($0.formatted(.number.precision(.fractionLength(0)))) kcal"
                     } ?? "—")
                     .monospacedDigit()
                 }

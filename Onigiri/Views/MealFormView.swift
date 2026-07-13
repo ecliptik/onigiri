@@ -124,8 +124,11 @@ struct MealFormView: View {
             meal.name = trimmed
             meal.category = category
             meal.isFavorite = isFavorite
-            meal.items.forEach(context.delete)
+            // Unlink before deleting: deleting items the meal still
+            // references is the dangling-reference crash class.
+            let oldItems = meal.items
             meal.items = items
+            oldItems.forEach(context.delete)
         } else {
             context.insert(Meal(name: trimmed, items: items, isFavorite: isFavorite, category: category))
         }

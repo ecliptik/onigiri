@@ -28,6 +28,9 @@ final class OnlineFoodSearch {
     private static let pageSize = 10
     private let client = OpenFoodFactsClient()
     private(set) var lastQuery = ""
+    /// Comparing query strings can't tell a resubmit from the search it
+    /// supersedes; the generation counter can (same idiom as TodayModel).
+    private var searchGeneration = 0
 
     var hasSearched: Bool { !lastQuery.isEmpty }
 
@@ -38,7 +41,12 @@ final class OnlineFoodSearch {
             return
         }
         lastQuery = trimmed
+        searchGeneration += 1
+        let generation = searchGeneration
         isSearching = true
+        // A superseded page load never resets this itself — the search
+        // that superseded it must, or paging wedges on a stuck spinner.
+        isLoadingMore = false
         message = nil
         moreMessage = nil
         results = []
@@ -46,14 +54,14 @@ final class OnlineFoodSearch {
         hasMore = false
         do {
             let hits = try await client.search(query: trimmed, limit: Self.pageSize)
-            guard lastQuery == trimmed else { return } // superseded
+            guard generation == searchGeneration else { return } // superseded
             results = hits.filter { !rejected.contains($0.barcode) }
             hasMore = hits.count == Self.pageSize
             if hits.isEmpty {
                 message = "No online matches — try different words."
             }
         } catch {
-            guard lastQuery == trimmed else { return }
+            guard generation == searchGeneration else { return }
             // Transient failures toast (hosts on each sheet); the inline
             // message stays for result states like "no matches".
             ToastCenter.shared.show(
@@ -71,10 +79,11 @@ final class OnlineFoodSearch {
     func loadMore() async {
         guard hasMore, !isSearching, !isLoadingMore, hasSearched else { return }
         let query = lastQuery
+        let generation = searchGeneration
         isLoadingMore = true
         do {
             let hits = try await client.search(query: query, limit: Self.pageSize, page: page + 1)
-            guard lastQuery == query else { return } // superseded
+            guard generation == searchGeneration else { return } // superseded
             page += 1
             hasMore = hits.count == Self.pageSize
             // OFF pages can shift between requests — drop repeats (and
@@ -84,7 +93,7 @@ final class OnlineFoodSearch {
             if fresh.isEmpty && !hits.isEmpty { hasMore = false }
             results += fresh
         } catch {
-            guard lastQuery == query else { return }
+            guard generation == searchGeneration else { return }
             hasMore = false
             moreMessage = error as? OpenFoodFactsError == .throttled
                 ? "OpenFoodFacts is busy — wait a minute and try again."
@@ -95,6 +104,7 @@ final class OnlineFoodSearch {
 
     func clear() {
         lastQuery = ""
+        searchGeneration += 1
         results = []
         message = nil
         moreMessage = nil

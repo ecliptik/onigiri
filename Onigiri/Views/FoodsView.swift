@@ -464,7 +464,14 @@ struct PortionSheet: View {
                     // quarters for quick nudges.
                     Stepper(value: $quantity, in: 0.01...100, step: 0.25) {
                         LabeledContent("Serving") {
-                            TextField("1", value: $quantity, format: .number.precision(.fractionLength(0...2)))
+                            // The field bypasses the Stepper's range, so
+                            // clamp here too: an absurd typed quantity
+                            // (1e18) logs kcal that overflow the Int
+                            // casts in row labels and crash-loop Today.
+                            TextField("1", value: Binding(
+                                get: { quantity },
+                                set: { quantity = min(max($0, 0.01), 100) }
+                            ), format: .number.precision(.fractionLength(0...2)))
                                 .keyboardType(.decimalPad)
                                 .multilineTextAlignment(.trailing)
                                 .frame(maxWidth: 80)

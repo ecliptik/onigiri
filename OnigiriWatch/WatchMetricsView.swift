@@ -96,8 +96,8 @@ struct WatchMetricsView: View {
                 .frame(width: 24, alignment: .center)
             VStack(alignment: .leading, spacing: 0) {
                 Text(mode == .limit
-                    ? "\(Int(total.rounded())) \(nutrient.unitSymbol)"
-                    : "\(Int(total.rounded())) / \(Int(target)) \(nutrient.unitSymbol)")
+                    ? "\(total.formatted(.number.precision(.fractionLength(0)))) \(nutrient.unitSymbol)"
+                    : "\(total.formatted(.number.precision(.fractionLength(0)))) / \(target.formatted(.number.precision(.fractionLength(0)))) \(nutrient.unitSymbol)")
                     .font(.headline)
                     .foregroundStyle(valueColor)
                     .monospacedDigit()

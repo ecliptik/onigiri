@@ -22,9 +22,16 @@ final class TodayModel {
 
     var isToday: Bool { Calendar.current.isDateInToday(selectedDate) }
 
+    /// Tracks intent, not the date: once midnight passes, `isToday` is
+    /// already false for the day the user was pinned to, so only this
+    /// flag can tell "left on today overnight" (roll forward) apart from
+    /// "deliberately browsing yesterday" (stay put).
+    private var followsToday = true
+
     func goToPreviousDay() async {
         guard let previous = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate) else { return }
         selectedDate = previous
+        followsToday = false
         await refresh()
     }
 
@@ -32,6 +39,7 @@ final class TodayModel {
         guard !isToday,
               let next = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate) else { return }
         selectedDate = min(next, Calendar.current.startOfDay(for: .now))
+        followsToday = isToday
         await refresh()
     }
 
@@ -41,6 +49,7 @@ final class TodayModel {
             Calendar.current.startOfDay(for: day),
             Calendar.current.startOfDay(for: .now)
         )
+        followsToday = isToday
         await refresh()
     }
 
@@ -104,8 +113,9 @@ final class TodayModel {
 
     /// Day data only — fast enough that browsing feels immediate.
     func refresh() async {
-        // A new calendar day rolls the view back to "today".
-        if isToday {
+        // A new calendar day rolls the view forward to the new "today" —
+        // unless the user deliberately navigated to a past day.
+        if followsToday {
             selectedDate = Calendar.current.startOfDay(for: .now)
         }
         refreshGeneration += 1

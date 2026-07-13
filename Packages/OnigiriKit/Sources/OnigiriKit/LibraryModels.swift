@@ -102,6 +102,11 @@ public final class Food {
 public final class MealItem {
     @Relationship(inverse: \Food.mealItems)
     public var food: Food?
+    /// Inverse of `Meal.items` — without it, deleting an item that a
+    /// meal still references leaves a dangling reference that kills the
+    /// process on the next `items` access (same class of crash as the
+    /// Food↔MealItem incident).
+    public var meal: Meal?
     public var quantity: Double
 
     public init(food: Food, quantity: Double = 1) {
@@ -118,7 +123,7 @@ public final class Meal {
     /// Stable external identifier, used by widget configuration entities.
     public var uuid: UUID
     public var name: String
-    @Relationship(deleteRule: .cascade) public var items: [MealItem]
+    @Relationship(deleteRule: .cascade, inverse: \MealItem.meal) public var items: [MealItem]
     public var createdAt: Date
     public var isFavorite: Bool = false
     public var category: String?

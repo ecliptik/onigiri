@@ -19,7 +19,7 @@ struct MealEntity: AppEntity {
     var displayRepresentation: DisplayRepresentation {
         DisplayRepresentation(
             title: "\(name)",
-            subtitle: "\(Int(kcal)) kcal"
+            subtitle: "\(kcal.formatted(.number.precision(.fractionLength(0)))) kcal"
         )
     }
 }

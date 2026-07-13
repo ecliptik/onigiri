@@ -48,6 +48,12 @@ public enum DeficitTargetHistory {
         storedTargets()[dayKey(for: day, calendar: calendar)]
     }
 
+    /// Drops every snapshot — Settings' goals reset. Past days fall back
+    /// to judging by the current target, the pre-snapshot behavior.
+    public static func reset() {
+        SharedStore.defaults.removeObject(forKey: key)
+    }
+
     private static func storedTargets() -> [String: Double] {
         (SharedStore.defaults.dictionary(forKey: key) as? [String: Double]) ?? [:]
     }

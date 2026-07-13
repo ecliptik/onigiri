@@ -40,6 +40,45 @@ struct SettingsView: View {
         case idle, testing, success
         case failure(String)
     }
+
+    /// Which reset is awaiting its confirmation alert.
+    @State private var pendingReset: PendingReset?
+
+    enum PendingReset: String, Identifiable {
+        case library, goals, settings, all
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .library: "Reset food library?"
+            case .goals: "Reset goals?"
+            case .settings: "Reset settings?"
+            case .all: "Reset all?"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .library:
+                "Deletes every food and meal on this phone and the watch. Logged history in Apple Health is untouched, but the library can't be brought back — Export Library first if unsure."
+            case .goals:
+                "Removes the weight goal and its daily deficit history. Weight and logged history in Apple Health are untouched. This can't be undone."
+            case .settings:
+                "Returns every setting to its default, including tracked metrics, icons, reminders, and the online database API key. The food library and goals stay."
+            case .all:
+                "Resets Onigiri back to stock: food library, goals, and every setting. Apple Health data is untouched. This can't be undone."
+            }
+        }
+
+        var toast: String {
+            switch self {
+            case .library: "Library reset"
+            case .goals: "Goals reset"
+            case .settings: "Settings reset"
+            case .all: "Onigiri reset to stock"
+            }
+        }
+    }
     @State private var notificationsDenied = false
     @State private var healthWriteDenied = false
 
@@ -266,7 +305,22 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
         } header: {
             Text("Data")
+        }
+    }
+
+    /// Destructive resets, last on purpose — and Apple Health is never
+    /// touched by any of them: HealthKit is the log store, its data
+    /// outlives the app's library/settings by design.
+    private var resetSection: some View {
+        Section {
+            Button("Reset Food Library", role: .destructive) { pendingReset = .library }
+            Button("Reset Goals", role: .destructive) { pendingReset = .goals }
+            Button("Reset Settings", role: .destructive) { pendingReset = .settings }
+            Button("Reset All", role: .destructive) { pendingReset = .all }
+        } header: {
+            Text("Reset")
         } footer: {
+            // The app's version/© colophon keeps the very bottom.
             VStack(spacing: 2) {
                 Text("Onigiri \(Bundle.main.appVersion)")
                 Text("© 2026 Micheal Waltz")
@@ -278,6 +332,82 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 8)
         }
+    }
+
+    /// Every preference key the settings reset returns to defaults.
+    /// hasOnboarded is deliberately absent (a settings reset shouldn't
+    /// replay onboarding); Reset All wipes the whole domain instead.
+    private static let preferenceKeys: [String] = [
+        SharedStore.waterServingKey, SharedStore.waterGoalKey,
+        SharedStore.waterIconKey, SharedStore.foodIconKey, SharedStore.rewardIconKey,
+        SharedStore.sodiumLimitKey, SharedStore.balanceStyleKey,
+        SharedStore.progressGaugesKey, SharedStore.showSodiumKey, SharedStore.showWaterKey,
+        SharedStore.remindMealsKey, SharedStore.remindWaterKey, SharedStore.remindStreakKey,
+        SharedStore.trackedMetric1Key, SharedStore.trackedMetric1ModeKey,
+        SharedStore.trackedMetric1TargetKey, SharedStore.trackedMetric1IconKey,
+        SharedStore.trackedMetric2Key, SharedStore.trackedMetric2ModeKey,
+        SharedStore.trackedMetric2TargetKey, SharedStore.trackedMetric2IconKey,
+        SharedStore.untrackedBelowKey, SharedStore.energyStatsStyleKey,
+        SharedStore.textSearchSourceKey, SharedStore.fdcAPIKeyKey,
+    ]
+
+    private func performReset(_ reset: PendingReset) {
+        switch reset {
+        case .library:
+            guard deleteLibrary() else { return }
+        case .goals:
+            guard deleteGoals() else { return }
+        case .settings:
+            resetPreferences()
+        case .all:
+            guard deleteLibrary(), deleteGoals() else { return }
+            // The whole domain, not just the preference list — stock
+            // means the caches, the watch mirror, and the onboarding
+            // flag go too (onboarding replays on next launch).
+            SharedStore.defaults.removePersistentDomain(forName: SharedStore.appGroupID)
+            fdcAPIKeyDraft = ""
+            fdcKeyTest = .idle
+        }
+        // Reminders replan off the (possibly cleared) toggles; the push
+        // rebuilds the watch mirror and reloads widgets.
+        ReminderScheduler.shared.replan()
+        PhoneSyncService.shared.push(from: context)
+        ToastCenter.shared.show(reset.toast)
+    }
+
+    private func deleteLibrary() -> Bool {
+        do {
+            // Items first, then their containers — nothing left to dangle.
+            try context.delete(model: MealItem.self)
+            try context.delete(model: Meal.self)
+            try context.delete(model: Food.self)
+            try context.save()
+            return true
+        } catch {
+            ToastCenter.shared.show("Reset failed: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private func deleteGoals() -> Bool {
+        do {
+            try context.delete(model: GoalSettings.self)
+            try context.save()
+        } catch {
+            ToastCenter.shared.show("Reset failed: \(error.localizedDescription)")
+            return false
+        }
+        DeficitTargetHistory.reset()
+        return true
+    }
+
+    private func resetPreferences() {
+        for key in Self.preferenceKeys {
+            SharedStore.defaults.removeObject(forKey: key)
+        }
+        // The key field's draft mirrors storage by hand.
+        fdcAPIKeyDraft = ""
+        fdcKeyTest = .idle
     }
 
     private static let foodIconOptions: [(tag: String, name: String)] = [
@@ -715,10 +845,27 @@ struct SettingsView: View {
                 onlineDatabaseSection
 
                 dataSection
+
+                resetSection
             }
             .compactSections()
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            // Centered alert, never confirmationDialog (the row-anchored
+            // popover bubble) — the app-wide destructive-confirm rule.
+            .alert(
+                pendingReset?.title ?? "",
+                isPresented: Binding(
+                    get: { pendingReset != nil },
+                    set: { if !$0 { pendingReset = nil } }
+                ),
+                presenting: pendingReset
+            ) { reset in
+                Button("Reset", role: .destructive) { performReset(reset) }
+                Button("Cancel", role: .cancel) {}
+            } message: { reset in
+                Text(reset.message)
+            }
             .onChange(of: balanceStyle) {
                 // The watch mirrors this setting; sync it right away.
                 PhoneSyncService.shared.push(from: context)

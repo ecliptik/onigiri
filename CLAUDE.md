@@ -22,7 +22,7 @@ cd Packages/OnigiriKit && swift test     # pure-logic tests; ALSO needs the
 
 - Commits are GPG-signed: run `git commit` with the sandbox disabled (gpg needs
   `~/.gnupg`). If it fails with "Operation cancelled", the passphrase cache
-  expired and pinentry can't prompt from the agent shell — ask Micheal to run
+  expired and pinentry can't prompt from the agent shell — ask the user to run
   `! gpg --clearsign -o /dev/null <<< test` to prime gpg-agent, then retry.
 
 ## Deploying to devices
@@ -114,5 +114,5 @@ cd Packages/OnigiriKit && swift test     # pure-logic tests; ALSO needs the
   a separate `FoodSearchSheet` with its own drifting list existed until
   2026-07-13. Keep it that way: search behavior changes go in the
   shared section only. Search fields are the STANDARD system
-  `.searchable` (bottom placement) everywhere — Micheal vetoed custom
+  `.searchable` (bottom placement) everywhere — the user vetoed custom
   bars and auto-focus; barcode scanners live in the TOP toolbar.

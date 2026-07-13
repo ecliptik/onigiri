@@ -3,16 +3,16 @@
 Plan agreed 2026-07-10 (late). Scope from `docs/POST-1.0.md` leftovers plus
 repo publication. Rhythm unchanged: implement → kit tests + affected UI
 test on ERASED paired sims → commit → push → deploy phone AND watch →
-tell Micheal what to verify.
+tell the user what to verify.
 
-Decisions locked with Micheal:
+Decisions locked with the user:
 
 - License: **MIT**.
 - Scrub level: **secrets/devices only** — team ID and device names/UDIDs
   move to gitignored local config. © Micheal Waltz, ecliptik URLs, doc
   prose, and the `com.ecliptik` bundle ID all stay (public identity;
   bundle rename would reset HealthKit grants and device data).
-- Git authorship stays `Micheal Waltz <micheal@ecliptik.com>` (his
+- Git authorship stays `Micheal Waltz <micheal@ecliptik.com>` (the
   public address — verified, all 120 commits).
 - History WILL be rewritten (only clones: this laptop + Forgejo):
   reel.mp4/reel.gif purged everywhere (embarrassing), team ID + device
@@ -39,7 +39,7 @@ collision.
    headline; goal already syncs).
 CAUTION (memory): watch UI has zero automated coverage and a bare VStack
 under .navigationTitle renders blank on-device — keep ScrollView roots.
-Verification is Micheal-on-wrist.
+Verification is user-on-wrist.
 
 ## M3 — Progress gauges toggle
 

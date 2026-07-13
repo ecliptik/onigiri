@@ -32,7 +32,7 @@ re-deploy required (free team, 7-day provisioning).
 1. **First-run onboarding — SHIPPED 2026-07-12** (9af0b4f): five
    swipeable pages (welcome → Health with context → goal → water →
    done), every step skippable, existing installs auto-flagged past it.
-   No in-app preview (Micheal: not needed) — the walkthrough test's
+   No in-app preview (user: not needed) — the walkthrough test's
    screenshots are the review. The Goal empty-state item below is
    softened by this but not eliminated.
 
@@ -44,8 +44,8 @@ re-deploy required (free team, 7-day provisioning).
    a horizontal page swipe from watch home reveals the Tracked screen
    mirroring the phone's slots; slot settings ride the sync payload,
    totals come from the watch's own Health store. Complications stay on
-   the kcal headline + water line BY CHOICE (Micheal: "I like how it is
-   now") — revisit only if he asks for slot-aware complications.
+   the kcal headline + water line BY CHOICE (user: "I like how it is
+   now") — revisit only if the user asks for slot-aware complications.
 
 4. **Portion sheet presentation — second rung applied 2026-07-12**
    (28pt corner radius + hairline rim over the material, both modes
@@ -58,7 +58,7 @@ re-deploy required (free team, 7-day provisioning).
    Goal to a single gray sentence — functional and honest, but a thin
    headline. Upgrade paths: the Foods-style empty-state block (icon +
    title + description), or conditionally reorder so the form leads
-   until the chart has data. Micheal: "leave it as is" for now; it's
+   until the chart has data. User ruling: "leave it as is" for now; it's
    here because onboarding work (#1) touches the same first-run
    experience and should sweep this up.
 

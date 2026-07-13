@@ -1,12 +1,12 @@
 # Onigiri 1.3.0 — iPad
 
 Plan agreed 2026-07-11. Same rhythm as 1.1/1.2: implement → kit tests +
-affected UI test on ERASED sims → commit → push → deploy → tell Micheal
+affected UI test on ERASED sims → commit → push → deploy → tell the user
 what to verify. iPad verification is SIMULATOR-ONLY this release
-(Micheal's call) — device deploy and the Health-iCloud-sync check move
+(the user's call) — device deploy and the Health-iCloud-sync check move
 to whenever an iPad joins `scripts/local-devices.env`.
 
-Decisions locked with Micheal:
+Decisions locked with the user:
 
 - **Library on iPad = Export/Import JSON** (free team: no CloudKit, and
   WatchConnectivity is phone↔watch only). HealthKit *logs* reach an
@@ -59,7 +59,7 @@ sims get data from `--seed-sample-data`.
 - QA walkthrough (normal + accessibility text) on iPad sim, portrait
   and landscape; a Split View–width spot check.
 - Review every capture like the 1.1 QA round; fix findings; judgment
-  calls to Micheal.
+  calls to the user.
 - Flow test green on BOTH iPhone and iPad sims becomes the standing
   gate for layout-touching changes this release.
 

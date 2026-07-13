@@ -1,9 +1,9 @@
 # Onigiri 1.1.0 — "Show me my data" + reminders
 
-Plan agreed 2026-07-10 (scope fine-tuned with Micheal). Read `CLAUDE.md` for
+Plan agreed 2026-07-10 (scope fine-tuned with the user). Read `CLAUDE.md` for
 build/deploy mechanics and `docs/POST-1.0.md` for the source roadmap.
 
-SHIPPED 2026-07-10: v1.1.0 tagged (all milestones + Micheal's feedback
+SHIPPED 2026-07-10: v1.1.0 tagged (all milestones + the user's feedback
 rounds: metric drill-ins from headline/goal card, collapsible nutrition
 groups, Recents meal tags, swipe right-to-edit/left-to-delete log rows
 with library-consistent pill reveals and matched row metrics, full
@@ -26,7 +26,7 @@ Scope decisions:
 
 Each milestone is a deployable increment. Rhythm per milestone: implement →
 kit tests + affected UI test on ERASED paired sims → commit → push → deploy
-phone AND watch (`scripts/deploy-phone.sh`) → tell Micheal exactly what to
+phone AND watch (`scripts/deploy-phone.sh`) → tell the user exactly what to
 verify on device. (Weekly re-deploys, due ~07-17, fall out of this naturally.)
 
 ## M1 — Day nutrition detail

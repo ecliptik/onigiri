@@ -2,9 +2,9 @@
 
 Handoff plan written at the v1.0 tag (2026-07-10). Read `CLAUDE.md` first
 (build/deploy/test mechanics, SwiftData landmines) and `docs/PLAN.md` for
-the app's design history. The working rhythm Micheal expects: fix → test
+the app's design history. The working rhythm the user expects: fix → test
 (package + affected UI test on ERASED paired sims) → commit → push →
-deploy to phone AND watch (`scripts/deploy-phone.sh`) → tell him exactly
+deploy to phone AND watch (`scripts/deploy-phone.sh`) → tell the user exactly
 what to verify on device. Weekly re-deploy required (free team, 7-day
 provisioning).
 
@@ -57,7 +57,7 @@ streaks, tappable day card → Today (`QuickActions.dayRequest`).
    migration; design before starting.
 7. Watch parity niceties: sync the food/water icon personalization;
    water-goal progress on the watch home.
-8. **Progress gauges toggle** (Micheal's idea, default OFF in Settings →
+8. **Progress gauges toggle** (the user's idea, default OFF in Settings →
    Appearance): optional rings/bars on Today's metrics — e.g. a ring
    around the balance headline, water/sodium fill bars. Design as a
    set (all metrics or none); a lone water bar looked out of place and
@@ -68,7 +68,7 @@ streaks, tappable day card → Today (`QuickActions.dayRequest`).
    of the workflow; video via `simctl io ... recordVideo` while driving
    the seeded flow UI test makes a repeatable reel. Seed with
    `--seed-sample-data` so the data looks lived-in. Note item 4 covers
-   notifications/reminders — Micheal has flagged it twice, so treat it
+   notifications/reminders — the user has flagged it twice, so treat it
    as the top vote-getter for 1.1 alongside the "show me my data" theme.
 
 ## Engineering backlog (from the pre-1.0 three-agent audit; none urgent)
@@ -104,5 +104,5 @@ streaks, tappable day card → Today (`QuickActions.dayRequest`).
 - Gray system Form headers vs black content headers on scroll screens —
   intentional two-tier hierarchy.
 - OFF supplement entries often carry label values in per-100g fields
-  (÷100 error); Micheal hand-corrects micros once per food and the
+  (÷100 error); the user hand-corrects micros once per food and the
   library's values deliberately win over OFF on rescan.

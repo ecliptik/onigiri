@@ -264,7 +264,7 @@ why Save is disabled; the nutrient picker disables the other slot's
 pick, the sodium limit stays editable while untracked, zeroed targets
 sync to the watch, and the tracked/reminder footers explain themselves.
 
-## Micheal's UI direction (landed with Tier 4, same session)
+## The user's UI direction (landed with Tier 4, same session)
 
 1. **Corner + pill**: food logging/adding moved to the Music-style
    detached tab-bar circle ("Add", the search-role slot — the only
@@ -413,12 +413,12 @@ left: "Removed" toasts (reads better next to Undo than "Deleted").
 
 ## Feedback round 1 (2026-07-12, on-device) — SHIPPED same session
 
-Micheal's first pass on the new UI: keep the corner pills, drop the
+The user's first pass on the new UI: keep the corner pills, drop the
 auto-focused search ("too jarring" — list + bottom bar, no keyboard);
 placeholder shortened to "Foods, Meals, and More" (Foods tab matches).
 Log sheet scopes became Foods / Meals / Favorites (Favorites replaced
 "All"; mixed view only earned its keep as a favorites shelf) with a
-"Recent" top-10 (PURELY most recent, no favorite boost — his call) and
+"Recent" top-10 (PURELY most recent, no favorite boost — the user's call) and
 "Everything else" per scope; history-only entries fold into the Foods
 pool as rows. Water found its home: the hydration metric IS the button
 (tap = serving, long-press = amounts, Undo covers slips, a11y value
@@ -546,6 +546,32 @@ then the app is feature-complete on its own terms.
    moved into the kit (shared judging with the iPhone streak widget,
    which was refactored onto them); the watch bundle grew
    StreakComplication (circular/inline/corner/rectangular).
+
+## v1.6.0 — the feature-complete release (TAGGED 2026-07-13)
+
+The batch above plus the feedback rounds on it, all user-verified
+on device:
+
+- **Watch page layout (the user's design)**: home (Log a meal / Log water,
+  immediate on open) → Metrics (renamed from Tracked, the user's pick) →
+  Log → Favorites → Meals → Foods. The browse pages are the ten most
+  recent per scope, one tap to log, flash confirms in place; the
+  "Log a meal" sheet stays the quick page (meals + six recent foods).
+  All pages share the left-aligned inline title style.
+- **Watch Log page**: today's food entries, tap to adjust calories
+  (crown or ±25 — sodium/nutrients rescale proportionally, the
+  phone's write-before-delete edit) or Remove; left-swipe removes.
+- **"Metrics" complication** (accessoryRectangular): kcal headline in
+  the user's style over the two tracked-metric lines with their
+  emojis — the phone's Settings slots exactly.
+- **Sync payload**: favorites (meals + foods interleaved by recency,
+  ten) and recentFoods (ten) ride the application context; meals now
+  sync recency-ordered.
+- **Copy round (the user's picks)**: water reminder drops "— time for
+  water"; meal nudge "…keep today's balance up to date"; streak title
+  "Keep your streak going"; Maintain footer "To hold steady, eat
+  within your average daily burn."; Remove Goal footer "If no goal is
+  set, any deficit earns a daily badge."
 
 ## Deliberately not doing
 

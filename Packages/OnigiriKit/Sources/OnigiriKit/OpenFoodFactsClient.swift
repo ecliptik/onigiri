@@ -29,15 +29,50 @@ public struct ScannedProduct: Sendable, Equatable {
 public enum OpenFoodFactsError: Error, LocalizedError {
     case notFound
     case badResponse
-    /// 429/503 — OpenFoodFacts rate-limits search (~10/min per IP) and
-    /// its endpoints shed load with 503s. Waiting genuinely helps.
+    /// 429 — OpenFoodFacts rate-limits search (~10/min per IP). Retrying
+    /// inside the backoff window can't succeed; only waiting helps.
     case throttled
+    /// 503 — the endpoints shed load momentarily; a short retry often
+    /// recovers (distinct from .throttled, which must fail fast).
+    case serverBusy
 
     public var errorDescription: String? {
         switch self {
         case .notFound: "That barcode isn't in OpenFoodFacts."
         case .badResponse: "OpenFoodFacts didn't respond as expected."
-        case .throttled: "OpenFoodFacts is busy — wait a minute and try again."
+        case .throttled, .serverBusy: "OpenFoodFacts is busy — wait a minute and try again."
+        }
+    }
+
+    /// Both flavors of "busy" for user-facing messaging.
+    public var isBusy: Bool {
+        switch self {
+        case .throttled, .serverBusy: true
+        default: false
+        }
+    }
+}
+
+/// Process-wide barcode → product cache. Product data barely changes;
+/// re-searching the same lunch words (or re-scanning a barcode a search
+/// row already fetched) used to re-spend OFF's ~10/min rate limit on
+/// every sheet presentation. Bounded FIFO; successful lookups only.
+private actor ProductCache {
+    static let shared = ProductCache()
+    private var products: [String: ScannedProduct] = [:]
+    private var order: [String] = []
+    private let limit = 200
+
+    func product(for barcode: String) -> ScannedProduct? {
+        products[barcode]
+    }
+
+    func store(_ product: ScannedProduct, for barcode: String) {
+        if products.updateValue(product, forKey: barcode) == nil {
+            order.append(barcode)
+        }
+        while order.count > limit {
+            products.removeValue(forKey: order.removeFirst())
         }
     }
 }
@@ -51,11 +86,16 @@ public struct OpenFoodFactsClient: Sendable {
     private static let fields = "code,product_name,brands,serving_size,nutriments"
 
     public func product(barcode: String) async throws -> ScannedProduct {
+        if let cached = await ProductCache.shared.product(for: barcode) {
+            return cached
+        }
         guard let url = URL(string: "https://world.openfoodfacts.org/api/v2/product/\(barcode).json?fields=\(Self.fields)") else {
             throw OpenFoodFactsError.badResponse
         }
         let data = try await fetch(url)
-        return try Self.parse(data: data, barcode: barcode)
+        let product = try Self.parse(data: data, barcode: barcode)
+        await ProductCache.shared.store(product, for: barcode)
+        return product
     }
 
     /// A lightweight text-search hit; full nutrition comes from a follow-up
@@ -84,7 +124,11 @@ public struct OpenFoodFactsClient: Sendable {
     /// next page when the user scrolls past the last row.
     public func search(query: String, limit: Int = 10, page: Int = 1) async throws -> [SearchResult] {
         // Three passes with exponential backoff (0s, 1s, 2s) before the
-        // user sees an error — OFF's 503s are often momentary.
+        // user sees an error — OFF's 503s (.serverBusy) are often
+        // momentary and stay retryable. Rate limiting and cancellation
+        // fail fast: a 429 can't clear inside the backoff window
+        // (retrying digs the rate-limit hole deeper), and a superseded
+        // search must stop making requests, not retry them.
         var lastError: Error = OpenFoodFactsError.badResponse
         for attempt in 0..<3 {
             if attempt > 0 {
@@ -93,6 +137,10 @@ public struct OpenFoodFactsClient: Sendable {
             do {
                 return try await searchOnce(query: query, limit: limit, page: page)
             } catch {
+                if case OpenFoodFactsError.throttled = error { throw error }
+                if error is CancellationError || (error as? URLError)?.code == .cancelled {
+                    throw error
+                }
                 lastError = error
             }
         }
@@ -132,9 +180,9 @@ public struct OpenFoodFactsClient: Sendable {
             return try await Self.rank(legacySearch(query: query, limit: limit, page: page), query: query)
         } catch {
             // Both legs down. "Wait a minute" is actionable, "failed"
-            // isn't — surface throttling if either leg reported it.
-            if case OpenFoodFactsError.throttled = error { throw error }
-            if case OpenFoodFactsError.throttled = primaryError { throw primaryError }
+            // isn't — surface busyness if either leg reported it.
+            if (error as? OpenFoodFactsError)?.isBusy == true { throw error }
+            if (primaryError as? OpenFoodFactsError)?.isBusy == true { throw primaryError }
             throw error
         }
     }
@@ -173,13 +221,23 @@ public struct OpenFoodFactsClient: Sendable {
         return try Self.parseLegacySearch(data: data)
     }
 
+    /// Interactive-search session: the default 60 s request timeout ×
+    /// retries × two endpoints could hold the radio for minutes on a dead
+    /// path; 15 s is generous for these small JSON responses.
+    private static let session: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 15
+        return URLSession(configuration: configuration)
+    }()
+
     private func fetch(_ url: URL) async throws -> Data {
         var request = URLRequest(url: url)
         request.setValue("Onigiri/0.1 (personal calorie tracker)", forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw OpenFoodFactsError.badResponse }
         guard http.statusCode != 404 else { throw OpenFoodFactsError.notFound }
-        guard http.statusCode != 429, http.statusCode != 503 else { throw OpenFoodFactsError.throttled }
+        guard http.statusCode != 429 else { throw OpenFoodFactsError.throttled }
+        guard http.statusCode != 503 else { throw OpenFoodFactsError.serverBusy }
         guard http.statusCode == 200 else { throw OpenFoodFactsError.badResponse }
         return data
     }

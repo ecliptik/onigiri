@@ -43,7 +43,8 @@ struct GaugeProvider: TimelineProvider {
         Task { @MainActor in
             let now = Date()
             let snapshot = await SnapshotLoader.load()
-            let refresh = now.addingTimeInterval(30 * 60)
+            // Push-based reloads keep widgets fresh; this poll is only a fallback.
+            let refresh = now.addingTimeInterval(60 * 60)
             if let midnight = nextMidnight(after: now), midnight <= refresh {
                 completion(Timeline(
                     entries: [

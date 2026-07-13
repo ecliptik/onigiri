@@ -17,13 +17,23 @@ final class OnlineFoodSearch {
     private(set) var products: [String: ScannedProduct] = [:]
     private(set) var detailFailures: Set<String> = []
     private(set) var fetchingCode: String?
-    private var detailsInFlight: Set<String> = []
+    /// One in-flight fetch per barcode; picking a row mid-fetch awaits
+    /// the existing task instead of firing a duplicate request.
+    private var detailTasks: [String: Task<ScannedProduct?, Never>] = [:]
     private var page = 1
     private var hasMore = false
     /// Barcodes whose product carries no calorie data at all — weeded
     /// from results (useless for logging) and kept out of later pages.
     /// A literal 0 kcal stays: that's real data (water, diet soda).
+    /// Reset per search: the client's product cache makes re-weeding a
+    /// re-searched barcode free, and retaining the set made a re-search
+    /// of a data-poor query dead-end on an empty, fetchless list.
     private var rejected: Set<String> = []
+    /// Weeding can chain page loads with zero user input (page → details
+    /// → all weeded → next page…) — cap the automatic backfills between
+    /// user gestures or a data-poor query can burn the whole rate limit.
+    private var autoBackfills = 0
+    private static let maxAutoBackfills = 2
 
     private static let pageSize = 10
     private let client = OpenFoodFactsClient()
@@ -31,6 +41,11 @@ final class OnlineFoodSearch {
     /// Comparing query strings can't tell a resubmit from the search it
     /// supersedes; the generation counter can (same idiom as TodayModel).
     private var searchGeneration = 0
+    /// The running search and page load, kept so a resubmit can CANCEL
+    /// them — the generation guard already discards stale results, but an
+    /// abandoned task's retries kept spending the shared rate limit.
+    private var searchTask: Task<Void, Never>?
+    private var pageTask: Task<Void, Never>?
 
     var hasSearched: Bool { !lastQuery.isEmpty }
 
@@ -40,6 +55,10 @@ final class OnlineFoodSearch {
             clear()
             return
         }
+        // Kill the superseded search's in-flight requests and pending
+        // retries — they'd spend the rate limit on discarded results.
+        searchTask?.cancel()
+        pageTask?.cancel()
         lastQuery = trimmed
         searchGeneration += 1
         let generation = searchGeneration
@@ -52,8 +71,16 @@ final class OnlineFoodSearch {
         results = []
         page = 1
         hasMore = false
+        autoBackfills = 0
+        rejected = []
+        let task = Task { await performSearch(trimmed, generation: generation) }
+        searchTask = task
+        await task.value
+    }
+
+    private func performSearch(_ query: String, generation: Int) async {
         do {
-            let hits = try await client.search(query: trimmed, limit: Self.pageSize)
+            let hits = try await client.search(query: query, limit: Self.pageSize)
             guard generation == searchGeneration else { return } // superseded
             results = hits.filter { !rejected.contains($0.barcode) }
             hasMore = hits.count == Self.pageSize
@@ -73,14 +100,36 @@ final class OnlineFoodSearch {
         isSearching = false
     }
 
-    /// The next page, triggered when the last row scrolls into view. A
-    /// full page means there may be another; a short/empty page — or a
-    /// throttle — ends paging until the next fresh search.
-    func loadMore() async {
+    /// The next page, triggered when the last row scrolls into view (or,
+    /// capped, by weeding — `auto`). A full page means there may be
+    /// another; a short/empty page — or a throttle — ends paging until
+    /// the next fresh search.
+    func loadMore(auto: Bool = false) async {
         guard hasMore, !isSearching, !isLoadingMore, hasSearched else { return }
+        if auto {
+            guard autoBackfills < Self.maxAutoBackfills else {
+                // Out of automatic budget with nothing left to show —
+                // say so, or the section is a silent dead end (there are
+                // no rows whose scroll could pull the next page).
+                if results.isEmpty {
+                    message = "Only products without calorie data so far — try different words."
+                }
+                return
+            }
+            autoBackfills += 1
+        } else {
+            // A real user gesture re-arms the automatic backfill.
+            autoBackfills = 0
+        }
         let query = lastQuery
         let generation = searchGeneration
         isLoadingMore = true
+        let task = Task { await performLoadMore(query: query, generation: generation) }
+        pageTask = task
+        await task.value
+    }
+
+    private func performLoadMore(query: String, generation: Int) async {
         do {
             let hits = try await client.search(query: query, limit: Self.pageSize, page: page + 1)
             guard generation == searchGeneration else { return } // superseded
@@ -95,7 +144,7 @@ final class OnlineFoodSearch {
         } catch {
             guard generation == searchGeneration else { return }
             hasMore = false
-            moreMessage = error as? OpenFoodFactsError == .throttled
+            moreMessage = (error as? OpenFoodFactsError)?.isBusy == true
                 ? "OpenFoodFacts is busy — wait a minute and try again."
                 : "Couldn't load more results."
         }
@@ -103,6 +152,8 @@ final class OnlineFoodSearch {
     }
 
     func clear() {
+        searchTask?.cancel()
+        pageTask?.cancel()
         lastQuery = ""
         searchGeneration += 1
         results = []
@@ -113,6 +164,7 @@ final class OnlineFoodSearch {
         page = 1
         hasMore = false
         rejected = []
+        autoBackfills = 0
     }
 
     /// Unstructured on purpose: the row's .task would cancel the fetch
@@ -120,33 +172,55 @@ final class OnlineFoodSearch {
     /// One in-flight request per barcode, and it runs to completion.
     func loadDetail(for barcode: String) {
         guard products[barcode] == nil, !detailFailures.contains(barcode),
-              detailsInFlight.insert(barcode).inserted else { return }
-        Task {
-            defer { detailsInFlight.remove(barcode) }
-            if let product = try? await client.product(barcode: barcode) {
-                products[barcode] = product
-                // No calorie data at all — weed it, and backfill a page
-                // if weeding emptied the list.
-                if product.kcal == nil {
-                    rejected.insert(barcode)
-                    results.removeAll { $0.barcode == barcode }
-                    if results.isEmpty, hasMore, !isSearching {
-                        await loadMore()
-                    }
-                }
+              detailTasks[barcode] == nil else { return }
+        detailTasks[barcode] = Task {
+            defer { detailTasks[barcode] = nil }
+            // The client answers repeats from its process-wide cache, so
+            // a re-searched barcode costs no request here.
+            let product = try? await client.product(barcode: barcode)
+            if let product {
+                apply(product, for: barcode)
             } else {
                 detailFailures.insert(barcode)
+            }
+            return product
+        }
+    }
+
+    private func apply(_ product: ScannedProduct, for barcode: String) {
+        products[barcode] = product
+        // No calorie data at all — weed it, and backfill a page if
+        // weeding emptied the list (bounded; see maxAutoBackfills).
+        if product.kcal == nil {
+            rejected.insert(barcode)
+            results.removeAll { $0.barcode == barcode }
+            if results.isEmpty, hasMore, !isSearching {
+                // Guard against a stale backfill queued for a superseded
+                // query spending the new query's budget.
+                let generation = searchGeneration
+                Task {
+                    guard generation == searchGeneration else { return }
+                    await loadMore(auto: true)
+                }
             }
         }
     }
 
-    /// The full product for a picked row — the cached fetch, else a live one,
-    /// else the bare search hit (better than nothing).
+    /// The full product for a picked row — the cached fetch, the one
+    /// already in flight for the row, else a live one, else the bare
+    /// search hit (better than nothing).
     func product(for result: OpenFoodFactsClient.SearchResult) async -> ScannedProduct {
         if let cached = products[result.barcode] { return cached }
         fetchingCode = result.barcode
         defer { fetchingCode = nil }
-        if let product = try? await client.product(barcode: result.barcode) {
+        // Picking a row the instant it appears used to double-fetch: the
+        // row's detail task was still running — await it instead. If that
+        // task FAILED, don't immediately double down on the rate limit;
+        // fall through to the bare search hit.
+        if let running = detailTasks[result.barcode] {
+            if let product = await running.value { return product }
+        } else if !detailFailures.contains(result.barcode),
+                  let product = try? await client.product(barcode: result.barcode) {
             products[result.barcode] = product
             return product
         }

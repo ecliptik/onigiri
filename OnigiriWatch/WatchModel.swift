@@ -17,6 +17,10 @@ final class WatchModel {
     private var started = false
     /// Double-taps on a slow HealthKit write must not log twice.
     private var isLogging = false
+    /// Completed-refresh stamp: page swipes and re-activations fired a
+    /// full plan load each (TabView pre-renders neighbors, so one open
+    /// plus a swipe could run it 3-4×).
+    private var lastRefreshed: Date?
 
     /// Transient line under the buttons: haptics alone made a failed
     /// log indistinguishable from a successful one.
@@ -43,17 +47,40 @@ final class WatchModel {
         await refresh()
     }
 
+    /// Passive entry point (page onAppear, scene re-activation): skip the
+    /// query set when fresh, unless the day rolled over. Logs and start()
+    /// still call refresh() directly.
+    func refreshIfStale(maxAge: TimeInterval = 30) async {
+        if let last = lastRefreshed,
+           Date.now.timeIntervalSince(last) < maxAge,
+           Calendar.current.isDate(last, inSameDayAs: .now) {
+            return
+        }
+        await refresh()
+    }
+
     func refresh() async {
-        state = await DailyPlanLoader.load(goal: sync.goal)
         healthDenied = health.sharingDenied()
+        // The three reads are independent — run them concurrently.
+        async let planRead = DailyPlanLoader.load(goal: sync.goal)
+        async let entriesRead = health.todayFoodEntries()
         var totals: [Double] = [0, 0]
         for slot in 1...2 {
             if let nutrient = SharedStore.trackedNutrient(slot: slot) {
                 totals[slot - 1] = (try? await health.dayTotal(of: nutrient)) ?? 0
             }
         }
+        state = await planRead
         trackedTotals = totals
-        foodLog = ((try? await health.todayFoodEntries()) ?? []).sorted { $0.date > $1.date }
+        // Newest first straight from the query's sort descriptor.
+        let entries = try? await entriesRead
+        foodLog = entries ?? []
+        // Stamp only when the store actually answered — a transient
+        // Health failure must not make refreshIfStale suppress the retry
+        // the next page swipe or wrist raise would provide.
+        if entries != nil {
+            lastRefreshed = .now
+        }
     }
 
     /// Rescale a logged entry to a new calorie count — sodium and the

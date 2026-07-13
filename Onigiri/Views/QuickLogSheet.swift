@@ -54,6 +54,17 @@ struct QuickLogSheet: View {
     }
     /// Last week's distinct logged foods, newest first (HealthKit history).
     @State private var recents: [FoodLogEntry] = []
+    /// History rows built from `recents` — cached because building them
+    /// scans the food library per entry and formats a relative date per
+    /// row, which used to rerun on every search keystroke. Rebuilt when
+    /// the recents load and when any library name changes.
+    @State private var historyRows: [Item] = []
+
+    /// The rebuild trigger for `historyRows`: its twin-exclusion depends
+    /// exactly on the set of library names.
+    private var libraryNames: [String] {
+        meals.map(\.name) + foods.map(\.name)
+    }
 
     private struct Item: Identifiable {
         let id: String
@@ -157,7 +168,7 @@ struct QuickLogSheet: View {
     }
 
     var body: some View {
-        let items = allItems + historyItems()
+        let items = allItems + historyRows
         let ranked = pool(items)
         NavigationStack {
             List {
@@ -301,7 +312,12 @@ struct QuickLogSheet: View {
                     }
                 }
                 recents = (try? await HealthKitService().recentFoodEntries()) ?? []
+                historyRows = historyItems()
             }
+            // Library NAMES changed (add, remove, or in-place rename —
+            // identity-based model-array comparison misses renames): the
+            // twin-exclusion in the history rows must re-judge.
+            .onChange(of: libraryNames) { historyRows = historyItems() }
             // An active search hides the toolbar (no Done); deactivate
             // it when any sub-sheet opens so the sheet comes back to
             // its resting state after logging.

@@ -84,6 +84,11 @@ public final class HealthKitService {
         // fire (and its widget reload) for the process's lifetime.
         guard !isObservingLogChanges else { return }
         isObservingLogChanges = true
+        // .immediate background delivery for both types: water from the
+        // watch's dedicated button must reach the phone's water widget
+        // promptly (and vice versa), and the wake is cheap now — one
+        // debounced, kind-scoped reload rendered from PlanCache instead
+        // of a full per-provider query storm.
         for identifier in [HKQuantityTypeIdentifier.dietaryEnergyConsumed, .dietaryWater] {
             let type = HKQuantityType(identifier)
             let query = HKObserverQuery(sampleType: type, predicate: nil) { _, completion, _ in
@@ -183,8 +188,26 @@ public final class HealthKitService {
 
     /// Mean of (active + resting) burn over the last `days` full days,
     /// skipping days with implausibly little data. Nil if there's no history.
+    ///
+    /// Today is excluded (it's partial), so the result barely moves within
+    /// a day — yet it used to be recomputed (two 14-day collection
+    /// queries) inside every plan load, on every widget refresh and
+    /// foreground. Cached in the App Group so every process shares one
+    /// computation. The 15-minute TTL (not the whole day) lets a watch
+    /// syncing yesterday's burn late self-correct like the uncached code
+    /// did; a nil result (no history yet) is never cached — granting
+    /// Health access mid-day must take effect.
     public func averageDailyBurnKcal(days: Int = 14, now: Date = .now) async throws -> Double? {
         let calendar = Calendar.current
+        let cacheKey = "averageDailyBurnKcal.\(days)"
+        let dayKey = DeficitTargetHistory.dayKey(for: now, calendar: calendar)
+        if let cached = SharedStore.defaults.dictionary(forKey: cacheKey),
+           cached["day"] as? String == dayKey,
+           let value = cached["value"] as? Double,
+           let stamp = cached["stamp"] as? Double,
+           now.timeIntervalSince1970 - stamp < 15 * 60 {
+            return value
+        }
         let end = calendar.startOfDay(for: now) // exclude today; it's partial
         guard let start = calendar.date(byAdding: .day, value: -days, to: end) else { return nil }
         async let active = dailyTotals(.activeEnergyBurned, start: start, end: end)
@@ -195,7 +218,12 @@ public final class HealthKitService {
         }
         let fullDays = totals.values.filter { $0 > 800 }
         guard !fullDays.isEmpty else { return nil }
-        return fullDays.reduce(0, +) / Double(fullDays.count)
+        let average = fullDays.reduce(0, +) / Double(fullDays.count)
+        SharedStore.defaults.set(
+            ["day": dayKey, "value": average, "stamp": now.timeIntervalSince1970] as [String: Any],
+            forKey: cacheKey
+        )
+        return average
     }
 
     private func dailyTotals(

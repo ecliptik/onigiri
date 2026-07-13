@@ -43,7 +43,8 @@ struct MeterProvider: AppIntentTimelineProvider {
     func timeline(for configuration: MeterWidgetConfiguration, in context: Context) async -> Timeline<MeterEntry> {
         let now = Date()
         let snapshot = await SnapshotLoader.load()
-        let refresh = now.addingTimeInterval(30 * 60)
+        // Push-based reloads keep widgets fresh; this poll is only a fallback.
+        let refresh = now.addingTimeInterval(60 * 60)
         if let midnight = nextMidnight(after: now), midnight <= refresh {
             return Timeline(
                 entries: [

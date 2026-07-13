@@ -55,7 +55,9 @@ struct WatchLogView: View {
             }
         }
         .onAppear {
-            Task { await model.refresh() }
+            // Page swipes re-fire this (and TabView pre-renders
+            // neighbors) — the model skips when fresh.
+            Task { await model.refreshIfStale() }
         }
     }
 }

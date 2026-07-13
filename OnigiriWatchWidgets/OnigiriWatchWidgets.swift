@@ -82,7 +82,8 @@ struct WatchProvider: TimelineProvider {
         Task { @MainActor in
             let now = Date()
             let entry = await load()
-            let refresh = now.addingTimeInterval(30 * 60)
+            // Push-based reloads keep widgets fresh; this poll is only a fallback.
+            let refresh = now.addingTimeInterval(60 * 60)
             let midnight = Calendar.current.date(
                 byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now)
             )
@@ -242,7 +243,8 @@ struct SummaryProvider: TimelineProvider {
         Task { @MainActor in
             let now = Date()
             let entry = await load()
-            let refresh = now.addingTimeInterval(30 * 60)
+            // Push-based reloads keep widgets fresh; this poll is only a fallback.
+            let refresh = now.addingTimeInterval(60 * 60)
             let midnight = Calendar.current.date(
                 byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now)
             )

@@ -88,7 +88,7 @@ struct WatchHomeView: View {
         .task { await model.start() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
-                Task { await model.refresh() }
+                Task { await model.refreshIfStale() }
             }
         }
     }

@@ -47,11 +47,14 @@ struct WatchHomeView: View {
                         Task { await model.logWater() }
                     } label: {
                         Label {
-                            // The serving on the face, like the phone
-                            // widget's water button.
-                            Text("Log water (\(model.waterServingOz, format: .number.precision(.fractionLength(0))) oz)")
+                            // No serving suffix — "(12 oz)" overflowed
+                            // the small faces; the flash confirms the
+                            // amount on log.
+                            Text("Log water")
                         } icon: {
-                            WaterIconView(raw: waterIcon)
+                            // Solid white drop on the blue button —
+                            // matching the meal button's monochrome fork.
+                            WaterIconView(raw: waterIcon, tint: .white)
                         }
                         .font(.headline)
                         .frame(maxWidth: .infinity)

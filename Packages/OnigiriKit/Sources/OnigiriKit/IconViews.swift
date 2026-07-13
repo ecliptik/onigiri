@@ -28,14 +28,19 @@ public struct FoodIconView: View {
 /// or one of the emoji options.
 public struct WaterIconView: View {
     let raw: String
+    /// Overrides the SF drop's blue — the watch's blue water button
+    /// wants a solid white drop, matching the meal button's dark fork.
+    /// Emoji icons keep their own colors.
+    let tint: Color?
 
-    public init(raw: String) {
+    public init(raw: String, tint: Color? = nil) {
         self.raw = raw
+        self.tint = tint
     }
 
     public var body: some View {
         if raw == "sfDrop" || raw.isEmpty {
-            Image(systemName: "drop.fill").foregroundStyle(.blue)
+            Image(systemName: "drop.fill").foregroundStyle(tint ?? .blue)
         } else {
             Text(SharedStore.waterEmoji(for: raw))
         }

@@ -47,17 +47,11 @@ re-deploy required (free team, 7-day provisioning).
    the kcal headline + water line BY CHOICE (Micheal: "I like how it is
    now") — revisit only if he asks for slot-aware complications.
 
-4. **Portion sheet presentation.** `.presentationBackground(.thickMaterial)`
-   fixed the worst of the dark-mode black-on-black blending when the
-   sheet stacks over the food form or Log sheet, but the verdict was "a
-   bit better, could use some work — fine for now." Ideas for the next
-   pass, roughly in order of restraint: a visible border stroke or
-   stronger shadow at the sheet edge; dimming the sheet BEHIND more
-   aggressively; a tinted header strip so the Cancel/Log bar reads as a
-   distinct surface; or the drastic option — an inset floating card
-   (visible margins all around, dialog-like) instead of an edge-to-edge
-   sheet, unmistakable layering at the price of departing from the
-   standard sheet feel.
+4. **Portion sheet presentation — second rung applied 2026-07-12**
+   (28pt corner radius + hairline rim over the material, both modes
+   verified). Remaining ladder if it still reads flat: stronger
+   backdrop dimming; a tinted header strip; or the inset floating
+   card (dialog-like, unmistakable but non-standard).
 
 5. **Goal screen empty state.** Since the trend chart leads the screen
    (1.3.4), a brand-new user (fewer than two weigh-ins in Health) opens
@@ -68,10 +62,7 @@ re-deploy required (free team, 7-day provisioning).
    here because onboarding work (#1) touches the same first-run
    experience and should sweep this up.
 
-6. **README screenshots.** The public README's four shots (Today,
-   Foods dark, Goal, Calendar dark) date from ~v1.2; the app has
-   visibly moved since (tappable day title, "Details", tracked metrics,
-   trend-first Goal, new day card). Drift is accepted — refresh is
-   cheap (the QA walkthrough attachments ARE these screens) but each
-   refresh needs a visual review pass, so do it at a meaty milestone
-   (a 1.4 with onboarding), not per-release.
+6. **README screenshots — refreshed at v1.3.5** (2026-07-12) from QA
+   walkthrough attachments. Refresh again at the next meaty milestone;
+   the light/dark capture recipe is two QA runs with
+   `simctl ui <udid> appearance` (boot the sim BEFORE setting it).

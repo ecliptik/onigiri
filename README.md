@@ -8,7 +8,7 @@ A personal calorie, nutrition, and water tracker for iPhone + Apple Watch, built
 
 | Today | Foods | Goal | Calendar |
 |---|---|---|---|
-| ![Today: balance headline, hydration, goal gauge, meters, log](docs/showcase/light/today.png) | ![Food library with meals and foods, dark mode](docs/showcase/dark/foods.png) | ![Goal: daily plan with predicted vs actual](docs/showcase/light/goal.png) | ![Calendar: month grid of earned onigiri and streaks, dark mode](docs/showcase/dark/calendar.png) |
+| ![Today: balance headline, hydration, goal gauge, meters, log](docs/showcase/light/today.png) | ![Food library with meals and foods, dark mode](docs/showcase/dark/foods.png) | ![Goal: weight trend with projection and the daily plan](docs/showcase/light/goal.png) | ![Calendar: month grid of earned onigiri and streaks, dark mode](docs/showcase/dark/calendar.png) |
 
 ## Features
 

@@ -155,6 +155,14 @@ public struct FoodDataCentralClient: Sendable {
         return OpenFoodFactsClient.rank(hits, query: query, name: \.description, brand: { _ in nil })
     }
 
+    /// One minimal search round-trip (pageSize 1) proving the key works —
+    /// Settings' "Test Key" button, so a bad key surfaces at entry time
+    /// instead of mid-search. Single attempt, fail fast: a test button
+    /// answering in one beat beats a 3×-backoff retry ladder.
+    public func validateKey() async throws {
+        _ = try await searchOnce(query: "apple", limit: 1, page: 1)
+    }
+
     /// The row-model code an FDC food travels under in the barcode slot —
     /// identity for caching and (harmlessly) for the library's barcode
     /// field; a scanned EAN can never collide with it.

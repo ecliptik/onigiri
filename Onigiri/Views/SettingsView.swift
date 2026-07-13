@@ -33,6 +33,13 @@ struct SettingsView: View {
     @AppStorage(SharedStore.fdcAPIKeyKey, store: SharedStore.defaults) private var fdcAPIKey = ""
     /// What the key field shows; only plausible keys flow to storage.
     @State private var fdcAPIKeyDraft = SharedStore.fdcAPIKey
+    /// The "Test Key" round-trip's verdict; editing the key voids it.
+    @State private var fdcKeyTest = FDCKeyTest.idle
+
+    enum FDCKeyTest: Equatable {
+        case idle, testing, success
+        case failure(String)
+    }
     @State private var notificationsDenied = false
     @State private var healthWriteDenied = false
 
@@ -99,6 +106,28 @@ struct SettingsView: View {
         }
     }
 
+    /// One probe request against FDC with the drafted key. The verdict
+    /// only lands if the field still holds the key it judged.
+    private func testFDCKey(_ key: String) {
+        fdcKeyTest = .testing
+        Task {
+            let verdict: FDCKeyTest
+            do {
+                try await FoodDataCentralClient(apiKey: key).validateKey()
+                verdict = .success
+            } catch let error as FoodDataCentralError where error == .badAPIKey {
+                verdict = .failure("FoodData Central rejected this key")
+            } catch let error as FoodDataCentralError where error.isBusy {
+                verdict = .failure("FoodData Central is busy — try again in a minute")
+            } catch {
+                verdict = .failure("Couldn't reach FoodData Central")
+            }
+            if fdcAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines) == key {
+                fdcKeyTest = verdict
+            }
+        }
+    }
+
     /// Where text search looks things up. Barcode scans stay on
     /// OpenFoodFacts either way; FDC needs the user's own api.data.gov
     /// key (device-local, never synced — see PLAN-1.7).
@@ -123,6 +152,9 @@ struct SettingsView: View {
                         if key.isEmpty || SharedStore.isPlausibleFDCKey(key) {
                             fdcAPIKey = key
                         }
+                        // A different key means the last verdict is
+                        // about someone else.
+                        fdcKeyTest = .idle
                     }
                 let draft = fdcAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
                 if draft.isEmpty {
@@ -133,6 +165,28 @@ struct SettingsView: View {
                     Text("API keys are 40 letters and digits — this one is \(draft.count) and won't be saved.")
                         .font(.footnote)
                         .foregroundStyle(.orange)
+                }
+                HStack {
+                    // Answers "is this key REAL?" at entry time — the
+                    // shape check above can't know, and without this the
+                    // first failed search is the messenger.
+                    Button("Test Key") { testFDCKey(draft) }
+                        .disabled(!SharedStore.isPlausibleFDCKey(draft) || fdcKeyTest == .testing)
+                    Spacer()
+                    switch fdcKeyTest {
+                    case .idle:
+                        EmptyView()
+                    case .testing:
+                        ProgressView()
+                    case .success:
+                        Label("Success", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    case .failure(let reason):
+                        Text(reason)
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                            .multilineTextAlignment(.trailing)
+                    }
                 }
             }
         } header: {

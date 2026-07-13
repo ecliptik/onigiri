@@ -113,9 +113,12 @@ struct SettingsView: View {
                     .keyboardType(.asciiCapable)
                     .font(.callout.monospaced())
                 if fdcAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text("No key yet — text search stays on OpenFoodFacts until one is added.")
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("An API key is required to use the USDA FoodData Central")
+                            .foregroundStyle(.orange)
+                        Text("[fdc.nal.usda.gov/api-guide](https://fdc.nal.usda.gov/api-guide)")
+                    }
+                    .font(.footnote)
                 }
             }
         } header: {

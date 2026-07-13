@@ -7,10 +7,12 @@ struct WatchHomeView: View {
     let model: WatchModel
     @State private var showMeals = false
     @Environment(\.scenePhase) private var scenePhase
-    // AppStorage so an icon sync re-renders immediately (the values land
-    // in the shared defaults via WatchSync.store).
+    // AppStorage so an icon/style sync re-renders immediately (the
+    // values land in the shared defaults via WatchSync.store) — a plain
+    // SharedStore read here didn't repaint until the next log.
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
+    @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
 
     var body: some View {
         NavigationStack {
@@ -34,13 +36,15 @@ struct WatchHomeView: View {
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(.orange)
+                    .tint(.riceToast)
 
                     Button {
                         Task { await model.logWater() }
                     } label: {
                         Label {
-                            Text("Log water")
+                            // The serving on the face, like the phone
+                            // widget's water button.
+                            Text("Log water (\(model.waterServingOz, format: .number.precision(.fractionLength(0))) oz)")
                         } icon: {
                             WaterIconView(raw: waterIcon)
                         }
@@ -48,7 +52,21 @@ struct WatchHomeView: View {
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(.blue)
+                    .tint(.riceToast)
+
+                    // Success flash / failure hint: the haptic alone made
+                    // a failed log look exactly like a working one.
+                    if let flash = model.flash {
+                        Text(flash)
+                            .font(.caption2)
+                            .foregroundStyle(model.flashIsError ? .orange : .green)
+                            .multilineTextAlignment(.center)
+                    } else if model.healthDenied {
+                        Text("Health access is off — allow Onigiri in the Health app on your iPhone.")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .multilineTextAlignment(.center)
+                    }
                 }
                 .controlSize(.small)
                 .padding(.horizontal, 4)
@@ -71,7 +89,7 @@ struct WatchHomeView: View {
     /// toward the deficit goal when the user picked the countdown.
     @ViewBuilder
     private var headlineNumber: some View {
-        if SharedStore.showsRemainingKcal, let remaining = model.state.remainingKcal {
+        if balanceStyle == "remaining", let remaining = model.state.remainingKcal {
             let headline = CalorieBudget.remainingHeadline(remaining)
             VStack(spacing: 0) {
                 Text(headline.value, format: .number.precision(.fractionLength(0)))
@@ -106,11 +124,19 @@ struct MealPickerView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+                if model.flashIsError, let flash = model.flash {
+                    Text(flash)
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
                 ForEach(model.sync.meals) { meal in
                     Button {
                         Task {
-                            await model.log(meal)
-                            dismiss()
+                            // Failure keeps the picker open — dismissing
+                            // on error looked identical to success.
+                            if await model.log(meal) {
+                                dismiss()
+                            }
                         }
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {

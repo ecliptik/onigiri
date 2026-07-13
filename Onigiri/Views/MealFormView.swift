@@ -72,7 +72,10 @@ struct MealFormView: View {
 
                 Section("Foods") {
                     ForEach(visibleFoods) { food in
-                        Stepper(value: binding(for: food), in: 0...20, step: 1) {
+                        // Quarter steps plus a typed quantity, like the
+                        // portion sheet — the builder was integer-only
+                        // while logging celebrated 0.85 servings.
+                        Stepper(value: binding(for: food), in: 0...20, step: 0.25) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(food.name)
@@ -82,14 +85,18 @@ struct MealFormView: View {
                                 }
                                 Spacer()
                                 let quantity = quantities[food.persistentModelID] ?? 0
-                                Text(quantity > 0 ? "×\(quantity, format: .number.precision(.fractionLength(0)))" : "—")
+                                Text(quantity > 0 ? "×\(quantity, format: .number.precision(.fractionLength(0...2)))" : "—")
                                     .foregroundStyle(quantity > 0 ? .primary : .secondary)
                                     .monospacedDigit()
                             }
                         }
                     }
                     if visibleFoods.isEmpty {
-                        Text("No foods match “\(foodFilter.trimmingCharacters(in: .whitespaces))”.")
+                        // `No foods match “”.` rendered for an emptied
+                        // library.
+                        Text(foodFilter.trimmingCharacters(in: .whitespaces).isEmpty
+                            ? "No saved foods yet — add foods on the Library tab first."
+                            : "No foods match “\(foodFilter.trimmingCharacters(in: .whitespaces))”.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -150,6 +157,10 @@ struct MealFormView: View {
     }
 
     private func save() {
+        // Every log confirms loudly; a silent edit-save read as a dead
+        // button.
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        ToastCenter.shared.show("Saved \(name.trimmingCharacters(in: .whitespaces)) ✓")
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         let items = foods.compactMap { food -> MealItem? in
             let quantity = quantities[food.persistentModelID] ?? 0

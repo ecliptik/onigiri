@@ -5,6 +5,9 @@ import OnigiriKit
 
 enum AppTab: Hashable {
     case today, foods, goal, calendar
+    /// The detached corner "+" (the system search-tab slot, Music-style).
+    /// Never stays selected — ContentView bounces it and routes.
+    case log
 }
 
 /// The visible screen reports whether it's scrolled to the top; while it
@@ -126,8 +129,31 @@ struct ContentView: View {
             Tab("Calendar", systemImage: "calendar", value: .calendar) {
                 CalendarView()
             }
+            // The Music-style detached corner circle (the search-tab
+            // slot is the only public API that renders there). It acts
+            // as a button: the onChange below bounces the selection and
+            // opens the right add flow for the tab the user was on.
+            // "Add", not "Log" — the portion sheet's confirm is "Log"
+            // and two same-named buttons make tests (and VoiceOver)
+            // ambiguous.
+            Tab("Add", systemImage: "plus", value: .log, role: .search) {
+                Color.clear
+            }
         }
         .tint(.riceToast)
+        .onChange(of: selectedTab) { old, new in
+            guard new == .log else { return }
+            selectedTab = old == .log ? .today : old
+            if old == .foods {
+                // The Library's +: straight to the new-food form.
+                QuickActions.shared.addFoodRequest = true
+            } else {
+                // Everywhere else: the Log sheet (search-first, scanner
+                // and favorites inside).
+                selectedTab = .today
+                QuickActions.shared.quickLogRequest = .all
+            }
+        }
         // Liquid Glass: the tab bar shrinks out of the way while scrolling
         // content, re-expanding on scroll-up — and pinned full whenever
         // the screen is at the top (the system misses gesture-less

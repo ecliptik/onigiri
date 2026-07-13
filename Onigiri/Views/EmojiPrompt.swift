@@ -89,7 +89,10 @@ struct EmojiPromptSheet: View {
             }
             .padding()
             .ignoresSafeArea(.keyboard, edges: .bottom)
-            .navigationTitle("Custom Emoji")
+            // The slot's name, not a hardcoded "Custom Emoji" — all five
+            // icon slots presented identically with no context for which
+            // icon was being changed.
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

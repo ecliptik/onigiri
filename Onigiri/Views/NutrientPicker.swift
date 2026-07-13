@@ -5,6 +5,10 @@ import OnigiriKit
 /// can track, grouped and searchable, with its label unit alongside.
 struct NutrientPickerView: View {
     @Binding var selectionKey: String
+    /// The OTHER slot's nutrient key — selecting it here would put the
+    /// same metric on Today twice, with two Settings sections editing
+    /// one target. Disabled with a hint instead.
+    var takenKey: String?
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
 
@@ -52,14 +56,20 @@ struct NutrientPickerView: View {
         if !visible.isEmpty {
             Section(title) {
                 ForEach(visible) { nutrient in
+                    let taken = nutrient.key == takenKey
                     Button {
                         selectionKey = nutrient.key
                         dismiss()
                     } label: {
                         HStack {
                             Text(nutrient.displayName)
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(taken ? .secondary : .primary)
                             Spacer()
+                            if taken {
+                                Text("other slot")
+                                    .font(.footnote)
+                                    .foregroundStyle(.tertiary)
+                            }
                             Text(nutrient.unitSymbol)
                                 .foregroundStyle(.secondary)
                             if nutrient.key == selectionKey {
@@ -69,6 +79,7 @@ struct NutrientPickerView: View {
                             }
                         }
                     }
+                    .disabled(taken)
                 }
             }
         }

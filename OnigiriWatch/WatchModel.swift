@@ -17,6 +17,14 @@ final class WatchModel {
     /// Double-taps on a slow HealthKit write must not log twice.
     private var isLogging = false
 
+    /// Transient line under the buttons: haptics alone made a failed
+    /// log indistinguishable from a successful one.
+    private(set) var flash: String?
+    private(set) var flashIsError = false
+    private var flashGeneration = 0
+    /// Write access denied — zeros forever otherwise, with no hint.
+    private(set) var healthDenied = false
+
     var waterServingOz: Double { SharedStore.waterServingOz }
     var waterGoalOz: Double { SharedStore.waterGoalOz }
 
@@ -36,6 +44,7 @@ final class WatchModel {
 
     func refresh() async {
         state = await DailyPlanLoader.load(goal: sync.goal)
+        healthDenied = health.sharingDenied()
         var totals: [Double] = [0, 0]
         for slot in 1...2 {
             if let nutrient = SharedStore.trackedNutrient(slot: slot) {
@@ -45,22 +54,31 @@ final class WatchModel {
         trackedTotals = totals
     }
 
-    func logWater() async {
-        guard !isLogging else { return }
+    @discardableResult
+    func logWater() async -> Bool {
+        guard !isLogging else { return false }
         isLogging = true
         defer { isLogging = false }
         do {
             try await health.logWater(oz: waterServingOz)
             WKInterfaceDevice.current().play(.success)
+            showFlash(
+                "+\(waterServingOz.formatted(.number.precision(.fractionLength(0)))) oz ✓",
+                isError: false
+            )
             await refresh()
             WidgetCenter.shared.reloadAllTimelines()
+            return true
         } catch {
             WKInterfaceDevice.current().play(.failure)
+            showFlash("Couldn't log — check Health access", isError: true)
+            return false
         }
     }
 
-    func log(_ meal: SyncedMeal) async {
-        guard !isLogging else { return }
+    @discardableResult
+    func log(_ meal: SyncedMeal) async -> Bool {
+        guard !isLogging else { return false }
         isLogging = true
         defer { isLogging = false }
         do {
@@ -72,10 +90,25 @@ final class WatchModel {
                 category: meal.category.flatMap(FoodCategory.init(rawValue:))
             )
             WKInterfaceDevice.current().play(.success)
+            showFlash("✓ \(meal.name)", isError: false)
             await refresh()
             WidgetCenter.shared.reloadAllTimelines()
+            return true
         } catch {
             WKInterfaceDevice.current().play(.failure)
+            showFlash("Couldn't log — check Health access", isError: true)
+            return false
+        }
+    }
+
+    private func showFlash(_ message: String, isError: Bool) {
+        flashGeneration += 1
+        let generation = flashGeneration
+        flash = message
+        flashIsError = isError
+        Task {
+            try? await Task.sleep(for: .seconds(isError ? 4 : 2))
+            if generation == flashGeneration { flash = nil }
         }
     }
 }

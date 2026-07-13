@@ -101,7 +101,7 @@ struct FoodFormView: View {
                         Button {
                             showSearch = true
                         } label: {
-                            Label("Search database", systemImage: "magnifyingglass")
+                            Label("Search Database", systemImage: "magnifyingglass")
                         }
                         Spacer()
                         Button {
@@ -234,7 +234,7 @@ struct FoodFormView: View {
                         } label: {
                             Text("Done")
                                 .fontWeight(.semibold)
-                                .foregroundStyle(.black)
+                                .foregroundStyle(Color.onRicePaper)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.ricePaper)
@@ -267,7 +267,10 @@ struct FoodFormView: View {
                     presenting: duplicateMatch
                 ) { match in
                     Button("Edit Existing") { adopt(match) }
-                    Button("Create New") {}
+                    // Cancel role: dismissing the alert should mean the
+                    // safe default (keep both foods), and the alert gets
+                    // a bolded default button.
+                    Button("Create New", role: .cancel) {}
                 } message: { _ in
                     Text("Edit keeps your saved values and attaches this barcode; Create New makes a separate food.")
                 }
@@ -470,6 +473,10 @@ struct FoodFormView: View {
 
     private func save() {
         persist()
+        // Every log confirms loudly; a silent edit-save read as a dead
+        // button.
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        ToastCenter.shared.show("Saved \(name.trimmingCharacters(in: .whitespaces)) ✓")
         dismiss()
     }
 
@@ -477,6 +484,7 @@ struct FoodFormView: View {
     /// foods are added without eating them.
     private func saveOnly() {
         persist()
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
         ToastCenter.shared.show(
             "Saved \(name.trimmingCharacters(in: .whitespaces)) to your library ✓"
         )

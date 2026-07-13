@@ -19,7 +19,13 @@ struct DayNutritionView: View {
         List {
             summarySection
             if model.foodLog.isEmpty {
-                Text(model.isToday ? "Nothing logged — log a meal to see its nutrients here." : "Nothing logged this day.")
+                // 1,800 kcal up top with "nothing logged" below read as
+                // a bug — say where the calories came from.
+                Text(model.summary.intakeKcal > 0
+                    ? "Nothing logged in Onigiri — the calories above include other apps' entries."
+                    : (model.isToday
+                        ? "Nothing logged — log a meal to see its nutrients here."
+                        : "Nothing was logged this day."))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else if totals.isEmpty {
@@ -35,6 +41,8 @@ struct DayNutritionView: View {
                     }
                     microGroup("Minerals", Micronutrient.minerals)
                     microGroup("Vitamins", Micronutrient.vitamins)
+                } footer: {
+                    Text("Breakdown covers Onigiri entries only; the totals above include every app's Health data.")
                 }
             }
         }
@@ -64,12 +72,13 @@ struct DayNutritionView: View {
                     .monospacedDigit()
             }
             // Same vocabulary as the calendar day card: positive is a
-            // deficit (good), negative reads as a surplus. No icon on
-            // Today either — it's a derived number.
-            LabeledContent("Deficit") {
+            // deficit (good), negative a surplus. "Net", not "Deficit" —
+            // a row labeled Deficit reading "surplus" flipped signs on
+            // the reader. No icon on Today either — a derived number.
+            LabeledContent("Net") {
                 let deficit = -model.summary.balanceKcal
                 Text(deficit >= 0
-                    ? "\(deficit, format: .number.precision(.fractionLength(0))) kcal"
+                    ? "\(deficit, format: .number.precision(.fractionLength(0))) kcal deficit"
                     : "\(-deficit, format: .number.precision(.fractionLength(0))) kcal surplus")
                     .foregroundStyle(deficit >= 0 ? Color.green : Color.orange)
                     .monospacedDigit()

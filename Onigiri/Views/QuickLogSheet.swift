@@ -19,6 +19,10 @@ struct QuickLogSheet: View {
     @State private var kind: QuickActions.QuickLogKind = .all
     @State private var kindLoaded = false
     @State private var searchText = ""
+    /// Drives the whole search-active state (not just keyboard focus):
+    /// an active search hides the toolbar, so sub-sheets must be able
+    /// to deactivate it entirely or Done never comes back.
+    @State private var searchPresented = false
     @State private var isLogging = false
     @State private var onlineSearch = OnlineFoodSearch()
     @State private var isLookingUpBarcode = false
@@ -140,27 +144,6 @@ struct QuickLogSheet: View {
         }
         NavigationStack {
             List {
-                // Segmented controls don't scale with Dynamic Type (UIKit
-                // limitation) — at accessibility sizes this becomes a menu
-                // row so the labels grow with everything else.
-                if dynamicTypeSize.isAccessibilitySize {
-                    Picker("Show", selection: $kind) {
-                        Text("All").tag(QuickActions.QuickLogKind.all)
-                        Text("Meals").tag(QuickActions.QuickLogKind.meals)
-                        Text("Foods").tag(QuickActions.QuickLogKind.foods)
-                    }
-                    .pickerStyle(.menu)
-                } else {
-                    Picker("Show", selection: $kind) {
-                        Text("All").tag(QuickActions.QuickLogKind.all)
-                        Text("Meals").tag(QuickActions.QuickLogKind.meals)
-                        Text("Foods").tag(QuickActions.QuickLogKind.foods)
-                    }
-                    .pickerStyle(.segmented)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
-                }
-
                 if isLookingUpBarcode {
                     HStack(spacing: 8) {
                         ProgressView()
@@ -195,11 +178,11 @@ struct QuickLogSheet: View {
                             ContentUnavailableView {
                                 Label("No saved foods yet", systemImage: "fork.knife")
                             } description: {
-                                Text("Scan a barcode or search online — logged foods are saved to your library.\n\nOr bring your library from another device: export it there (Settings → Export library) and import the file here.")
+                                Text("Scan a barcode or search online — logged foods are saved to your library.\n\nOr bring your library from another device: export it there (Settings → Export Library) and import the file here.")
                             } actions: {
                                 // Text-only: with a systemImage, iOS 26
                                 // collapses the label to a bare icon here.
-                                Button("Import library…") {
+                                Button("Import Library…") {
                                     showLibraryImporter = true
                                 }
                                 .buttonStyle(.borderedProminent)
@@ -230,9 +213,21 @@ struct QuickLogSheet: View {
             .compactSections()
             .navigationTitle("Log")
             .navigationBarTitleDisplayMode(.inline)
-            // A/B variant: system search field (focus animation, cancel,
-            // scroll-away) with the barcode scanner in the toolbar.
-            .searchable(text: $searchText, prompt: "Search library and online")
+            // Music-style: the kind pills pinned on top of the results,
+            // not scrolled away with them.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                kindPicker
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(.bar)
+            }
+            // System search field (focus animation, cancel, scroll-away)
+            // with the barcode scanner in the toolbar.
+            .searchable(
+                text: $searchText,
+                isPresented: $searchPresented,
+                prompt: "Meals, Foods, Favorites, and More"
+            )
             .onSubmit(of: .search) {
                 Task { await onlineSearch.search(searchText) }
             }
@@ -267,9 +262,23 @@ struct QuickLogSheet: View {
                         activeSheet = .scanner
                     } else {
                         kind = initialKind
+                        // Music-style: the keyboard comes up with the
+                        // sheet (after its presentation settles) — the
+                        // sheet is search-first now. Unless a fast tap
+                        // already opened something over it.
+                        try? await Task.sleep(for: .milliseconds(400))
+                        if activeSheet == nil {
+                            searchPresented = true
+                        }
                     }
                 }
                 recents = (try? await HealthKitService().recentFoodEntries()) ?? []
+            }
+            // An active search hides the toolbar (no Done); deactivate
+            // it when any sub-sheet opens so the sheet comes back to
+            // its resting state after logging.
+            .onChange(of: activeSheet?.id) { _, id in
+                if id != nil { searchPresented = false }
             }
             .sheet(item: $activeSheet) { sheet in
                 switch sheet {
@@ -304,6 +313,28 @@ struct QuickLogSheet: View {
             }
         }
         .toastHost()
+    }
+
+    /// The kind filter, pinned above the list. Segmented controls don't
+    /// scale with Dynamic Type (UIKit limitation) — at accessibility
+    /// sizes this becomes a menu so the labels grow with everything else.
+    @ViewBuilder
+    private var kindPicker: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            Picker("Show", selection: $kind) {
+                Text("All").tag(QuickActions.QuickLogKind.all)
+                Text("Meals").tag(QuickActions.QuickLogKind.meals)
+                Text("Foods").tag(QuickActions.QuickLogKind.foods)
+            }
+            .pickerStyle(.menu)
+        } else {
+            Picker("Show", selection: $kind) {
+                Text("All").tag(QuickActions.QuickLogKind.all)
+                Text("Meals").tag(QuickActions.QuickLogKind.meals)
+                Text("Foods").tag(QuickActions.QuickLogKind.foods)
+            }
+            .pickerStyle(.segmented)
+        }
     }
 
     /// The fast portion sheet for a barcode the library already knows.

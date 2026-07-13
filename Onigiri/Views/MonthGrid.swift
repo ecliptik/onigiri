@@ -8,6 +8,9 @@ struct MonthGridView: View {
     /// Start of the displayed month.
     let month: Date
     let earned: Set<Date>
+    /// Days that cleared the untracked threshold — a missed goal and a
+    /// day with no data are different stories and wear different marks.
+    var tracked: Set<Date> = []
     let selectedDay: Date
     let onSelect: (Date) -> Void
 
@@ -43,6 +46,7 @@ struct MonthGridView: View {
                     DayCell(
                         day: day,
                         earned: earned.contains(dayStart),
+                        tracked: tracked.contains(dayStart),
                         isToday: calendar.isDateInToday(day),
                         isFuture: day > .now,
                         isSelected: dayStart == selectedDay
@@ -81,6 +85,7 @@ extension Calendar {
 private struct DayCell: View {
     let day: Date
     let earned: Bool
+    let tracked: Bool
     let isToday: Bool
     let isFuture: Bool
     let isSelected: Bool
@@ -105,11 +110,18 @@ private struct DayCell: View {
                 Text(SharedStore.rewardEmoji(for: rewardIcon))
                     .font(.system(size: emojiSize))
                     .frame(height: markerHeight)
-            } else {
+            } else if tracked, !isToday {
+                // Tracked but the goal was missed — a hollow dot. A day
+                // with no data stays blank: one gray dot used to mean
+                // missed, untracked, and pre-install alike.
                 Circle()
-                    .fill(.quaternary)
-                    .frame(width: 5, height: 5)
+                    .strokeBorder(Color.secondary.opacity(0.6), lineWidth: 1)
+                    .frame(width: 6, height: 6)
                     .opacity(isFuture ? 0 : 1)
+                    .frame(height: markerHeight)
+            } else {
+                Color.clear
+                    .frame(width: 6, height: 6)
                     .frame(height: markerHeight)
             }
         }
@@ -138,6 +150,8 @@ private struct DayCell: View {
         // Today is never "met" mid-day — the badge is awarded when the
         // day completes.
         if isToday { return "Today, \(date), \(earned ? "goal met" : "in progress")" }
-        return "\(date), \(earned ? "goal met" : "goal not met")"
+        // "Goal not met" for a day with zero data was a lie.
+        if earned { return "\(date), goal met" }
+        return "\(date), \(tracked ? "goal not met" : "not tracked")"
     }
 }

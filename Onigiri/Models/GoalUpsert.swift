@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import UIKit
 import OnigiriKit
 
 /// The one validation + save path for weight goals. GoalView and
@@ -51,5 +52,8 @@ enum GoalUpsert {
         PhoneSyncService.shared.push(from: context)
         // A new target changes tonight's streak-warning math.
         ReminderScheduler.shared.replan()
+        // Same success haptic as every log (the toast is the caller's —
+        // onboarding stays quiet, GoalView announces).
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 }

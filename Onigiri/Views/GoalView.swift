@@ -91,6 +91,10 @@ struct GoalView: View {
                         Text("Target must be below your current weight.")
                             .font(.caption)
                             .foregroundStyle(.orange)
+                    } else if targetWeightLb == nil {
+                        Text("Enter a target weight to set a goal.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -106,7 +110,16 @@ struct GoalView: View {
                             Text("≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
                         }
                         LabeledContent("Average burn") {
-                            Text("≈ \(averageBurnKcal ?? 2000, format: .number.precision(.fractionLength(0))) kcal/day")
+                            // The fallback used to present as fact — the
+                            // whole budget inherits this guess.
+                            Text(averageBurnKcal.map {
+                                "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
+                            } ?? "≈ 2000 kcal/day (assumed)")
+                        }
+                        if averageBurnKcal == nil {
+                            Text("No activity data in Health yet — the plan assumes 2000 kcal/day until burn history exists.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                         // Is the math showing up on the scale? Trailing 30
                         // days of deficit vs the smoothed weigh-in change.
@@ -162,15 +175,16 @@ struct GoalView: View {
                 }
                 // Decimal pads have no return key; surface a Done while
                 // editing. (The keyboard-accessory toolbar placement doesn't
-                // reliably render on iOS 26, so this lives in the nav bar.)
+                // reliably render on iOS 26, so this lives in the nav bar —
+                // .principal, matching the food form's.)
                 if weightFieldFocused {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItem(placement: .principal) {
                         Button {
                             weightFieldFocused = false
                         } label: {
                             Text("Done")
                                 .fontWeight(.semibold)
-                                .foregroundStyle(.black)
+                                .foregroundStyle(Color.onRicePaper)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.ricePaper)

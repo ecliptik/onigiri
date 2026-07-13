@@ -64,6 +64,21 @@ struct GaugeWidgetView: View {
     let entry: GaugeEntry
 
     var body: some View {
+        if entry.snapshot.needsSetup {
+            VStack(spacing: 6) {
+                OnigiriGauge(progress: 0)
+                    .frame(width: 52, height: 52)
+                Text("Open Onigiri to set up")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        } else {
+            gauge
+        }
+    }
+
+    private var gauge: some View {
         VStack(spacing: 4) {
             OnigiriGauge(progress: entry.snapshot.gaugeProgress)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

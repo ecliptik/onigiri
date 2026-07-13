@@ -9,6 +9,9 @@ struct DaySnapshot {
     /// 0...1 fill of the onigiri gauge (banked deficit / daily target).
     var gaugeProgress: Double
     var waterGoalOz: Double
+    /// Health access never granted — a confident green "0 kcal" before
+    /// setup was indistinguishable from a genuinely balanced day.
+    var needsSetup = false
 
     static let placeholder = DaySnapshot(
         summary: DailyEnergySummary(
@@ -31,7 +34,8 @@ struct DaySnapshot {
             // The full budget again: remaining was budget − intake.
             remainingKcal: remainingKcal.map { $0 + summary.intakeKcal },
             gaugeProgress: 0,
-            waterGoalOz: waterGoalOz
+            waterGoalOz: waterGoalOz,
+            needsSetup: needsSetup
         )
     }
 }
@@ -49,13 +53,15 @@ enum SnapshotLoader {
     /// The phone mirrors the goal into the App Group on every sync push;
     /// the shared DailyPlanLoader does the rest, like the watch.
     static func load() async -> DaySnapshot {
+        let needsSetup = (try? await HealthKitService().shouldRequestAuthorization()) == true
         let state = await DailyPlanLoader.load(goal: WatchSync.loadGoal())
         return DaySnapshot(
             summary: state.summary,
             deficitTargetKcal: state.deficitTargetKcal,
             remainingKcal: state.remainingKcal,
             gaugeProgress: state.gaugeProgress,
-            waterGoalOz: SharedStore.waterGoalOz
+            waterGoalOz: SharedStore.waterGoalOz,
+            needsSetup: needsSetup
         )
     }
 }

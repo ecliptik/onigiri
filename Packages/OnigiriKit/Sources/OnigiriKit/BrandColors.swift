@@ -5,6 +5,11 @@ public extension Color {
     /// filled controls (pair with dark text). Works on light and dark.
     static let ricePaper = Color(red: 0.96, green: 0.83, blue: 0.62)
 
+    /// Text/icon color on a ricePaper fill. Semantic on purpose: raw
+    /// `.black` at the call sites breaks silently if ricePaper ever
+    /// adapts to dark mode.
+    static let onRicePaper = Color.black
+
     /// A toasted tan used as the app-wide tint. Adapts to the system
     /// appearance: deeper in light mode for contrast on white, brighter in
     /// dark mode so it doesn't muddy against black.

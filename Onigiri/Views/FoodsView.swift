@@ -13,6 +13,7 @@ struct FoodsView: View {
 
     @State private var showNewFood = false
     @State private var showNewMeal = false
+    @State private var quickActions = QuickActions.shared
     @State private var editingFood: Food?
     @State private var editingMeal: Meal?
     @State private var isLogging = false
@@ -107,6 +108,9 @@ struct FoodsView: View {
                                 .tint(.riceToast)
                                 Button {
                                     meal.isFavorite.toggle()
+                                    // A light tap: the neighboring delete
+                                    // confirms loudly, this was silent.
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                     PhoneSyncService.shared.push(from: context)
                                 } label: {
                                     Label("Favorite", systemImage: meal.isFavorite ? "star.slash" : "star.fill")
@@ -163,6 +167,7 @@ struct FoodsView: View {
                             .tint(.riceToast)
                             Button {
                                 food.isFavorite.toggle()
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                 PhoneSyncService.shared.push(from: context)
                             } label: {
                                 Label("Favorite", systemImage: food.isFavorite ? "star.slash" : "star.fill")
@@ -181,13 +186,13 @@ struct FoodsView: View {
 
                     if foods.isEmpty {
                         ContentUnavailableView {
-                            Label("No foods yet", systemImage: "fork.knife")
+                            Label("No saved foods yet", systemImage: "fork.knife")
                         } description: {
-                            Text("Add a food once — calories and nutrients off the label, then log it with a tap.\n\nAlready tracking on another device? Export its library (Settings → Export library), save the file, and import it here.")
+                            Text("Add a food once — calories and nutrients off the label, then log it with a tap.\n\nAlready tracking on another device? Export its library (Settings → Export Library), save the file, and import it here.")
                         } actions: {
                             // Text-only: with a systemImage, iOS 26 collapses
                             // the label to a bare icon here (as in toolbars).
-                            Button("Import library…") {
+                            Button("Import Library…") {
                                 showLibraryImporter = true
                             }
                             .buttonStyle(.borderedProminent)
@@ -223,7 +228,7 @@ struct FoodsView: View {
             .fileImporter(isPresented: $showLibraryImporter, allowedContentTypes: [.json]) { result in
                 ToastCenter.shared.show(LibraryTransfer.handlePickedFile(result, context: context))
             }
-            .searchable(text: $searchText, prompt: "Search library and online")
+            .searchable(text: $searchText, prompt: "Meals, Foods, Favorites, and More")
             .onSubmit(of: .search) {
                 Task { await onlineSearch.search(searchText) }
             }
@@ -280,6 +285,13 @@ struct FoodsView: View {
                 }
                 .presentationDetents([.medium, .large])
             }
+            // The corner + while on this tab: straight to the new-food
+            // form. Consumable Optional, checked on change and appear
+            // (the Bool-flag version of this pattern goes dead).
+            .onChange(of: quickActions.addFoodRequest) { _, _ in
+                consumeAddFoodRequest()
+            }
+            .onAppear { consumeAddFoodRequest() }
             // Alerts, not confirmationDialogs: iOS 26 anchors dialogs to
             // the source row as a popover bubble; a destructive confirm
             // should be the standard centered alert.
@@ -319,6 +331,12 @@ struct FoodsView: View {
                 Text(deleteFoodsMessage)
             }
         }
+    }
+
+    private func consumeAddFoodRequest() {
+        guard quickActions.addFoodRequest != nil else { return }
+        quickActions.addFoodRequest = nil
+        showNewFood = true
     }
 
     private var deleteMealsTitle: String {
@@ -557,7 +575,7 @@ struct PortionSheet: View {
                         } label: {
                             Text("Done")
                                 .fontWeight(.semibold)
-                                .foregroundStyle(.black)
+                                .foregroundStyle(Color.onRicePaper)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.ricePaper)

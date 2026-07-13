@@ -31,11 +31,11 @@ struct SettingsView: View {
     @AppStorage(SharedStore.remindWaterKey, store: SharedStore.defaults) private var remindWater = false
     @AppStorage(SharedStore.remindStreakKey, store: SharedStore.defaults) private var remindStreak = false
     @State private var notificationsDenied = false
+    @State private var healthWriteDenied = false
 
     @State private var showExporter = false
     @State private var showImporter = false
     @State private var exportDocument: LibraryJSONDocument?
-    @State private var transferMessage: String?
 
     /// "Choose your own…" flow: which icon slot the emoji prompt edits,
     /// what was selected before (to restore on cancel/invalid), and the
@@ -65,7 +65,7 @@ struct SettingsView: View {
                     Text("Notifications are off for Onigiri — reminders won't appear.")
                         .font(.footnote)
                         .foregroundStyle(.orange)
-                    Button("Turn on in Settings") {
+                    Button("Turn On in Settings") {
                         if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
                             UIApplication.shared.open(url)
                         }
@@ -74,14 +74,14 @@ struct SettingsView: View {
                 }
             }
             #if DEBUG
-            Button("Preview reminders", systemImage: "bell.badge") {
+            Button("Preview Reminders", systemImage: "bell.badge") {
                 ReminderScheduler.shared.preview()
             }
             #endif
         } header: {
             Text("Reminders")
         } footer: {
-            Text("Meals check in at 2 PM, water at 11 AM, 3 PM, and 7 PM while you're behind, streaks at 8 PM.")
+            Text("Meals check in at 2 PM, water at 11 AM, 3 PM, and 7 PM while you're behind, streaks at 8 PM. Water pacing follows the Water section's goal, even when water isn't a tracked metric.")
         }
     }
 
@@ -100,32 +100,29 @@ struct SettingsView: View {
     // type-checker will solve in reasonable time.
     private var dataSection: some View {
         Section {
-            Button("Export library…", systemImage: "square.and.arrow.up") {
+            // Outcomes toast, like the same operations do from Foods
+            // and the Log sheet — this screen used a third style
+            // (sticky inline text).
+            Button("Export Library…", systemImage: "square.and.arrow.up") {
                 // Failure must say so — a button that silently does
                 // nothing reads as a dead button.
                 do {
                     exportDocument = LibraryJSONDocument(data: try LibraryTransfer.export(from: context))
-                    transferMessage = nil
                     showExporter = true
                 } catch {
                     exportDocument = nil
-                    transferMessage = "Export failed: \(error.localizedDescription)"
+                    ToastCenter.shared.show("Export failed: \(error.localizedDescription)")
                 }
             }
-            Button("Import library…", systemImage: "square.and.arrow.down") {
+            Button("Import Library…", systemImage: "square.and.arrow.down") {
                 showImporter = true
             }
-            Button("Back up now", systemImage: "externaldrive") {
+            Button("Back Up Now", systemImage: "externaldrive") {
                 if BackupService.backupIfDue(context: context, force: true) != nil {
-                    transferMessage = "Backed up ✓"
+                    ToastCenter.shared.show("Backed up ✓")
                 } else {
-                    transferMessage = "Backup failed."
+                    ToastCenter.shared.show("Backup failed.")
                 }
-            }
-            if let transferMessage {
-                Text(transferMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
             Text(backupCaption)
                 .font(.caption)
@@ -396,9 +393,12 @@ struct SettingsView: View {
     @ViewBuilder
     private func trackedMetricSection(slot: Int) -> some View {
         let nutrient = slotNutrient(slot)
-        Section(slot == 1 ? "First tracked metric" : "Second tracked metric") {
+        Section {
             NavigationLink {
-                NutrientPickerView(selectionKey: slot == 1 ? $trackedMetric1 : $trackedMetric2)
+                NutrientPickerView(
+                    selectionKey: slot == 1 ? $trackedMetric1 : $trackedMetric2,
+                    takenKey: slotNutrient(slot == 1 ? 2 : 1)?.key
+                )
             } label: {
                 LabeledContent("Metric") { Text(nutrient?.displayName ?? "None") }
             }
@@ -446,7 +446,38 @@ struct SettingsView: View {
                     metricIconPicker(slot: slot, nutrient: nutrient)
                 }
             }
+        } header: {
+            Text(slot == 1 ? "First tracked metric" : "Second tracked metric")
+        } footer: {
+            // Once, under the pair: nothing used to say where these
+            // "slots" actually show up.
+            if slot == 2 {
+                Text("Tracked metrics appear under Today's balance and on the watch's Tracked page.")
+            }
         }
+        // Sodium's limit keeps coloring the calendar, day details, and
+        // Today's log even when no slot tracks it — keep its knob
+        // reachable (the water icon relocates the same way above).
+        if slot == 2, !slotTracksSodium {
+            Section {
+                LabeledContent("Sodium limit") {
+                    HStack(spacing: 4) {
+                        TextField("0", value: $sodiumLimitMg, format: .number)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 100)
+                        Text("mg")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } footer: {
+                Text("Colors sodium in the calendar and day details even while untracked.")
+            }
+        }
+    }
+
+    private var slotTracksSodium: Bool {
+        slotNutrient(1) == .sodium || slotNutrient(2) == .sodium
     }
 
     /// Default emoji or a custom pick — same prompt as the goal badge.
@@ -508,6 +539,22 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // Only when write access is denied: every log fails with
+                // an opaque toast otherwise, and iOS can't deep-link the
+                // Health sharing pane — instructions are the recovery.
+                if healthWriteDenied {
+                    Section("Apple Health") {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Health access is off — logging can't save.")
+                                .font(.footnote)
+                                .foregroundStyle(.orange)
+                            Text("Turn it on in the Health app: Profile → Apps → Onigiri.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
                 appearanceSection
 
                 trackedMetricSection(slot: 1)
@@ -575,6 +622,7 @@ struct SettingsView: View {
                 let denied: Bool = status == .denied
                 let anyReminderOn: Bool = remindMeals || remindWater || remindStreak
                 notificationsDenied = denied && anyReminderOn
+                healthWriteDenied = HealthKitService().sharingDenied()
             }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -589,13 +637,13 @@ struct SettingsView: View {
             ) { result in
                 switch result {
                 case .success:
-                    transferMessage = "Library exported ✓"
+                    ToastCenter.shared.show("Library exported ✓")
                 case .failure(let error):
-                    transferMessage = "Export failed: \(error.localizedDescription)"
+                    ToastCenter.shared.show("Export failed: \(error.localizedDescription)")
                 }
             }
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
-                transferMessage = LibraryTransfer.handlePickedFile(result, context: context)
+                ToastCenter.shared.show(LibraryTransfer.handlePickedFile(result, context: context))
             }
             // On the outer chain deliberately: presenting from a Form
             // section tore down the whole Settings sheet moments after
@@ -611,6 +659,9 @@ struct SettingsView: View {
                 )
             }
         }
+        // Transfer/backup outcomes toast; a sheet needs its own host
+        // (the root's renders behind presented sheets).
+        .toastHost()
     }
 }
 

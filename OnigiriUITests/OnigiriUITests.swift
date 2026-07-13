@@ -133,7 +133,7 @@ final class OnigiriUITests: XCTestCase {
         // (not the library), so its Log button can only come from the
         // Recent query — and its portion sheet must carry the entry's own
         // values ("as last logged"), the no-library-match path.
-        app.buttons["Log food or meal"].tap()
+        switchTab(in: app, to: "Add")  // the corner + pill opens the Log sheet
         XCTAssertTrue(
             app.staticTexts["Recent"].waitForExistence(timeout: 10),
             "Log sheet should lead with a Recent section"
@@ -289,7 +289,7 @@ final class OnigiriUITests: XCTestCase {
         app.navigationBars["Details"].buttons.firstMatch.tap()
         app.swipeDown()
 
-        app.buttons["Log food or meal"].tap()
+        switchTab(in: app, to: "Add")  // the corner + pill opens the Log sheet
         _ = app.staticTexts["Recent"].waitForExistence(timeout: 10)
         scene("logsheet")
         // The row's Log button is unique to the sheet — the row text also
@@ -419,7 +419,7 @@ final class OnigiriUITests: XCTestCase {
         for _ in 0..<5 { app.buttons["Next day"].tap() }
 
         // Log sheet: kinds, no-match search, portion sheet.
-        app.buttons["Log food or meal"].tap()
+        switchTab(in: app, to: "Add")  // the corner + pill opens the Log sheet
         _ = app.staticTexts["Recent"].waitForExistence(timeout: 10)
         shot("logsheet-all")
         // At accessibility sizes the kind picker is a menu, not segments;
@@ -546,12 +546,19 @@ final class OnigiriUITests: XCTestCase {
     }
 
     /// Expand every collapsed meal section so entry rows are hittable.
+    /// Headers at the screen's bottom edge sit under the corner Add pill
+    /// (and the tab bar) — scroll them clear before tapping.
     @MainActor
     private func expandMealSections(in app: XCUIApplication) {
         let collapsed = app.buttons.matching(collapsedSectionPredicate)
-        for _ in 0..<4 {
+        for _ in 0..<6 {
             guard collapsed.count > 0 else { return }
-            collapsed.firstMatch.tap()
+            let target = collapsed.firstMatch
+            if !target.isHittable {
+                app.swipeUp()
+                guard target.isHittable else { continue }
+            }
+            target.tap()
         }
     }
 
@@ -901,18 +908,12 @@ final class OnigiriUITests: XCTestCase {
             XCTAssertTrue(fileText.waitForExistence(timeout: 5), "Exported file in picker")
             fileText.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         }
-        Thread.sleep(forTimeInterval: 2)
-
-        // The picker dismisses back into the Form; the message lives in the
-        // Data section which may need re-scrolling into view.
+        // The outcome is a TOAST now (one feedback channel app-wide) —
+        // catch it right away, it only lingers a couple of seconds.
         let confirmation = app.staticTexts.matching(
             NSPredicate(format: "label BEGINSWITH 'Imported'")
         ).firstMatch
-        var confirmScrolls = 0
-        while !confirmation.exists && confirmScrolls < 6 {
-            app.swipeUp()
-            confirmScrolls += 1
-        }
+        _ = confirmation.waitForExistence(timeout: 6)
         if !confirmation.exists {
             // Surface whatever message actually rendered (e.g. an error).
             let anyMessage = app.staticTexts.matching(

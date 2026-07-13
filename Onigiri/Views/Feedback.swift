@@ -22,6 +22,9 @@ final class ToastCenter {
     func show(_ message: String, undo: (@MainActor () -> Void)? = nil) {
         let item = Item(message: message, undo: undo)
         current = item
+        // The toast is the app's primary confirmation channel — without
+        // an announcement it (and its Undo) is sighted-only.
+        UIAccessibility.post(notification: .announcement, argument: message)
         Task {
             // Undoable toasts linger so the button is actually reachable.
             try? await Task.sleep(for: .seconds(undo == nil ? 2 : 5))

@@ -34,10 +34,16 @@ struct CalendarView: View {
                     MonthGridView(
                         month: displayedMonth,
                         earned: model.earned,
+                        tracked: model.trackedDaySet,
                         selectedDay: selectedDay,
                         onSelect: { selectedDay = $0 }
                     )
                     .simultaneousGesture(horizontalSwipe { shiftMonth($0) })
+                    // The legend the grid never had: three marks, three
+                    // stories.
+                    Text("\(SharedStore.rewardEmoji(for: rewardIcon)) goal met  ·  ○ tracked, goal missed  ·  blank: not tracked")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                     VStack(spacing: Layout.screenSpacing) {
                         dayHeader
                         daySummaryCard
@@ -195,6 +201,15 @@ struct CalendarView: View {
                     Text("In progress")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                } else if model.trackedDaySet.contains(selectedDay) {
+                    // A blank slot here read as a loading failure.
+                    Text("Goal not met")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Not tracked")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
             }
             // Fixed three-column grid, always rendered ("—" when a day has
@@ -239,6 +254,14 @@ struct CalendarView: View {
                 Text("Daily goal: \(target, format: .number.precision(.fractionLength(0))) kcal deficit")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            // The tap is a cross-tab jump — the bare chevron never said
+            // so, and the behavior was VoiceOver-hint-only discoverable.
+            HStack {
+                Spacer()
+                Text("View & edit on Today")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
         }
         .padding(14)
@@ -335,7 +358,14 @@ struct CalendarView: View {
         } label: {
             VStack(spacing: 8) {
                 HStack(spacing: 0) {
-                    stat("\(SharedStore.rewardEmoji(for: rewardIcon)) \(model.earnedCount(inMonthOf: displayedMonth))", caption: "this month")
+                    // "this month" while browsing March claimed the
+                    // wrong month — name it when it isn't the current.
+                    stat(
+                        "\(SharedStore.rewardEmoji(for: rewardIcon)) \(model.earnedCount(inMonthOf: displayedMonth))",
+                        caption: calendar.isDate(displayedMonth, equalTo: .now, toGranularity: .month)
+                            ? "this month"
+                            : "in \(displayedMonth.formatted(.dateTime.month(.wide)))"
+                    )
                     Divider().frame(height: 36)
                     stat(
                         "\(model.streak) \(model.streak == 1 ? "day" : "days")",

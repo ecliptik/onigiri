@@ -12,6 +12,9 @@ final class TodayModel {
     private(set) var currentWeightLb: Double?
     private(set) var averageBurnKcal: Double?
     private(set) var errorMessage: String?
+    /// Health write access explicitly denied — every log would fail
+    /// with an opaque toast, so Today shows a recovery hint instead.
+    private(set) var healthWriteDenied = false
     private(set) var selectedDate = Calendar.current.startOfDay(for: .now)
 
     private let health = HealthKitService()
@@ -109,6 +112,9 @@ final class TodayModel {
     func loadStatic() async {
         currentWeightLb = (try? await health.latestBodyMassLb()) ?? currentWeightLb
         averageBurnKcal = (try? await health.averageDailyBurnKcal()) ?? averageBurnKcal
+        // Re-checked on every foreground: the user may have just flipped
+        // access in the Health app.
+        healthWriteDenied = health.sharingDenied()
     }
 
     /// Day data only — fast enough that browsing feels immediate.

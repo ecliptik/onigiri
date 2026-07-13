@@ -14,10 +14,18 @@ struct OnboardingView: View {
 
     @State private var selection = 0
     @State private var healthRequested = false
+    @State private var isRequestingHealth = false
     @State private var healthWeightLb: Double?
     @State private var manualWeightLb: Double?
     @State private var targetWeightLb: Double?
+    @State private var averageBurnKcal: Double?
     @State private var targetDate = Calendar.current.date(byAdding: .day, value: 90, to: .now) ?? .now
+    @FocusState private var weightFieldFocused: Bool
+
+    // The copy scales with Dynamic Type; fixed glyphs looked undersized
+    // beside it at accessibility sizes.
+    @ScaledMetric(relativeTo: .largeTitle) private var heroIconSize = 72.0
+    @ScaledMetric(relativeTo: .largeTitle) private var pageIconSize = 48.0
 
     private let health = HealthKitService()
 
@@ -34,10 +42,32 @@ struct OnboardingView: View {
         // Outside the tinted TabView — brand the links ourselves.
         .tint(.riceToast)
         .overlay(alignment: .topTrailing) {
-            if selection < 4 {
+            // While a decimal field is focused, the corner slot becomes
+            // the keyboard-dismiss (decimal pads have no return key —
+            // same problem GoalView solved with its nav-bar Done).
+            if weightFieldFocused {
+                Button {
+                    weightFieldFocused = false
+                } label: {
+                    Text("Done")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color.onRicePaper)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.ricePaper)
+                .padding()
+            } else if selection < 4 {
                 Button("Set Up Later") { finish() }
                     .font(.subheadline)
                     .padding()
+            }
+        }
+        // Swiping past the Health page must not skip the request — it
+        // otherwise fires contextlessly on Today right after onboarding,
+        // the exact prompt this flow exists to avoid.
+        .onChange(of: selection) { old, new in
+            if old == 1, new > 1, !healthRequested {
+                Task { await requestHealthAccess(advance: false) }
             }
         }
         // Select-all on focus, like the app's other decimal fields.
@@ -54,7 +84,7 @@ struct OnboardingView: View {
     private var welcomePage: some View {
         page {
             Text("🍙")
-                .font(.system(size: 72))
+                .font(.system(size: heroIconSize))
             Text("Welcome to Onigiri")
                 .font(.title.bold())
             Text("Calories, nutrition, and water logged to Apple Health")
@@ -69,7 +99,7 @@ struct OnboardingView: View {
     private var healthPage: some View {
         page {
             Image(systemName: "heart.fill")
-                .font(.system(size: 56))
+                .font(.system(size: pageIconSize * 56 / 48))
                 .foregroundStyle(.red)
             Text("Your log lives in Apple Health")
                 .font(.title2.bold())
@@ -79,27 +109,40 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
         } action: {
             Button {
-                Task {
-                    if (try? await health.shouldRequestAuthorization()) == true {
-                        try? await health.requestAuthorization()
-                    }
-                    healthRequested = true
-                    healthWeightLb = try? await health.latestBodyMassLb()
-                    withAnimation { selection = 2 }
-                }
+                Task { await requestHealthAccess(advance: true) }
             } label: {
                 Text(healthRequested ? "Continue" : "Allow Health Access")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .tint(.riceToast)
+            .disabled(isRequestingHealth)
+        }
+    }
+
+    /// One path for the button and the swipe-past: request (once), then
+    /// fetch what the goal page needs. Guarded — a double-tap used to
+    /// spawn two authorization flows, and the completion yanked the
+    /// selection back to page 2 from wherever the user had swiped.
+    private func requestHealthAccess(advance: Bool) async {
+        guard !isRequestingHealth else { return }
+        isRequestingHealth = true
+        defer { isRequestingHealth = false }
+        if (try? await health.shouldRequestAuthorization()) == true {
+            try? await health.requestAuthorization()
+        }
+        healthRequested = true
+        healthWeightLb = try? await health.latestBodyMassLb()
+        averageBurnKcal = (try? await health.averageDailyBurnKcal()) ?? nil
+        if advance, selection == 1 {
+            withAnimation { selection = 2 }
         }
     }
 
     private var goalPage: some View {
         page {
             Image(systemName: "chart.line.downtrend.xyaxis")
-                .font(.system(size: 48))
+                .font(.system(size: pageIconSize))
                 .foregroundStyle(.green)
             Text("Set a goal")
                 .font(.title2.bold())
@@ -114,6 +157,7 @@ struct OnboardingView: View {
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                             .frame(maxWidth: 90)
+                            .focused($weightFieldFocused)
                     }
                 }
                 LabeledContent("Target weight (lb)") {
@@ -121,11 +165,27 @@ struct OnboardingView: View {
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
                         .frame(maxWidth: 90)
+                        .focused($weightFieldFocused)
                 }
                 DatePicker("By date", selection: $targetDate, in: Date.now..., displayedComponents: .date)
             }
             .padding(.horizontal)
-            Text("Days that hit the daily deficit earn an onigiri. Change this in the Goal tab.")
+            // The plan the goal implies, before committing — GoalView
+            // would have shown this; onboarding used to save blind.
+            if let plan = previewPlan {
+                VStack(spacing: 4) {
+                    Text("≈ \(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal/day deficit — budget ≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if plan.isAggressive {
+                        Label("That pace is aggressive — a later date means a gentler budget.", systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .multilineTextAlignment(.center)
+            }
+            Text("Days that hit the daily deficit earn an onigiri. You can adjust your goal anytime in the Goal tab.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -144,7 +204,7 @@ struct OnboardingView: View {
     private var waterPage: some View {
         page {
             Image(systemName: "drop.fill")
-                .font(.system(size: 48))
+                .font(.system(size: pageIconSize))
                 .foregroundStyle(.blue)
             Text("Daily water goal")
                 .font(.title2.bold())
@@ -166,7 +226,7 @@ struct OnboardingView: View {
     private var donePage: some View {
         page {
             Text("🍙")
-                .font(.system(size: 72))
+                .font(.system(size: heroIconSize))
             Text("You're set")
                 .font(.title.bold())
             Text("Make your first Log entry from Today's + button")
@@ -219,6 +279,23 @@ struct OnboardingView: View {
     /// couldn't edit.
     private var goalValidation: GoalUpsert.Validation {
         GoalUpsert.validate(targetLb: targetWeightLb, currentLb: healthWeightLb ?? manualWeightLb)
+    }
+
+    /// The plan a valid goal implies, GoalView's math (2000 kcal burn
+    /// assumed until Health has history, like everywhere else).
+    private var previewPlan: CalorieBudget.Plan? {
+        guard goalValidation == .valid,
+              let current = healthWeightLb ?? manualWeightLb,
+              let target = targetWeightLb else { return nil }
+        let days = Calendar.current.dateComponents(
+            [.day], from: Calendar.current.startOfDay(for: .now), to: targetDate
+        ).day ?? 0
+        return CalorieBudget.plan(
+            currentWeightLb: current,
+            targetWeightLb: target,
+            daysRemaining: days,
+            averageDailyBurn: averageBurnKcal ?? 2000
+        )
     }
 
     /// Say WHY the button reads "Continue" — the old copy claimed "no

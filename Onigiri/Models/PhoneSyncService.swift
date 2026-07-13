@@ -48,11 +48,13 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         // the watch's metrics page mirrors the phone's configuration.
         let trackedSettings: [String: String] = Dictionary(
             uniqueKeysWithValues: WatchSync.trackedMetricKeys.compactMap { key in
-                if let string = SharedStore.defaults.string(forKey: key) {
-                    return (key, string)
+                // Numeric targets always send — a reset to 0 ("use the
+                // default") must reach the watch, or its old custom
+                // target lives on until the slot's nutrient changes.
+                if WatchSync.trackedNumericKeys.contains(key) {
+                    return (key, String(SharedStore.defaults.double(forKey: key)))
                 }
-                let number = SharedStore.defaults.double(forKey: key)
-                return number > 0 ? (key, String(number)) : nil
+                return SharedStore.defaults.string(forKey: key).map { (key, $0) }
             }
         )
         WatchSync.store(SyncPayload(

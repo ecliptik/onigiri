@@ -65,6 +65,13 @@ public final class HealthKitService {
         try await store.requestAuthorization(toShare: Self.shareTypes, read: Self.readTypes)
     }
 
+    /// Write access was explicitly denied. Read denial isn't detectable
+    /// (by design), but write denial is — and it's what makes every log
+    /// attempt fail, so Settings and Today surface a recovery hint.
+    public func sharingDenied() -> Bool {
+        store.authorizationStatus(for: HKQuantityType(.dietaryEnergyConsumed)) == .sharingDenied
+    }
+
     #if DEBUG
     private static let debugSeedShareTypes: Set<HKSampleType> = [
         HKQuantityType(.activeEnergyBurned),

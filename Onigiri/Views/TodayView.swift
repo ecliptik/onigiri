@@ -10,10 +10,6 @@ struct TodayView: View {
     @State private var monthModel = CalendarModel()
     @Environment(\.scenePhase) private var scenePhase
     @Query private var goals: [GoalSettings]
-    @Query(filter: #Predicate<Food> { $0.isFavorite }, sort: \Food.name)
-    private var favoriteFoods: [Food]
-    @Query(filter: #Predicate<Meal> { $0.isFavorite }, sort: \Meal.name)
-    private var favoriteMeals: [Meal]
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
@@ -126,6 +122,16 @@ struct TodayView: View {
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
                     }
+                    // Denied write access fails every log with an opaque
+                    // toast; iOS can't deep-link the Health sharing pane,
+                    // so instructions are the recovery path.
+                    if model.healthWriteDenied {
+                        Text("Health access is off, so logging can't save. Turn it on in the Health app: Profile → Apps → Onigiri.")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                    }
                 }
                 .padding(.bottom, 24)
             }
@@ -176,7 +182,8 @@ struct TodayView: View {
                 case .datePicker:
                     DayJumpSheet(
                         selected: model.selectedDate,
-                        earned: monthModel.earned
+                        earned: monthModel.earned,
+                        tracked: monthModel.trackedDaySet
                     ) { day in
                         Task { await model.select(day: day) }
                     }
@@ -288,20 +295,6 @@ struct TodayView: View {
         .overlay(
             Capsule().strokeBorder(Color.riceToast.opacity(0.5), lineWidth: 1)
         )
-    }
-
-    /// Favorite meals log one-tap with their own slot, like the Log sheet.
-    private func logFavorite(meal: Meal) {
-        Task {
-            await LogActions.logFood(
-                name: meal.name,
-                kcal: meal.totalKcal,
-                sodiumMg: meal.totalSodiumMg,
-                nutrients: meal.totalNutrients,
-                category: PortionTarget.category(from: meal.category),
-                date: DayBounds.logTimestamp(for: model.selectedDate)
-            )
-        }
     }
 
     /// Water logs into the browsed day (backfill included).
@@ -613,42 +606,11 @@ struct TodayView: View {
                 Text("Log")
                     .font(.sectionHeader)
                 Spacer()
-                // Present on past days too: forgotten meals get backfilled
-                // into the browsed day (noon timestamp, slot picked in the
-                // portion sheet). Prominent glass, sized for their role as
-                // the primary logging actions. Tap opens the Log sheet;
-                // long-press offers favorites and the scanner — the food
-                // parallel of the water button's amounts.
-                Menu {
-                    ForEach(favoriteMeals.prefix(6)) { meal in
-                        Button("⭐ \(meal.name)") {
-                            logFavorite(meal: meal)
-                        }
-                    }
-                    ForEach(favoriteFoods.prefix(6)) { food in
-                        Button("⭐ \(food.name)") {
-                            activeSheet = .portion(PortionTarget(
-                                name: food.name, kcal: food.kcal,
-                                sodiumMg: food.sodiumMg, nutrients: food.nutrients,
-                                serving: food.servingDescription,
-                                defaultCategory: PortionTarget.category(from: food.category)
-                            ))
-                        }
-                    }
-                    Divider()
-                    // The Log sheet's scanner, not the Foods-tab food
-                    // form: known barcodes get the 1-tap portion sheet,
-                    // and the browsed day's logDate rides along.
-                    Button("Scan barcode", systemImage: "barcode.viewfinder") {
-                        activeSheet = .quickLog(.scan)
-                    }
-                } label: {
-                    logButtonLabel { FoodIconView(raw: foodIcon) }
-                } primaryAction: {
-                    activeSheet = .quickLog(.all)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Log food or meal")
+                // Food logging moved to the corner + pill (the detached
+                // tab-bar slot) — favorites and the scanner live inside
+                // the Log sheet it opens. Water stays here: the one-tap
+                // water log is sacred. Present on past days too — water
+                // backfills into the browsed day.
 
                 // Tap logs the default serving; long-press offers the
                 // other amounts (the old Water tab's menu).
@@ -670,7 +632,7 @@ struct TodayView: View {
             .padding(.horizontal)
 
             if model.foodLog.isEmpty {
-                Text(model.isToday ? "Nothing Logged" : "Nothing was logged this day.")
+                Text(model.isToday ? "Nothing logged yet." : "Nothing was logged this day.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal)
@@ -1055,15 +1017,17 @@ private struct WaterEditSheet: View {
 private struct DayJumpSheet: View {
     let selected: Date
     let earned: Set<Date>
+    let tracked: Set<Date>
     let onPick: (Date) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var displayedMonth: Date
 
     private let calendar = Calendar.current
 
-    init(selected: Date, earned: Set<Date>, onPick: @escaping (Date) -> Void) {
+    init(selected: Date, earned: Set<Date>, tracked: Set<Date>, onPick: @escaping (Date) -> Void) {
         self.selected = selected
         self.earned = earned
+        self.tracked = tracked
         self.onPick = onPick
         _displayedMonth = State(initialValue: Calendar.current.startOfMonth(for: selected))
     }
@@ -1076,6 +1040,7 @@ private struct DayJumpSheet: View {
             MonthGridView(
                 month: displayedMonth,
                 earned: earned,
+                tracked: tracked,
                 selectedDay: calendar.startOfDay(for: selected),
                 onSelect: { day in
                     onPick(day)

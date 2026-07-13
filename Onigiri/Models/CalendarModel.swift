@@ -4,6 +4,9 @@ import OnigiriKit
 @Observable
 final class CalendarModel {
     private(set) var earned: Set<Date> = []
+    /// Days that cleared the untracked threshold — the month grid marks
+    /// tracked-but-missed differently from no-data days.
+    private(set) var trackedDaySet: Set<Date> = []
     private(set) var streak = 0
     private(set) var bestStreak = 0
     private(set) var targetDeficitKcal: Double?
@@ -72,6 +75,10 @@ final class CalendarModel {
         )
         streak = StreakCalendar.currentStreak(earned: earned)
         bestStreak = StreakCalendar.bestStreak(earned: earned)
+        let calendar = Calendar.current
+        trackedDaySet = Set(totalsByDay.values
+            .filter { StreakCalendar.isTracked($0, untrackedBelowKcal: SharedStore.untrackedBelowKcal) }
+            .map { calendar.startOfDay(for: $0.day) })
     }
 
     /// The deficit target a day is judged against: its snapshot when one

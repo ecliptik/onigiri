@@ -49,7 +49,12 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
         // every log and foreground — even with reminders off.
         let plan = await DailyPlanLoader.load(goal: WatchSync.loadGoal())
         let center = UNUserNotificationCenter.current()
-        center.removeAllPendingNotificationRequests()
+        // Only OUR reminders — removeAll would nuke any future
+        // notification type this app grows.
+        let pendingIDs = await center.pendingNotificationRequests()
+            .map(\.identifier)
+            .filter { $0.hasPrefix("onigiri.") }
+        center.removePendingNotificationRequests(withIdentifiers: pendingIDs)
         guard enabled.any else { return }
         let settings = await center.notificationSettings()
         guard settings.authorizationStatus == .authorized else { return }

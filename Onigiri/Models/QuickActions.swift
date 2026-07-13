@@ -37,6 +37,10 @@ final class QuickActions {
     /// One-shot request for TodayView to browse to a specific day
     /// (Calendar's "View day"), same consumable-Optional pattern.
     var dayRequest: Date?
+
+    /// One-shot request for FoodsView to open the new-food form (the
+    /// corner + while on the Library tab), same consumable pattern.
+    var addFoodRequest: Bool?
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {

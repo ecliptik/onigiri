@@ -251,7 +251,32 @@ barcode before name. Flow-test expectations updated to the new UX.
     Scanning a barcode already saved under a different name mints a
     twin; match barcode first like QuickLogSheet's scanner does.
 
-## Tier 4 — onboarding & goal polish
+## Tier 4 — onboarding & goal polish — ALL SHIPPED 2026-07-12 (same session)
+
+All four landed: `sharingDenied()` drives recovery hints on Today and
+a Settings "Apple Health" section (instructional copy — iOS can't
+deep-link the sharing pane); the onboarding goal page gained the
+corner Done for the decimal keyboard, a swipe-past-safe Health request
+(one guarded path for button and swipe), an inline plan preview with
+the aggressive-pace warning, ScaledMetric icons, and the unambiguous
+Goal-tab caption; GoalView labels the assumed 2000 kcal burn and says
+why Save is disabled; the nutrient picker disables the other slot's
+pick, the sodium limit stays editable while untracked, zeroed targets
+sync to the watch, and the tracked/reminder footers explain themselves.
+
+## Micheal's UI direction (landed with Tier 4, same session)
+
+1. **Corner + pill**: food logging/adding moved to the Music-style
+   detached tab-bar circle ("Add", the search-role slot — the only
+   public API that renders there; it acts as a button via a selection
+   bounce). On Today/Goal/Calendar it opens the Log sheet; on the
+   Library it opens the new-food form (Add Meal stays in the toolbar
+   menu). The header food menu is gone; favorites/scanner live in the
+   Log sheet. Water keeps its 1-tap capsule in the Log header.
+2. **Music-style search**: the Log sheet is search-first — kind pills
+   pinned on top, keyboard auto-raised on open, placeholder "Meals,
+   Foods, Favorites, and More" (Foods search matches). Watch for the
+   search-slot morph quirk on device; fallback is a floating button.
 
 26. **No recovery path from denied Health permission, anywhere.** The
     request is one-shot; denial leaves all-zero meters, raw "Couldn't
@@ -283,7 +308,33 @@ barcode before name. Flow-test expectations updated to the new UX.
     water (goal can't go below 16 oz); `GoalView.save()` never replans
     reminders.
 
-## Tier 5 — history & watch polish
+## Tier 5 — history & watch polish — ALL SHIPPED 2026-07-12 (same session)
+
+Month grid: hollow dot = tracked-but-missed, blank = untracked, honest
+VoiceOver, a one-line legend, and the day card's missing status
+branches ("Goal not met"/"Not tracked") plus a "View & edit on Today"
+caption on the cross-tab card. Day details: the "Deficit" row is "Net"
+(reading "x kcal deficit/surplus"), the all-sources-vs-Onigiri-only
+split is disclosed in the empty state and a section footer, and the
+month summary names past months. Watch: success flash ("+12 oz ✓" /
+"✓ Meal") and a visible failure hint (meal picker stays open on
+failure), water button shows the serving, an auth-denied footnote,
+riceToast tint (was orange/blue — the only off-brand surface), and the
+balance style repaints via @AppStorage. Widgets: accessoryCorner for
+both complications, and every widget/complication renders "Open
+Onigiri to set up" before Health access instead of a confident zero.
+
+## Tier 6 — consistency & copy — SWEPT 2026-07-12 (same session)
+
+Edit-saves toast + haptic (foods, meals, goal), favorites tick, toasts
+post VoiceOver announcements, Settings transfer/backup outcomes moved
+to the app-wide toast channel, Title Case across buttons ("Import
+Library…", "Back Up Now", …), "Nothing logged yet.", "No saved foods
+yet" unified, keyboard-Done standardized to .principal, duplicate
+alert got its cancel role, EmojiPrompt shows the slot's name, the meal
+builder takes quarter servings, `Color.onRicePaper` replaces raw
+.black, and replan only clears onigiri.* notifications. Deliberately
+left: "Removed" toasts (reads better next to Undo than "Deleted").
 
 30. **Month grid legend + third state.** The gray dot conflates
     missed / untracked / pre-install / outside-window; VoiceOver says

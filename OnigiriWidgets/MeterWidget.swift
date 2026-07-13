@@ -66,6 +66,21 @@ struct MeterWidgetView: View {
     private var summary: DailyEnergySummary { entry.snapshot.summary }
 
     var body: some View {
+        if entry.snapshot.needsSetup {
+            VStack(spacing: 6) {
+                OnigiriGauge(progress: 0)
+                    .frame(width: 44, height: 44)
+                Text("Open Onigiri to set up")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+        } else {
+            meter
+        }
+    }
+
+    private var meter: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 // Honor the same "Calorie display" setting as the app/watch.

@@ -108,8 +108,10 @@ public enum WatchSync {
         SharedStore.trackedMetric2TargetKey, SharedStore.trackedMetric2IconKey,
     ] }
 
-    /// Numeric slot keys — stored back as Doubles on the watch.
-    static var trackedNumericKeys: Set<String> { [
+    /// Numeric slot keys — stored back as Doubles on the watch. Public:
+    /// the phone must send these even at 0 (reset-to-default), where
+    /// string keys ride only when set.
+    public static var trackedNumericKeys: Set<String> { [
         SharedStore.trackedMetric1TargetKey, SharedStore.trackedMetric2TargetKey,
     ] }
 

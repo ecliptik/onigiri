@@ -298,7 +298,7 @@ struct SummaryComplication: Widget {
             SummaryComplicationView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
-        .configurationDisplayName("Daily Summary")
+        .configurationDisplayName("Metrics")
         .description("Calorie headline plus your two tracked metrics.")
         .supportedFamilies([.accessoryRectangular])
     }

@@ -31,7 +31,7 @@ struct FoodSearchSheet: View {
                 // bottom (the app-wide standard), a completely blank
                 // list above it would read upside down.
                 if !search.hasSearched && !search.isSearching && search.results.isEmpty {
-                    Text("Search OpenFoodFacts for foods without barcodes — results appear here.")
+                    Text("Search OpenFoodFacts")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

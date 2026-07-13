@@ -107,11 +107,26 @@ struct SettingsView: View {
                 Text("USDA FoodData Central").tag(SharedStore.textSearchSourceFDC)
             }
             if textSearchSource == SharedStore.textSearchSourceFDC {
-                TextField("API key", text: $fdcAPIKey)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.asciiCapable)
-                    .font(.callout.monospaced())
+                HStack {
+                    TextField("API key", text: $fdcAPIKey)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.asciiCapable)
+                        .font(.callout.monospaced())
+                    // Keys arrive by copy from a browser/email — the
+                    // system PasteButton needs no long-press hunting
+                    // (and no paste-permission banner). Trimmed: copied
+                    // keys drag whitespace/newlines along.
+                    PasteButton(payloadType: String.self) { strings in
+                        guard let key = strings.first else { return }
+                        Task { @MainActor in
+                            fdcAPIKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+                        }
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.small)
+                }
                 if fdcAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("An API key is required to use the USDA FoodData Central, go to [fdc.nal.usda.gov/api-guide](https://fdc.nal.usda.gov/api-guide) to request a key")
                         .font(.footnote)
@@ -121,7 +136,7 @@ struct SettingsView: View {
         } header: {
             Text("Online Database")
         } footer: {
-            Text("[OpenFoodFacts](https://world.openfoodfacts.org) is used for Barcode scans")
+            Text("[OpenFoodFacts](https://world.openfoodfacts.org) is used for barcode scans")
         }
     }
 

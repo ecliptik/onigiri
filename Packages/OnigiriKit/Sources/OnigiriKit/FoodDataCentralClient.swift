@@ -174,9 +174,19 @@ public struct FoodDataCentralClient: Sendable {
             return cached
         }
         guard let portions = try? await portions(fdcId: fdcId) else { return base }
-        let product = Self.scaled(base, to: portions.first)
+        let product = Self.scaled(base, to: Self.bestPortion(portions))
         await ProductCache.shared.store(product, for: base.barcode)
         return product
+    }
+
+    /// The prefill serving: the household measure nearest a 100 g
+    /// serving. Sequence order can't be trusted for this — FNDDS lists
+    /// the single fruit first ("1 grape", 7 g; verified live), which is
+    /// a counting unit, not a serving.
+    static func bestPortion(_ portions: [FoodPortion]) -> FoodPortion? {
+        portions.min {
+            abs($0.gramWeight - 100) < abs($1.gramWeight - 100)
+        }
     }
 
     /// Per-100 g values rescaled to a household portion; no portion means
@@ -393,19 +403,27 @@ public struct FoodDataCentralClient: Sendable {
             let gramWeight: Double?
             let sequenceNumber: Int?
 
-            /// "1 cup" from whichever fields the dataset filled. FNDDS
-            /// marks unusable rows "Quantity not specified"; SR Legacy
-            /// uses a bare `modifier`, Foundation a `measureUnit` whose
-            /// placeholder name is "undetermined".
+            /// "1 cup" from whichever fields the dataset filled — all
+            /// three shapes verified live 2026-07-13. FNDDS fills
+            /// `portionDescription` (unusable rows say "Quantity not
+            /// specified") and its `modifier` is a numeric portion CODE
+            /// ("10205"), never words; SR Legacy uses a word `modifier`
+            /// ("grape"); Foundation a `measureUnit` whose placeholder
+            /// name is "undetermined" and whose real name can be the
+            /// regulatory "RACC" — rendered as the plain word "serving".
             var displayDescription: String? {
                 if let text = portionDescription?.trimmingCharacters(in: .whitespaces),
                    !text.isEmpty {
                     return text.localizedCaseInsensitiveContains("not specified") ? nil : text
                 }
-                let unit = [measureUnit?.name, modifier]
+                var unit = [measureUnit?.name, modifier]
                     .compactMap { $0?.trimmingCharacters(in: .whitespaces) }
-                    .filter { !$0.isEmpty && $0.lowercased() != "undetermined" }
+                    .filter {
+                        !$0.isEmpty && $0.lowercased() != "undetermined"
+                            && !$0.allSatisfy(\.isNumber)
+                    }
                     .first
+                if unit?.uppercased() == "RACC" { unit = "serving" }
                 guard let unit else { return nil }
                 guard let amount, amount > 0 else { return unit }
                 let count = amount.formatted(.number.precision(.fractionLength(0...2)))

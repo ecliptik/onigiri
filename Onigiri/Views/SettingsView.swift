@@ -619,7 +619,10 @@ struct SettingsView: View {
                             Text("\(waterServingOz, format: .number.precision(.fractionLength(0))) oz")
                         }
                     }
-                    Stepper(value: $waterGoalOz, in: 16...200, step: 8) {
+                    // The goal steps by the serving size (12 oz serving →
+                    // 12, 24, 36…): the goal is drunk in servings, so
+                    // stepping by anything else lands between them.
+                    Stepper(value: $waterGoalOz, in: 16...200, step: waterServingOz) {
                         LabeledContent("Daily goal") {
                             Text("\(waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
                         }

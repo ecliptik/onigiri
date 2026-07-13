@@ -159,18 +159,47 @@ struct FoodDataCentralTests {
     // MARK: - Portions
 
     @Test func parsesSurveyPortionDescriptions() throws {
+        // Live shape (food/2709237): out-of-order sequenceNumbers, a
+        // numeric portion CODE in modifier, "undetermined" measureUnit.
         let json = """
         {"fdcId":2709237,"foodPortions":[
-        {"sequenceNumber":2,"portionDescription":"1 NLEA serving","gramWeight":126},
-        {"sequenceNumber":1,"portionDescription":"1 cup, seedless","gramWeight":151},
-        {"sequenceNumber":9,"portionDescription":"Quantity not specified","gramWeight":100}]}
+        {"sequenceNumber":3,"modifier":"90000","portionDescription":"Quantity not specified",
+         "measureUnit":{"name":"undetermined"},"gramWeight":75},
+        {"sequenceNumber":2,"modifier":"10205","portionDescription":"1 cup",
+         "measureUnit":{"name":"undetermined"},"gramWeight":150},
+        {"sequenceNumber":1,"modifier":"60831","portionDescription":"1 grape",
+         "measureUnit":{"name":"undetermined"},"gramWeight":7}]}
         """
         let portions = try FoodDataCentralClient.parsePortions(data: data(json))
         // Sorted by sequenceNumber; "Quantity not specified" is unusable.
         #expect(portions == [
-            FoodPortion(description: "1 cup, seedless", gramWeight: 151),
-            FoodPortion(description: "1 NLEA serving", gramWeight: 126),
+            FoodPortion(description: "1 grape", gramWeight: 7),
+            FoodPortion(description: "1 cup", gramWeight: 150),
         ])
+        // The prefill serving is the measure nearest 100 g — "1 grape"
+        // is a counting unit, not a serving.
+        #expect(FoodDataCentralClient.bestPortion(portions)
+            == FoodPortion(description: "1 cup", gramWeight: 150))
+    }
+
+    @Test func foundationRACCReadsAsServing() throws {
+        // Live shape (food/2346413): no modifier, measureUnit "RACC".
+        let json = """
+        {"fdcId":2346413,"foodPortions":[
+        {"sequenceNumber":1,"amount":1.0,"measureUnit":{"name":"RACC"},"gramWeight":140.0}]}
+        """
+        let portions = try FoodDataCentralClient.parsePortions(data: data(json))
+        #expect(portions == [FoodPortion(description: "1 serving", gramWeight: 140)])
+    }
+
+    @Test func numericPortionCodesNeverBecomeUnits() throws {
+        // An FNDDS row missing its portionDescription must not render
+        // its numeric portion code as "1 10205".
+        let json = """
+        {"fdcId":1,"foodPortions":[
+        {"amount":1,"modifier":"10205","measureUnit":{"name":"undetermined"},"gramWeight":150}]}
+        """
+        #expect(try FoodDataCentralClient.parsePortions(data: data(json)).isEmpty)
     }
 
     @Test func buildsSRLegacyPortionFromAmountAndModifier() throws {

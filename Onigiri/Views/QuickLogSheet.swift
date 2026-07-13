@@ -16,7 +16,7 @@ struct QuickLogSheet: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Meal.name) private var meals: [Meal]
     @Query(sort: \Food.name) private var foods: [Food]
-    @State private var kind: QuickActions.QuickLogKind = .all
+    @State private var kind: QuickActions.QuickLogKind = .foods
     @State private var kindLoaded = false
     @State private var searchText = ""
     /// Drives the whole search-active state (not just keyboard focus):
@@ -65,6 +65,9 @@ struct QuickLogSheet: View {
         var recency: Date = .distantPast
         var food: Food?
         var meal: Meal?
+        /// True for HealthKit-history rows with no library twin — they
+        /// re-log their own values ("as last logged").
+        var isHistory = false
         var isMeal: Bool { meal != nil }
     }
 
@@ -100,48 +103,60 @@ struct QuickLogSheet: View {
         return mealItems + foodItems
     }
 
-    /// Takes the item list as a parameter so body computes the whole
-    /// allItems → filtered → favorites/others chain once per evaluation
-    /// instead of ~3× per keystroke through chained computed properties.
-    private func filtered(_ items: [Item]) -> [Item] {
-        let matched = items.filter { item in
-            switch kind {
-            case .meals: if !item.isMeal { return false }
-            case .foods: if item.isMeal { return false }
-            case .all, .scan: break
-            }
-            if searchText.isEmpty { return true }
-            if item.name.localizedCaseInsensitiveContains(searchText) { return true }
-            return item.category?.localizedCaseInsensitiveContains(searchText) ?? false
+    /// History-only rows: last week's logged foods with no library twin
+    /// (library rows carry their own recency already, and meal-named
+    /// entries would duplicate the meal rows).
+    private func historyItems() -> [Item] {
+        recents.compactMap { entry in
+            guard !isMealName(entry.name),
+                  !foods.contains(where: {
+                      $0.name.localizedCaseInsensitiveCompare(entry.name) == .orderedSame
+                  })
+            else { return nil }
+            return Item(
+                id: "recent-\(entry.id.uuidString)",
+                name: entry.name,
+                detail: entry.date.formatted(.relative(presentation: .named)),
+                kcal: entry.kcal,
+                sodiumMg: entry.sodiumMg,
+                nutrients: entry.nutrients,
+                isFavorite: false,
+                category: entry.category.rawValue,
+                recency: entry.date,
+                isHistory: true
+            )
         }
-        // Favorites first, then by recency (last logged, else added) —
-        // Micheal: recent beats slot affinity — then name for stability.
+    }
+
+    /// The scope's pool, ranked purely by recency (Micheal: no favorite
+    /// boost — "what I actually eat" order), name for stability.
+    private func pool(_ items: [Item]) -> [Item] {
+        let scoped = items.filter { item in
+            switch kind {
+            case .meals: item.isMeal
+            case .favorites: item.isFavorite
+            case .foods, .all, .scan: !item.isMeal
+            }
+        }
+        let matched = searchText.isEmpty ? scoped : scoped.filter { item in
+            item.name.localizedCaseInsensitiveContains(searchText)
+                || (item.category?.localizedCaseInsensitiveContains(searchText) ?? false)
+        }
         return matched.sorted { lhs, rhs in
-            if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
             if lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
             return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
     }
 
     /// A history entry is "a meal" when its name still matches the meal
-    /// library — drives the Meal tag and the kind filter for Recents.
+    /// library — those rows would duplicate the meal rows.
     private func isMealName(_ name: String) -> Bool {
         meals.contains { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame }
     }
 
     var body: some View {
-        let items = allItems
-        let visible = filtered(items)
-        let favorites = visible.filter(\.isFavorite)
-        let others = visible.filter { !$0.isFavorite }
-        // Recents respect the Meals/Foods filter like everything else.
-        let visibleRecents = recents.filter { entry in
-            switch kind {
-            case .all, .scan: true
-            case .meals: isMealName(entry.name)
-            case .foods: !isMealName(entry.name)
-            }
-        }
+        let items = allItems + historyItems()
+        let ranked = pool(items)
         NavigationStack {
             List {
                 if isLookingUpBarcode {
@@ -151,48 +166,29 @@ struct QuickLogSheet: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                // What you actually ate lately beats any sort order — but it
-                // yields to search, which is about finding something else.
-                if searchText.isEmpty, !visibleRecents.isEmpty {
-                    Section("Recent") {
-                        ForEach(visibleRecents) { entry in
-                            recentRow(entry)
-                        }
-                    }
-                }
-                if !favorites.isEmpty {
-                    Section("Favorites") {
-                        ForEach(favorites) { item in
+                if !searchText.isEmpty || kind == .favorites {
+                    // Search results (and the Favorites scope) read as
+                    // one flat ranked list — no Recent split.
+                    Section {
+                        ForEach(ranked) { item in
                             row(item)
                         }
+                        emptyState(pool: ranked, items: items)
                     }
-                }
-                Section(favorites.isEmpty ? "Library" : "Everything else") {
-                    ForEach(others) { item in
-                        row(item)
+                } else {
+                    // The 10 most recently logged/used lead; the rest of
+                    // the scope follows.
+                    Section("Recent") {
+                        ForEach(ranked.prefix(10)) { item in
+                            row(item)
+                        }
+                        emptyState(pool: ranked, items: items)
                     }
-                    if visible.isEmpty {
-                        // Accurate copy: this sheet can create foods itself
-                        // via the scan button and online search above.
-                        if items.isEmpty {
-                            ContentUnavailableView {
-                                Label("No saved foods yet", systemImage: "fork.knife")
-                            } description: {
-                                Text("Scan a barcode or search online — logged foods are saved to your library.\n\nOr bring your library from another device: export it there (Settings → Export Library) and import the file here.")
-                            } actions: {
-                                // Text-only: with a systemImage, iOS 26
-                                // collapses the label to a bare icon here.
-                                Button("Import Library…") {
-                                    showLibraryImporter = true
-                                }
-                                .buttonStyle(.borderedProminent)
+                    if ranked.count > 10 {
+                        Section("Everything else") {
+                            ForEach(ranked.dropFirst(10)) { item in
+                                row(item)
                             }
-                        } else {
-                            ContentUnavailableView(
-                                "No matches",
-                                systemImage: "magnifyingglass",
-                                description: Text("Try different words, or search online below.")
-                            )
                         }
                     }
                 }
@@ -226,7 +222,7 @@ struct QuickLogSheet: View {
             .searchable(
                 text: $searchText,
                 isPresented: $searchPresented,
-                prompt: "Meals, Foods, Favorites, and More"
+                prompt: "Foods, Meals, and More"
             )
             .onSubmit(of: .search) {
                 Task { await onlineSearch.search(searchText) }
@@ -255,21 +251,18 @@ struct QuickLogSheet: View {
             .task {
                 if !kindLoaded {
                     kindLoaded = true
-                    // .scan is a routing kind, not a filter: land on All
-                    // with the scanner already up.
-                    if initialKind == .scan {
-                        kind = .all
+                    // Routing kinds aren't scopes: .scan lands on Foods
+                    // with the scanner up, .all just lands on Foods. No
+                    // auto-focused search — the keyboard-on-open version
+                    // was too jarring (Micheal).
+                    switch initialKind {
+                    case .scan:
+                        kind = .foods
                         activeSheet = .scanner
-                    } else {
+                    case .all:
+                        kind = .foods
+                    default:
                         kind = initialKind
-                        // Music-style: the keyboard comes up with the
-                        // sheet (after its presentation settles) — the
-                        // sheet is search-first now. Unless a fast tap
-                        // already opened something over it.
-                        try? await Task.sleep(for: .milliseconds(400))
-                        if activeSheet == nil {
-                            searchPresented = true
-                        }
                     }
                 }
                 recents = (try? await HealthKitService().recentFoodEntries()) ?? []
@@ -315,25 +308,68 @@ struct QuickLogSheet: View {
         .toastHost()
     }
 
-    /// The kind filter, pinned above the list. Segmented controls don't
-    /// scale with Dynamic Type (UIKit limitation) — at accessibility
-    /// sizes this becomes a menu so the labels grow with everything else.
+    /// The kind filter, pinned above the list — Foods, Meals, Favorites
+    /// (Favorites replaced "All"; the mixed view earned its keep only as
+    /// a favorites shelf). Segmented controls don't scale with Dynamic
+    /// Type (UIKit limitation) — at accessibility sizes this becomes a
+    /// menu so the labels grow with everything else.
     @ViewBuilder
     private var kindPicker: some View {
         if dynamicTypeSize.isAccessibilitySize {
             Picker("Show", selection: $kind) {
-                Text("All").tag(QuickActions.QuickLogKind.all)
-                Text("Meals").tag(QuickActions.QuickLogKind.meals)
                 Text("Foods").tag(QuickActions.QuickLogKind.foods)
+                Text("Meals").tag(QuickActions.QuickLogKind.meals)
+                Text("Favorites").tag(QuickActions.QuickLogKind.favorites)
             }
             .pickerStyle(.menu)
         } else {
             Picker("Show", selection: $kind) {
-                Text("All").tag(QuickActions.QuickLogKind.all)
-                Text("Meals").tag(QuickActions.QuickLogKind.meals)
                 Text("Foods").tag(QuickActions.QuickLogKind.foods)
+                Text("Meals").tag(QuickActions.QuickLogKind.meals)
+                Text("Favorites").tag(QuickActions.QuickLogKind.favorites)
             }
             .pickerStyle(.segmented)
+        }
+    }
+
+    /// Scope-aware empty states, rendered inside the leading section.
+    @ViewBuilder
+    private func emptyState(pool: [Item], items: [Item]) -> some View {
+        if pool.isEmpty {
+            if items.isEmpty {
+                // Accurate copy: this sheet can create foods itself via
+                // the scan button and online search.
+                ContentUnavailableView {
+                    Label("No saved foods yet", systemImage: "fork.knife")
+                } description: {
+                    Text("Scan a barcode or search online — logged foods are saved to your library.\n\nOr bring your library from another device: export it there (Settings → Export Library) and import the file here.")
+                } actions: {
+                    // Text-only: with a systemImage, iOS 26 collapses
+                    // the label to a bare icon here.
+                    Button("Import Library…") {
+                        showLibraryImporter = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            } else if !searchText.isEmpty {
+                ContentUnavailableView(
+                    "No matches",
+                    systemImage: "magnifyingglass",
+                    description: Text("Try different words, or search online below.")
+                )
+            } else if kind == .favorites {
+                Text("No favorites yet — swipe right on a food or meal to star it.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else if kind == .meals {
+                Text("No saved meals yet — build one on the Library tab.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("No saved foods yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -419,16 +455,19 @@ struct QuickLogSheet: View {
             activeSheet = .portion(makePortionTarget(for: item))
         }
         .swipeActions(edge: .leading) {
-            Button {
-                if let meal = item.meal {
-                    activeSheet = .editMeal(meal)
-                } else if let food = item.food {
-                    activeSheet = .editFood(food)
+            // History rows have no library twin — nothing to edit.
+            if !item.isHistory {
+                Button {
+                    if let meal = item.meal {
+                        activeSheet = .editMeal(meal)
+                    } else if let food = item.food {
+                        activeSheet = .editFood(food)
+                    }
+                } label: {
+                    Label("Edit", systemImage: "pencil")
                 }
-            } label: {
-                Label("Edit", systemImage: "pencil")
+                .tint(.riceToast)
             }
-            .tint(.riceToast)
         }
         .accessibilityAddTraits(.isButton)
         .accessibilityAction(named: "Edit") {
@@ -440,56 +479,12 @@ struct QuickLogSheet: View {
         }
     }
 
-    /// A recent entry re-logs through the portion sheet. No editor behind
-    /// the row — there's nothing to edit — so the whole row is the action.
-    private func recentRow(_ entry: FoodLogEntry) -> some View {
-        HStack(spacing: 10) {
-            LibraryRow(
-                name: entry.name,
-                detail: entry.date.formatted(.relative(presentation: .named)),
-                kcal: entry.kcal,
-                sodiumMg: entry.sodiumMg,
-                // History entries don't know what they were; a name still
-                // in the meal library is the best available signal.
-                isMeal: isMealName(entry.name)
-            )
-            LogButton(name: entry.name) {
-                activeSheet = .portion(recentTarget(for: entry))
-            } onCustomPortion: {
-                activeSheet = .portion(recentTarget(for: entry))
-            }
-        }
-        .contentShape(.rect)
-        .onTapGesture {
-            activeSheet = .portion(recentTarget(for: entry))
-        }
-        .accessibilityAddTraits(.isButton)
-    }
-
-    /// Library values win when a food of the same name still exists —
-    /// they carry Micheal's hand-corrections. Otherwise re-log the
-    /// entry's own values.
-    private func recentTarget(for entry: FoodLogEntry) -> PortionTarget {
-        if let food = foods.first(where: {
-            $0.name.localizedCaseInsensitiveCompare(entry.name) == .orderedSame
-        }) {
-            return PortionTarget(
-                name: food.name, kcal: food.kcal, sodiumMg: food.sodiumMg,
-                nutrients: food.nutrients, serving: food.servingDescription,
-                defaultCategory: PortionTarget.category(from: food.category)
-            )
-        }
-        return PortionTarget(
-            name: entry.name, kcal: entry.kcal, sodiumMg: entry.sodiumMg,
-            nutrients: entry.nutrients, serving: "as last logged",
-            defaultCategory: entry.category
-        )
-    }
-
     private func makePortionTarget(for item: Item) -> PortionTarget {
         PortionTarget(
             name: item.name, kcal: item.kcal, sodiumMg: item.sodiumMg,
-            nutrients: item.nutrients, serving: item.detail,
+            // A history row's detail is its relative log date, not a
+            // serving description.
+            nutrients: item.nutrients, serving: item.isHistory ? "as last logged" : item.detail,
             defaultCategory: PortionTarget.category(from: item.category)
         )
     }

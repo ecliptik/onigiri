@@ -19,11 +19,13 @@ final class QuickActions {
     }
 
     enum QuickLogKind {
-        case all, meals, foods
-        /// The Log sheet with its barcode scanner already open — known
+        /// Scopes the sheet offers (Foods / Meals / Favorites).
+        case foods, meals, favorites
+        /// Routing kinds, not scopes: .all lands on Foods; .scan lands
+        /// on Foods with the barcode scanner already open — known
         /// barcodes take the 1-tap portion path with the browsed-day
         /// logDate (the Foods-tab food form lost both).
-        case scan
+        case all, scan
     }
 
     var pending: Action?

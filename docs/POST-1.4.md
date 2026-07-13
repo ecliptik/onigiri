@@ -411,6 +411,24 @@ left: "Removed" toasts (reads better next to Undo than "Deleted").
     semantic `onRicePaper` color; `removeAllPendingNotificationRequests`
     wipes ALL notifications, not just reminder-prefixed IDs.
 
+## Feedback round 1 (2026-07-12, on-device) — SHIPPED same session
+
+Micheal's first pass on the new UI: keep the corner pills, drop the
+auto-focused search ("too jarring" — list + bottom bar, no keyboard);
+placeholder shortened to "Foods, Meals, and More" (Foods tab matches).
+Log sheet scopes became Foods / Meals / Favorites (Favorites replaced
+"All"; mixed view only earned its keep as a favorites shelf) with a
+"Recent" top-10 (PURELY most recent, no favorite boost — his call) and
+"Everything else" per scope; history-only entries fold into the Foods
+pool as rows. Water found its home: the hydration metric IS the button
+(tap = serving, long-press = amounts, Undo covers slips, a11y value
+carries the total) and the header capsule is gone — chosen from a
+brainstorm (over log-sheet row / keep-capsule options). The Foods
+toolbar "+ Add" menu consolidated into the corner pill (Food-or-Meal
+chooser dialog). The food form's search entry moved from a top row to
+a bottom search-bar launcher ("Search OpenFoodFacts", Log-sheet look,
+barcode button sized to the bar).
+
 ## Deliberately not doing
 
 - **Metric units** (kg/ml): personal US app; revisit only if it grows

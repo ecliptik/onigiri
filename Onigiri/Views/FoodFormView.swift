@@ -94,38 +94,22 @@ struct FoodFormView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    // One row: text search on the left, barcode scan on
-                    // the right.
-                    HStack {
-                        Button {
-                            showSearch = true
-                        } label: {
-                            Label("Search Database", systemImage: "magnifyingglass")
+                // Lookup status only — the search entry point moved to
+                // the bottom bar, matching the Log sheet.
+                if isLookingUp || lookupMessage != nil {
+                    Section {
+                        if isLookingUp {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("Looking up product…")
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                        Spacer()
-                        Button {
-                            showScanner = true
-                        } label: {
-                            Image(systemName: "barcode.viewfinder")
-                                .foregroundStyle(Color.riceToast)
+                        if let lookupMessage {
+                            Text(lookupMessage)
+                                .font(.footnote)
+                                .foregroundStyle(.orange)
                         }
-                        .accessibilityLabel("Scan barcode")
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(isLookingUp)
-
-                    if isLookingUp {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                            Text("Looking up product…")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    if let lookupMessage {
-                        Text(lookupMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.orange)
                     }
                 }
 
@@ -198,6 +182,45 @@ struct FoodFormView: View {
             .compactSections()
             .navigationTitle(food == nil && createdFood == nil ? "New Food" : "Edit Food")
             .navigationBarTitleDisplayMode(.inline)
+            // Bottom search-bar launcher, matching the Log sheet's look
+            // and placement (the entry point used to be a row at the TOP
+            // of the form). One tap opens the real search sheet, which
+            // focuses itself; the barcode button rides alongside, sized
+            // to the bar.
+            .safeAreaInset(edge: .bottom) {
+                HStack(spacing: 10) {
+                    Button {
+                        showSearch = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundStyle(.secondary)
+                            Text("Search OpenFoodFacts")
+                                .foregroundStyle(.secondary)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 12)
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    Button {
+                        showScanner = true
+                    } label: {
+                        Image(systemName: "barcode.viewfinder")
+                            .font(.title2)
+                            .foregroundStyle(Color.riceToast)
+                            .padding(9)
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityLabel("Scan barcode")
+                }
+                .disabled(isLookingUp)
+                .padding(.horizontal)
+                .padding(.vertical, 6)
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {

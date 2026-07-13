@@ -13,6 +13,7 @@ struct FoodsView: View {
 
     @State private var showNewFood = false
     @State private var showNewMeal = false
+    @State private var showAddChooser = false
     @State private var quickActions = QuickActions.shared
     @State private var editingFood: Food?
     @State private var editingMeal: Meal?
@@ -228,7 +229,7 @@ struct FoodsView: View {
             .fileImporter(isPresented: $showLibraryImporter, allowedContentTypes: [.json]) { result in
                 ToastCenter.shared.show(LibraryTransfer.handlePickedFile(result, context: context))
             }
-            .searchable(text: $searchText, prompt: "Meals, Foods, Favorites, and More")
+            .searchable(text: $searchText, prompt: "Foods, Meals, and More")
             .onSubmit(of: .search) {
                 Task { await onlineSearch.search(searchText) }
             }
@@ -253,22 +254,6 @@ struct FoodsView: View {
                     }
                     .accessibilityLabel("Filter by category")
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button("Add Food", systemImage: "carrot") { showNewFood = true }
-                        Button("Add Meal", systemImage: "takeoutbag.and.cup.and.straw") { showNewMeal = true }
-                            .disabled(foods.isEmpty)
-                    } label: {
-                        // "＋ Add" instead of a bare plus. An explicit
-                        // HStack, not Label(.titleAndIcon): iOS 26 toolbars
-                        // strip Label titles down to the icon.
-                        HStack(spacing: 4) {
-                            Image(systemName: "plus")
-                            Text("Add")
-                        }
-                    }
-                    .accessibilityLabel("Add food or meal")
-                }
             }
             .sheet(isPresented: $showNewFood) { FoodFormView(food: nil) }
             .sheet(item: $formPrefill) { prefill in
@@ -285,13 +270,20 @@ struct FoodsView: View {
                 }
                 .presentationDetents([.medium, .large])
             }
-            // The corner + while on this tab: straight to the new-food
-            // form. Consumable Optional, checked on change and appear
-            // (the Bool-flag version of this pattern goes dead).
+            // The corner + while on this tab (the toolbar "+ Add" menu
+            // consolidated into it): a Food-or-Meal chooser. Consumable
+            // Optional, checked on change and appear (the Bool-flag
+            // version of this pattern goes dead).
             .onChange(of: quickActions.addFoodRequest) { _, _ in
                 consumeAddFoodRequest()
             }
             .onAppear { consumeAddFoodRequest() }
+            .confirmationDialog("Add to your library", isPresented: $showAddChooser, titleVisibility: .visible) {
+                Button("Add Food") { showNewFood = true }
+                if !foods.isEmpty {
+                    Button("Add Meal") { showNewMeal = true }
+                }
+            }
             // Alerts, not confirmationDialogs: iOS 26 anchors dialogs to
             // the source row as a popover bubble; a destructive confirm
             // should be the standard centered alert.
@@ -336,7 +328,7 @@ struct FoodsView: View {
     private func consumeAddFoodRequest() {
         guard quickActions.addFoodRequest != nil else { return }
         quickActions.addFoodRequest = nil
-        showNewFood = true
+        showAddChooser = true
     }
 
     private var deleteMealsTitle: String {

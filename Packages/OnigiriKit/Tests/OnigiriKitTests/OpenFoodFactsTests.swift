@@ -126,12 +126,14 @@ struct OpenFoodFactsTests {
             result("Crispy Roasted Potatoes"),
             result("Potatoes au Gratin"),
         ], query: "Roasted Potatoes")
-        // Whole phrase wins; the one-word matches tie and keep server order.
+        // Whole phrase wins; among the one-word matches, the extra-word
+        // penalty puts the potato dish above the cereal and the rice
+        // (fewer name words the query never asked for).
         #expect(ranked.map(\.name) == [
             "Crispy Roasted Potatoes",
+            "Potatoes au Gratin",
             "Honey Bunches of Oats Honey Roasted",
             "Ready Rice Roasted Chicken",
-            "Potatoes au Gratin",
         ])
     }
 
@@ -163,20 +165,41 @@ struct OpenFoodFactsTests {
         #expect(ranked[1].brand == "Kirkland Signature")
         #expect(ranked[2].brand == nil)
 
-        // A pure brand query surfaces the brand's products at all.
+        // A pure brand query surfaces the brand's products — including
+        // "mcdonalds" without the apostrophe, via the word-forms match
+        // ("mcdonalds" → "mcdonald" ↔ tokenized "McDonald's").
         let brandOnly = OpenFoodFactsClient.rank([
             result("Fries", nil),
             result("French Fries", "McDonald's"),
         ], query: "mcdonalds")
-        // "mcdonalds" (no apostrophe) isn't contained in "mcdonald's" —
-        // ranking can't fix spelling, server order stands.
-        #expect(brandOnly.count == 2)
+        #expect(brandOnly[0].brand == "McDonald's")
 
         let brandExact = OpenFoodFactsClient.rank([
             result("Fries", nil),
             result("French Fries", "McDonald's"),
         ], query: "mcdonald's")
         #expect(brandExact[0].brand == "McDonald's")
+    }
+
+    @Test func rankPrefersPlainFoodsForGenericQueries() {
+        func result(_ name: String, _ brand: String? = nil) -> OpenFoodFactsClient.SearchResult {
+            .init(barcode: name, name: name, brand: brand)
+        }
+        // "grapes" means grapes: the exact-name match leads, the fewer
+        // unasked-for name words the better, and plural/singular
+        // differences don't break the word matching.
+        let ranked = OpenFoodFactsClient.rank([
+            result("Concord Grape Jelly", "Welch's"),
+            result("Grape Seed Oil"),
+            result("Grapes"),
+            result("Red Grapes"),
+        ], query: "grapes")
+        #expect(ranked.map(\.name) == [
+            "Grapes",
+            "Red Grapes",
+            "Concord Grape Jelly", // ties with Grape Seed Oil; server order
+            "Grape Seed Oil",
+        ])
     }
 
     @Test func parsesSaturatedTransFatAndCholesterol() throws {

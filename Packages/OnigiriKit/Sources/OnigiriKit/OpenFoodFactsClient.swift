@@ -148,23 +148,45 @@ public struct OpenFoodFactsClient: Sendable {
     }
 
     /// Both endpoints match loosely ("roasted potatoes" surfaces "honey
-    /// roasted oats"), so results re-rank client-side: whole-phrase
-    /// matches first, then by how many query words the name contains,
-    /// keeping the server's order for ties. Brands count too — the
-    /// server matches them ("Kirkland", "McDonald's"), and scoring only
-    /// the name buried a brand's own products under name-word
-    /// coincidences — but at a lower weight, so food words in the NAME
-    /// still dominate.
+    /// roasted oats") and order by scan-count popularity, so results
+    /// re-rank client-side for user intent: whole-phrase matches first,
+    /// then an exact-name bonus (a product NAMED your query is your
+    /// query), then per-word matches — plural-insensitive, so "grapes"
+    /// credits "Grape" — minus a small penalty per name word you never
+    /// asked for ("Grapes" beats "Grape Jelly" beats "Grape Seed Oil").
+    /// Brand words count at half the name weight ("Kirkland",
+    /// "McDonald's"), so food words in the name still dominate. Server
+    /// order breaks ties.
     static func rank(_ results: [SearchResult], query: String) -> [SearchResult] {
         let phrase = query.lowercased().trimmingCharacters(in: .whitespaces)
-        let words = phrase.split(separator: " ").map(String.init)
+        let words = tokenize(phrase)
         guard !words.isEmpty else { return results }
         func score(_ result: SearchResult) -> Int {
             let name = result.name.lowercased()
             let brand = result.brand?.lowercased() ?? ""
-            var value = words.count { name.contains($0) } * 10
-            // A word already credited to the name doesn't double-dip.
-            value += words.count { !name.contains($0) && brand.contains($0) } * 5
+            let nameTokens = tokenize(name)
+            let brandTokens = tokenize(brand)
+            var matchedInName = 0
+            var matchedInBrand = 0
+            for word in words {
+                if nameTokens.contains(where: { formsMatch(word, $0) }) {
+                    matchedInName += 1
+                } else if brandTokens.contains(where: { formsMatch(word, $0) }) {
+                    matchedInBrand += 1
+                }
+            }
+            var value = matchedInName * 10 + matchedInBrand * 5
+            // "I typed a food, not a product": every name word the query
+            // didn't ask for is a step away from intent. Capped so long
+            // descriptive names aren't buried outright.
+            let extraTokens = nameTokens.count { token in
+                !words.contains { formsMatch($0, token) }
+            }
+            value -= min(extraTokens, 3) * 2
+            // The name IS the query, up to word order and plurals.
+            if matchedInName == words.count, extraTokens == 0 {
+                value += 50
+            }
             if name.contains(phrase) {
                 value += 100
             } else if brand.contains(phrase) {
@@ -178,6 +200,35 @@ public struct OpenFoodFactsClient: Sendable {
                 $0.score != $1.score ? $0.score > $1.score : $0.offset < $1.offset
             }
             .map(\.result)
+    }
+
+    /// Lowercased alphanumeric words, single letters dropped ("McDonald's"
+    /// → ["mcdonald"], not a stray "s").
+    static func tokenize(_ text: String) -> [String] {
+        text.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { $0.count >= 2 }
+    }
+
+    /// Plural-insensitive word comparison: two words match when any of
+    /// their singular/plural forms coincide — "grapes" ↔ "grape",
+    /// "tomatoes" ↔ "tomato", "berries" ↔ "berry".
+    static func formsMatch(_ lhs: String, _ rhs: String) -> Bool {
+        !wordForms(lhs).isDisjoint(with: wordForms(rhs))
+    }
+
+    private static func wordForms(_ word: String) -> Set<String> {
+        var forms: Set<String> = [word]
+        if word.hasSuffix("ies"), word.count > 4 {
+            forms.insert(String(word.dropLast(3)) + "y")
+        }
+        if word.hasSuffix("es"), word.count > 4 {
+            forms.insert(String(word.dropLast(2)))
+        }
+        if word.hasSuffix("s"), word.count > 3 {
+            forms.insert(String(word.dropLast()))
+        }
+        return forms
     }
 
     private func searchOnce(query: String, limit: Int, page: Int) async throws -> [SearchResult] {
@@ -226,6 +277,18 @@ public struct OpenFoodFactsClient: Sendable {
             .init(name: "page", value: String(page)),
             .init(name: "fields", value: "code,product_name,brands"),
             .init(name: "lc", value: Self.languageCode),
+            // Only products with filled nutrition facts: entries without
+            // them (common for raw produce) are unloggable anyway — the
+            // client weeds them after a wasted per-row fetch — and they
+            // crowd loggable results out of the page. Verified live
+            // 2026-07-13 (count drops, results all complete). NOT applied
+            // to search-a-licious: its filter syntax couldn't be verified
+            // (the service was mid-outage), and a wrong filter there
+            // would 200-with-zero-hits — which never triggers this
+            // fallback and would break search outright.
+            .init(name: "tagtype_0", value: "states"),
+            .init(name: "tag_contains_0", value: "contains"),
+            .init(name: "tag_0", value: "en:nutrition-facts-completed"),
         ]
         guard let url = components.url else { throw OpenFoodFactsError.badResponse }
         let data = try await fetch(url)

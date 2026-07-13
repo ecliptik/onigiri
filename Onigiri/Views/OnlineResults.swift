@@ -35,7 +35,12 @@ final class OnlineFoodSearch {
     private var autoBackfills = 0
     private static let maxAutoBackfills = 2
 
-    private static let pageSize = 10
+    /// The re-rank pool: one search request either way, and the server
+    /// orders by scan-count popularity, so a plain "Grapes" can sit
+    /// thirty deep under jelly and soda — a bigger page gives the
+    /// intent-ranking something to find. Per-row detail fetches are
+    /// visible-rows-only, so this doesn't multiply follow-up requests.
+    private static let pageSize = 30
     private let client = OpenFoodFactsClient()
     private(set) var lastQuery = ""
     /// Comparing query strings can't tell a resubmit from the search it

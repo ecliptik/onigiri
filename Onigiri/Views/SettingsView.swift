@@ -133,7 +133,7 @@ struct SettingsView: View {
     /// key (device-local, never synced — see PLAN-1.7).
     private var onlineDatabaseSection: some View {
         Section {
-            Picker("Text search", selection: $textSearchSource) {
+            Picker("Source", selection: $textSearchSource) {
                 Text("OpenFoodFacts").tag(SharedStore.textSearchSourceOFF)
                 Text("USDA FoodData Central").tag(SharedStore.textSearchSourceFDC)
             }
@@ -170,7 +170,7 @@ struct SettingsView: View {
                     // Answers "is this key REAL?" at entry time — the
                     // shape check above can't know, and without this the
                     // first failed search is the messenger.
-                    Button("Test Key") { testFDCKey(draft) }
+                    Button("Test API key") { testFDCKey(draft) }
                         .disabled(!SharedStore.isPlausibleFDCKey(draft) || fdcKeyTest == .testing)
                     Spacer()
                     switch fdcKeyTest {
@@ -192,7 +192,7 @@ struct SettingsView: View {
         } header: {
             Text("Online Database")
         } footer: {
-            Text("[OpenFoodFacts](https://world.openfoodfacts.org) is used for barcode scans")
+            Text("[OpenFoodFacts](https://world.openfoodfacts.org) is always used for barcode scanning")
         }
     }
 

@@ -686,13 +686,26 @@ struct SettingsView: View {
                             Text("\(waterServingOz, format: .number.precision(.fractionLength(0))) oz")
                         }
                     }
-                    // The goal steps by the serving size (12 oz serving →
-                    // 12, 24, 36…): the goal is drunk in servings, so
-                    // stepping by anything else lands between them.
-                    Stepper(value: $waterGoalOz, in: 16...200, step: waterServingOz) {
+                    // The goal is drunk in servings, so stepping SNAPS to
+                    // multiples of the serving size (12 oz serving → 12,
+                    // 24, 36…) — plain ±serving from a goal set under an
+                    // old serving size stays misaligned forever, and the
+                    // tempting reset-to-0 escape hatch can't exist:
+                    // storage reads 0 as "unset → 64", so a 0 here would
+                    // show while the app secretly runs the fallback.
+                    // Floor = one serving, ceiling 200.
+                    Stepper {
                         LabeledContent("Daily goal") {
                             Text("\(waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
                         }
+                    } onIncrement: {
+                        let serving = max(1, waterServingOz)
+                        let next = (floor(waterGoalOz / serving + 1e-9) + 1) * serving
+                        if next <= 200 { waterGoalOz = next }
+                    } onDecrement: {
+                        let serving = max(1, waterServingOz)
+                        let previous = (ceil(waterGoalOz / serving - 1e-9) - 1) * serving
+                        waterGoalOz = max(serving, previous)
                     }
                 }
 

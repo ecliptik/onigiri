@@ -109,6 +109,12 @@ cd Packages/OnigiriKit && swift test     # pure-logic tests; ALSO needs the
   WatchConnectivity, log sync is HealthKit's own.
 - OpenFoodFacts: the search index has NO nutrition fields — search rows lazily
   fetch the full product per barcode to show kcal/serving.
+- Text search can route to USDA FoodData Central instead (Settings →
+  Online Database; user-supplied api.data.gov key, device-local). FDC rows
+  carry `fdc:{fdcId}` in the barcode slot and arrive with nutrients inline
+  (no lazy fetch, no weeding). The FDC search endpoint must be POST — GET
+  400s on the `Survey (FNDDS)` dataType parens. Barcode scans are always
+  OpenFoodFacts.
 - ALL online-search surfaces (Foods, Log sheet, and the food form's
   inline database search) render the shared `OnlineResultsSection` —
   a separate `FoodSearchSheet` with its own drifting list existed until

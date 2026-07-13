@@ -57,7 +57,8 @@ public enum OpenFoodFactsError: Error, LocalizedError {
 /// re-searching the same lunch words (or re-scanning a barcode a search
 /// row already fetched) used to re-spend OFF's ~10/min rate limit on
 /// every sheet presentation. Bounded FIFO; successful lookups only.
-private actor ProductCache {
+/// Module-internal: FDC picks share it, keyed by their "fdc:{id}" codes.
+actor ProductCache {
     static let shared = ProductCache()
     private var products: [String: ScannedProduct] = [:]
     private var order: [String] = []
@@ -158,12 +159,24 @@ public struct OpenFoodFactsClient: Sendable {
     /// "McDonald's"), so food words in the name still dominate. Server
     /// order breaks ties.
     static func rank(_ results: [SearchResult], query: String) -> [SearchResult] {
+        rank(results, query: query, name: \.name, brand: \.brand)
+    }
+
+    /// The same intent scoring for any result type — FDC descriptions
+    /// have their own relevance quirks ("Grape leaves, canned" above raw
+    /// grapes) and re-rank with the identical rules.
+    static func rank<Item>(
+        _ results: [Item],
+        query: String,
+        name: (Item) -> String,
+        brand: (Item) -> String?
+    ) -> [Item] {
         let phrase = query.lowercased().trimmingCharacters(in: .whitespaces)
         let words = tokenize(phrase)
         guard !words.isEmpty else { return results }
-        func score(_ result: SearchResult) -> Int {
-            let name = result.name.lowercased()
-            let brand = result.brand?.lowercased() ?? ""
+        func score(_ result: Item) -> Int {
+            let name = name(result).lowercased()
+            let brand = brand(result)?.lowercased() ?? ""
             let nameTokens = tokenize(name)
             let brandTokens = tokenize(brand)
             var matchedInName = 0

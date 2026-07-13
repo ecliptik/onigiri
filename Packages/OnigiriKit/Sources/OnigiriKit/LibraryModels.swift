@@ -275,6 +275,30 @@ public enum SharedStore {
     /// installs with a goal are flagged true without seeing it.
     public static let hasOnboardedKey = "hasOnboarded"
 
+    /// Text-search database: "off" (OpenFoodFacts, default) or "fdc"
+    /// (USDA FoodData Central). Barcode scans always use OpenFoodFacts.
+    public static let textSearchSourceKey = "textSearchSource"
+    public static let textSearchSourceOFF = "off"
+    public static let textSearchSourceFDC = "fdc"
+    /// The user's api.data.gov key — device-local on purpose: it never
+    /// rides WatchConnectivity (the watch doesn't search) and never
+    /// enters the repo.
+    public static let fdcAPIKeyKey = "fdcAPIKey"
+
+    /// The user's FDC key, trimmed; empty means "none saved".
+    public static var fdcAPIKey: String {
+        (defaults.string(forKey: fdcAPIKeyKey) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Whether text search should hit FDC: the source is selected AND a
+    /// key exists. FDC without a key falls back to OpenFoodFacts (the
+    /// Settings hint says so).
+    public static var usesFDCTextSearch: Bool {
+        defaults.string(forKey: textSearchSourceKey) == textSearchSourceFDC
+            && !fdcAPIKey.isEmpty
+    }
+
     /// Days with less intake logged count as untracked — streak-breaking,
     /// excluded from month totals. Default 1,000; the user can set 0 to
     /// disable (so unset and explicit-zero must be distinguishable).

@@ -29,6 +29,8 @@ struct SettingsView: View {
     @AppStorage(SharedStore.remindMealsKey, store: SharedStore.defaults) private var remindMeals = false
     @AppStorage(SharedStore.remindWaterKey, store: SharedStore.defaults) private var remindWater = false
     @AppStorage(SharedStore.remindStreakKey, store: SharedStore.defaults) private var remindStreak = false
+    @AppStorage(SharedStore.textSearchSourceKey, store: SharedStore.defaults) private var textSearchSource = SharedStore.textSearchSourceOFF
+    @AppStorage(SharedStore.fdcAPIKeyKey, store: SharedStore.defaults) private var fdcAPIKey = ""
     @State private var notificationsDenied = false
     @State private var healthWriteDenied = false
 
@@ -92,6 +94,38 @@ struct SettingsView: View {
             }
         } else {
             ReminderScheduler.shared.replan()
+        }
+    }
+
+    /// Where text search looks things up. Barcode scans stay on
+    /// OpenFoodFacts either way; FDC needs the user's own api.data.gov
+    /// key (device-local, never synced — see PLAN-1.7).
+    private var onlineDatabaseSection: some View {
+        Section {
+            Picker("Text search", selection: $textSearchSource) {
+                Text("OpenFoodFacts").tag(SharedStore.textSearchSourceOFF)
+                Text("USDA FoodData Central").tag(SharedStore.textSearchSourceFDC)
+            }
+            if textSearchSource == SharedStore.textSearchSourceFDC {
+                TextField("API key", text: $fdcAPIKey)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.asciiCapable)
+                    .font(.callout.monospaced())
+                if fdcAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("No key yet — text search stays on OpenFoodFacts until one is added.")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
+            }
+        } header: {
+            Text("Online Database")
+        } footer: {
+            if textSearchSource == SharedStore.textSearchSourceFDC {
+                Text("Barcode scans always use OpenFoodFacts. USDA FoodData Central requires a free API key from [api.data.gov](https://api.data.gov).")
+            } else {
+                Text("Barcode scans always use OpenFoodFacts.")
+            }
         }
     }
 
@@ -591,6 +625,8 @@ struct SettingsView: View {
                         }
                     }
                 }
+
+                onlineDatabaseSection
 
                 dataSection
             }

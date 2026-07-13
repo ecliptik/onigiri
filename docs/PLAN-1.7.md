@@ -17,8 +17,11 @@ portions ("1 cup"). The two are complements, not competitors:
 
 ## The API (verified live 2026-07-13)
 
-- `GET https://api.nal.usda.gov/fdc/v1/foods/search?api_key=…&query=…`
-  with `dataType` filter and `pageSize`/`pageNumber` paging.
+- `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=…` with
+  `dataType` filter and `pageSize`/`pageNumber` paging. **Must be POST
+  with a JSON body**: the gateway 400s any GET whose query string
+  contains the `Survey (FNDDS)` parentheses, encoded or literal
+  (verified live 2026-07-13).
 - Free API key from https://api.data.gov (instant signup), 1,000
   requests/hour. Public-domain data (US government work), no attribution
   or usage restrictions.

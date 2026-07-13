@@ -42,6 +42,10 @@ final class OnlineFoodSearch {
     /// visible-rows-only, so this doesn't multiply follow-up requests.
     private static let pageSize = 30
     private let client = OpenFoodFactsClient()
+    /// Non-nil while the current results came from USDA FoodData Central.
+    /// Snapshotted per search (setting + key can change mid-session), so
+    /// paging stays on the source — and the key — the results came from.
+    private var fdcClient: FoodDataCentralClient?
     private(set) var lastQuery = ""
     /// Comparing query strings can't tell a resubmit from the search it
     /// supersedes; the generation counter can (same idiom as TodayModel).
@@ -64,6 +68,12 @@ final class OnlineFoodSearch {
         // retries — they'd spend the rate limit on discarded results.
         searchTask?.cancel()
         pageTask?.cancel()
+        // Re-read the setting per search, not per session — flipping the
+        // source (or fixing the key) in Settings applies to the next
+        // search without relaunching.
+        fdcClient = SharedStore.usesFDCTextSearch
+            ? FoodDataCentralClient(apiKey: SharedStore.fdcAPIKey)
+            : nil
         lastQuery = trimmed
         searchGeneration += 1
         let generation = searchGeneration
@@ -85,24 +95,45 @@ final class OnlineFoodSearch {
 
     private func performSearch(_ query: String, generation: Int) async {
         do {
-            let hits = try await client.search(query: query, limit: Self.pageSize)
+            let hits = try await fetchPage(query: query, page: 1, generation: generation)
             guard generation == searchGeneration else { return } // superseded
             results = hits.filter { !rejected.contains($0.barcode) }
             hasMore = hits.count == Self.pageSize
             if hits.isEmpty {
-                message = "No online matches — try different words."
+                let source = fdcClient != nil ? "FoodData Central" : "OpenFoodFacts"
+                message = "No \(source) matches — try different words."
             }
         } catch {
             guard generation == searchGeneration else { return }
             // Transient failures toast (hosts on each sheet); the inline
             // message stays for result states like "no matches".
             ToastCenter.shared.show(
-                error is OpenFoodFactsError
+                error is OpenFoodFactsError || error is FoodDataCentralError
                     ? error.localizedDescription
                     : "Online search failed: \(error.localizedDescription)"
             )
         }
         isSearching = false
+    }
+
+    /// One page from whichever source this search runs on. FDC hits carry
+    /// their nutrients inline — each lands in `products` up front, so the
+    /// per-row lazy detail (and the missing-calories weeding built around
+    /// it) short-circuits: no fetch, no weed.
+    private func fetchPage(
+        query: String, page: Int, generation: Int
+    ) async throws -> [OpenFoodFactsClient.SearchResult] {
+        guard let fdcClient else {
+            return try await client.search(query: query, limit: Self.pageSize, page: page)
+        }
+        let foods = try await fdcClient.search(query: query, limit: Self.pageSize, page: page)
+        // A superseded search must not seed the new search's row products.
+        guard generation == searchGeneration else { return [] }
+        return foods.map { food in
+            let product = food.per100gProduct
+            products[product.barcode] = product
+            return .init(barcode: product.barcode, name: food.description, brand: food.dataType)
+        }
     }
 
     /// The next page, triggered when the last row scrolls into view (or,
@@ -136,7 +167,7 @@ final class OnlineFoodSearch {
 
     private func performLoadMore(query: String, generation: Int) async {
         do {
-            let hits = try await client.search(query: query, limit: Self.pageSize, page: page + 1)
+            let hits = try await fetchPage(query: query, page: page + 1, generation: generation)
             guard generation == searchGeneration else { return } // superseded
             page += 1
             hasMore = hits.count == Self.pageSize
@@ -149,8 +180,11 @@ final class OnlineFoodSearch {
         } catch {
             guard generation == searchGeneration else { return }
             hasMore = false
+            // Both sources' busy copy is actionable ("wait a minute") —
+            // pass it through; everything else collapses to one line.
             moreMessage = (error as? OpenFoodFactsError)?.isBusy == true
-                ? "OpenFoodFacts is busy — wait a minute and try again."
+                    || (error as? FoodDataCentralError)?.isBusy == true
+                ? error.localizedDescription
                 : "Couldn't load more results."
         }
         isLoadingMore = false
@@ -215,6 +249,15 @@ final class OnlineFoodSearch {
     /// already in flight for the row, else a live one, else the bare
     /// search hit (better than nothing).
     func product(for result: OpenFoodFactsClient.SearchResult) async -> ScannedProduct {
+        // FDC rows already hold per-100 g values; picking upgrades to the
+        // food's household portion ("1 cup, seedless (151 g)") with one
+        // detail fetch, cached process-wide alongside OFF lookups.
+        if let fdcClient, let base = products[result.barcode],
+           FoodDataCentralClient.fdcId(fromCode: result.barcode) != nil {
+            fetchingCode = result.barcode
+            defer { fetchingCode = nil }
+            return await fdcClient.pickedProduct(for: base)
+        }
         if let cached = products[result.barcode] { return cached }
         fetchingCode = result.barcode
         defer { fetchingCode = nil }

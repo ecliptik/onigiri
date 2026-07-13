@@ -210,7 +210,9 @@ struct FoodFormView: View {
             .searchable(
                 text: $dbQuery,
                 isPresented: $dbSearchActive,
-                prompt: "Search OpenFoodFacts"
+                prompt: SharedStore.usesFDCTextSearch
+                    ? "Search FoodData Central"
+                    : "Search OpenFoodFacts"
             )
             .onSubmit(of: .search) {
                 Task { await onlineSearch.search(dbQuery) }

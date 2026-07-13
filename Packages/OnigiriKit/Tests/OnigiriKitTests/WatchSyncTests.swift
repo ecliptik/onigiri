@@ -33,6 +33,33 @@ struct WatchSyncTests {
         #expect(payload.waterIcon == "wave")
     }
 
+    @Test func recentFoodsAndGoalModeRoundTrip() {
+        let recents = [SyncedMeal(id: UUID(), name: "Banana", kcal: 105, sodiumMg: 1)]
+        let goal = SyncedGoal(
+            targetWeightLb: 170, targetDate: .distantFuture,
+            fallbackCurrentWeightLb: nil, mode: GoalMode.maintain
+        )
+        let context = WatchSync.makeContext(
+            meals: [], recentFoods: recents, goal: goal,
+            waterServingOz: 12, waterGoalOz: 64
+        )
+        let payload = WatchSync.parse(context)
+        #expect(payload.recentFoods == recents)
+        guard case .set(let synced) = payload.goal else {
+            Issue.record("goal did not round-trip")
+            return
+        }
+        #expect(synced.isMaintenance)
+    }
+
+    // A pre-1.6 phone's context has no recentFoods key — keep, not clear.
+    @Test func missingRecentFoodsMeansKeep() {
+        let context = WatchSync.makeContext(meals: [], goal: nil, waterServingOz: 12, waterGoalOz: 64)
+        var stripped = context
+        stripped.removeValue(forKey: "sync.recentFoods")
+        #expect(WatchSync.parse(stripped).recentFoods == nil)
+    }
+
     @Test func iconsDefaultToSFSymbols() {
         let context = WatchSync.makeContext(meals: [], goal: nil, waterServingOz: 12, waterGoalOz: 64)
         let payload = WatchSync.parse(context)

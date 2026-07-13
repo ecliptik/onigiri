@@ -72,6 +72,24 @@ public final class HealthKitService {
         store.authorizationStatus(for: HKQuantityType(.dietaryEnergyConsumed)) == .sharingDenied
     }
 
+    /// Fires `onChange` whenever dietary energy or water samples change,
+    /// including cross-device (a watch log syncing into the phone's
+    /// store) — so widgets/complications refresh in seconds instead of
+    /// waiting out the 30-minute timeline window. Background delivery
+    /// needs the healthkit.background-delivery entitlement; where it's
+    /// unavailable the observer still covers the foreground.
+    public func startObservingLogChanges(_ onChange: @escaping @Sendable () -> Void) {
+        for identifier in [HKQuantityTypeIdentifier.dietaryEnergyConsumed, .dietaryWater] {
+            let type = HKQuantityType(identifier)
+            let query = HKObserverQuery(sampleType: type, predicate: nil) { _, completion, _ in
+                onChange()
+                completion()
+            }
+            store.execute(query)
+            store.enableBackgroundDelivery(for: type, frequency: .immediate) { _, _ in }
+        }
+    }
+
     #if DEBUG
     private static let debugSeedShareTypes: Set<HKSampleType> = [
         HKQuantityType(.activeEnergyBurned),

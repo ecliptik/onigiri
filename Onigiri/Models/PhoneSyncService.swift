@@ -33,11 +33,21 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
                 id: $0.uuid, name: $0.name, kcal: $0.totalKcal, sodiumMg: $0.totalSodiumMg,
                 category: $0.category, nutrients: $0.totalNutrients
             ) }
+        // The watch's "Recent foods" — the same pure-recency order as the
+        // phone's Log sheet, capped small (the watch list is a glance).
+        let recentFoods = ((try? context.fetch(FetchDescriptor<Food>())) ?? [])
+            .sorted { $0.recencyDate > $1.recencyDate }
+            .prefix(6)
+            .map { SyncedMeal(
+                id: UUID(), name: $0.name, kcal: $0.kcal, sodiumMg: $0.sodiumMg,
+                category: $0.category, nutrients: $0.nutrients
+            ) }
         let goal = ((try? context.fetch(FetchDescriptor<GoalSettings>())) ?? []).first
             .map { SyncedGoal(
                 targetWeightLb: $0.targetWeightLb,
                 targetDate: $0.targetDate,
-                fallbackCurrentWeightLb: $0.fallbackCurrentWeightLb
+                fallbackCurrentWeightLb: $0.fallbackCurrentWeightLb,
+                mode: $0.mode
             ) }
 
         let balanceStyle = SharedStore.defaults.string(forKey: SharedStore.balanceStyleKey) ?? "balance"
@@ -59,6 +69,7 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         )
         WatchSync.store(SyncPayload(
             meals: meals,
+            recentFoods: recentFoods,
             goal: goal.map(GoalUpdate.set) ?? .clear,
             waterServingOz: SharedStore.waterServingOz,
             waterGoalOz: SharedStore.waterGoalOz,
@@ -81,6 +92,7 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         else { return }
         try? WCSession.default.updateApplicationContext(WatchSync.makeContext(
             meals: meals,
+            recentFoods: recentFoods,
             goal: goal,
             waterServingOz: SharedStore.waterServingOz,
             waterGoalOz: SharedStore.waterGoalOz,

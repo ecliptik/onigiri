@@ -31,6 +31,13 @@ struct CalorieBudgetTests {
         #expect(plan.isAggressive)
     }
 
+    @Test func maintenancePlanBudgetIsTheBurn() {
+        let plan = CalorieBudget.maintenancePlan(averageDailyBurn: 2450)
+        #expect(plan.requiredDailyDeficit == 0)
+        #expect(plan.dailyBudget == 2450)
+        #expect(!plan.isAggressive)
+    }
+
     @Test func goalAlreadyMet() {
         let plan = CalorieBudget.plan(
             currentWeightLb: 180, targetWeightLb: 180,

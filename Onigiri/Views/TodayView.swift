@@ -192,7 +192,8 @@ struct TodayView: View {
                             SyncedGoal(
                                 targetWeightLb: $0.targetWeightLb,
                                 targetDate: $0.targetDate,
-                                fallbackCurrentWeightLb: $0.fallbackCurrentWeightLb
+                                fallbackCurrentWeightLb: $0.fallbackCurrentWeightLb,
+                                mode: $0.mode
                             )
                         })
                     }
@@ -406,7 +407,8 @@ struct TodayView: View {
                 bankedKcal: max(0, -model.summary.balanceKcal),
                 intakeKcal: model.summary.intakeKcal,
                 plan: plan,
-                showsRemaining: model.isToday
+                showsRemaining: model.isToday,
+                weeklyTrendLb: model.weeklyTrendLb
             )
         } else {
             Text(goals.isEmpty
@@ -420,6 +422,10 @@ struct TodayView: View {
     }
 
     private func plan(for goal: GoalSettings) -> CalorieBudget.Plan? {
+        // Maintenance needs no weight or date — the budget IS the burn.
+        if goal.isMaintenance {
+            return CalorieBudget.maintenancePlan(averageDailyBurn: model.expectedDailyBurnKcal)
+        }
         guard let weight = model.currentWeightLb ?? goal.fallbackCurrentWeightLb else { return nil }
         let days = Calendar.current.dateComponents(
             [.day], from: Calendar.current.startOfDay(for: .now), to: goal.targetDate
@@ -1042,10 +1048,20 @@ struct DailyGoalCard: View {
     let intakeKcal: Double
     let plan: CalorieBudget.Plan
     var showsRemaining = true
+    /// Actual scale movement over the past week (negative = down);
+    /// nil when Health has too few weigh-ins to say.
+    var weeklyTrendLb: Double? = nil
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
 
+    /// A zero-deficit plan is maintenance: the gauge tracks budget left
+    /// instead of deficit banked, and the copy talks budget, not goal.
+    private var isMaintenance: Bool { plan.requiredDailyDeficit <= 0 }
+
     private var progress: Double {
-        plan.requiredDailyDeficit > 0 ? bankedKcal / plan.requiredDailyDeficit : 1
+        if isMaintenance {
+            return plan.dailyBudget > 0 ? max(0, min(1, 1 - intakeKcal / plan.dailyBudget)) : 0
+        }
+        return plan.requiredDailyDeficit > 0 ? bankedKcal / plan.requiredDailyDeficit : 1
     }
     private var remainingKcal: Double { plan.dailyBudget - intakeKcal }
     /// `max(0, -0.0)` keeps IEEE negative zero, which formats as "-0".
@@ -1058,15 +1074,21 @@ struct DailyGoalCard: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text("Daily goal")
+                    Text(isMaintenance ? "Daily budget" : "Daily goal")
                         .font(.headline)
                     Text("\(((max(0, min(1, progress))) * 100).formatted(.number.precision(.fractionLength(0))))%")
                         .font(.headline)
                         .foregroundStyle(progress >= 1 ? Color.green : Color.secondary)
                 }
-                Text("\(displayBankedKcal, format: .number.precision(.fractionLength(0))) of \(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal deficit")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                if isMaintenance {
+                    Text("\(intakeKcal, format: .number.precision(.fractionLength(0))) of \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal eaten")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("\(displayBankedKcal, format: .number.precision(.fractionLength(0))) of \(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal deficit")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
                 // Keep the card the same height across days: today shows the
                 // remaining budget; past days show the day's outcome.
                 if showsRemaining {
@@ -1079,7 +1101,7 @@ struct DailyGoalCard: View {
                             .font(.subheadline)
                             .foregroundStyle(.orange)
                     }
-                } else if progress >= 1 {
+                } else if isMaintenance ? bankedKcal > 0 : progress >= 1 {
                     Text("\(SharedStore.rewardEmoji(for: rewardIcon)) earned")
                         .font(.subheadline)
                         .foregroundStyle(.green)
@@ -1088,6 +1110,15 @@ struct DailyGoalCard: View {
                     Text(intakeKcal == 0 ? "nothing logged" : "goal not met")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                }
+                if let trend = weeklyTrendLb {
+                    Label {
+                        Text("Scale: \(trend < 0 ? "down" : "up") \(abs(trend), format: .number.precision(.fractionLength(1))) lb this week")
+                    } icon: {
+                        Image(systemName: trend < 0 ? "arrow.down.right" : "arrow.up.right")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
                 if plan.isAggressive {
                     Label("Aggressive pace — consider a later date", systemImage: "exclamationmark.triangle.fill")

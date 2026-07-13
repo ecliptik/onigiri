@@ -31,12 +31,27 @@ public struct SyncedGoal: Codable, Sendable, Equatable {
     public let targetWeightLb: Double
     public let targetDate: Date
     public let fallbackCurrentWeightLb: Double?
+    /// "lose" (nil, the historical default) or "maintain" — optional so
+    /// payloads survive version skew in both directions.
+    public let mode: String?
 
-    public init(targetWeightLb: Double, targetDate: Date, fallbackCurrentWeightLb: Double?) {
+    public init(
+        targetWeightLb: Double, targetDate: Date,
+        fallbackCurrentWeightLb: Double?, mode: String? = nil
+    ) {
         self.targetWeightLb = targetWeightLb
         self.targetDate = targetDate
         self.fallbackCurrentWeightLb = fallbackCurrentWeightLb
+        self.mode = mode
     }
+
+    public var isMaintenance: Bool { mode == GoalMode.maintain }
+}
+
+/// The two goal modes, as stored strings (SwiftData + sync payload).
+public enum GoalMode {
+    public static let lose = "lose"
+    public static let maintain = "maintain"
 }
 
 /// What a sync says to do with the watch's stored goal. "Absent from the
@@ -53,6 +68,9 @@ public struct SyncPayload: Sendable {
     /// nil when the meals data was missing or failed to decode — keep the
     /// watch's last good list.
     public let meals: [SyncedMeal]?
+    /// The phone's most recently used foods, SyncedMeal-shaped so the
+    /// watch logs them through the same one-tap path. nil = keep.
+    public let recentFoods: [SyncedMeal]?
     public let goal: GoalUpdate
     public let waterServingOz: Double?
     public let waterGoalOz: Double?
@@ -69,6 +87,7 @@ public struct SyncPayload: Sendable {
 
     public init(
         meals: [SyncedMeal]?,
+        recentFoods: [SyncedMeal]? = nil,
         goal: GoalUpdate,
         waterServingOz: Double?,
         waterGoalOz: Double?,
@@ -80,6 +99,7 @@ public struct SyncPayload: Sendable {
         sodiumLimitMg: Double? = nil
     ) {
         self.meals = meals
+        self.recentFoods = recentFoods
         self.goal = goal
         self.waterServingOz = waterServingOz
         self.waterGoalOz = waterGoalOz
@@ -96,6 +116,7 @@ public struct SyncPayload: Sendable {
 /// persistence into the shared defaults (readable by complications).
 public enum WatchSync {
     static let mealsKey = "sync.meals"
+    static let recentFoodsKey = "sync.recentFoods"
     static let goalKey = "sync.goal"
     static let trackedKey = "sync.trackedMetrics"
 
@@ -119,6 +140,7 @@ public enum WatchSync {
 
     public static func makeContext(
         meals: [SyncedMeal],
+        recentFoods: [SyncedMeal] = [],
         goal: SyncedGoal?,
         waterServingOz: Double,
         waterGoalOz: Double,
@@ -142,6 +164,9 @@ public enum WatchSync {
         if let data = try? JSONEncoder().encode(meals) {
             context[mealsKey] = data
         }
+        if let data = try? JSONEncoder().encode(recentFoods) {
+            context[recentFoodsKey] = data
+        }
         if let goal, let data = try? JSONEncoder().encode(goal) {
             context[goalKey] = data
         }
@@ -160,8 +185,11 @@ public enum WatchSync {
         } else {
             goal = .clear
         }
+        let recentFoods: [SyncedMeal]? = (context[recentFoodsKey] as? Data)
+            .flatMap { try? JSONDecoder().decode([SyncedMeal].self, from: $0) }
         return SyncPayload(
             meals: meals,
+            recentFoods: recentFoods,
             goal: goal,
             waterServingOz: context[SharedStore.waterServingKey] as? Double,
             waterGoalOz: context[SharedStore.waterGoalKey] as? Double,
@@ -178,6 +206,9 @@ public enum WatchSync {
         let defaults = SharedStore.defaults
         if let meals = payload.meals, let data = try? JSONEncoder().encode(meals) {
             defaults.set(data, forKey: mealsKey)
+        }
+        if let recents = payload.recentFoods, let data = try? JSONEncoder().encode(recents) {
+            defaults.set(data, forKey: recentFoodsKey)
         }
         switch payload.goal {
         case .set(let goal):
@@ -223,6 +254,11 @@ public enum WatchSync {
 
     public static func loadMeals() -> [SyncedMeal] {
         guard let data = SharedStore.defaults.data(forKey: mealsKey) else { return [] }
+        return (try? JSONDecoder().decode([SyncedMeal].self, from: data)) ?? []
+    }
+
+    public static func loadRecentFoods() -> [SyncedMeal] {
+        guard let data = SharedStore.defaults.data(forKey: recentFoodsKey) else { return [] }
         return (try? JSONDecoder().decode([SyncedMeal].self, from: data)) ?? []
     }
 

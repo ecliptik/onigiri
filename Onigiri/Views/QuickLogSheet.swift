@@ -554,6 +554,8 @@ struct QuickLogSheet: View {
                 date: logDate
             )
             isLogging = false
+            // Recency moved — refresh the watch's "Recent foods" list.
+            PhoneSyncService.shared.push(from: context)
         }
     }
 }

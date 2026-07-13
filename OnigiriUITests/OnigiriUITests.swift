@@ -599,6 +599,60 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5), "Keyboard should dismiss")
     }
 
+    /// Maintenance mode end to end on screen: flip the Goal picker to
+    /// Maintain, save, and confirm Today's card reads budget (not
+    /// deficit). Opt-in capture via TEST_RUNNER_MAINTENANCE=1 — it
+    /// mutates the goal, so keep it out of the default suite.
+    @MainActor
+    func testMaintenanceMode() throws {
+        guard ProcessInfo.processInfo.environment["MAINTENANCE"] == "1" else {
+            throw XCTSkip("Set TEST_RUNNER_MAINTENANCE=1 to run the maintenance-mode capture")
+        }
+        let app = XCUIApplication()
+        app.launchArguments = ["--seed-sample-data"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        func shot(_ name: String) {
+            Thread.sleep(forTimeInterval: 0.8)
+            let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            attachment.name = "maintenance-\(name)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+
+        switchTab(in: app, to: "Goal")
+        let picker = app.segmentedControls.firstMatch
+        XCTAssertTrue(picker.waitForExistence(timeout: 10), "Goal mode picker should exist")
+        picker.buttons["Maintain"].tap()
+        shot("goal-maintain")
+        // Target section hides; the plan shows the budget without a deficit.
+        XCTAssertTrue(app.staticTexts["Calorie budget"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Deficit needed"].exists, "No deficit row in maintenance")
+        let save = app.buttons["Save"]
+        XCTAssertTrue(save.isEnabled, "Mode change should enable Save")
+        save.tap()
+
+        switchTab(in: app, to: "Today")
+        let budgetTitle = app.staticTexts["Daily budget"]
+        XCTAssertTrue(budgetTitle.waitForExistence(timeout: 10), "Today card should read Daily budget")
+        shot("today-maintain")
+
+        // Back to lose so the sim isn't left in maintenance. The Daily
+        // plan section sits below the fold in lose mode (Form rows are
+        // lazy — they don't exist until scrolled near).
+        switchTab(in: app, to: "Goal")
+        picker.buttons["Lose Weight"].tap()
+        let deficitRow = app.staticTexts["Deficit needed"]
+        for _ in 0..<4 where !deficitRow.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(deficitRow.waitForExistence(timeout: 5), "Deficit row returns in lose mode")
+        app.buttons["Save"].tap()
+    }
+
     /// Barcode → OpenFoodFacts lookup prefills the food form. Uses the
     /// manual-entry fallback (no camera in the simulator) and live network.
     @MainActor

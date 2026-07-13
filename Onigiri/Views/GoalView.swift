@@ -11,6 +11,7 @@ struct GoalView: View {
 
     @State private var targetWeightLb: Double?
     @State private var targetDate = Calendar.current.date(byAdding: .day, value: 90, to: .now) ?? .now
+    @State private var mode: String = GoalMode.lose
     @State private var manualWeightLb: Double?
     @State private var healthWeightLb: Double?
     @State private var averageBurnKcal: Double?
@@ -24,8 +25,10 @@ struct GoalView: View {
 
     private var currentWeightLb: Double? { healthWeightLb ?? manualWeightLb }
 
+    private var isMaintenance: Bool { mode == GoalMode.maintain }
+
     private var validation: GoalUpsert.Validation {
-        GoalUpsert.validate(targetLb: targetWeightLb, currentLb: currentWeightLb)
+        GoalUpsert.validate(targetLb: targetWeightLb, currentLb: currentWeightLb, mode: mode)
     }
 
     /// Save enables only when the form is valid AND differs from the
@@ -34,12 +37,19 @@ struct GoalView: View {
     private var isDirty: Bool {
         guard validation == .valid else { return false }
         guard let goal = goals.first else { return true }
+        if (goal.mode ?? GoalMode.lose) != mode { return true }
+        // In maintenance the target knobs are hidden — their staleness
+        // isn't a difference the user can see or intend.
+        if isMaintenance { return false }
         return goal.targetWeightLb != targetWeightLb
             || !Calendar.current.isDate(goal.targetDate, inSameDayAs: targetDate)
             || (healthWeightLb == nil && goal.fallbackCurrentWeightLb != manualWeightLb)
     }
 
     private var plan: CalorieBudget.Plan? {
+        if isMaintenance {
+            return CalorieBudget.maintenancePlan(averageDailyBurn: averageBurnKcal ?? 2000)
+        }
         guard let current = currentWeightLb, let target = targetWeightLb, target < current else { return nil }
         let days = Calendar.current.dateComponents(
             [.day], from: Calendar.current.startOfDay(for: .now), to: targetDate
@@ -59,6 +69,18 @@ struct GoalView: View {
                 // screen's headline; the knobs to change it come after.
                 trendSection
 
+                Section {
+                    Picker("Goal", selection: $mode) {
+                        Text("Lose Weight").tag(GoalMode.lose)
+                        Text("Maintain").tag(GoalMode.maintain)
+                    }
+                    .pickerStyle(.segmented)
+                } footer: {
+                    if isMaintenance {
+                        Text("Your daily budget is your average burn — eat within it to hold steady. Any deficit earns the day's badge.")
+                    }
+                }
+
                 Section("Current weight") {
                     if let healthWeightLb {
                         LabeledContent("From Apple Health") {
@@ -77,7 +99,8 @@ struct GoalView: View {
                     }
                 }
 
-                Section("Target") {
+                if !isMaintenance {
+                    Section("Target") {
                     LabeledContent("Weight (lb)") {
                         TextField("0", value: $targetWeightLb, format: .number)
                             .keyboardType(.decimalPad)
@@ -96,15 +119,18 @@ struct GoalView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    }
                 }
 
-                if let plan, let current = currentWeightLb, let target = targetWeightLb {
+                if let plan {
                     Section("Daily plan") {
-                        LabeledContent("To lose") {
-                            Text("\(current - target, format: .number.precision(.fractionLength(1))) lb")
-                        }
-                        LabeledContent("Deficit needed") {
-                            Text("\(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal/day")
+                        if !isMaintenance, let current = currentWeightLb, let target = targetWeightLb {
+                            LabeledContent("To lose") {
+                                Text("\(current - target, format: .number.precision(.fractionLength(1))) lb")
+                            }
+                            LabeledContent("Deficit needed") {
+                                Text("\(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal/day")
+                            }
                         }
                         LabeledContent("Calorie budget") {
                             Text("≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
@@ -201,6 +227,7 @@ struct GoalView: View {
                 targetWeightLb = goal.targetWeightLb
                 targetDate = goal.targetDate
                 manualWeightLb = goal.fallbackCurrentWeightLb
+                mode = goal.mode ?? GoalMode.lose
                 loaded = true
             }
         }
@@ -273,7 +300,7 @@ struct GoalView: View {
                         .foregroundStyle(.blue)
                         .interpolationMethod(.catmullRom)
                     }
-                    if let target = targetWeightLb {
+                    if !isMaintenance, let target = targetWeightLb {
                         RuleMark(y: .value("Target", target))
                             .foregroundStyle(.green)
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [6, 4]))
@@ -288,7 +315,11 @@ struct GoalView: View {
                 .frame(height: 220)
                 .padding(.vertical, 4)
 
-                if let projectedDate {
+                if isMaintenance {
+                    // No target line in maintenance — the chart is just
+                    // the scale holding (or not).
+                    EmptyView()
+                } else if let projectedDate {
                     Label {
                         Text("On this trend, you'll hit your target around \(projectedDate, format: .dateTime.month(.wide).day())")
                     } icon: {
@@ -310,18 +341,25 @@ struct GoalView: View {
     }
 
     private var chartYDomain: ClosedRange<Double> {
-        let weights = weightHistory.map(\.weightLb) + [targetWeightLb].compactMap(\.self)
+        let weights = weightHistory.map(\.weightLb)
+            + (isMaintenance ? [] : [targetWeightLb].compactMap(\.self))
         guard let min = weights.min(), let max = weights.max() else { return 0...1 }
         return (min - 2)...(max + 2)
     }
 
     private func save() {
-        guard validation == .valid, let target = targetWeightLb else { return }
+        guard validation == .valid else { return }
+        // targetWeightLb is non-optional on the model; in maintenance
+        // it's ignored, so park the best-known weight there.
+        guard let target = targetWeightLb
+            ?? (isMaintenance ? (currentWeightLb ?? goals.first?.targetWeightLb ?? 0) : nil)
+        else { return }
         GoalUpsert.save(
             targetLb: target,
             targetDate: targetDate,
             healthWeightLb: healthWeightLb,
             manualWeightLb: manualWeightLb,
+            mode: mode == GoalMode.lose ? nil : mode,
             goals: goals,
             context: context
         )
@@ -332,6 +370,7 @@ struct GoalView: View {
     private func removeGoal() {
         goals.forEach(context.delete)
         targetWeightLb = nil
+        mode = GoalMode.lose
         weightFieldFocused = false
         // push sends GoalUpdate.clear to the watch and reloads widgets.
         PhoneSyncService.shared.push(from: context)

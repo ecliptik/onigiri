@@ -179,4 +179,76 @@ public struct WaterAccessoryView: View {
         }
     }
 }
+
+/// The streak, judged exactly like the Calendar tab (per-day snapshot
+/// targets, untracked threshold, completed days only) — shared by the
+/// iPhone streak widget and the watch streak complication.
+@MainActor
+public enum StreakLoader {
+    public static func load() async -> (streak: Int, needsSetup: Bool) {
+        let health = HealthKitService()
+        let needsSetup = (try? await health.shouldRequestAuthorization()) == true
+        let state = await DailyPlanLoader.load(goal: WatchSync.loadGoal())
+        let totals = (try? await health.dailyEnergyTotals()) ?? []
+        let earned = StreakCalendar.earnedDays(
+            totals: totals,
+            targetDeficitKcal: state.deficitTargetKcal,
+            targetsByDay: DeficitTargetHistory.targetsByDay(),
+            untrackedBelowKcal: SharedStore.untrackedBelowKcal
+        )
+        return (StreakCalendar.currentStreak(earned: earned), needsSetup)
+    }
+}
+
+/// The streak's accessory-family rendering, shared across surfaces.
+public struct StreakAccessoryView: View {
+    @Environment(\.widgetFamily) private var family
+    let streak: Int
+    let needsSetup: Bool
+
+    public init(streak: Int, needsSetup: Bool) {
+        self.streak = streak
+        self.needsSetup = needsSetup
+    }
+
+    public var body: some View {
+        switch family {
+        case .accessoryInline:
+            if needsSetup {
+                Text("\(SharedStore.rewardEmoji) Open Onigiri to set up")
+            } else {
+                Text("\(SharedStore.rewardEmoji) \(streak)-day streak")
+            }
+        #if os(watchOS)
+        case .accessoryCorner:
+            Text(SharedStore.rewardEmoji)
+                .font(.system(size: 20))
+                .widgetLabel {
+                    Text(needsSetup ? "Set up Onigiri" : "\(streak)-day streak")
+                }
+        case .accessoryRectangular:
+            HStack(spacing: 8) {
+                Text(SharedStore.rewardEmoji)
+                    .font(.system(size: 24))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(needsSetup ? "—" : "\(streak) \(streak == 1 ? "day" : "days")")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(streak > 0 && !needsSetup ? Color.green : Color.secondary)
+                    Text(needsSetup ? "Open Onigiri to set up" : "current streak")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+        #endif
+        default:
+            VStack(spacing: 0) {
+                Text(SharedStore.rewardEmoji)
+                    .font(.system(size: 16))
+                Text(needsSetup ? "—" : "\(streak)")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+            }
+        }
+    }
+}
 #endif

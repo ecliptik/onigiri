@@ -16,10 +16,12 @@ enum GoalUpsert {
         case targetNotBelowCurrent
     }
 
-    /// A goal needs a positive target below a known current weight —
-    /// weight-gain/maintain goals aren't supported, and a goal saved
-    /// without a current weight leaves the plan uncomputable everywhere.
-    static func validate(targetLb: Double?, currentLb: Double?) -> Validation {
+    /// A lose goal needs a positive target below a known current weight —
+    /// weight-gain goals aren't supported, and a goal saved without a
+    /// current weight leaves the plan uncomputable everywhere. Maintenance
+    /// needs neither: the budget is the burn.
+    static func validate(targetLb: Double?, currentLb: Double?, mode: String? = nil) -> Validation {
+        if mode == GoalMode.maintain { return .valid }
         guard let target = targetLb, target > 0 else { return .missingTarget }
         guard let current = currentLb else { return .missingCurrentWeight }
         return target < current ? .valid : .targetNotBelowCurrent
@@ -32,6 +34,7 @@ enum GoalUpsert {
         targetDate: Date,
         healthWeightLb: Double?,
         manualWeightLb: Double?,
+        mode: String? = nil,
         goals: [GoalSettings],
         context: ModelContext
     ) {
@@ -41,11 +44,13 @@ enum GoalUpsert {
             goal.targetWeightLb = targetLb
             goal.targetDate = targetDate
             goal.fallbackCurrentWeightLb = fallback
+            goal.mode = mode
         } else {
             context.insert(GoalSettings(
                 targetWeightLb: targetLb,
                 targetDate: targetDate,
-                fallbackCurrentWeightLb: fallback
+                fallbackCurrentWeightLb: fallback,
+                mode: mode
             ))
         }
         try? context.save()

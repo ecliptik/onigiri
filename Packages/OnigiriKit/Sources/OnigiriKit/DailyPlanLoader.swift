@@ -54,6 +54,24 @@ public enum DailyPlanLoader {
         async let weightRead = health.latestBodyMassLb()
         async let burnRead = health.averageDailyBurnKcal()
         let summary = (try? await summaryRead) ?? .zero
+        if goal.isMaintenance {
+            // Maintenance: eat what you burn. deficitTarget stays nil
+            // (any-deficit badge rule, and no "% of goal" captions);
+            // the gauge shows the budget still left to eat.
+            _ = try? await weightRead
+            let averageBurn = ((try? await burnRead) ?? nil)
+                ?? max(summary.totalBurnKcal, 2000)
+            let plan = CalorieBudget.maintenancePlan(averageDailyBurn: averageBurn)
+            let progress = plan.dailyBudget > 0
+                ? max(0, min(1, 1 - summary.intakeKcal / plan.dailyBudget))
+                : 0
+            return State(
+                summary: summary,
+                deficitTargetKcal: nil,
+                gaugeProgress: progress,
+                dailyBudgetKcal: plan.dailyBudget
+            )
+        }
         let healthWeight = (try? await weightRead) ?? nil
         guard let weight = healthWeight ?? goal.fallbackCurrentWeightLb else {
             return State(summary: summary, deficitTargetKcal: nil, gaugeProgress: 0)

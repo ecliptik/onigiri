@@ -155,16 +155,23 @@ public final class GoalSettings {
     public var targetDate: Date
     /// Manual fallback when Apple Health has no weight samples yet.
     public var fallbackCurrentWeightLb: Double?
+    /// GoalMode.lose (nil, the historical default) or .maintain — in
+    /// maintenance the target/date are ignored and the budget is TDEE.
+    public var mode: String?
 
     public init(
         targetWeightLb: Double,
         targetDate: Date,
-        fallbackCurrentWeightLb: Double? = nil
+        fallbackCurrentWeightLb: Double? = nil,
+        mode: String? = nil
     ) {
         self.targetWeightLb = targetWeightLb
         self.targetDate = targetDate
         self.fallbackCurrentWeightLb = fallbackCurrentWeightLb
+        self.mode = mode
     }
+
+    public var isMaintenance: Bool { mode == GoalMode.maintain }
 }
 
 /// The duplicate-food guard's name matching: scanning a product whose

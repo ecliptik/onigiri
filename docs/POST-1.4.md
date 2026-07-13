@@ -517,6 +517,36 @@ Constraints that shape all of it: the widget process is memory-capped
 (no SwiftData — the App Group mirror pattern is established), and the
 free team means no push (irrelevant: WidgetKit timelines are local).
 
+## Feature-complete batch — the last five (BUILT 2026-07-13, after v1.5.0)
+
+From the "are we feature complete?" review: five philosophy-fit items,
+then the app is feature-complete on its own terms.
+
+1. **Maintenance mode** — Goal tab grew a segmented Lose Weight/Maintain
+   picker. Maintain needs no target/date: the daily budget IS the
+   average burn (`CalorieBudget.maintenancePlan`), the goal card reads
+   "Daily budget … X of Y kcal eaten", the gauge tracks budget left,
+   and any deficit earns the day's badge (deficit target syncs as nil —
+   the calendar/streak 0-target rule already handled it). Mode rides
+   `GoalSettings.mode` / `SyncedGoal.mode` (nil = lose, so old payloads
+   and onboarding are untouched).
+2. **Today scale trend line** — goal card caption "Scale: down 0.4 lb
+   this week" from the 7-day-smoothed weigh-in change (21 days of
+   history for runway). The plan-math card now shows what the scale
+   actually did, both modes.
+3. **Recent foods on the watch** — the phone pushes its top-6
+   most-recent foods (SyncedMeal-shaped) in the application context;
+   the watch's Log sheet gains a "Recent foods" section, same one-tap
+   path as meals. Version-skew-safe (missing key = keep).
+4. **HealthKit background delivery** — `background-delivery`
+   entitlement on both apps + `HKObserverQuery` on dietary energy and
+   water. A log from the watch refreshes iPhone widgets (and vice
+   versa for complications) without waiting out WidgetKit's timeline.
+5. **Watch streak complication** — StreakLoader + StreakAccessoryView
+   moved into the kit (shared judging with the iPhone streak widget,
+   which was refactored onto them); the watch bundle grew
+   StreakComplication (circular/inline/corner/rectangular).
+
 ## Deliberately not doing
 
 - **Metric units** (kg/ml): personal US app; revisit only if it grows

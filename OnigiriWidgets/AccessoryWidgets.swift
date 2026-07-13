@@ -59,23 +59,11 @@ struct StreakProvider: TimelineProvider {
 
     @MainActor
     private func load() async -> StreakEntry {
-        let health = HealthKitService()
-        let needsSetup = (try? await health.shouldRequestAuthorization()) == true
-        let state = await DailyPlanLoader.load(goal: WatchSync.loadGoal())
-        let totals = (try? await health.dailyEnergyTotals()) ?? []
-        // The exact judging the Calendar tab uses: per-day snapshot
-        // targets, untracked threshold, badges only on completed days.
-        let earned = StreakCalendar.earnedDays(
-            totals: totals,
-            targetDeficitKcal: state.deficitTargetKcal,
-            targetsByDay: DeficitTargetHistory.targetsByDay(),
-            untrackedBelowKcal: SharedStore.untrackedBelowKcal
-        )
-        return StreakEntry(
-            date: .now,
-            streak: StreakCalendar.currentStreak(earned: earned),
-            needsSetup: needsSetup
-        )
+        // The shared kit loader — the watch streak complication runs the
+        // exact same judging (per-day snapshot targets, untracked
+        // threshold, badges only on completed days).
+        let (streak, needsSetup) = await StreakLoader.load()
+        return StreakEntry(date: .now, streak: streak, needsSetup: needsSetup)
     }
 }
 
@@ -99,19 +87,10 @@ struct StreakWidgetView: View {
 
     var body: some View {
         switch family {
-        case .accessoryInline:
-            if entry.needsSetup {
-                Text("\(emoji) Open Onigiri to set up")
-            } else {
-                Text("\(emoji) \(entry.streak)-day streak")
-            }
-        case .accessoryCircular:
-            VStack(spacing: 0) {
-                Text(emoji)
-                    .font(.system(size: 16))
-                Text(entry.needsSetup ? "—" : "\(entry.streak)")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-            }
+        case .accessoryInline, .accessoryCircular:
+            // The shared kit view — the watch complication renders the
+            // exact same thing.
+            StreakAccessoryView(streak: entry.streak, needsSetup: entry.needsSetup)
         default:
             VStack(spacing: 6) {
                 Text(emoji)

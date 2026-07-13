@@ -11,6 +11,9 @@ final class TodayModel {
     private(set) var trackedTotals: [Double] = [0, 0]
     private(set) var currentWeightLb: Double?
     private(set) var averageBurnKcal: Double?
+    /// Smoothed scale movement over the past 7 days (negative = down);
+    /// nil until Health holds enough weigh-ins to say.
+    private(set) var weeklyTrendLb: Double?
     private(set) var errorMessage: String?
     /// Health write access explicitly denied — every log would fail
     /// with an opaque toast, so Today shows a recovery hint instead.
@@ -112,6 +115,15 @@ final class TodayModel {
     func loadStatic() async {
         currentWeightLb = (try? await health.latestBodyMassLb()) ?? currentWeightLb
         averageBurnKcal = (try? await health.averageDailyBurnKcal()) ?? averageBurnKcal
+        // 21 days of history so the 7-day moving average has runway
+        // before the week window it's read over.
+        if let history = try? await health.bodyMassHistory(days: 21) {
+            weeklyTrendLb = WeightTrend.Change.actualLb(
+                history: history,
+                from: Date.now.addingTimeInterval(-7 * 86400),
+                to: .now
+            )
+        }
         // Re-checked on every foreground: the user may have just flipped
         // access in the Health app.
         healthWriteDenied = health.sharingDenied()

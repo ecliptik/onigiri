@@ -119,7 +119,7 @@ struct WatchHomeView: View {
     }
 }
 
-/// Synced meals, one tap to log.
+/// Synced meals and the phone's recent foods, one tap to log.
 struct MealPickerView: View {
     let model: WatchModel
     @Environment(\.dismiss) private var dismiss
@@ -127,7 +127,7 @@ struct MealPickerView: View {
     var body: some View {
         NavigationStack {
             List {
-                if model.sync.meals.isEmpty {
+                if model.sync.meals.isEmpty && model.sync.recentFoods.isEmpty {
                     Text("Save meals on your iPhone and they'll appear here.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -137,26 +137,43 @@ struct MealPickerView: View {
                         .font(.footnote)
                         .foregroundStyle(.orange)
                 }
-                ForEach(model.sync.meals) { meal in
-                    Button {
-                        Task {
-                            // Failure keeps the picker open — dismissing
-                            // on error looked identical to success.
-                            if await model.log(meal) {
-                                dismiss()
-                            }
+                if !model.sync.meals.isEmpty {
+                    Section(model.sync.recentFoods.isEmpty ? "" : "Meals") {
+                        ForEach(model.sync.meals) { meal in
+                            logRow(meal)
                         }
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(meal.name)
-                            Text("\(meal.kcal, format: .number.precision(.fractionLength(0))) kcal • \(meal.sodiumMg, format: .number.precision(.fractionLength(0))) mg Na")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                    }
+                }
+                // The phone's most recently logged foods — one serving,
+                // one tap, same path as meals.
+                if !model.sync.recentFoods.isEmpty {
+                    Section("Recent foods") {
+                        ForEach(model.sync.recentFoods) { food in
+                            logRow(food)
                         }
                     }
                 }
             }
-            .navigationTitle("Meals")
+            .navigationTitle("Log")
+        }
+    }
+
+    private func logRow(_ meal: SyncedMeal) -> some View {
+        Button {
+            Task {
+                // Failure keeps the picker open — dismissing
+                // on error looked identical to success.
+                if await model.log(meal) {
+                    dismiss()
+                }
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(meal.name)
+                Text("\(meal.kcal, format: .number.precision(.fractionLength(0))) kcal • \(meal.sodiumMg, format: .number.precision(.fractionLength(0))) mg Na")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }

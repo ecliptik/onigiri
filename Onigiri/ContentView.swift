@@ -41,6 +41,10 @@ struct ContentView: View {
     @State private var quickActions = QuickActions.shared
     @State private var tabBarPin = TabBarPin.shared
     @AppStorage(SharedStore.hasOnboardedKey, store: SharedStore.defaults) private var hasOnboarded = false
+    /// Holds the HKObserverQuery alive for the app's lifetime — a log
+    /// arriving from the watch (or any app) refreshes the widgets, which
+    /// otherwise stay stale until the next timeline turn or app open.
+    @State private var logObserver = HealthKitService()
     /// Latched in the task below: once onboarding is showing, saving a
     /// goal mid-flow must NOT dismiss it (only finish/skip does, via
     /// hasOnboarded) — gating live on goals.isEmpty cut the flow short
@@ -69,6 +73,11 @@ struct ContentView: View {
             }
             BackupService.backupIfDue(context: context)
             ReminderScheduler.shared.activate()
+            logObserver.startObservingLogChanges {
+                Task { @MainActor in
+                    WidgetCenter.shared.reloadAllTimelines()
+                }
+            }
             // Existing installs never see onboarding: a goal means the
             // app is already set up. Fresh installs latch it on. The
             // context is asked directly — the seeder just ran in this

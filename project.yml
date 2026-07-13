@@ -76,6 +76,9 @@ targets:
       path: Onigiri/Onigiri.entitlements
       properties:
         com.apple.developer.healthkit: true
+        # Wakes the app for HealthKit changes so widgets refresh when a
+        # log arrives from the watch (or any other app).
+        com.apple.developer.healthkit.background-delivery: true
         com.apple.security.application-groups:
           - group.com.ecliptik.Onigiri
 
@@ -129,6 +132,7 @@ targets:
       path: OnigiriWatch/OnigiriWatch.entitlements
       properties:
         com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.background-delivery: true
         com.apple.security.application-groups:
           - group.com.ecliptik.Onigiri
 

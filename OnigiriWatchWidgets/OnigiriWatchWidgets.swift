@@ -7,6 +7,7 @@ struct OnigiriWatchWidgetsBundle: WidgetBundle {
     var body: some Widget {
         BalanceComplication()
         WaterComplication()
+        StreakComplication()
     }
 }
 
@@ -166,5 +167,65 @@ struct WaterComplicationView: View {
             goalOz: entry.waterGoalOz,
             needsSetup: entry.needsSetup
         )
+    }
+}
+
+// MARK: - Streak complication
+
+struct StreakEntry: TimelineEntry {
+    let date: Date
+    let streak: Int
+    let needsSetup: Bool
+
+    static let placeholder = StreakEntry(date: .now, streak: 3, needsSetup: false)
+}
+
+struct StreakComplicationProvider: TimelineProvider {
+    func placeholder(in context: Context) -> StreakEntry { .placeholder }
+
+    func getSnapshot(in context: Context, completion: @escaping (StreakEntry) -> Void) {
+        if context.isPreview {
+            completion(.placeholder)
+            return
+        }
+        Task { @MainActor in
+            completion(await load())
+        }
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<StreakEntry>) -> Void) {
+        Task { @MainActor in
+            let entry = await load()
+            // The streak only moves when a day completes — refresh at
+            // midnight, with a lazy fallback in between.
+            let refresh = Date().addingTimeInterval(60 * 60)
+            let midnight = Calendar.current.date(
+                byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: .now)
+            )
+            completion(Timeline(
+                entries: [entry],
+                policy: .after(midnight.map { min($0, refresh) } ?? refresh)
+            ))
+        }
+    }
+
+    @MainActor
+    private func load() async -> StreakEntry {
+        // The shared kit loader — the iPhone streak widget runs the
+        // exact same judging.
+        let (streak, needsSetup) = await StreakLoader.load()
+        return StreakEntry(date: .now, streak: streak, needsSetup: needsSetup)
+    }
+}
+
+struct StreakComplication: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "OnigiriStreak", provider: StreakComplicationProvider()) { entry in
+            StreakAccessoryView(streak: entry.streak, needsSetup: entry.needsSetup)
+                .containerBackground(.fill.tertiary, for: .widget)
+        }
+        .configurationDisplayName("Streak")
+        .description("Your current run of goal-met days.")
+        .supportedFamilies([.accessoryCircular, .accessoryInline, .accessoryCorner, .accessoryRectangular])
     }
 }

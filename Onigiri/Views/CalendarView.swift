@@ -113,7 +113,8 @@ struct CalendarView: View {
             SyncedGoal(
                 targetWeightLb: $0.targetWeightLb,
                 targetDate: $0.targetDate,
-                fallbackCurrentWeightLb: $0.fallbackCurrentWeightLb
+                fallbackCurrentWeightLb: $0.fallbackCurrentWeightLb,
+                mode: $0.mode
             )
         }
         await model.refresh(goal: goal)

@@ -21,6 +21,13 @@ public enum CalorieBudget {
         public let isAggressive: Bool
     }
 
+    /// Maintenance: eat what you burn. No deficit target — any deficit
+    /// earns the badge (the goal-less rule) — but the budget, gauge,
+    /// and kcal-left headline stay on screen.
+    public static func maintenancePlan(averageDailyBurn: Double) -> Plan {
+        Plan(requiredDailyDeficit: 0, dailyBudget: averageDailyBurn, isAggressive: false)
+    }
+
     public static func plan(
         currentWeightLb: Double,
         targetWeightLb: Double,

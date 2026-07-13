@@ -8,6 +8,7 @@ import OnigiriKit
 @Observable
 final class WatchSyncReceiver: NSObject, WCSessionDelegate {
     private(set) var meals: [SyncedMeal] = WatchSync.loadMeals()
+    private(set) var recentFoods: [SyncedMeal] = WatchSync.loadRecentFoods()
     private(set) var goal: SyncedGoal? = WatchSync.loadGoal()
 
     func activate() {
@@ -24,6 +25,9 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         // skew) — hold on to the last good copy.
         if let meals = payload.meals {
             self.meals = meals
+        }
+        if let recents = payload.recentFoods {
+            self.recentFoods = recents
         }
         switch payload.goal {
         case .set(let goal): self.goal = goal

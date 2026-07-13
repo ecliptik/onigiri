@@ -119,27 +119,14 @@ struct WatchHomeView: View {
     }
 }
 
-/// The watch Log picker: a quick first page (meals + recent foods, the
-/// original), then Foods / Meals / Favorites pages mirroring the phone
-/// Log sheet's scopes — each the ten most recent, one tap to log.
+/// The "Log a meal" sheet: the original quick page — synced meals plus
+/// the six most recent foods, one tap to log. The deeper Favorites/
+/// Meals/Foods browsing lives on the app's own pages past Metrics.
 struct MealPickerView: View {
     let model: WatchModel
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        TabView {
-            quickPage
-            scopePage("Foods", items: model.sync.recentFoods,
-                      empty: "Foods you log on your iPhone appear here.")
-            scopePage("Meals", items: Array(model.sync.meals.prefix(10)),
-                      empty: "Save meals on your iPhone and they'll appear here.")
-            scopePage("Favorites", items: model.sync.favorites,
-                      empty: "Favorites from your iPhone appear here.")
-        }
-    }
-
-    /// The original combined page — the fast path stays page one.
-    private var quickPage: some View {
         NavigationStack {
             List {
                 if model.sync.meals.isEmpty && model.sync.recentFoods.isEmpty {
@@ -147,21 +134,25 @@ struct MealPickerView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-                errorRow
+                if model.flashIsError, let flash = model.flash {
+                    Text(flash)
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
                 if !model.sync.meals.isEmpty {
                     Section(model.sync.recentFoods.isEmpty ? "" : "Meals") {
                         ForEach(model.sync.meals) { meal in
-                            logRow(meal)
+                            row(meal)
                         }
                     }
                 }
                 // The phone's most recently logged foods — one serving,
                 // one tap, same path as meals.
                 if !model.sync.recentFoods.isEmpty {
-                    // Six here as before — the Foods page has the full ten.
+                    // Six here — the Foods page has the full ten.
                     Section("Recent foods") {
                         ForEach(model.sync.recentFoods.prefix(6).map { $0 }) { food in
-                            logRow(food)
+                            row(food)
                         }
                     }
                 }
@@ -170,7 +161,25 @@ struct MealPickerView: View {
         }
     }
 
-    private func scopePage(_ title: String, items: [SyncedMeal], empty: String) -> some View {
+    private func row(_ meal: SyncedMeal) -> some View {
+        LogItemRow(model: model, item: meal) {
+            // Failure keeps the picker open — dismissing on error
+            // looked identical to success.
+            dismiss()
+        }
+    }
+}
+
+/// One top-level browse page (Favorites / Meals / Foods): the ten most
+/// recent of its scope, one tap to log — the flash confirms in place,
+/// there's no sheet to dismiss.
+struct LogScopeView: View {
+    let model: WatchModel
+    let title: String
+    let items: [SyncedMeal]
+    let empty: String
+
+    var body: some View {
         NavigationStack {
             List {
                 if items.isEmpty {
@@ -178,37 +187,37 @@ struct MealPickerView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-                errorRow
+                if let flash = model.flash {
+                    Text(flash)
+                        .font(.footnote)
+                        .foregroundStyle(model.flashIsError ? .orange : .green)
+                }
                 ForEach(items) { item in
-                    logRow(item)
+                    LogItemRow(model: model, item: item)
                 }
             }
             .navigationTitle(title)
         }
     }
+}
 
-    @ViewBuilder
-    private var errorRow: some View {
-        if model.flashIsError, let flash = model.flash {
-            Text(flash)
-                .font(.footnote)
-                .foregroundStyle(.orange)
-        }
-    }
+/// One tappable synced item — logs a serving through the shared path.
+private struct LogItemRow: View {
+    let model: WatchModel
+    let item: SyncedMeal
+    var onSuccess: (() -> Void)? = nil
 
-    private func logRow(_ meal: SyncedMeal) -> some View {
+    var body: some View {
         Button {
             Task {
-                // Failure keeps the picker open — dismissing
-                // on error looked identical to success.
-                if await model.log(meal) {
-                    dismiss()
+                if await model.log(item) {
+                    onSuccess?()
                 }
             }
         } label: {
             VStack(alignment: .leading, spacing: 2) {
-                Text(meal.name)
-                Text("\(meal.kcal, format: .number.precision(.fractionLength(0))) kcal • \(meal.sodiumMg, format: .number.precision(.fractionLength(0))) mg Na")
+                Text(item.name)
+                Text("\(item.kcal, format: .number.precision(.fractionLength(0))) kcal • \(item.sodiumMg, format: .number.precision(.fractionLength(0))) mg Na")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

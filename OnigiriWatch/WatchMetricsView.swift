@@ -45,7 +45,7 @@ struct WatchMetricsView: View {
                 }
                 .padding(.horizontal, 4)
             }
-            .navigationTitle("Tracked")
+            .navigationTitle("Metrics")
             .navigationBarTitleDisplayMode(.inline)
         }
         .onAppear {

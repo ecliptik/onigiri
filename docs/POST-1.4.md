@@ -451,7 +451,12 @@ widgets, and watch app; per PLAN.md it's "only a signing-team switch".
 grates, or (b) family wants the app — TestFlight is the clean way to
 give it to them. If neither, the free team keeps working.
 
-## Widget expansion plan — W1+W2+W3 BUILT 2026-07-13 (same day)
+## Widget expansion plan — W1+W2+W3 BUILT 2026-07-13, RELEASED as v1.5.0
+
+On-watch feedback settled the button scheme: meal = rice-paper cream
+with dark content, water = blue with a SOLID WHITE drop (both icons
+monochrome, matching) and no serving suffix in the label — the flash
+confirms the amount.
 
 Everything below shipped except item 10 (parked by ruling). The
 intents moved into OnigiriKit (`OnigiriKitIntents`, registered via

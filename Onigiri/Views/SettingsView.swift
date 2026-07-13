@@ -128,6 +128,41 @@ struct SettingsView: View {
         }
     }
 
+    // The sodium limit lives inside its tracked-metric section; water
+    // keeps its own — serving size is about the log buttons, and the
+    // goal rides with it. Placed right under the tracked metrics: the
+    // water slot's caption points here for its target.
+    private var waterSection: some View {
+        Section("Water") {
+            Stepper(value: $waterServingOz, in: 4...40, step: 2) {
+                LabeledContent("Serving size") {
+                    Text("\(waterServingOz, format: .number.precision(.fractionLength(0))) oz")
+                }
+            }
+            // The goal is drunk in servings, so stepping SNAPS to
+            // multiples of the serving size (12 oz serving → 12,
+            // 24, 36…) — plain ±serving from a goal set under an
+            // old serving size stays misaligned forever, and the
+            // tempting reset-to-0 escape hatch can't exist:
+            // storage reads 0 as "unset → 64", so a 0 here would
+            // show while the app secretly runs the fallback.
+            // Floor = one serving, ceiling 200.
+            Stepper {
+                LabeledContent("Daily goal") {
+                    Text("\(waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
+                }
+            } onIncrement: {
+                let serving = max(1, waterServingOz)
+                let next = (floor(waterGoalOz / serving + 1e-9) + 1) * serving
+                if next <= 200 { waterGoalOz = next }
+            } onDecrement: {
+                let serving = max(1, waterServingOz)
+                let previous = (ceil(waterGoalOz / serving - 1e-9) - 1) * serving
+                waterGoalOz = max(serving, previous)
+            }
+        }
+    }
+
     /// Where text search looks things up. Barcode scans stay on
     /// OpenFoodFacts either way; FDC needs the user's own api.data.gov
     /// key (device-local, never synced — see PLAN-1.7).
@@ -524,7 +559,7 @@ struct SettingsView: View {
                         }
                     }
                 case .water:
-                    Text("Water's target is the daily goal in the Water section below.")
+                    Text("Water's target is the daily goal in the Water section.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 default:
@@ -548,12 +583,6 @@ struct SettingsView: View {
             }
         } header: {
             Text(slot == 1 ? "First tracked metric" : "Second tracked metric")
-        } footer: {
-            // Once, under the pair: nothing used to say where these
-            // "slots" actually show up.
-            if slot == 2 {
-                Text("Tracked metrics appear under Today's balance and on the watch's Tracked page.")
-            }
         }
         // Sodium's limit keeps coloring the calendar, day details, and
         // Today's log even when no slot tracks it — keep its knob
@@ -660,6 +689,10 @@ struct SettingsView: View {
                 trackedMetricSection(slot: 1)
                 trackedMetricSection(slot: 2)
 
+                // Right under the metrics: the water slot's caption
+                // points here for its target.
+                waterSection
+
                 Section {
                     Stepper(value: $untrackedBelowKcal, in: 0...2000, step: 100) {
                         LabeledContent("Counts as untracked") {
@@ -676,38 +709,6 @@ struct SettingsView: View {
                 }
 
                 remindersSection
-
-                // The sodium limit lives inside its tracked-metric section
-                // now; water keeps its own section — serving size is about
-                // the log buttons, and the goal rides with it (Micheal).
-                Section("Water") {
-                    Stepper(value: $waterServingOz, in: 4...40, step: 2) {
-                        LabeledContent("Serving size") {
-                            Text("\(waterServingOz, format: .number.precision(.fractionLength(0))) oz")
-                        }
-                    }
-                    // The goal is drunk in servings, so stepping SNAPS to
-                    // multiples of the serving size (12 oz serving → 12,
-                    // 24, 36…) — plain ±serving from a goal set under an
-                    // old serving size stays misaligned forever, and the
-                    // tempting reset-to-0 escape hatch can't exist:
-                    // storage reads 0 as "unset → 64", so a 0 here would
-                    // show while the app secretly runs the fallback.
-                    // Floor = one serving, ceiling 200.
-                    Stepper {
-                        LabeledContent("Daily goal") {
-                            Text("\(waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
-                        }
-                    } onIncrement: {
-                        let serving = max(1, waterServingOz)
-                        let next = (floor(waterGoalOz / serving + 1e-9) + 1) * serving
-                        if next <= 200 { waterGoalOz = next }
-                    } onDecrement: {
-                        let serving = max(1, waterServingOz)
-                        let previous = (ceil(waterGoalOz / serving - 1e-9) - 1) * serving
-                        waterGoalOz = max(serving, previous)
-                    }
-                }
 
                 onlineDatabaseSection
 

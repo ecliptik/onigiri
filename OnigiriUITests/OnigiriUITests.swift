@@ -931,6 +931,7 @@ final class OnigiriUITests: XCTestCase {
         }
         let app = XCUIApplication()
         app.launch()
+        skipOnboardingIfPresent(in: app)
         grantHealthAccess(in: app, timeout: 10)
 
         switchTab(in: app, to: "Foods")
@@ -1230,8 +1231,80 @@ final class OnigiriUITests: XCTestCase {
     func testGrantPendingAccess() throws {
         let app = XCUIApplication()
         app.launch()
+        skipOnboardingIfPresent(in: app)
         grantHealthAccess(in: app, timeout: 30)
         Thread.sleep(forTimeInterval: 3)
+    }
+
+    /// Fresh installs without a seeded goal land on onboarding — tests
+    /// that aren't about it skip straight through.
+    @MainActor
+    private func skipOnboardingIfPresent(in app: XCUIApplication) {
+        let skip = app.buttons["Set Up Later"]
+        if skip.waitForExistence(timeout: 4) {
+            skip.tap()
+        }
+    }
+
+    /// Onboarding walkthrough (opt-in via ONBOARDING=1, fresh erased
+    /// sims, NO seeding): welcome → Health access → goal (190 lb) →
+    /// water → done, then the goal exists in the app.
+    @MainActor
+    func testOnboarding() throws {
+        guard ProcessInfo.processInfo.environment["ONBOARDING"] == "1" else {
+            throw XCTSkip("Set ONBOARDING=1 to run the onboarding test")
+        }
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Welcome to Onigiri"].waitForExistence(timeout: 10),
+                      "Fresh install lands on onboarding")
+        attachShot(named: "onboarding-welcome")
+        app.buttons["Continue"].firstMatch.tap()
+
+        let allow = app.buttons["Allow Health Access"]
+        XCTAssertTrue(allow.waitForExistence(timeout: 5), "Health page")
+        attachShot(named: "onboarding-health")
+        allow.tap()
+        grantHealthAccess(in: app, timeout: 30)
+
+        let targetField = app.textFields.firstMatch
+        XCTAssertTrue(targetField.waitForExistence(timeout: 10), "Goal page fields")
+        attachShot(named: "onboarding-goal")
+        // Fields: current weight (manual, no Health data on a fresh sim)
+        // then target — fill both so the goal validates. LabeledContent
+        // stretches the field's frame across the row; the editable part
+        // sits at the trailing edge, so tap there.
+        let fields = app.textFields
+        fields.element(boundBy: 0).coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        Thread.sleep(forTimeInterval: 0.5)
+        fields.element(boundBy: 0).typeText("210")
+        fields.element(boundBy: 1).coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        Thread.sleep(forTimeInterval: 0.5)
+        fields.element(boundBy: 1).typeText("190")
+        app.buttons["Save Goal"].tap()
+
+        XCTAssertTrue(app.staticTexts["Daily water goal"].waitForExistence(timeout: 5), "Water page")
+        attachShot(named: "onboarding-water")
+        app.buttons["Continue"].firstMatch.tap()
+
+        let start = app.buttons["Start Logging"]
+        XCTAssertTrue(start.waitForExistence(timeout: 5), "Done page")
+        attachShot(named: "onboarding-done")
+        start.tap()
+
+        // Landed in the app with the goal saved.
+        XCTAssertTrue(app.buttons["dayTitleButton"].waitForExistence(timeout: 10),
+                      "Onboarding hands off to Today")
+        switchTab(in: app, to: "Goal")
+        // "190" lives in the target field's VALUE (editable), and the
+        // derived plan proves the save — match either.
+        let target = app.descendants(matching: .any).matching(
+            NSPredicate(format: "value CONTAINS '190' OR label CONTAINS 'To lose'")
+        ).firstMatch
+        XCTAssertTrue(target.waitForExistence(timeout: 10), "Goal saved from onboarding")
+        attachShot(named: "onboarding-goal-saved")
     }
 
     /// Handles the Health permission sheet: Turn On All, then Allow.

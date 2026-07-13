@@ -259,6 +259,9 @@ public enum SharedStore {
     /// (Burned/Eaten flanking the balance headline — frees a row for
     /// the log).
     public static let energyStatsStyleKey = "energyStatsStyle"
+    /// First-run onboarding shown (or deliberately skipped) — existing
+    /// installs with a goal are flagged true without seeing it.
+    public static let hasOnboardedKey = "hasOnboarded"
 
     /// Days with less intake logged count as untracked — streak-breaking,
     /// excluded from month totals. Default 1,000; the user can set 0 to

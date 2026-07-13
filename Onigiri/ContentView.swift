@@ -38,31 +38,24 @@ struct ContentView: View {
     @State private var scanRequest = false
     @State private var quickActions = QuickActions.shared
     @State private var tabBarPin = TabBarPin.shared
+    @AppStorage(SharedStore.hasOnboardedKey, store: SharedStore.defaults) private var hasOnboarded = false
+    /// Latched in the task below: once onboarding is showing, saving a
+    /// goal mid-flow must NOT dismiss it (only finish/skip does, via
+    /// hasOnboarded) — gating live on goals.isEmpty cut the flow short
+    /// the moment the goal page saved.
+    @State private var showingOnboarding = false
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            // Today sits first and is the app's home; water lives inside it
-            // (hydration row + a Water group in the log).
-            Tab("Today", systemImage: "gauge.with.needle", value: .today) {
-                TodayView()
-            }
-            Tab("Foods", systemImage: "fork.knife", value: .foods) {
-                FoodsView(scanRequest: $scanRequest)
-            }
-            Tab("Goal", systemImage: "chart.line.downtrend.xyaxis", value: .goal) {
-                GoalView()
-            }
-            Tab("Calendar", systemImage: "calendar", value: .calendar) {
-                CalendarView()
+        // The Group keeps the launch tasks alive in BOTH branches —
+        // rendering onboarding INSTEAD of the tabs (not over them) also
+        // keeps TodayView from firing the Health prompt contextlessly.
+        Group {
+            if showingOnboarding && !hasOnboarded {
+                OnboardingView()
+            } else {
+                mainTabs
             }
         }
-        .tint(.riceToast)
-        // Liquid Glass: the tab bar shrinks out of the way while scrolling
-        // content, re-expanding on scroll-up — and pinned full whenever
-        // the screen is at the top (the system misses gesture-less
-        // returns to the top, like collapsing the log sections).
-        .tabBarMinimizeBehavior(tabBarPin.atTop ? .never : .onScrollDown)
-        .toastHost()
         .task {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--seed-sample-data") {
@@ -74,6 +67,18 @@ struct ContentView: View {
             }
             BackupService.backupIfDue(context: context)
             ReminderScheduler.shared.activate()
+            // Existing installs never see onboarding: a goal means the
+            // app is already set up. Fresh installs latch it on. The
+            // context is asked directly — the seeder just ran in this
+            // same task, ahead of any @Query refresh.
+            if !hasOnboarded {
+                let goalCount = (try? context.fetchCount(FetchDescriptor<GoalSettings>())) ?? 0
+                if goalCount > 0 {
+                    hasOnboarded = true
+                } else {
+                    showingOnboarding = true
+                }
+            }
             // A quick action may have launched the app before this view existed.
             if let action = quickActions.pending {
                 quickActions.pending = nil
@@ -104,6 +109,32 @@ struct ContentView: View {
             // Calendar's "View day": land on Today, which consumes the date.
             if day != nil { selectedTab = .today }
         }
+    }
+
+    private var mainTabs: some View {
+        TabView(selection: $selectedTab) {
+            // Today sits first and is the app's home; water lives inside it
+            // (hydration row + a Water group in the log).
+            Tab("Today", systemImage: "gauge.with.needle", value: .today) {
+                TodayView()
+            }
+            Tab("Foods", systemImage: "fork.knife", value: .foods) {
+                FoodsView(scanRequest: $scanRequest)
+            }
+            Tab("Goal", systemImage: "chart.line.downtrend.xyaxis", value: .goal) {
+                GoalView()
+            }
+            Tab("Calendar", systemImage: "calendar", value: .calendar) {
+                CalendarView()
+            }
+        }
+        .tint(.riceToast)
+        // Liquid Glass: the tab bar shrinks out of the way while scrolling
+        // content, re-expanding on scroll-up — and pinned full whenever
+        // the screen is at the top (the system misses gesture-less
+        // returns to the top, like collapsing the log sections).
+        .tabBarMinimizeBehavior(tabBarPin.atTop ? .never : .onScrollDown)
+        .toastHost()
     }
 
     private func handle(_ action: QuickActions.Action) {

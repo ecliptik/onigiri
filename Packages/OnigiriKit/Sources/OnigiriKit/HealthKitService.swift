@@ -203,7 +203,13 @@ public final class HealthKitService {
     /// Weigh-ins over the trailing `days`, date-ascending, in pounds.
     public func bodyMassHistory(days: Int = 90, now: Date = .now) async throws -> [WeightTrend.Point] {
         guard let start = Calendar.current.date(byAdding: .day, value: -days, to: now) else { return [] }
-        let inRange = HKQuery.predicateForSamples(withStart: start, end: now, options: [])
+        return try await bodyMassHistory(from: start, to: now)
+    }
+
+    /// Weigh-ins for an arbitrary range — the calendar extends its year
+    /// of history on demand when older months are browsed.
+    public func bodyMassHistory(from start: Date, to end: Date) async throws -> [WeightTrend.Point] {
+        let inRange = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
         let descriptor = HKSampleQueryDescriptor(
             predicates: [.quantitySample(type: HKQuantityType(.bodyMass), predicate: inRange)],
             sortDescriptors: [SortDescriptor(\.startDate)]

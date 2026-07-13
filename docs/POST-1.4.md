@@ -429,6 +429,75 @@ chooser dialog). The food form's search entry moved from a top row to
 a bottom search-bar launcher ("Search OpenFoodFacts", Log-sheet look,
 barcode button sized to the bar).
 
+## Paid developer account — decision brief (2026-07-13)
+
+$99/year buys, in order of value to THIS app:
+
+1. **No weekly re-deploys** — provisioning lasts a year instead of 7
+   days; the recurring deploy chore (and the watch wrestling it brings)
+   disappears. This alone is most of the value.
+2. **TestFlight** — family devices (the other iPhones/iPads on this
+   Mac) get the app over the air, auto-updating, no cables.
+3. **iCloud/CloudKit** — SwiftData+CloudKit sync for the library
+   (foods/meals/goal) across devices, replacing Export/Import JSON.
+   Migration note: CloudKit-backed SwiftData requires optional
+   relationships and no unique constraints — the current models are
+   close but need an audit pass; logs stay in HealthKit regardless.
+4. Push notifications and App Store distribution — not needed today.
+
+Costs beyond the $99: none structural — same bundle IDs, HealthKit,
+widgets, and watch app; per PLAN.md it's "only a signing-team switch".
+**Recommendation:** buy when either (a) the weekly re-deploy chore
+grates, or (b) family wants the app — TestFlight is the clean way to
+give it to them. If neither, the free team keeps working.
+
+## Widget expansion plan (for review — nothing built yet)
+
+Current inventory: iPhone home screen small (gauge) and medium (meter
+with interactive water/meal buttons, configurable meal); watch
+complications (balance: circular/rectangular/inline/corner; water:
+circular/inline/corner). All recently hardened (midnight cut, gallery
+previews, needs-setup states, choke-point reloads).
+
+### W1 — cheap wins (reuse existing views/intents)
+
+1. **iPhone Lock Screen widgets**: add the accessory families
+   (circular/rectangular/inline) to the iOS bundle — the watch
+   complication layouts port nearly verbatim. Balance ring + water
+   ring on the lock screen is the single biggest glanceability win.
+2. **Control Center "Log Water" control** (ControlWidget): one-press
+   water from Control Center or the Action button, wrapping the
+   existing LogWaterIntent.
+3. **App Shortcuts**: expose Log Water / Log Meal to Siri and
+   Spotlight (AppShortcutsProvider over the existing intents).
+4. **StandBy audit**: systemSmall already appears in StandBy — verify
+   the gauge reads well in night mode, tweak if not.
+
+### W2 — new widgets
+
+5. **Streak** (systemSmall + accessoryCircular): current streak count
+   with the reward badge — StreakCalendar over the day totals, using
+   the same per-day snapshot targets as the app.
+6. **Month calendar** (systemLarge, iPad shines): the month grid with
+   earned/tracked marks — phone mirrors the earned/tracked sets into
+   the App Group on sync push; the widget renders statically.
+7. **Weight trend** (systemMedium/Large): the Goal chart (weigh-ins +
+   7-day average + target line) via Swift Charts, which works in
+   widgets; reads Health directly like the others.
+
+### W3 — later
+
+8. **Daily progress combo** (systemMedium alt): gauge + sodium + water
+   + streak in one card, as a configurable alternative to the meter.
+9. **Interactive gauge**: a water quick-log button on the small
+   widget (one intent button fits).
+10. Slot-aware watch complications — parked BY RULING ("I like how it
+    is now"); revisit only on request.
+
+Constraints that shape all of it: the widget process is memory-capped
+(no SwiftData — the App Group mirror pattern is established), and the
+free team means no push (irrelevant: WidgetKit timelines are local).
+
 ## Deliberately not doing
 
 - **Metric units** (kg/ml): personal US app; revisit only if it grows

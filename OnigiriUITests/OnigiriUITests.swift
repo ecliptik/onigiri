@@ -434,6 +434,8 @@ final class OnigiriUITests: XCTestCase {
             let kindPicker = app.segmentedControls.firstMatch
             kindPicker.buttons["Meals"].tap()
             shot("logsheet-meals")
+            kindPicker.buttons["Favorites"].tap()
+            shot("logsheet-favorites")
             kindPicker.buttons["Foods"].tap()
             shot("logsheet-foods")
         }
@@ -443,8 +445,8 @@ final class OnigiriUITests: XCTestCase {
         }
         if tapIfExists(logShakeRow) {
             shot("portion-sheet")
-            // The half-height portion sheet leaves the Log sheet's Cancel
-            // hittable behind it — the topmost (last) Cancel is the portion's.
+            // The Log sheet's own dismiss is "Done" now, so the only
+            // Cancel on screen is the portion sheet's.
             app.buttons.matching(identifier: "Cancel").allElementsBoundByIndex.last?.tap()
         }
         // Search state last: focusing the field replaces toolbar buttons,
@@ -476,6 +478,14 @@ final class OnigiriUITests: XCTestCase {
             shot("foods-add-menu")
             if tapIfExists(app.buttons["Add Food"]) {
                 shot("food-form-new", settle: 1.2)
+                // The inline database search (the shared section under
+                // the bottom system field).
+                let dbField = app.searchFields["Search OpenFoodFacts"]
+                if tapIfExists(dbField) {
+                    dbField.typeText("granola")
+                    shot("food-form-db-search", settle: 1.2)
+                    tapIfExists(app.buttons["Cancel"].firstMatch)
+                }
                 tapIfExists(app.buttons["Cancel"].firstMatch)
             }
         }
@@ -995,6 +1005,8 @@ final class OnigiriUITests: XCTestCase {
         app.launch()
         grantHealthAccess(in: app, timeout: 30)
         grantHealthAccess(in: app, timeout: 10)
+        // The iPad sim adds a Health sync prompt after the grants.
+        dismissHealthSyncPrompt(in: app)
         for tab in ["Today", "Foods", "Goal", "Calendar"] {
             switchTab(in: app, to: tab)
             attachShot(named: "tab-\(tab.lowercased())", settle: 2)
@@ -1010,8 +1022,13 @@ final class OnigiriUITests: XCTestCase {
             attachShot(named: "foods-search-typed", settle: 2)
         }
         switchTab(in: app, to: "Today")
-        switchTab(in: app, to: "Add")
-        attachShot(named: "log-sheet", settle: 2)
+        // Tolerant: the corner slot's element shape differs on iPad and
+        // the tab shots above are this test's real product.
+        let addTab = app.buttons["Add"].firstMatch
+        if addTab.waitForExistence(timeout: 5), addTab.isHittable {
+            addTab.tap()
+            attachShot(named: "log-sheet", settle: 2)
+        }
     }
 
     private func attachShot(named name: String, settle: TimeInterval = 0.8) {

@@ -163,7 +163,7 @@ struct GoalView: View {
                 Text("The deficit target and daily budget go away. Your logs aren't touched.")
             }
             .compactSections()
-            .readableContentWidth()
+            .readableContentWidth(groupedBackground: true)
             .expandsTabBarAtTop()
             .navigationTitle("Goal")
             .scrollDismissesKeyboard(.interactively)

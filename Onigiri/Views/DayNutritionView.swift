@@ -46,7 +46,7 @@ struct DayNutritionView: View {
                 }
             }
         }
-        .readableContentWidth()
+        .readableContentWidth(groupedBackground: true)
         .navigationTitle("Details")
     }
 

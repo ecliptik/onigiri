@@ -45,7 +45,9 @@ final class CalendarModel {
         weightHistory = (try? await health.bodyMassHistory(days: 365)) ?? weightHistory
     }
 
-    /// Load a browsed month that predates the trailing window, once.
+    /// Load a browsed month that predates the trailing window, once —
+    /// energy totals for the badges/stats, and weigh-ins so "Scale
+    /// change" doesn't hit the year-of-history cliff.
     func ensureTotals(forMonthOf month: Date) async {
         let calendar = Calendar.current
         guard let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: month)),
@@ -61,6 +63,13 @@ final class CalendarModel {
             totalsByDay[calendar.startOfDay(for: total.day)] = total
         }
         recomputeBadges()
+        if let weights = try? await health.bodyMassHistory(from: monthStart, to: min(monthEnd, .now)),
+           !weights.isEmpty {
+            // Merge and de-dupe (the trailing-365 load may overlap).
+            let known = Set(weightHistory.map(\.date))
+            weightHistory = (weightHistory + weights.filter { !known.contains($0.date) })
+                .sorted { $0.date < $1.date }
+        }
     }
 
     /// Badges are awarded when a day completes, judged by that day's

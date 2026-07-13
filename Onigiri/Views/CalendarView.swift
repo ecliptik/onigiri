@@ -460,7 +460,7 @@ struct MonthDetailView: View {
                 }
             }
         }
-        .readableContentWidth()
+        .readableContentWidth(groupedBackground: true)
         .navigationTitle(month.formatted(.dateTime.month(.wide).year()))
         .navigationBarTitleDisplayMode(.inline)
         // Water total and food count need their own Health queries; the

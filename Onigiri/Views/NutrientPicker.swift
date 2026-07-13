@@ -41,7 +41,7 @@ struct NutrientPickerView: View {
             group("Vitamins", Micronutrient.vitamins.map(TrackedNutrient.micro))
         }
         .compactSections()
-        .readableContentWidth()
+        .readableContentWidth(groupedBackground: true)
         .navigationTitle("Tracked Metric")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search nutrients")

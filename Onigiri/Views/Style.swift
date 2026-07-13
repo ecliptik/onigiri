@@ -16,36 +16,33 @@ extension View {
     }
 
     /// Caps scrollable content at a readable width and centers it —
-    /// iPhone layouts are untouched (margin math yields 0), iPad stops
-    /// stretching rows edge to edge across 1024pt. Apply to ScrollViews
-    /// and Lists/Forms alike (contentMargins reaches both).
-    func readableContentWidth(max maxWidth: CGFloat = 700) -> some View {
-        modifier(ReadableContentWidth(maxWidth: maxWidth))
+    /// iPhone layouts are untouched (widths never hit the cap), iPad
+    /// stops stretching rows edge to edge across 1024pt. A plain frame
+    /// cap on purpose: the old GeometryReader desynced the nav-bar
+    /// search drawer, and explicit contentMargins squared every
+    /// List/Form by overriding the system's inset-grouped defaults.
+    /// Pass `groupedBackground: true` for Lists/Forms so iPad's side
+    /// gutters match the grouped background instead of flashing white.
+    func readableContentWidth(
+        max maxWidth: CGFloat = 700, groupedBackground: Bool = false
+    ) -> some View {
+        modifier(ReadableContentWidth(maxWidth: maxWidth, groupedBackground: groupedBackground))
     }
 }
 
 private struct ReadableContentWidth: ViewModifier {
     let maxWidth: CGFloat
+    let groupedBackground: Bool
 
-    @ViewBuilder
     func body(content: Content) -> some View {
-        // iPhone bypasses ENTIRELY: no width can need the margin, and
-        // both the GeometryReader wrapper (which desynced the nav-bar
-        // search drawer and large-title collapse) and an explicit 0pt
-        // margin (which squared every List/Form by overriding the
-        // system's inset-grouped defaults) caused real bugs here.
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            GeometryReader { geo in
-                content
-                    .contentMargins(
-                        .horizontal,
-                        max(0, (geo.size.width - maxWidth) / 2),
-                        for: .scrollContent
-                    )
+        content
+            .frame(maxWidth: maxWidth)
+            .frame(maxWidth: .infinity)
+            .background {
+                if groupedBackground {
+                    Color(.systemGroupedBackground).ignoresSafeArea()
+                }
             }
-        } else {
-            content
-        }
     }
 }
 

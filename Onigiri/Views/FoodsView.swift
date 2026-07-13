@@ -223,7 +223,7 @@ struct FoodsView: View {
                 }
             }
             .compactSections()
-            .readableContentWidth()
+            .readableContentWidth(groupedBackground: true)
             .expandsTabBarAtTop()
             .navigationTitle("Foods")
             .fileImporter(isPresented: $showLibraryImporter, allowedContentTypes: [.json]) { result in

@@ -187,7 +187,7 @@ struct FoodsView: View {
                         ContentUnavailableView {
                             Label("No foods yet", systemImage: "fork.knife")
                         } description: {
-                            Text("Add a food once — calories and sodium off the label — then log it any day with a tap.\n\nAlready tracking on another device? Export its library (Settings → Export library), save the file, and import it here.")
+                            Text("Add a food once — calories and nutrients off the label, then log it with a tap.\n\nAlready tracking on another device? Export its library (Settings → Export library), save the file, and import it here.")
                         } actions: {
                             // Text-only: with a systemImage, iOS 26 collapses
                             // the label to a bare icon here (as in toolbars).

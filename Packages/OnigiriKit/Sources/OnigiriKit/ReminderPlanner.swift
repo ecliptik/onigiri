@@ -128,7 +128,7 @@ public enum ReminderPlanner {
         PlannedReminder(
             kind: .meals, fireDate: fire,
             title: "Nothing logged yet",
-            body: "Log your meals to keep today's balance honest."
+            body: "Log your meals to keep today's balance correct."
         )
     }
 

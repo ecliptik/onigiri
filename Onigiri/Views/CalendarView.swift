@@ -46,7 +46,7 @@ struct CalendarView: View {
                     }
                     .simultaneousGesture(horizontalSwipe { shiftDay($0) })
                     if model.targetDeficitKcal == nil {
-                        Text("No goal set — days earn an onigiri for any calorie deficit. Set a goal to raise the bar.")
+                        Text("No goal set — any deficit earns a badge. Set a goal to raise the bar.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)

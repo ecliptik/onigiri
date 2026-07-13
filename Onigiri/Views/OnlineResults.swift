@@ -87,7 +87,7 @@ final class OnlineFoodSearch {
             guard lastQuery == query else { return }
             hasMore = false
             moreMessage = error as? OpenFoodFactsError == .throttled
-                ? "OpenFoodFacts is busy — try again in a minute."
+                ? "OpenFoodFacts is busy — wait a minute and try again."
                 : "Couldn't load more results."
         }
         isLoadingMore = false

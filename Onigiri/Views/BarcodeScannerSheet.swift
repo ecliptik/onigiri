@@ -20,7 +20,7 @@ struct BarcodeScannerSheet: View {
                 } else {
                     Form {
                         Section {
-                            Text("Camera scanning isn't available here — type the barcode digits instead.")
+                            Text("Camera scanning isn't available — enter the barcode digits manually.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                             TextField("Barcode", text: $manualCode)

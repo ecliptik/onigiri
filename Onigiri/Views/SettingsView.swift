@@ -62,7 +62,7 @@ struct SettingsView: View {
             Toggle("Streak about to lapse", isOn: $remindStreak)
             if notificationsDenied {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Notifications are off for Onigiri, so reminders can't fire.")
+                    Text("Notifications are off for Onigiri — reminders won't appear.")
                         .font(.footnote)
                         .foregroundStyle(.orange)
                     Button("Turn on in Settings") {
@@ -513,7 +513,7 @@ struct SettingsView: View {
                                 : "Off")
                         }
                     }
-                    Text("Days with less logged break the streak and stay out of the month's totals — sparse days skew them. 0 turns this off.")
+                    Text("Days with less logged break the streak and stay out of the month's totals. 0 turns this off.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } header: {

@@ -57,7 +57,7 @@ struct OnboardingView: View {
                 .font(.system(size: 72))
             Text("Welcome to Onigiri")
                 .font(.title.bold())
-            Text("Calories, nutrition, and water — logged straight to Apple Health, counted toward your goal.")
+            Text("Calories, nutrition, and water logged to Apple Health")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -71,9 +71,9 @@ struct OnboardingView: View {
             Image(systemName: "heart.fill")
                 .font(.system(size: 56))
                 .foregroundStyle(.red)
-            Text("Your log lives in Health")
+            Text("Your log lives in Apple Health")
                 .font(.title2.bold())
-            Text("Onigiri writes what you eat and drink to Apple Health and reads your burn from it — nothing is stored anywhere else.")
+            Text("Onigiri reads and writes to Apple Health — nothing is stored online")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -125,7 +125,7 @@ struct OnboardingView: View {
                 DatePicker("By date", selection: $targetDate, in: Date.now..., displayedComponents: .date)
             }
             .padding(.horizontal)
-            Text("Days that hit the daily deficit earn an onigiri. You can change all of this in the Goal tab.")
+            Text("Days that hit the daily deficit earn an onigiri. Change this in the Goal tab.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -133,7 +133,7 @@ struct OnboardingView: View {
             VStack(spacing: 6) {
                 advanceButton(goalIsValid ? "Save Goal" : "Continue")
                 if !goalIsValid {
-                    Text("No goal yet? Any deficit earns the badge.")
+                    Text("No goal set — any deficit earns the badge.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -154,7 +154,7 @@ struct OnboardingView: View {
                     .monospacedDigit()
             }
             .padding(.horizontal, 40)
-            Text("Sodium and water are tracked on Today by default — swap either for any nutrient in Settings, badge and all.")
+            Text("Sodium and water are tracked on Today by default — customize to use any nutrient in Settings")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -169,7 +169,7 @@ struct OnboardingView: View {
                 .font(.system(size: 72))
             Text("You're set")
                 .font(.title.bold())
-            Text("Log your first meal from Today's + button — foods you save become one-tap logs.")
+            Text("Make your first Log entry from Today's + button")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

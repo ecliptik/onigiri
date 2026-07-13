@@ -177,7 +177,7 @@ struct QuickLogSheet: View {
                             ContentUnavailableView {
                                 Label("No saved foods yet", systemImage: "fork.knife")
                             } description: {
-                                Text("Scan a barcode or search online above — logged foods are saved for next time.\n\nOr bring your library from another device: export it there (Settings → Export library) and import the file here.")
+                                Text("Scan a barcode or search online — logged foods are saved to your library.\n\nOr bring your library from another device: export it there (Settings → Export library) and import the file here.")
                             } actions: {
                                 // Text-only: with a systemImage, iOS 26
                                 // collapses the label to a bare icon here.

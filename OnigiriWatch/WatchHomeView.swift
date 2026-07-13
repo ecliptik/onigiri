@@ -102,7 +102,7 @@ struct MealPickerView: View {
         NavigationStack {
             List {
                 if model.sync.meals.isEmpty {
-                    Text("Save meals on your iPhone and they'll sync here for one-tap logging.")
+                    Text("Save meals on your iPhone and they'll appear here.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

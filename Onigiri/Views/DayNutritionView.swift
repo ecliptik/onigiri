@@ -19,11 +19,11 @@ struct DayNutritionView: View {
         List {
             summarySection
             if model.foodLog.isEmpty {
-                Text(model.isToday ? "Nothing logged yet — log a meal to see its nutrients here." : "Nothing was logged this day.")
+                Text(model.isToday ? "Nothing logged — log a meal to see its nutrients here." : "Nothing logged this day.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else if totals.isEmpty {
-                Text("Entries are missing additional nutrients information")
+                Text("Entries have no additional nutrient data.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {

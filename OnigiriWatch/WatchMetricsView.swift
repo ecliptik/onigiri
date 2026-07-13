@@ -31,7 +31,7 @@ struct WatchMetricsView: View {
                     let first = slotNutrient(1)
                     let second = slotNutrient(2)
                     if first == nil && second == nil {
-                        Text("No tracked metrics — pick them in the iPhone app's Settings.")
+                        Text("No tracked metrics — customize them in the iPhone app's Settings.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)

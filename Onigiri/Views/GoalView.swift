@@ -65,7 +65,7 @@ struct GoalView: View {
                                 .multilineTextAlignment(.trailing)
                                 .focused($weightFieldFocused)
                         }
-                        Text("No weight in Apple Health yet — step on your scale, or enter it here.")
+                        Text("No weight in Apple Health yet — enter it here.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

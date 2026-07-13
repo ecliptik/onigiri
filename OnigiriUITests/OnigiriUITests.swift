@@ -598,7 +598,7 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(addFood.waitForExistence(timeout: 5), "Add Food chooser option")
         addFood.tap()
 
-        let scan = app.buttons["Scan barcode"]
+        let scan = app.buttons["Scan Barcode"]
         XCTAssertTrue(scan.waitForExistence(timeout: 5), "Scan button in food form")
         scan.tap()
 

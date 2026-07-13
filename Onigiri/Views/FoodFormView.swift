@@ -99,22 +99,28 @@ struct FoodFormView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // Lookup status only — the search field lives at the
-                // bottom (system placement), like every other search.
-                if isLookingUp || lookupMessage != nil {
-                    Section {
-                        if isLookingUp {
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                Text("Looking up product…")
-                                    .foregroundStyle(.secondary)
-                            }
+                // The scanner leads the form as a labeled row (Micheal's
+                // pick — the toolbar icon crowded the Save cluster);
+                // lookup status lands right beneath it. The search field
+                // lives at the bottom, system placement.
+                Section {
+                    Button {
+                        showScanner = true
+                    } label: {
+                        Label("Scan Barcode", systemImage: "barcode.viewfinder")
+                    }
+                    .disabled(isLookingUp)
+                    if isLookingUp {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("Looking up product…")
+                                .foregroundStyle(.secondary)
                         }
-                        if let lookupMessage {
-                            Text(lookupMessage)
-                                .font(.footnote)
-                                .foregroundStyle(.orange)
-                        }
+                    }
+                    if let lookupMessage {
+                        Text(lookupMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
                     }
                 }
 
@@ -224,15 +230,6 @@ struct FoodFormView: View {
                             dismiss()
                         }
                     }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showScanner = true
-                    } label: {
-                        Image(systemName: "barcode.viewfinder")
-                    }
-                    .disabled(isLookingUp)
-                    .accessibilityLabel("Scan barcode")
                 }
                 // New foods: Save keeps it library-only (meal building);
                 // Save & Log continues to the portion sheet. Two toolbar

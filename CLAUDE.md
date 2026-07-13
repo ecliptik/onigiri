@@ -109,7 +109,7 @@ cd Packages/OnigiriKit && swift test     # pure-logic tests; ALSO needs the
   WatchConnectivity, log sync is HealthKit's own.
 - OpenFoodFacts: the search index has NO nutrition fields — search rows lazily
   fetch the full product per barcode to show kcal/serving.
-- TWO online-search lists exist: `OnlineResultsSection` (Foods + Log sheet)
-  and `FoodSearchSheet`'s own list (the food form's Search Database sheet,
-  which predates the shared section). Any search behavior change (paging,
-  weeding, empty states) must land in BOTH.
+- ALL online-search surfaces (Foods, Log sheet, and the food form's
+  Search Database sheet) render the shared `OnlineResultsSection` —
+  `FoodSearchSheet` had its own drifting list until 2026-07-12. Keep it
+  that way: search behavior changes go in the shared section only.

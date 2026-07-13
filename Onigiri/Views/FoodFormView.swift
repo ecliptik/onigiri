@@ -5,8 +5,8 @@ import OnigiriKit
 
 /// Create or edit a saved food, with barcode scanning to prefill from
 /// OpenFoodFacts. The one surface every new food passes through — Save
-/// persists to the library, then offers to log a portion (declining is
-/// the meal-building path).
+/// keeps it library-only (the meal-building path), Save & Log continues
+/// to the portion sheet.
 struct FoodFormView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -51,8 +51,10 @@ struct FoodFormView: View {
     @State private var lookupMessage: String?
     @State private var portionTarget: PortionTarget?
     @State private var portionDidLog = false
-    /// The post-save "Log it?" prompt for new foods.
-    @State private var askToLog = false
+    /// Cancel/drag with typed data confirms first — twelve typed
+    /// nutrient fields used to vanish on a stray swipe.
+    @State private var confirmDiscard = false
+    @State private var initialSnapshot: FieldsSnapshot?
     /// Duplicate-food guard: a prefill whose name is already in the
     /// library offers editing that food instead of minting a twin.
     @State private var duplicateMatch: Food?
@@ -63,6 +65,30 @@ struct FoodFormView: View {
 
     private var canSave: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty && kcal != nil
+    }
+
+    /// Everything the form edits, for the dirty check.
+    private struct FieldsSnapshot: Equatable {
+        var name: String
+        var kcal: Double?
+        var sodiumMg: Double?
+        var serving: String
+        var barcode: String?
+        var nutrients: NutrientValues
+        var category: String?
+        var isFavorite: Bool
+    }
+
+    private var currentSnapshot: FieldsSnapshot {
+        FieldsSnapshot(
+            name: name, kcal: kcal, sodiumMg: sodiumMg, serving: serving,
+            barcode: barcode, nutrients: formNutrients,
+            category: category, isFavorite: isFavorite
+        )
+    }
+
+    private var isDirty: Bool {
+        initialSnapshot.map { $0 != currentSnapshot } ?? false
     }
 
     var body: some View {
@@ -174,13 +200,24 @@ struct FoodFormView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        if isDirty {
+                            confirmDiscard = true
+                        } else {
+                            dismiss()
+                        }
+                    }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    // New foods save first, then OFFER to log — building a
-                    // meal means adding foods without logging them.
+                // New foods: Save keeps it library-only (meal building);
+                // Save & Log continues to the portion sheet. Two toolbar
+                // buttons replace the old post-save "Log it?" alert — a
+                // whole modal for a yes/no.
+                ToolbarItemGroup(placement: .confirmationAction) {
                     if food == nil {
-                        Button("Save") { saveAndAskToLog() }
+                        Button("Save") { saveOnly() }
+                            .disabled(!canSave)
+                        Button("Save & Log") { saveAndLog() }
+                            .fontWeight(.semibold)
                             .disabled(!canSave)
                     } else {
                         Button("Save") { save() }
@@ -235,18 +272,11 @@ struct FoodFormView: View {
                     Text("Edit keeps your saved values and attaches this barcode; Create New makes a separate food.")
                 }
             }
-            .alert(
-                "Log “\(name.trimmingCharacters(in: .whitespaces))”?",
-                isPresented: $askToLog
-            ) {
-                Button("Log") { presentPortionSheet() }
-                Button("Not Now", role: .cancel) {
-                    ToastCenter.shared.show(
-                        "Saved \(name.trimmingCharacters(in: .whitespaces)) to your library ✓"
-                    )
-                    dismiss()
-                }
+            .alert("Discard changes?", isPresented: $confirmDiscard) {
+                Button("Discard", role: .destructive) { dismiss() }
+                Button("Keep Editing", role: .cancel) {}
             }
+            .interactiveDismissDisabled(isDirty)
             .sheet(isPresented: $showScanner) {
                 BarcodeScannerSheet { code in
                     Task { await lookup(code) }
@@ -264,7 +294,7 @@ struct FoodFormView: View {
                 ToastCenter.shared.show("Saved \(name.trimmingCharacters(in: .whitespaces)) to your library ✓ — not logged")
                 dismiss()
             }) { target in
-                PortionSheet(target: target) { quantity, category in
+                PortionSheet(target: target) { quantity, category, _ in
                     portionDidLog = true
                     log(target, quantity: quantity, category: category)
                 }
@@ -278,18 +308,25 @@ struct FoodFormView: View {
                 } else if startScanning {
                     showScanner = true
                 }
+                // After the initial load: a pristine form (or an
+                // untouched prefill) dismisses freely; anything typed
+                // or scanned IN the form confirms first.
+                initialSnapshot = currentSnapshot
             }
         }
         .toastHost()
     }
 
-    /// Duplicate-food guard: fires only for NEW foods whose prefilled
-    /// name is already in the library (Micheal's manual-entry-then-scan
-    /// case). Manual typing is not guarded — that's deliberate.
+    /// Duplicate-food guard: fires only for NEW foods whose prefill is
+    /// already in the library (Micheal's manual-entry-then-scan case).
+    /// Barcode beats name — a product saved under a different name used
+    /// to sail past and mint a twin. Manual typing is not guarded —
+    /// that's deliberate.
     private func checkForDuplicate() {
         guard food == nil, createdFood == nil else { return }
-        duplicateMatch = libraryFoods.first {
-            LibraryDuplicate.nameMatches($0.name, name)
+        duplicateMatch = libraryFoods.first { existing in
+            if let barcode, !barcode.isEmpty, existing.barcode == barcode { return true }
+            return LibraryDuplicate.nameMatches(existing.name, name)
         }
     }
 
@@ -436,12 +473,21 @@ struct FoodFormView: View {
         dismiss()
     }
 
-    /// New-food flow: persist first (the food survives every later
-    /// choice), then offer to log it — declining is the meal-building
-    /// path, where foods are added without eating them.
-    private func saveAndAskToLog() {
+    /// New-food "Save": library only — the meal-building path, where
+    /// foods are added without eating them.
+    private func saveOnly() {
         persist()
-        askToLog = true
+        ToastCenter.shared.show(
+            "Saved \(name.trimmingCharacters(in: .whitespaces)) to your library ✓"
+        )
+        dismiss()
+    }
+
+    /// New-food "Save & Log": persist first (the food survives every
+    /// later choice), then straight to the portion sheet.
+    private func saveAndLog() {
+        persist()
+        presentPortionSheet()
     }
 
     private func presentPortionSheet() {

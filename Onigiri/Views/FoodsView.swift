@@ -11,11 +11,7 @@ struct FoodsView: View {
     @Query(sort: \Meal.name) private var meals: [Meal]
     @Query(sort: \Food.name) private var foods: [Food]
 
-    /// Set by the "Scan Barcode" quick action: open a new-food form scanning.
-    @Binding var scanRequest: Bool
-
     @State private var showNewFood = false
-    @State private var showScanFood = false
     @State private var showNewMeal = false
     @State private var editingFood: Food?
     @State private var editingMeal: Meal?
@@ -273,29 +269,16 @@ struct FoodsView: View {
             .sheet(item: $formPrefill) { prefill in
                 FoodFormView(food: nil, prefill: prefill.product)
             }
-            .sheet(isPresented: $showScanFood) { FoodFormView(food: nil, startScanning: true) }
             .sheet(item: $editingFood) { FoodFormView(food: $0) }
             .sheet(isPresented: $showNewMeal) { MealFormView() }
             .sheet(item: $editingMeal) { MealFormView(meal: $0) }
             .sheet(item: $portionTarget) { target in
-                PortionSheet(target: target) { quantity, category in
+                PortionSheet(target: target) { quantity, category, _ in
                     log(name: target.name, kcal: target.kcal,
                         sodiumMg: target.sodiumMg, nutrients: target.nutrients,
                         category: category, quantity: quantity)
                 }
                 .presentationDetents([.medium, .large])
-            }
-            .task {
-                if scanRequest {
-                    scanRequest = false
-                    showScanFood = true
-                }
-            }
-            .onChange(of: scanRequest) { _, requested in
-                if requested {
-                    scanRequest = false
-                    showScanFood = true
-                }
             }
             // Alerts, not confirmationDialogs: iOS 26 anchors dialogs to
             // the source row as a popover bubble; a destructive confirm
@@ -441,18 +424,29 @@ struct LogButton: View {
 }
 
 /// Pick a portion and meal slot with a live preview before logging.
+/// With `editDate` set (the log row's Edit) it also offers the entry's
+/// date and time, passed back as the closure's third value.
 struct PortionSheet: View {
     let target: PortionTarget
-    let onLog: (Double, FoodCategory) -> Void
+    let editDate: Date?
+    let onLog: (Double, FoodCategory, Date?) -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var quantity = 1.0
     @State private var category: FoodCategory
+    @State private var entryDate: Date
+    @FocusState private var quantityFocused: Bool
 
-    init(target: PortionTarget, onLog: @escaping (Double, FoodCategory) -> Void) {
+    init(
+        target: PortionTarget,
+        editDate: Date? = nil,
+        onLog: @escaping (Double, FoodCategory, Date?) -> Void
+    ) {
         self.target = target
+        self.editDate = editDate
         self.onLog = onLog
         _category = State(initialValue: target.defaultCategory)
+        _entryDate = State(initialValue: editDate ?? .now)
     }
 
     var body: some View {
@@ -475,6 +469,7 @@ struct PortionSheet: View {
                                 .keyboardType(.decimalPad)
                                 .multilineTextAlignment(.trailing)
                                 .frame(maxWidth: 80)
+                                .focused($quantityFocused)
                         }
                         .padding(.trailing, 8)
                     }
@@ -507,6 +502,19 @@ struct PortionSheet: View {
                             .monospacedDigit()
                     }
                 }
+                // Edit mode only: move the entry in time ("logged at
+                // 11 pm but it was yesterday's dinner" used to mean
+                // delete + re-log).
+                if editDate != nil {
+                    Section {
+                        DatePicker(
+                            "Time",
+                            selection: $entryDate,
+                            in: ...Date.now,
+                            displayedComponents: [.date, .hourAndMinute]
+                        )
+                    }
+                }
             }
             .navigationBarTitleDisplayMode(.inline)
             // Select-all on focus, like the food form: the prefilled "1"
@@ -523,12 +531,37 @@ struct PortionSheet: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Log") {
-                        onLog(quantity, category)
-                        dismiss()
+                    Button(editDate != nil ? "Save" : "Log") {
+                        // TextField(value:format:) commits on focus
+                        // resignation — resign, then read the quantity
+                        // a runloop later, or a typed 0.5 logs as 1.
+                        quantityFocused = false
+                        DispatchQueue.main.async {
+                            onLog(
+                                min(max(quantity, 0.01), 100),
+                                category,
+                                editDate != nil ? entryDate : nil
+                            )
+                            dismiss()
+                        }
                     }
                     .fontWeight(.semibold)
                     .disabled(quantity <= 0)
+                }
+                // Decimal pads have no return key; surface a Done while
+                // editing, like the food form.
+                if quantityFocused {
+                    ToolbarItem(placement: .principal) {
+                        Button {
+                            quantityFocused = false
+                        } label: {
+                            Text("Done")
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.black)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.ricePaper)
+                    }
                 }
             }
         }

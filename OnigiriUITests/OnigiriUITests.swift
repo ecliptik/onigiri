@@ -152,6 +152,12 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(logRecent.waitForExistence(timeout: 5),
                       "Recent row should open the portion sheet")
         logRecent.tap()
+        // The Log sheet stays open after a log now (multi-item lunches);
+        // Done leaves it.
+        let doneButton = app.buttons["Done"]
+        XCTAssertTrue(doneButton.waitForExistence(timeout: 5),
+                      "Log sheet should stay open after logging, with Done to leave")
+        doneButton.tap()
 
         // Streak calendar: the three seeded history days each earned an
         // onigiri (750 kcal deficit vs ~618 target), so the streak is 3.
@@ -182,13 +188,12 @@ final class OnigiriUITests: XCTestCase {
             forDuration: 0.1,
             thenDragTo: waterStart.withOffset(CGVector(dx: -300, dy: 0))
         )
-        // Deletes confirm now (library-consistent): a centered alert.
-        let confirmDelete = app.alerts.buttons["Delete"]
-        XCTAssertTrue(confirmDelete.waitForExistence(timeout: 5),
-                      "Full swipe should ask for confirmation")
-        confirmDelete.tap()
+        // Deletes commit outright now — the Undo toast replaced the
+        // confirm alert (one gesture instead of four).
         XCTAssertTrue(app.staticTexts["24 / 64 oz water"].waitForExistence(timeout: 10),
-                      "Confirming should delete the water row")
+                      "Full swipe should delete the water row outright")
+        XCTAssertTrue(app.buttons["Undo"].waitForExistence(timeout: 5),
+                      "Delete should offer Undo in the toast")
         // The in-content title still reads "Today" (a page would say
         // "Yesterday"); the nav bar no longer carries the day title.
         XCTAssertTrue(app.buttons["dayTitleButton"].label.hasPrefix("Today"),
@@ -216,7 +221,8 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(increment.waitForExistence(timeout: 5),
                       "Edit should open the portion sheet with the stepper")
         for _ in 0..<4 { increment.tap() }
-        app.buttons["Log"].tap()
+        // Edit mode's confirm reads "Save" (and offers the entry's time).
+        app.buttons["Save"].tap()
         XCTAssertTrue(app.staticTexts["360 kcal"].waitForExistence(timeout: 10),
                       "Editing to 2 servings should double the logged entry")
         // Scroll back up so the minimized tab bar re-expands.

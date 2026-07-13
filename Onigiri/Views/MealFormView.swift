@@ -15,6 +15,29 @@ struct MealFormView: View {
     @State private var category: String?
     @State private var isFavorite = false
     @State private var foodFilter = ""
+    /// Cancel/drag with edits confirms first — a half-built meal used
+    /// to vanish on a stray swipe.
+    @State private var confirmDiscard = false
+    @State private var initialSnapshot: FieldsSnapshot?
+
+    private struct FieldsSnapshot: Equatable {
+        var name: String
+        var quantities: [PersistentIdentifier: Double]
+        var category: String?
+        var isFavorite: Bool
+    }
+
+    private var currentSnapshot: FieldsSnapshot {
+        FieldsSnapshot(
+            // Zero quantities are "not in the meal" — same as absent.
+            name: name, quantities: quantities.filter { $0.value > 0 },
+            category: category, isFavorite: isFavorite
+        )
+    }
+
+    private var isDirty: Bool {
+        initialSnapshot.map { $0 != currentSnapshot } ?? false
+    }
 
     /// Foods shown in the picker list; totals still count every selected
     /// food, filtered out of view or not.
@@ -87,13 +110,24 @@ struct MealFormView: View {
             .searchable(text: $foodFilter, prompt: "Search foods")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        if isDirty {
+                            confirmDiscard = true
+                        } else {
+                            dismiss()
+                        }
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || !hasItems)
                 }
             }
+            .alert("Discard changes?", isPresented: $confirmDiscard) {
+                Button("Discard", role: .destructive) { dismiss() }
+                Button("Keep Editing", role: .cancel) {}
+            }
+            .interactiveDismissDisabled(isDirty)
             .onAppear {
                 if let meal {
                     name = meal.name
@@ -103,6 +137,7 @@ struct MealFormView: View {
                         item.food.map { ($0.persistentModelID, item.quantity) }
                     })
                 }
+                initialSnapshot = currentSnapshot
             }
         }
     }

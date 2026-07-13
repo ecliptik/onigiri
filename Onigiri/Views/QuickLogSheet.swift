@@ -104,7 +104,7 @@ struct QuickLogSheet: View {
             switch kind {
             case .meals: if !item.isMeal { return false }
             case .foods: if item.isMeal { return false }
-            case .all: break
+            case .all, .scan: break
             }
             if searchText.isEmpty { return true }
             if item.name.localizedCaseInsensitiveContains(searchText) { return true }
@@ -133,7 +133,7 @@ struct QuickLogSheet: View {
         // Recents respect the Meals/Foods filter like everything else.
         let visibleRecents = recents.filter { entry in
             switch kind {
-            case .all: true
+            case .all, .scan: true
             case .meals: isMealName(entry.name)
             case .foods: !isMealName(entry.name)
             }
@@ -243,7 +243,10 @@ struct QuickLogSheet: View {
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    // "Done", not "Cancel": logging commits immediately
+                    // (with its own Undo), so dismissal cancels nothing —
+                    // and the sheet now stays open for multi-item lunches.
+                    Button("Done") { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -257,14 +260,21 @@ struct QuickLogSheet: View {
             .task {
                 if !kindLoaded {
                     kindLoaded = true
-                    kind = initialKind
+                    // .scan is a routing kind, not a filter: land on All
+                    // with the scanner already up.
+                    if initialKind == .scan {
+                        kind = .all
+                        activeSheet = .scanner
+                    } else {
+                        kind = initialKind
+                    }
                 }
                 recents = (try? await HealthKitService().recentFoodEntries()) ?? []
             }
             .sheet(item: $activeSheet) { sheet in
                 switch sheet {
                 case .portion(let target):
-                    PortionSheet(target: target) { quantity, category in
+                    PortionSheet(target: target) { quantity, category, _ in
                         log(
                             Item(id: target.name, name: target.name, detail: target.serving,
                                  kcal: target.kcal, sodiumMg: target.sodiumMg,
@@ -280,10 +290,9 @@ struct QuickLogSheet: View {
                     }
                 case .form(let prefill):
                     // New foods go through the full form — reviewable, complete,
-                    // and saved to the library. Its Log action finishes the log.
-                    FoodFormView(food: nil, prefill: prefill.product, logDate: logDate) {
-                        dismiss()
-                    }
+                    // and saved to the library. Its Log action returns here
+                    // (the sheet stays open for the next item).
+                    FoodFormView(food: nil, prefill: prefill.product, logDate: logDate)
                 case .editFood(let food):
                     FoodFormView(food: food)
                 case .editMeal(let meal):
@@ -343,8 +352,10 @@ struct QuickLogSheet: View {
         }
     }
 
-    /// Same semantics as the Foods list: tapping the row opens the editor;
-    /// the + capsule logs (meals one-tap, foods confirm the portion).
+    /// In a sheet named "Log", tap = log: the row opens the portion
+    /// sheet (the + capsule keeps the fast paths — meals one-tap).
+    /// Editing moved to a leading swipe; tap-to-edit in the middle of a
+    /// logging flow was the one surprising row in the app.
     private func row(_ item: Item) -> some View {
         HStack(spacing: 10) {
             LibraryRow(
@@ -372,13 +383,30 @@ struct QuickLogSheet: View {
         }
         .contentShape(.rect)
         .onTapGesture {
+            item.food?.lastUsedAt = .now
+            item.meal?.lastUsedAt = .now
+            activeSheet = .portion(makePortionTarget(for: item))
+        }
+        .swipeActions(edge: .leading) {
+            Button {
+                if let meal = item.meal {
+                    activeSheet = .editMeal(meal)
+                } else if let food = item.food {
+                    activeSheet = .editFood(food)
+                }
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            .tint(.riceToast)
+        }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: "Edit") {
             if let meal = item.meal {
                 activeSheet = .editMeal(meal)
             } else if let food = item.food {
                 activeSheet = .editFood(food)
             }
         }
-        .accessibilityAddTraits(.isButton)
     }
 
     /// A recent entry re-logs through the portion sheet. No editor behind
@@ -435,6 +463,9 @@ struct QuickLogSheet: View {
         )
     }
 
+    /// Logs and STAYS OPEN — the toast confirms, and an ad-hoc
+    /// three-item lunch used to mean three full sheet round-trips.
+    /// Done (toolbar) leaves.
     private func log(_ item: Item, quantity: Double, category: FoodCategory) {
         guard !isLogging else { return }
         // Recency drives the sort under favorites.
@@ -442,7 +473,7 @@ struct QuickLogSheet: View {
         item.meal?.lastUsedAt = .now
         isLogging = true
         Task {
-            let logged = await LogActions.logFood(
+            _ = await LogActions.logFood(
                 name: item.name,
                 kcal: item.kcal * quantity,
                 sodiumMg: item.sodiumMg * quantity,
@@ -450,11 +481,7 @@ struct QuickLogSheet: View {
                 category: category,
                 date: logDate
             )
-            if logged {
-                dismiss()
-            } else {
-                isLogging = false
-            }
+            isLogging = false
         }
     }
 }

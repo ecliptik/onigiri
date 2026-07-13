@@ -42,28 +42,6 @@ struct TodayView: View {
     /// True while a log row is mid swipe-to-delete, so the day-paging
     /// swipe on the whole screen stands down.
     @State private var rowSwipeActive = false
-    /// Log deletes confirm first, like the library's (and the
-    /// confirmation is what lets the delete toast drop its Undo).
-    @State private var pendingLogDelete: PendingLogDelete?
-
-    private enum PendingLogDelete: Identifiable {
-        case food(FoodLogEntry)
-        case water(WaterLogEntry)
-
-        var id: UUID {
-            switch self {
-            case .food(let entry): entry.id
-            case .water(let entry): entry.id
-            }
-        }
-
-        var title: String {
-            switch self {
-            case .food(let entry): "Delete “\(entry.name)”?"
-            case .water(let entry): "Delete the \(entry.oz.formatted(.number.precision(.fractionLength(0)))) oz water entry?"
-            }
-        }
-    }
     /// The headline number follows the user's text size (Dynamic Type);
     /// minimumScaleFactor keeps huge accessibility sizes on one line.
     @ScaledMetric(relativeTo: .largeTitle) private var headlineSize = 60.0
@@ -77,6 +55,7 @@ struct TodayView: View {
         case datePicker
         case portion(PortionTarget)
         case editEntry(FoodLogEntry)
+        case editWater(WaterLogEntry)
 
         var id: String {
             switch self {
@@ -85,6 +64,7 @@ struct TodayView: View {
             case .datePicker: "datePicker"
             case .portion(let target): "portion-\(target.name)"
             case .editEntry(let entry): "edit-\(entry.id.uuidString)"
+            case .editWater(let entry): "editWater-\(entry.id.uuidString)"
             }
         }
     }
@@ -211,7 +191,7 @@ struct TodayView: View {
                         })
                     }
                 case .portion(let target):
-                    PortionSheet(target: target) { quantity, category in
+                    PortionSheet(target: target) { quantity, category, _ in
                         Task {
                             await LogActions.logFood(
                                 name: target.name,
@@ -227,38 +207,24 @@ struct TodayView: View {
                 case .editEntry(let entry):
                     // Rescale a logged entry: the sheet treats what was
                     // logged as one serving; confirming replaces the entry
-                    // in place (same time, chosen slot), Undo restores it.
+                    // (chosen slot, and now a movable date/time), Undo
+                    // restores it.
                     PortionSheet(target: PortionTarget(
                         name: entry.name, kcal: entry.kcal,
                         sodiumMg: entry.sodiumMg, nutrients: entry.nutrients,
                         serving: "as logged", defaultCategory: entry.category
-                    )) { quantity, category in
+                    ), editDate: entry.date) { quantity, category, date in
                         Task {
-                            await LogActions.editFoodEntry(entry, quantity: quantity, category: category)
+                            await LogActions.editFoodEntry(
+                                entry, quantity: quantity, category: category, date: date
+                            )
                         }
                     }
                     .presentationDetents([.medium, .large])
+                case .editWater(let entry):
+                    WaterEditSheet(entry: entry)
+                        .presentationDetents([.medium])
                 }
-            }
-            .alert(
-                pendingLogDelete?.title ?? "",
-                isPresented: .init(
-                    get: { pendingLogDelete != nil },
-                    set: { if !$0 { pendingLogDelete = nil } }
-                ),
-                presenting: pendingLogDelete
-            ) { pending in
-                Button("Delete", role: .destructive) {
-                    Task {
-                        switch pending {
-                        case .food(let entry): await LogActions.deleteFoodEntry(entry)
-                        case .water(let entry): await LogActions.deleteWaterEntry(entry)
-                        }
-                    }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: { _ in
-                Text("This can't be undone.")
             }
             .onChange(of: quickActions.quickLogRequest) { _, _ in
                 consumeQuickLogRequest()
@@ -670,8 +636,11 @@ struct TodayView: View {
                         }
                     }
                     Divider()
+                    // The Log sheet's scanner, not the Foods-tab food
+                    // form: known barcodes get the 1-tap portion sheet,
+                    // and the browsed day's logDate rides along.
                     Button("Scan barcode", systemImage: "barcode.viewfinder") {
-                        QuickActions.shared.pending = .scanBarcode
+                        activeSheet = .quickLog(.scan)
                     }
                 } label: {
                     logButtonLabel { FoodIconView(raw: foodIcon) }
@@ -764,12 +733,17 @@ struct TodayView: View {
                 .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
                 .logRowSwipeActions(
                     active: $rowSwipeActive,
-                    itemName: "\(entry.oz.formatted(.number.precision(.fractionLength(0)))) ounce entry"
+                    itemName: "\(entry.oz.formatted(.number.precision(.fractionLength(0)))) ounce entry",
+                    onTap: { activeSheet = .editWater(entry) },
+                    onEdit: { activeSheet = .editWater(entry) }
                 ) {
-                    pendingLogDelete = .water(entry)
+                    Task { await LogActions.deleteWaterEntry(entry) }
+                }
+                .accessibilityAction(named: "Edit") {
+                    activeSheet = .editWater(entry)
                 }
                 .accessibilityAction(named: "Delete") {
-                    pendingLogDelete = .water(entry)
+                    Task { await LogActions.deleteWaterEntry(entry) }
                 }
                 .padding(.horizontal)
             }
@@ -836,15 +810,16 @@ struct TodayView: View {
                 .logRowSwipeActions(
                     active: $rowSwipeActive,
                     itemName: entry.name,
+                    onTap: { activeSheet = .editEntry(entry) },
                     onEdit: { activeSheet = .editEntry(entry) }
                 ) {
-                    pendingLogDelete = .food(entry)
+                    Task { await LogActions.deleteFoodEntry(entry) }
                 }
                 .accessibilityAction(named: "Edit") {
                     activeSheet = .editEntry(entry)
                 }
                 .accessibilityAction(named: "Delete") {
-                    pendingLogDelete = .food(entry)
+                    Task { await LogActions.deleteFoodEntry(entry) }
                 }
                 .padding(.horizontal)
             }
@@ -880,12 +855,13 @@ private extension View {
     func logRowSwipeActions(
         active: Binding<Bool>,
         itemName: String,
+        onTap: (() -> Void)? = nil,
         onEdit: (() -> Void)? = nil,
         onDelete: @escaping () -> Void
     ) -> some View {
         modifier(LogRowSwipeActions(
             rowSwipeActive: active, itemName: itemName,
-            onEdit: onEdit, onDelete: onDelete
+            onTap: onTap, onEdit: onEdit, onDelete: onDelete
         ))
     }
 }
@@ -899,6 +875,9 @@ private extension View {
 private struct LogRowSwipeActions: ViewModifier {
     @Binding var rowSwipeActive: Bool
     let itemName: String
+    /// Tap on a closed row (an open row's tap just settles it shut) —
+    /// free discoverability for the edit hidden behind the swipe.
+    var onTap: (() -> Void)?
     var onEdit: (() -> Void)?
     let onDelete: () -> Void
 
@@ -944,7 +923,11 @@ private struct LogRowSwipeActions: ViewModifier {
             }
             .contentShape(.rect)
             .onTapGesture {
-                if restOffset != 0 { settle(0) }
+                if restOffset != 0 {
+                    settle(0)
+                } else {
+                    onTap?()
+                }
             }
             .gesture(
                 DragGesture(minimumDistance: 15)
@@ -991,6 +974,80 @@ private struct LogRowSwipeActions: ViewModifier {
     private func settle(_ value: CGFloat) {
         withAnimation(.snappy) { offset = value }
         restOffset = value
+    }
+}
+
+/// Edit a logged water serving: amount and time. Save replaces the
+/// entry (write-then-delete in LogActions), Undo restores it.
+private struct WaterEditSheet: View {
+    let entry: WaterLogEntry
+    @Environment(\.dismiss) private var dismiss
+    @State private var oz: Double
+    @State private var date: Date
+    @FocusState private var amountFocused: Bool
+
+    init(entry: WaterLogEntry) {
+        self.entry = entry
+        _oz = State(initialValue: entry.oz)
+        _date = State(initialValue: entry.date)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Stepper(value: $oz, in: 1...128, step: 4) {
+                        LabeledContent("Amount (oz)") {
+                            TextField("0", value: Binding(
+                                get: { oz },
+                                set: { oz = min(max($0, 1), 128) }
+                            ), format: .number.precision(.fractionLength(0...1)))
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(maxWidth: 80)
+                                .focused($amountFocused)
+                        }
+                        .padding(.trailing, 8)
+                    }
+                    DatePicker(
+                        "Time",
+                        selection: $date,
+                        in: ...Date.now,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                }
+            }
+            .navigationTitle("Edit Water")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        // Same commit dance as PortionSheet: the field
+                        // commits on focus resignation.
+                        amountFocused = false
+                        DispatchQueue.main.async {
+                            Task {
+                                await LogActions.editWaterEntry(entry, oz: oz, date: date)
+                            }
+                            dismiss()
+                        }
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(oz <= 0)
+                }
+            }
+        }
+        .presentationCornerRadius(28)
+        .presentationBackground {
+            ZStack {
+                Rectangle().fill(.thickMaterial)
+                UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
+                    .strokeBorder(Color.primary.opacity(0.15), lineWidth: 1)
+            }
+        }
     }
 }
 

@@ -3,6 +3,9 @@ import OnigiriKit
 
 /// Free-text search of OpenFoodFacts — for foods without barcodes.
 /// Picking a result fetches the full product (nutrition included).
+/// Renders the SAME OnlineResultsSection as Foods and the Log sheet —
+/// this used to be a hand-rolled third list that kept drifting (stale
+/// results, no failure state, no Add Food fallback).
 struct FoodSearchSheet: View {
     var initialQuery = ""
     let onPick: (ScannedProduct) -> Void
@@ -15,52 +18,26 @@ struct FoodSearchSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                if search.isSearching {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                        Text("Searching…")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                if let message = search.message {
-                    Text(message)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
                 // Anchor the empty sheet: with the search bar at the
                 // bottom (the app-wide standard), a completely blank
                 // list above it would read upside down.
-                if !search.hasSearched && !search.isSearching && search.results.isEmpty {
+                if query.trimmingCharacters(in: .whitespaces).isEmpty {
                     Text("Search OpenFoodFacts")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                }
-                ForEach(search.results) { result in
-                    OnlineResultRow(result: result, search: search) {
-                        Task {
-                            let product = await search.product(for: result)
-                            onPick(product)
-                            dismiss()
-                        }
-                    }
-                    .onAppear {
-                        // Same paging as the Foods/Log search sections:
-                        // the last row pulls the next page.
-                        if result.id == search.results.last?.id {
-                            Task { await search.loadMore() }
-                        }
-                    }
-                }
-                if search.isLoadingMore {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                        Text("Searching…")
-                            .foregroundStyle(.secondary)
-                    }
-                } else if let more = search.moreMessage {
-                    Text(more)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                } else {
+                    OnlineResultsSection(query: query, search: search, onPick: { product in
+                        onPick(product)
+                        dismiss()
+                    }, onAddManually: { name in
+                        // Hand the searched name back to the form as a
+                        // name-only product.
+                        onPick(ScannedProduct(
+                            barcode: "", name: name, kcal: nil, sodiumMg: nil,
+                            servingDescription: "", nutrients: NutrientValues()
+                        ))
+                        dismiss()
+                    })
                 }
             }
             .compactSections()
@@ -74,6 +51,11 @@ struct FoodSearchSheet: View {
             .searchFocused($searchFocused)
             .onSubmit(of: .search) {
                 Task { await search.search(query) }
+            }
+            .onChange(of: query) { _, text in
+                if text.trimmingCharacters(in: .whitespaces).isEmpty {
+                    search.clear()
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

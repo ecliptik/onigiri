@@ -35,7 +35,6 @@ struct ContentView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: AppTab = .today
-    @State private var scanRequest = false
     @State private var quickActions = QuickActions.shared
     @State private var tabBarPin = TabBarPin.shared
     @AppStorage(SharedStore.hasOnboardedKey, store: SharedStore.defaults) private var hasOnboarded = false
@@ -119,7 +118,7 @@ struct ContentView: View {
                 TodayView()
             }
             Tab("Foods", systemImage: "fork.knife", value: .foods) {
-                FoodsView(scanRequest: $scanRequest)
+                FoodsView()
             }
             Tab("Goal", systemImage: "chart.line.downtrend.xyaxis", value: .goal) {
                 GoalView()
@@ -154,8 +153,10 @@ struct ContentView: View {
             selectedTab = .today
             QuickActions.shared.quickLogRequest = .foods
         case .scanBarcode:
-            selectedTab = .foods
-            scanRequest = true
+            // The Log sheet's scanner (library fast path + logging),
+            // not the Foods-tab new-food form.
+            selectedTab = .today
+            QuickActions.shared.quickLogRequest = .scan
         }
     }
 }

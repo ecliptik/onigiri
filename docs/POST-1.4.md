@@ -166,7 +166,25 @@ validation+save behind GoalView AND onboarding with inline
     (Save stays disabled). Fix: one shared upsert + validation for both
     surfaces, with inline "target must be below current weight" copy.
 
-## Tier 3 — daily-loop friction (highest UX value per hour)
+## Tier 3 — daily-loop friction — ALL SHIPPED 2026-07-12 (same session)
+
+All ten landed: log-row deletes commit outright with an Undo toast
+(alert gone; water rows too); Today's scan (menu AND app-icon quick
+action) routes to the Log sheet's scanner via a new `.scan` kind —
+library fast path + browsed-day logDate — and the Foods-tab
+scanRequest plumbing is gone; the edit PortionSheet moves entries in
+date/time and water rows gained an edit sheet (`editWaterEntry`, same
+write-then-delete + undo shape); the portion field commits before Log
+reads it (focus resign + one-runloop defer) with a Done affordance;
+Save / Save & Log toolbar replaced the post-save alert; both forms
+confirm discard when dirty (`interactiveDismissDisabled` + snapshot
+compare); the Log sheet stays open after logging (toolbar reads Done)
+with row-tap = portion sheet and edit demoted to a leading swipe (+
+accessibility action); Today log rows tap-to-edit; `FoodSearchSheet`
+now renders the shared `OnlineResultsSection` (stale-query button,
+clear-on-empty, failure state, Add Food fallback all came free — the
+CLAUDE.md two-list rule is retired); the duplicate guard matches
+barcode before name. Flow-test expectations updated to the new UX.
 
 16. **Delete should be one swipe + undo, not four gestures + alert.**
     `TodayView.swift:243-262`. The safety models are inverted: a cheap

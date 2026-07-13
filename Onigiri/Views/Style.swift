@@ -27,20 +27,24 @@ extension View {
 private struct ReadableContentWidth: ViewModifier {
     let maxWidth: CGFloat
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        GeometryReader { geo in
-            let margin = max(0, (geo.size.width - maxWidth) / 2)
-            if margin > 0 {
+        // iPhone bypasses ENTIRELY: no width can need the margin, and
+        // both the GeometryReader wrapper (which desynced the nav-bar
+        // search drawer and large-title collapse) and an explicit 0pt
+        // margin (which squared every List/Form by overriding the
+        // system's inset-grouped defaults) caused real bugs here.
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            GeometryReader { geo in
                 content
-                    .contentMargins(.horizontal, margin, for: .scrollContent)
-            } else {
-                // iPhone: no margin needed — and setting an explicit 0
-                // OVERRODE the system default margins, flattening every
-                // List/Form into edge-to-edge square sections (the
-                // "box-like" look Micheal flagged) instead of the
-                // rounded inset-grouped cards.
-                content
+                    .contentMargins(
+                        .horizontal,
+                        max(0, (geo.size.width - maxWidth) / 2),
+                        for: .scrollContent
+                    )
             }
+        } else {
+            content
         }
     }
 }

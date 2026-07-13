@@ -993,6 +993,16 @@ final class OnigiriUITests: XCTestCase {
             switchTab(in: app, to: tab)
             attachShot(named: "tab-\(tab.lowercased())", settle: 2)
         }
+        // The Foods search drawer, activated — catches the
+        // field-disappears-on-tap class of bug.
+        switchTab(in: app, to: "Foods")
+        let foodsSearch = app.searchFields.firstMatch
+        if foodsSearch.waitForExistence(timeout: 5) {
+            foodsSearch.tap()
+            attachShot(named: "foods-search-active", settle: 2)
+            app.typeText("egg")
+            attachShot(named: "foods-search-typed", settle: 2)
+        }
         switchTab(in: app, to: "Today")
         switchTab(in: app, to: "Add")
         attachShot(named: "log-sheet", settle: 2)

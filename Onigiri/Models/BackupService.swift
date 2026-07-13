@@ -24,7 +24,10 @@ enum BackupService {
     }
 
     /// Writes a backup if the last one is over a day old (or `force`d).
-    /// Returns the file URL when a backup was written.
+    /// Returns the file URL when a backup was written. Synchronous on
+    /// purpose: a detached write raced the launch path's double call and
+    /// could be suspended with the process before the file landed — the
+    /// few-ms encode of a personal library isn't worth either failure.
     @discardableResult
     @MainActor
     static func backupIfDue(context: ModelContext, force: Bool = false, now: Date = .now) -> URL? {

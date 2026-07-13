@@ -22,7 +22,12 @@ public enum DeficitTargetHistory {
         targetKcal: Double?, now: Date = .now, calendar: Calendar = .current
     ) {
         var stored = storedTargets()
-        stored[dayKey(for: now, calendar: calendar)] = targetKcal ?? 0
+        let todayKey = dayKey(for: now, calendar: calendar)
+        let value = targetKcal ?? 0
+        // Every plan load lands here (app, watch, every widget provider) —
+        // skip the ~400-entry plist rewrite when nothing changed.
+        guard stored[todayKey] != value else { return }
+        stored[todayKey] = value
         if stored.count > keptDays {
             for stale in stored.keys.sorted().dropLast(keptDays) {
                 stored.removeValue(forKey: stale)

@@ -95,7 +95,9 @@ public enum PlanCache {
     }
 
     /// Whether the Health permission sheet has never been shown — an XPC
-    /// round trip every provider was repeating per reload.
+    /// round trip every provider was repeating per reload. TTL-cached
+    /// only, never latched: "false" can be a transient store error, and
+    /// an app update adding Health types makes it true again.
     public static func needsSetup() async -> Bool {
         let version = currentVersion()
         if isValid(setupEntry, version: version) {

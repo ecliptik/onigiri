@@ -60,6 +60,9 @@ private struct BarcodeScannerRepresentable: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ scanner: DataScannerViewController, context: Context) {
+        // Dismissal after a successful scan re-runs updates — don't
+        // restart the camera for the teardown animation.
+        guard !context.coordinator.delivered else { return }
         try? scanner.startScanning()
     }
 
@@ -69,7 +72,7 @@ private struct BarcodeScannerRepresentable: UIViewControllerRepresentable {
 
     final class Coordinator: NSObject, DataScannerViewControllerDelegate {
         let onCode: (String) -> Void
-        private var delivered = false
+        private(set) var delivered = false
 
         init(onCode: @escaping (String) -> Void) {
             self.onCode = onCode

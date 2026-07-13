@@ -21,6 +21,11 @@ struct OnigiriApp: App {
         // anything computed meal totals (e.g. the watch sync push). The
         // Core Data pass must run before SwiftData opens the store —
         // SwiftData traps on the dangling reference it needs to inspect.
+        // Deliberately NOT one-shot: repairStore can be skipped or fail
+        // silently, and a "repaired" flag that outlives the store file it
+        // judged would gate off the only recovery from a crash loop. The
+        // per-launch cost (a small scan of a personal library) is the
+        // cheaper side of that trade.
         if let url = SharedStore.storeURL {
             LibraryMaintenance.repairStore(at: url)
         }

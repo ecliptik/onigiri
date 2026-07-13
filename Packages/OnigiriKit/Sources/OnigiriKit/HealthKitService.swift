@@ -442,6 +442,10 @@ public final class HealthKitService {
         }
         let end = min(nextMonth, now)
         async let water = sum(.dietaryWater, unit: .fluidOunceUS(), start: start, end: end)
+        // Correlations, not bare energy samples: the day lists render
+        // food correlations, and the month count must agree with them
+        // (bare samples from the Health app or other trackers don't
+        // appear in the day lists).
         let inMonth = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
         let descriptor = HKSampleQueryDescriptor(
             predicates: [.correlation(type: HKCorrelationType(.food), predicate: inMonth)],

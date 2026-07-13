@@ -10,7 +10,6 @@ import OnigiriKit
 struct FoodFormView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
-    @Query private var libraryFoods: [Food]
 
     let food: Food?
     /// Open the barcode scanner immediately (quick-action entry point).
@@ -354,10 +353,20 @@ struct FoodFormView: View {
     /// that's deliberate.
     private func checkForDuplicate() {
         guard food == nil, createdFood == nil else { return }
-        duplicateMatch = libraryFoods.first { existing in
-            if let barcode, !barcode.isEmpty, existing.barcode == barcode { return true }
-            return LibraryDuplicate.nameMatches(existing.name, name)
+        // On-demand fetch, not an @Query: the form doesn't render the
+        // library, and the standing query kept every food materialized
+        // and re-rendered the form on any library change.
+        if let code = barcode, !code.isEmpty {
+            var descriptor = FetchDescriptor<Food>(predicate: #Predicate { $0.barcode == code })
+            descriptor.fetchLimit = 1
+            if let match = ((try? context.fetch(descriptor)) ?? []).first {
+                duplicateMatch = match
+                return
+            }
         }
+        // Name matching is fuzzy (LibraryDuplicate) — not predicable.
+        let all = (try? context.fetch(FetchDescriptor<Food>())) ?? []
+        duplicateMatch = all.first { LibraryDuplicate.nameMatches($0.name, name) }
     }
 
     /// "Edit Existing": the form becomes an editor for the matched food —

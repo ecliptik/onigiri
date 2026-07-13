@@ -188,17 +188,20 @@ final class CalendarModel {
         async let summaryRead = health.daySummary(for: day)
         // Non-sodium/water slots need their own day query; nil (slot off,
         // sodium/water, or a failed read) renders as "—", never a fake 0.
-        var slots: [Double?] = [nil, nil]
-        for slot in 1...2 {
-            if let nutrient = SharedStore.trackedNutrient(slot: slot),
-               nutrient != .sodium, nutrient != .water {
-                slots[slot - 1] = try? await health.dayTotal(of: nutrient, for: day)
-            }
-        }
+        // The slot reads are independent — run them concurrently.
+        async let slot1 = slotDayTotal(slot: 1, day: day)
+        async let slot2 = slotDayTotal(slot: 2, day: day)
+        let slots = await [slot1, slot2]
         let summary = try? await summaryRead
         guard generation == summaryGeneration else { return }
         selectedDaySummary = summary
         selectedDaySlotTotals = slots
+    }
+
+    private func slotDayTotal(slot: Int, day: Date) async -> Double? {
+        guard let nutrient = SharedStore.trackedNutrient(slot: slot),
+              nutrient != .sodium, nutrient != .water else { return nil }
+        return try? await health.dayTotal(of: nutrient, for: day)
     }
 
 }

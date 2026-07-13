@@ -48,7 +48,7 @@ struct StreakProvider: TimelineProvider {
             let entry = await load()
             // The streak only moves when a day completes — refresh at
             // midnight, with a lazy fallback in between.
-            let refresh = Date().addingTimeInterval(60 * 60)
+            let refresh = Date().addingTimeInterval(WidgetRefreshPolicy.pollFallback)
             let midnight = nextMidnight(after: .now)
             completion(Timeline(
                 entries: [entry],
@@ -157,7 +157,7 @@ struct MonthProvider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<MonthEntry>) -> Void) {
         Task { @MainActor in
             let entry = await load()
-            let refresh = Date().addingTimeInterval(60 * 60)
+            let refresh = Date().addingTimeInterval(WidgetRefreshPolicy.pollFallback)
             let midnight = nextMidnight(after: .now)
             completion(Timeline(
                 entries: [entry],

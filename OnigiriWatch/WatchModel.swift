@@ -21,6 +21,11 @@ final class WatchModel {
     /// full plan load each (TabView pre-renders neighbors, so one open
     /// plus a swipe could run it 3-4×).
     private var lastRefreshed: Date?
+    /// The refresh currently underway, so passive callers can join it —
+    /// at launch, start()'s refresh plus the pre-rendered pages' onAppear
+    /// used to run three concurrent full query sets before the first
+    /// completion could stamp lastRefreshed.
+    private var refreshTask: Task<Void, Never>?
 
     /// Transient line under the buttons: haptics alone made a failed
     /// log indistinguishable from a successful one.
@@ -47,10 +52,15 @@ final class WatchModel {
         await refresh()
     }
 
-    /// Passive entry point (page onAppear, scene re-activation): skip the
-    /// query set when fresh, unless the day rolled over. Logs and start()
-    /// still call refresh() directly.
+    /// Passive entry point (page onAppear, scene re-activation): join a
+    /// refresh already underway, and skip the query set when fresh —
+    /// unless the day rolled over. Logs and start() still call refresh()
+    /// directly (post-write data must never piggyback on a pre-write read).
     func refreshIfStale(maxAge: TimeInterval = 30) async {
+        if let running = refreshTask {
+            await running.value
+            return
+        }
         if let last = lastRefreshed,
            Date.now.timeIntervalSince(last) < maxAge,
            Calendar.current.isDate(last, inSameDayAs: .now) {
@@ -60,16 +70,22 @@ final class WatchModel {
     }
 
     func refresh() async {
+        let task = Task { await performRefresh() }
+        refreshTask = task
+        await task.value
+        if refreshTask == task {
+            refreshTask = nil
+        }
+    }
+
+    private func performRefresh() async {
         healthDenied = health.sharingDenied()
-        // The three reads are independent — run them concurrently.
+        // The reads are independent — run them all concurrently.
         async let planRead = DailyPlanLoader.load(goal: sync.goal)
         async let entriesRead = health.todayFoodEntries()
-        var totals: [Double] = [0, 0]
-        for slot in 1...2 {
-            if let nutrient = SharedStore.trackedNutrient(slot: slot) {
-                totals[slot - 1] = (try? await health.dayTotal(of: nutrient)) ?? 0
-            }
-        }
+        async let slot1 = slotTotal(slot: 1)
+        async let slot2 = slotTotal(slot: 2)
+        let totals = await [slot1, slot2]
         state = await planRead
         trackedTotals = totals
         // Newest first straight from the query's sort descriptor.
@@ -81,6 +97,11 @@ final class WatchModel {
         if entries != nil {
             lastRefreshed = .now
         }
+    }
+
+    private func slotTotal(slot: Int) async -> Double {
+        guard let nutrient = SharedStore.trackedNutrient(slot: slot) else { return 0 }
+        return (try? await health.dayTotal(of: nutrient)) ?? 0
     }
 
     /// Rescale a logged entry to a new calorie count — sodium and the

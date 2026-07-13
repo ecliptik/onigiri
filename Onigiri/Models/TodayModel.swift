@@ -143,11 +143,15 @@ final class TodayModel {
     /// them per chevron tap made day switching feel laggy. Fetched on
     /// start and on foregrounding instead.
     func loadStatic() async {
-        currentWeightLb = (try? await health.latestBodyMassLb()) ?? currentWeightLb
-        averageBurnKcal = (try? await health.averageDailyBurnKcal()) ?? averageBurnKcal
+        // Independent reads — run them concurrently.
+        async let weightRead = health.latestBodyMassLb()
+        async let burnRead = health.averageDailyBurnKcal()
+        async let historyRead = health.bodyMassHistory(days: 21)
+        currentWeightLb = (try? await weightRead) ?? currentWeightLb
+        averageBurnKcal = (try? await burnRead) ?? averageBurnKcal
         // 21 days of history so the 7-day moving average has runway
         // before the week window it's read over.
-        if let history = try? await health.bodyMassHistory(days: 21) {
+        if let history = try? await historyRead {
             weeklyTrendLb = WeightTrend.Change.actualLb(
                 history: history,
                 from: Date.now.addingTimeInterval(-7 * 86400),

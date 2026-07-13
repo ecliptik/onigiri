@@ -16,16 +16,35 @@ public enum WeightTrend {
 
     /// Trailing moving average: each point becomes the mean of all readings
     /// in the `windowDays` ending at its date. Input must be date-ascending.
+    /// Sliding window over prefix sums — the filter-per-point version was
+    /// O(n²) and ran from chart render paths over a year of weigh-ins.
     public static func movingAverage(_ points: [Point], windowDays: Int = 7) -> [Point] {
         guard !points.isEmpty else { return [] }
         let window = TimeInterval(windowDays) * 86400
-        return points.map { point in
-            let inWindow = points.filter {
-                $0.date <= point.date && point.date.timeIntervalSince($0.date) < window
-            }
-            let mean = inWindow.reduce(0) { $0 + $1.weightLb } / Double(inWindow.count)
-            return Point(date: point.date, weightLb: mean)
+        var prefix: [Double] = [0]
+        prefix.reserveCapacity(points.count + 1)
+        for point in points {
+            prefix.append(prefix[prefix.count - 1] + point.weightLb)
         }
+        var result: [Point] = []
+        result.reserveCapacity(points.count)
+        var low = 0   // first index still inside the window
+        var high = 0  // exclusive upper bound of dates <= the current date
+        for (index, point) in points.enumerated() {
+            while low < points.count,
+                  point.date.timeIntervalSince(points[low].date) >= window {
+                low += 1
+            }
+            if high < index + 1 { high = index + 1 }
+            // Same-timestamp readings later in the array count too,
+            // matching the filter this replaces.
+            while high < points.count, points[high].date <= point.date {
+                high += 1
+            }
+            let mean = (prefix[high] - prefix[low]) / Double(high - low)
+            result.append(Point(date: point.date, weightLb: mean))
+        }
+        return result
     }
 
     /// Predicted vs actual weight change over a window — the "did the math

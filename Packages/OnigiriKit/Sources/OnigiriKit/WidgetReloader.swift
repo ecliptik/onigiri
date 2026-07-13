@@ -25,6 +25,12 @@ public enum WidgetKinds {
     public static let watchAll = [balance, water, streak, summary]
 }
 
+/// Shared timeline policy: the observer-driven funnel is what keeps
+/// widgets fresh; providers poll only as a fallback, at this interval.
+public enum WidgetRefreshPolicy {
+    public static let pollFallback: TimeInterval = 60 * 60
+}
+
 /// The single funnel for widget reloads. A log used to fire
 /// reloadAllTimelines two or three times back-to-back (mutation handler,
 /// sync push, HealthKit observer), each fanning out to every provider's

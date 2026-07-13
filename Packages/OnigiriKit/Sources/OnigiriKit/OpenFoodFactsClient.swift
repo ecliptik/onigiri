@@ -510,8 +510,11 @@ private struct OFFNutriments: Decodable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        // OpenFoodFacts sometimes returns numbers as strings.
+        // OpenFoodFacts sometimes returns numbers as strings. Probe with
+        // contains() first — most keys are absent, and each blind decode
+        // attempt materialized a thrown DecodingError with context.
         func flexibleDouble(_ key: CodingKeys) -> Double? {
+            guard container.contains(key) else { return nil }
             if let value = try? container.decode(Double.self, forKey: key) { return value }
             if let text = try? container.decode(String.self, forKey: key) { return Double(text) }
             return nil
@@ -548,8 +551,11 @@ private struct OFFNutriments: Decodable {
         // Micronutrient keys are looked up dynamically — 24 CodingKeys
         // cases would say the same thing longer.
         let dynamic = try decoder.container(keyedBy: DynamicKey.self)
+        // ~28 OFF ids × 2 bases probed per product — check presence
+        // against the actual key set instead of decode-and-catch.
+        let presentKeys = Set(dynamic.allKeys.map(\.stringValue))
         func flexibleDouble(named name: String) -> Double? {
-            guard let key = DynamicKey(stringValue: name) else { return nil }
+            guard presentKeys.contains(name), let key = DynamicKey(stringValue: name) else { return nil }
             if let value = try? dynamic.decode(Double.self, forKey: key) { return value }
             if let text = try? dynamic.decode(String.self, forKey: key) { return Double(text) }
             return nil

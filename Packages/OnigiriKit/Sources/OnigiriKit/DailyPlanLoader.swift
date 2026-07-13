@@ -48,17 +48,16 @@ public enum DailyPlanLoader {
             let summary = (try? await health.todaySummary()) ?? .zero
             return State(summary: summary, deficitTargetKcal: nil, gaugeProgress: 0)
         }
-        // The three reads are independent — run them concurrently; this
-        // path is complication/widget refresh latency.
+        // The reads are independent — run them concurrently; this path
+        // is complication/widget refresh latency.
         async let summaryRead = health.todaySummary()
-        async let weightRead = health.latestBodyMassLb()
         async let burnRead = health.averageDailyBurnKcal()
-        let summary = (try? await summaryRead) ?? .zero
         if goal.isMaintenance {
             // Maintenance: eat what you burn. deficitTarget stays nil
             // (any-deficit badge rule, and no "% of goal" captions);
-            // the gauge shows the budget still left to eat.
-            _ = try? await weightRead
+            // the gauge shows the budget still left to eat. The current
+            // weight plays no part — don't query it.
+            let summary = (try? await summaryRead) ?? .zero
             let averageBurn = ((try? await burnRead) ?? nil)
                 ?? max(summary.totalBurnKcal, 2000)
             let plan = CalorieBudget.maintenancePlan(averageDailyBurn: averageBurn)
@@ -72,6 +71,8 @@ public enum DailyPlanLoader {
                 dailyBudgetKcal: plan.dailyBudget
             )
         }
+        async let weightRead = health.latestBodyMassLb()
+        let summary = (try? await summaryRead) ?? .zero
         let healthWeight = (try? await weightRead) ?? nil
         guard let weight = healthWeight ?? goal.fallbackCurrentWeightLb else {
             return State(summary: summary, deficitTargetKcal: nil, gaugeProgress: 0)

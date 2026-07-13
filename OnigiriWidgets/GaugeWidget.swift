@@ -44,7 +44,7 @@ struct GaugeProvider: TimelineProvider {
             let now = Date()
             let snapshot = await SnapshotLoader.load()
             // Push-based reloads keep widgets fresh; this poll is only a fallback.
-            let refresh = now.addingTimeInterval(60 * 60)
+            let refresh = now.addingTimeInterval(WidgetRefreshPolicy.pollFallback)
             if let midnight = nextMidnight(after: now), midnight <= refresh {
                 completion(Timeline(
                     entries: [

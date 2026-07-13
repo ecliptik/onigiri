@@ -83,7 +83,7 @@ struct WatchProvider: TimelineProvider {
             let now = Date()
             let entry = await load()
             // Push-based reloads keep widgets fresh; this poll is only a fallback.
-            let refresh = now.addingTimeInterval(60 * 60)
+            let refresh = now.addingTimeInterval(WidgetRefreshPolicy.pollFallback)
             let midnight = Calendar.current.date(
                 byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now)
             )
@@ -244,7 +244,7 @@ struct SummaryProvider: TimelineProvider {
             let now = Date()
             let entry = await load()
             // Push-based reloads keep widgets fresh; this poll is only a fallback.
-            let refresh = now.addingTimeInterval(60 * 60)
+            let refresh = now.addingTimeInterval(WidgetRefreshPolicy.pollFallback)
             let midnight = Calendar.current.date(
                 byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now)
             )
@@ -385,7 +385,7 @@ struct StreakComplicationProvider: TimelineProvider {
             let entry = await load()
             // The streak only moves when a day completes — refresh at
             // midnight, with a lazy fallback in between.
-            let refresh = Date().addingTimeInterval(60 * 60)
+            let refresh = Date().addingTimeInterval(WidgetRefreshPolicy.pollFallback)
             let midnight = Calendar.current.date(
                 byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: .now)
             )

@@ -168,7 +168,7 @@ struct ProgressProvider: TimelineProvider {
             let now = Date()
             let entry = await load()
             // Push-based reloads keep widgets fresh; this poll is only a fallback.
-            let refresh = now.addingTimeInterval(60 * 60)
+            let refresh = now.addingTimeInterval(WidgetRefreshPolicy.pollFallback)
             if let midnight = nextMidnight(after: now), midnight <= refresh {
                 completion(Timeline(
                     entries: [entry, ProgressEntry(date: midnight, snapshot: entry.snapshot.newDay, streak: entry.streak)],

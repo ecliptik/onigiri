@@ -1192,7 +1192,9 @@ final class OnigiriUITests: XCTestCase {
         let dbSearch = app.buttons["Search database"]
         XCTAssertTrue(dbSearch.waitForExistence(timeout: 10), "Form search row")
         dbSearch.tap()
-        let field = app.searchFields.firstMatch
+        // By placeholder: the Foods screen's own search bar sits behind
+        // the sheet and firstMatch grabs it instead.
+        let field = app.searchFields["e.g. blueberries"]
         XCTAssertTrue(field.waitForExistence(timeout: 5), "Search sheet field")
         field.tap()
         field.typeText("chicken\n")

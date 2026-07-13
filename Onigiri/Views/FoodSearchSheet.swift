@@ -27,6 +27,14 @@ struct FoodSearchSheet: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+                // Anchor the empty sheet: with the search bar at the
+                // bottom (the app-wide standard), a completely blank
+                // list above it would read upside down.
+                if !search.hasSearched && !search.isSearching && search.results.isEmpty {
+                    Text("Search OpenFoodFacts for foods without barcodes — results appear here.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 ForEach(search.results) { result in
                     OnlineResultRow(result: result, search: search) {
                         Task {
@@ -58,15 +66,11 @@ struct FoodSearchSheet: View {
             .compactSections()
             .navigationTitle("Search Database")
             .navigationBarTitleDisplayMode(.inline)
-            // Pinned to the top, unlike the app's other (bottom) search
-            // bars: this sheet opens EMPTY, and a bottom bar under a blank
-            // list reads upside down — results should fill in below the
-            // field, not above it.
-            .searchable(
-                text: $query,
-                placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "e.g. blueberries"
-            )
+            // Bottom placement like every other search in the app (the
+            // iOS 26 standard) — Micheal wants one search UX everywhere.
+            // The empty-sheet hint row above keeps the blank state from
+            // reading upside down (the reason this was once top-pinned).
+            .searchable(text: $query, prompt: "e.g. blueberries")
             .searchFocused($searchFocused)
             .onSubmit(of: .search) {
                 Task { await search.search(query) }

@@ -527,9 +527,17 @@ struct PortionSheet: View {
         }
         // Frosted, not flat: stacked over the food form (or the Log
         // sheet) the default background blends into the sheet behind —
-        // in dark mode only the grabber separated them. The material
-        // renders as an elevated layer in both modes.
-        .presentationBackground(.thickMaterial)
+        // in dark mode only the grabber separated them. The material,
+        // a larger corner radius, and a hairline rim make it read as a
+        // physically separate card in both modes.
+        .presentationCornerRadius(28)
+        .presentationBackground {
+            ZStack {
+                Rectangle().fill(.thickMaterial)
+                UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
+                    .strokeBorder(Color.primary.opacity(0.15), lineWidth: 1)
+            }
+        }
     }
 }
 

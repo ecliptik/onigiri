@@ -110,6 +110,9 @@ cd Packages/OnigiriKit && swift test     # pure-logic tests; ALSO needs the
 - OpenFoodFacts: the search index has NO nutrition fields — search rows lazily
   fetch the full product per barcode to show kcal/serving.
 - ALL online-search surfaces (Foods, Log sheet, and the food form's
-  Search Database sheet) render the shared `OnlineResultsSection` —
-  `FoodSearchSheet` had its own drifting list until 2026-07-12. Keep it
-  that way: search behavior changes go in the shared section only.
+  inline database search) render the shared `OnlineResultsSection` —
+  a separate `FoodSearchSheet` with its own drifting list existed until
+  2026-07-13. Keep it that way: search behavior changes go in the
+  shared section only. Search fields are the STANDARD system
+  `.searchable` (bottom placement) everywhere — Micheal vetoed custom
+  bars and auto-focus; barcode scanners live in the TOP toolbar.

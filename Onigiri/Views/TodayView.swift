@@ -531,22 +531,16 @@ struct TodayView: View {
             ? Color.sodiumStatus(mg: total, limitMg: target)
             : (nutrient == .water ? .blue : .green)
 
-        let label = Label {
-            HStack(spacing: 4) {
-                switch mode {
-                case .limit:
-                    Text("\(total, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(metricName(nutrient))")
-                        .foregroundStyle(Color.sodiumStatus(mg: total, limitMg: target))
-                        .fontWeight(.medium)
-                case .goal:
-                    Text("\(total, format: .number.precision(.fractionLength(0))) / \(target, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(metricName(nutrient))")
-                        .foregroundStyle(met ? Color.green : Color.secondary)
-                        .fontWeight(met ? .medium : .regular)
-                }
-                if nutrient == .water {
-                    Image(systemName: "plus.circle.fill")
-                        .foregroundStyle(Color.riceToast)
-                }
+        Label {
+            switch mode {
+            case .limit:
+                Text("\(total, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(metricName(nutrient))")
+                    .foregroundStyle(Color.sodiumStatus(mg: total, limitMg: target))
+                    .fontWeight(.medium)
+            case .goal:
+                Text("\(total, format: .number.precision(.fractionLength(0))) / \(target, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(metricName(nutrient))")
+                    .foregroundStyle(met ? Color.green : Color.secondary)
+                    .fontWeight(met ? .medium : .regular)
             }
         } icon: {
             metricIcon(slot: slot, nutrient: nutrient)
@@ -557,30 +551,6 @@ struct TodayView: View {
             fraction: target > 0 ? total / target : 0,
             tint: tint
         )
-
-        if nutrient == .water {
-            // The metric IS the button (Micheal's pick from the water
-            // brainstorm): tap logs a serving into the number it moves,
-            // Undo covers slips, long-press keeps the other amounts.
-            Button {
-                logWater(oz: SharedStore.waterServingOz)
-            } label: {
-                label.contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .disabled(isLoggingWater)
-            .contextMenu {
-                ForEach([8.0, 12, 16, 20, 24, 32], id: \.self) { oz in
-                    Button("\(oz, format: .number.precision(.fractionLength(0))) oz") {
-                        logWater(oz: oz)
-                    }
-                }
-            }
-            .accessibilityLabel("Log \(SharedStore.waterServingOz.formatted(.number.precision(.fractionLength(0)))) ounces of water")
-            .accessibilityValue("\(total.formatted(.number.precision(.fractionLength(0)))) of \(target.formatted(.number.precision(.fractionLength(0)))) ounces")
-        } else {
-            label
-        }
     }
 
     /// Sodium/water targets live on their long-standing keys (one source
@@ -614,13 +584,40 @@ struct TodayView: View {
 
     private var loggedSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // Food logging lives in the corner + pill; water is the
-            // tappable hydration metric above. The header is just the
-            // header now.
+            // Food logging lives in the corner + pill; water keeps its
+            // capsule here (the tappable-metric experiment grew the
+            // gauge on tap — Micheal reverted it). Tap logs the default
+            // serving; long-press offers the other amounts.
             HStack {
                 Text("Log")
                     .font(.sectionHeader)
                 Spacer()
+                Menu {
+                    ForEach([8.0, 12, 16, 20, 24, 32], id: \.self) { oz in
+                        Button("\(oz, format: .number.precision(.fractionLength(0))) oz") {
+                            logWater(oz: oz)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(Color.riceToast)
+                        WaterIconView(raw: waterIcon)
+                            .font(.title3)
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .overlay(
+                        Capsule().strokeBorder(Color.riceToast.opacity(0.5), lineWidth: 1)
+                    )
+                } primaryAction: {
+                    logWater(oz: SharedStore.waterServingOz)
+                }
+                .buttonStyle(.plain)
+                .disabled(isLoggingWater)
+                .accessibilityLabel("Log \(SharedStore.waterServingOz.formatted(.number.precision(.fractionLength(0)))) ounces of water")
             }
             .padding(.horizontal)
 

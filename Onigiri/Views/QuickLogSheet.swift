@@ -217,8 +217,10 @@ struct QuickLogSheet: View {
                     .padding(.vertical, 8)
                     .background(.bar)
             }
-            // System search field (focus animation, cancel, scroll-away)
-            // with the barcode scanner in the toolbar.
+            // The STANDARD system search field (Micheal: as close to
+            // Apple's as possible) — the barcode scanner therefore lives
+            // in the top toolbar, since the system field can't host an
+            // accessory button.
             .searchable(
                 text: $searchText,
                 isPresented: $searchPresented,
@@ -236,7 +238,7 @@ struct QuickLogSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     // "Done", not "Cancel": logging commits immediately
                     // (with its own Undo), so dismissal cancels nothing —
-                    // and the sheet now stays open for multi-item lunches.
+                    // and the sheet stays open for multi-item lunches.
                     Button("Done") { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {

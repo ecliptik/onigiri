@@ -278,10 +278,18 @@ struct FoodsView: View {
                 consumeAddFoodRequest()
             }
             .onAppear { consumeAddFoodRequest() }
-            .confirmationDialog("Add to your library", isPresented: $showAddChooser, titleVisibility: .visible) {
-                Button("Add Food") { showNewFood = true }
-                if !foods.isEmpty {
-                    Button("Add Meal") { showNewMeal = true }
+            // A centered ALERT, the app's standard dialog — the
+            // confirmationDialog rendered as an anchored bubble up by
+            // the tab bar (the iOS 26 quote-popover look Micheal keeps
+            // vetoing). Background layer: two alerts already chain on
+            // this view.
+            .background {
+                Color.clear.alert("Add to your library", isPresented: $showAddChooser) {
+                    Button("Add Food") { showNewFood = true }
+                    if !foods.isEmpty {
+                        Button("Add Meal") { showNewMeal = true }
+                    }
+                    Button("Cancel", role: .cancel) {}
                 }
             }
             // Alerts, not confirmationDialogs: iOS 26 anchors dialogs to

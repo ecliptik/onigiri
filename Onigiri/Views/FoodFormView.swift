@@ -46,7 +46,12 @@ struct FoodFormView: View {
     @State private var isFavorite = false
 
     @State private var showScanner = false
-    @State private var showSearch = false
+    /// The in-form OpenFoodFacts search: the STANDARD system field
+    /// (bottom-placed), results inline via the shared section — the
+    /// separate Search Database sheet is retired.
+    @State private var dbQuery = ""
+    @State private var dbSearchActive = false
+    @State private var onlineSearch = OnlineFoodSearch()
     @State private var isLookingUp = false
     @State private var lookupMessage: String?
     @State private var portionTarget: PortionTarget?
@@ -94,8 +99,8 @@ struct FoodFormView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // Lookup status only — the search entry point moved to
-                // the bottom bar, matching the Log sheet.
+                // Lookup status only — the search field lives at the
+                // bottom (system placement), like every other search.
                 if isLookingUp || lookupMessage != nil {
                     Section {
                         if isLookingUp {
@@ -111,6 +116,18 @@ struct FoodFormView: View {
                                 .foregroundStyle(.orange)
                         }
                     }
+                }
+
+                // Inline OpenFoodFacts results (the shared section) —
+                // picking one prefills the fields below.
+                if !dbQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                    OnlineResultsSection(query: dbQuery, search: onlineSearch, onPick: { product in
+                        apply(product)
+                        endDatabaseSearch()
+                    }, onAddManually: { pickedName in
+                        name = pickedName
+                        endDatabaseSearch()
+                    })
                 }
 
                 Section {
@@ -182,44 +199,21 @@ struct FoodFormView: View {
             .compactSections()
             .navigationTitle(food == nil && createdFood == nil ? "New Food" : "Edit Food")
             .navigationBarTitleDisplayMode(.inline)
-            // Bottom search-bar launcher, matching the Log sheet's look
-            // and placement (the entry point used to be a row at the TOP
-            // of the form). One tap opens the real search sheet, which
-            // focuses itself; the barcode button rides alongside, sized
-            // to the bar.
-            .safeAreaInset(edge: .bottom) {
-                HStack(spacing: 10) {
-                    Button {
-                        showSearch = true
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundStyle(.secondary)
-                            Text("Search OpenFoodFacts")
-                                .foregroundStyle(.secondary)
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 12)
-                        .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular.interactive(), in: .capsule)
-                    Button {
-                        showScanner = true
-                    } label: {
-                        Image(systemName: "barcode.viewfinder")
-                            .font(.title2)
-                            .foregroundStyle(Color.riceToast)
-                            .padding(9)
-                    }
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .accessibilityLabel("Scan barcode")
+            // The STANDARD system search field, bottom-placed like the
+            // Log sheet's — the barcode scanner sits in the top toolbar
+            // on both screens (the system field can't host it).
+            .searchable(
+                text: $dbQuery,
+                isPresented: $dbSearchActive,
+                prompt: "Search OpenFoodFacts"
+            )
+            .onSubmit(of: .search) {
+                Task { await onlineSearch.search(dbQuery) }
+            }
+            .onChange(of: dbQuery) { _, text in
+                if text.trimmingCharacters(in: .whitespaces).isEmpty {
+                    onlineSearch.clear()
                 }
-                .disabled(isLookingUp)
-                .padding(.horizontal)
-                .padding(.vertical, 6)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -230,6 +224,15 @@ struct FoodFormView: View {
                             dismiss()
                         }
                     }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showScanner = true
+                    } label: {
+                        Image(systemName: "barcode.viewfinder")
+                    }
+                    .disabled(isLookingUp)
+                    .accessibilityLabel("Scan barcode")
                 }
                 // New foods: Save keeps it library-only (meal building);
                 // Save & Log continues to the portion sheet. Two toolbar
@@ -272,9 +275,11 @@ struct FoodFormView: View {
                 for: UITextField.textDidBeginEditingNotification
             )) { note in
                 // The notification is app-wide: while one of this form's
-                // own sheets is up (scanner, online search, portion), its
-                // fields must not inherit the select-all.
-                guard !showScanner, !showSearch, portionTarget == nil,
+                // own sheets is up (scanner, portion), its fields must
+                // not inherit the select-all. The bottom search field is
+                // exempt too — selecting-all an in-progress query on
+                // refocus would surprise.
+                guard !showScanner, !dbSearchActive, portionTarget == nil,
                       let field = note.object as? UITextField else { return }
                 DispatchQueue.main.async { field.selectAll(nil) }
             }
@@ -308,11 +313,6 @@ struct FoodFormView: View {
                     Task { await lookup(code) }
                 }
             }
-            .sheet(isPresented: $showSearch) {
-                FoodSearchSheet(initialQuery: name) { product in
-                    apply(product)
-                }
-            }
             .sheet(item: $portionTarget, onDismiss: {
                 // Cancelled portion after Log: the save already happened —
                 // say so instead of silently keeping it.
@@ -341,6 +341,13 @@ struct FoodFormView: View {
             }
         }
         .toastHost()
+    }
+
+    /// A database pick landed in the fields — retire the search UI.
+    private func endDatabaseSearch() {
+        dbQuery = ""
+        dbSearchActive = false
+        onlineSearch.clear()
     }
 
     /// Duplicate-food guard: fires only for NEW foods whose prefill is

@@ -78,15 +78,17 @@ final class OnigiriUITests: XCTestCase {
 
         // Water lives on Today now: seeded 24 oz + one 12 oz serving = 36,
         // shown in the hydration row.
-        // The hydration metric IS the water button now; the total rides
-        // its accessibility value.
+        XCTAssertTrue(
+            app.staticTexts["24 / 64 oz water"].waitForExistence(timeout: 10),
+            "Seeded water total should show in the hydration row"
+        )
         let waterButton = app.buttons["Log 12 ounces of water"]
-        XCTAssertTrue(waterButton.waitForExistence(timeout: 10), "Hydration row should be the water button")
-        XCTAssertTrue(waitForWaterValue(waterButton, "24 of 64 ounces", timeout: 10),
-                      "Seeded water total should show in the hydration row")
+        XCTAssertTrue(waterButton.waitForExistence(timeout: 10), "Today should show the +water button")
         waterButton.tap()
-        XCTAssertTrue(waitForWaterValue(waterButton, "36 of 64 ounces", timeout: 10),
-                      "Hydration total should update after the one-tap log")
+        XCTAssertTrue(
+            app.staticTexts["36 / 64 oz water"].waitForExistence(timeout: 10),
+            "Hydration total should update after the one-tap log"
+        )
 
         // The meter grid drills into the day's full nutrient breakdown,
         // summed from the seeded meals' extended nutrients.
@@ -188,7 +190,7 @@ final class OnigiriUITests: XCTestCase {
         )
         // Deletes commit outright now — the Undo toast replaced the
         // confirm alert (one gesture instead of four).
-        XCTAssertTrue(waitForWaterValue(app.buttons["Log 12 ounces of water"], "24 of 64 ounces", timeout: 10),
+        XCTAssertTrue(app.staticTexts["24 / 64 oz water"].waitForExistence(timeout: 10),
                       "Full swipe should delete the water row outright")
         XCTAssertTrue(app.buttons["Undo"].waitForExistence(timeout: 5),
                       "Delete should offer Undo in the toast")
@@ -542,20 +544,6 @@ final class OnigiriUITests: XCTestCase {
     /// so in the accessibility label ("Lunch, 680 kcal, collapsed").
     private var collapsedSectionPredicate: NSPredicate {
         NSPredicate(format: "label CONTAINS 'collapsed'")
-    }
-
-    /// The hydration water button's accessibility value carries the day
-    /// total ("36 of 64 ounces"); poll it — HealthKit refreshes lag taps.
-    @MainActor
-    private func waitForWaterValue(
-        _ button: XCUIElement, _ expected: String, timeout: TimeInterval
-    ) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if (button.value as? String) == expected { return true }
-            Thread.sleep(forTimeInterval: 0.5)
-        }
-        return false
     }
 
     /// Expand every collapsed meal section so entry rows are hittable.
@@ -1210,13 +1198,11 @@ final class OnigiriUITests: XCTestCase {
         let addFood = app.buttons["Add Food"]
         XCTAssertTrue(addFood.waitForExistence(timeout: 5), "Add Food chooser option")
         addFood.tap()
-        let dbSearch = app.buttons["Search OpenFoodFacts"]
-        XCTAssertTrue(dbSearch.waitForExistence(timeout: 10), "Form bottom search launcher")
-        dbSearch.tap()
-        // By placeholder: the Foods screen's own search bar sits behind
-        // the sheet and firstMatch grabs it instead.
-        let field = app.searchFields["e.g. blueberries"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5), "Search sheet field")
+        // The form's own bottom system search field; results render
+        // inline via the shared section. By placeholder: the Foods
+        // screen's search bar sits behind the sheet.
+        let field = app.searchFields["Search OpenFoodFacts"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "Form database search field")
         field.tap()
         field.typeText("chicken\n")
 

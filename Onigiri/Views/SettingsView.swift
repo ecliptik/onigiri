@@ -91,7 +91,9 @@ struct SettingsView: View {
         } header: {
             Text("Reminders")
         } footer: {
-            Text("Meals check in at 2 PM, water at 11 AM, 3 PM, and 7 PM while you're behind, streaks at 8 PM. Water pacing follows the Water section's goal, even when water isn't a tracked metric.")
+            // The meal time lives in its toggle's label; only what the
+            // rows can't say rides here.
+            Text("Water pacing follows the Water section's goal, nudging at 11 AM, 3 PM, and 7 PM while you're behind; streaks check at 8 PM.")
         }
     }
 

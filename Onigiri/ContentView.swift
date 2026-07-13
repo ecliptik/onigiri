@@ -67,6 +67,16 @@ struct ContentView: View {
             if ProcessInfo.processInfo.arguments.contains("--seed-sample-data") {
                 DebugSeeder.seedLibraryIfEmpty(context: context)
             }
+            // The reset-roundtrip UI test's import path: the system file
+            // picker is unscriptable enough that the test restores the
+            // newest Documents/Backups file at launch instead. Runs
+            // before the onboarding check below, so a restored goal
+            // latches hasOnboarded exactly like an existing install.
+            if ProcessInfo.processInfo.arguments.contains("--import-latest-backup"),
+               let url = BackupService.latestBackup(),
+               let data = try? Data(contentsOf: url) {
+                _ = try? LibraryTransfer.importData(data, into: context)
+            }
             #endif
             PhoneSyncService.shared.activate {
                 PhoneSyncService.shared.push(from: context)
@@ -182,6 +192,11 @@ struct ContentView: View {
         // the screen is at the top (the system misses gesture-less
         // returns to the top, like collapsing the log sections).
         .tabBarMinimizeBehavior(tabBarPin.atTop ? .never : .onScrollDown)
+        // Hold the corner + to log a water serving without the sheet —
+        // the tap keeps opening the add flow.
+        .background(AddPillLongPress {
+            Task { await LogActions.logWater(oz: SharedStore.waterServingOz) }
+        })
         .toastHost()
     }
 

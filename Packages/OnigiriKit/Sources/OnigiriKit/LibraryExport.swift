@@ -71,11 +71,19 @@ public struct LibraryExport: Codable, Sendable, Equatable {
         public var targetWeightLb: Double
         public var targetDate: Date
         public var fallbackCurrentWeightLb: Double?
+        /// GoalMode raw value; optional so exports from before
+        /// maintenance mode (≤ v1.7.0) decode — nil means .lose, same
+        /// as GoalSettings.mode itself.
+        public var mode: String?
 
-        public init(targetWeightLb: Double, targetDate: Date, fallbackCurrentWeightLb: Double?) {
+        public init(
+            targetWeightLb: Double, targetDate: Date,
+            fallbackCurrentWeightLb: Double?, mode: String? = nil
+        ) {
             self.targetWeightLb = targetWeightLb
             self.targetDate = targetDate
             self.fallbackCurrentWeightLb = fallbackCurrentWeightLb
+            self.mode = mode
         }
     }
 

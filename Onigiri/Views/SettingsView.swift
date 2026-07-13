@@ -212,8 +212,9 @@ struct SettingsView: View {
             Picker("Source", selection: $textSearchSource) {
                 Text("OpenFoodFacts").tag(SharedStore.textSearchSourceOFF)
                 Text("USDA FoodData Central").tag(SharedStore.textSearchSourceFDC)
+                Text("Both").tag(SharedStore.textSearchSourceBoth)
             }
-            if textSearchSource == SharedStore.textSearchSourceFDC {
+            if textSearchSource != SharedStore.textSearchSourceOFF {
                 // A plain TextField keeps the standard long-press
                 // paste. It edits a DRAFT: only a plausible key (or a
                 // deliberate clear) reaches storage, so a mis-paste
@@ -377,11 +378,7 @@ struct SettingsView: View {
 
     private func deleteLibrary() -> Bool {
         do {
-            // Items first, then their containers — nothing left to dangle.
-            try context.delete(model: MealItem.self)
-            try context.delete(model: Meal.self)
-            try context.delete(model: Food.self)
-            try context.save()
+            try LibraryMaintenance.wipeLibrary(context: context)
             return true
         } catch {
             ToastCenter.shared.show("Reset failed: \(error.localizedDescription)")
@@ -391,8 +388,7 @@ struct SettingsView: View {
 
     private func deleteGoals() -> Bool {
         do {
-            try context.delete(model: GoalSettings.self)
-            try context.save()
+            try LibraryMaintenance.wipeGoals(context: context)
         } catch {
             ToastCenter.shared.show("Reset failed: \(error.localizedDescription)")
             return false

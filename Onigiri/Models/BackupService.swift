@@ -50,6 +50,23 @@ enum BackupService {
         return url
     }
 
+    /// The newest backup on disk, by modification date (the day-stamped
+    /// name collapses same-day backups onto one file, so the name sort
+    /// prune uses can't break ties).
+    static func latestBackup() -> URL? {
+        guard let directory = backupsDirectory else { return nil }
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: [.contentModificationDateKey]
+        )) ?? []
+        func modified(_ url: URL) -> Date {
+            (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
+                .contentModificationDate ?? .distantPast
+        }
+        return files
+            .filter { $0.lastPathComponent.hasPrefix("onigiri-backup-") }
+            .max { modified($0) < modified($1) }
+    }
+
     /// Keep only the newest `keepCount` backups.
     private static func prune(in directory: URL) {
         let files = (try? FileManager.default.contentsOfDirectory(

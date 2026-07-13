@@ -653,6 +653,145 @@ final class OnigiriUITests: XCTestCase {
         app.buttons["Save"].tap()
     }
 
+    /// Holding the corner + logs one water serving directly; the tap's
+    /// add flow must NOT also fire (the recognizer cancels the pill's
+    /// touch, or a hold would log water AND open the sheet).
+    @MainActor
+    func testAddPillLongPressLogsWater() throws {
+        let app = XCUIApplication()
+        app.launch()
+        // A fresh install shows onboarding INSTEAD of the tabs — no
+        // pill exists until it's skipped.
+        skipOnboardingIfPresent(in: app)
+        grantHealthAccess(in: app, timeout: 30)
+
+        let phonePill = app.tabBars.buttons["Add"]
+        let pill = phonePill.waitForExistence(timeout: 5) && phonePill.isHittable
+            ? phonePill : app.buttons["Add"].firstMatch
+        XCTAssertTrue(pill.waitForExistence(timeout: 10), "Corner Add pill")
+        pill.press(forDuration: 1.0)
+
+        let toast = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH 'Logged' AND label CONTAINS 'water'")
+        ).firstMatch
+        XCTAssertTrue(toast.waitForExistence(timeout: 8), "Water toast after long press")
+        XCTAssertFalse(app.buttons["Done"].exists, "Log sheet stayed closed")
+    }
+
+    /// Reset All → restore round trip (opt-in via TEST_RUNNER_RESET_ROUNDTRIP=1;
+    /// destroys the sim install's data): seed, flip the goal to Maintain,
+    /// grow the water serving, Back Up Now, Reset All, verify stock, then
+    /// relaunch with --import-latest-backup and verify the library, the
+    /// maintain mode (the round-trip's newest passenger), and water came
+    /// back — and that the settings outside the export stayed at stock.
+    @MainActor
+    func testResetAllRoundTrip() throws {
+        guard ProcessInfo.processInfo.environment["RESET_ROUNDTRIP"] == "1" else {
+            throw XCTSkip("Set TEST_RUNNER_RESET_ROUNDTRIP=1 to run the reset round trip")
+        }
+        let app = XCUIApplication()
+        app.launchArguments = ["--seed-sample-data"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        // A goal state the old export format couldn't carry.
+        switchTab(in: app, to: "Goal")
+        let picker = app.segmentedControls.firstMatch
+        XCTAssertTrue(picker.waitForExistence(timeout: 10), "Goal mode picker")
+        picker.buttons["Maintain"].tap()
+        let save = app.buttons["Save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5) && save.isEnabled, "Save after mode change")
+        save.tap()
+
+        // A water setting the export DOES carry: serving 12 → 14 oz.
+        switchTab(in: app, to: "Today")
+        let gear = app.buttons["Settings"]
+        XCTAssertTrue(gear.waitForExistence(timeout: 10), "Settings gear")
+        gear.tap()
+        let servingStepper = app.steppers.matching(
+            NSPredicate(format: "label CONTAINS[c] 'Serving size'")
+        ).firstMatch
+        for _ in 0..<6 where !servingStepper.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(servingStepper.waitForExistence(timeout: 5), "Water serving stepper")
+        servingStepper.buttons["Increment"].tap()
+
+        // Snapshot everything into Documents/Backups.
+        let backUp = app.buttons["Back Up Now"]
+        for _ in 0..<6 where !backUp.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(backUp.waitForExistence(timeout: 5), "Back Up Now")
+        backUp.tap()
+        XCTAssertTrue(
+            app.staticTexts["Backed up ✓"].waitForExistence(timeout: 10),
+            "Backup confirmation toast"
+        )
+
+        // Reset All, behind its centered confirm.
+        let resetAll = app.buttons["Reset All"]
+        for _ in 0..<6 where !resetAll.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(resetAll.waitForExistence(timeout: 5), "Reset All row")
+        resetAll.tap()
+        let alert = app.alerts["Reset all?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5), "Reset confirm alert")
+        alert.buttons["Reset"].tap()
+        XCTAssertTrue(
+            app.staticTexts["Onigiri reset to stock"].waitForExistence(timeout: 10),
+            "Reset toast"
+        )
+        app.buttons["Done"].tap()
+
+        // Stock: the seeded library is gone.
+        switchTab(in: app, to: "Foods")
+        let seededFood = app.staticTexts["Chicken breast"]
+        XCTAssertFalse(seededFood.waitForExistence(timeout: 3), "Library empty after reset")
+
+        // Relaunch restoring the backup (no seeder — what returns is
+        // what the file carried).
+        app.terminate()
+        app.launchArguments = ["--import-latest-backup"]
+        app.launch()
+        skipOnboardingIfPresent(in: app)
+
+        switchTab(in: app, to: "Foods")
+        XCTAssertTrue(seededFood.waitForExistence(timeout: 10), "Library restored from backup")
+
+        switchTab(in: app, to: "Goal")
+        let restoredPicker = app.segmentedControls.firstMatch
+        XCTAssertTrue(restoredPicker.waitForExistence(timeout: 10), "Goal picker after restore")
+        XCTAssertTrue(
+            restoredPicker.buttons["Maintain"].isSelected,
+            "Maintain mode survives the round trip"
+        )
+
+        switchTab(in: app, to: "Today")
+        XCTAssertTrue(gear.waitForExistence(timeout: 10))
+        gear.tap()
+        let restoredServing = app.steppers.matching(
+            NSPredicate(format: "label CONTAINS[c] 'Serving size' AND label CONTAINS '14'")
+        ).firstMatch
+        for _ in 0..<6 where !restoredServing.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(restoredServing.waitForExistence(timeout: 5), "Water serving restored to 14 oz")
+        // Settings OUTSIDE the export stay stock: the text-search picker
+        // reads its default source again.
+        let sourceRow = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] 'Source' AND label CONTAINS[c] 'OpenFoodFacts'")
+        ).firstMatch
+        for _ in 0..<6 where !sourceRow.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(sourceRow.waitForExistence(timeout: 5), "Search source back at default")
+        app.buttons["Done"].tap()
+    }
+
     /// Barcode → OpenFoodFacts lookup prefills the food form. Uses the
     /// manual-entry fallback (no camera in the simulator) and live network.
     @MainActor

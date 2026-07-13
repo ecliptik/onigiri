@@ -585,8 +585,27 @@ struct TodayView: View {
             // the sheet's pinned top row (Micheal's final water home;
             // widget/watch/app icon keep the 1-tap paths).
             HStack {
-                Text("Log")
-                    .font(.sectionHeader)
+                // The title is the master toggle: any group open →
+                // collapse everything; all closed → open everything
+                // (categories and water alike).
+                Button {
+                    withAnimation(.snappy) {
+                        let anyExpanded = collapsedSections.count < FoodCategory.allCases.count
+                            || !waterCollapsed
+                        if anyExpanded {
+                            collapsedSections = Set(FoodCategory.allCases)
+                            waterCollapsed = true
+                        } else {
+                            collapsedSections = []
+                            waterCollapsed = false
+                        }
+                    }
+                } label: {
+                    Text("Log")
+                        .font(.sectionHeader)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Log. Collapses or expands every group")
                 Spacer()
             }
             .padding(.horizontal)

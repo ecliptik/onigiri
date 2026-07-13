@@ -8,6 +8,15 @@ import OnigiriKit
 /// keeps it library-only (the meal-building path), Save & Log continues
 /// to the portion sheet.
 struct FoodFormView: View {
+    /// The field names what it queries — one database or both.
+    static var searchPrompt: String {
+        switch SharedStore.textSearchMode {
+        case .openFoodFacts: "Search OpenFoodFacts"
+        case .fdc: "Search FoodData Central"
+        case .both: "Search online databases"
+        }
+    }
+
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
 
@@ -210,9 +219,7 @@ struct FoodFormView: View {
             .searchable(
                 text: $dbQuery,
                 isPresented: $dbSearchActive,
-                prompt: SharedStore.usesFDCTextSearch
-                    ? "Search FoodData Central"
-                    : "Search OpenFoodFacts"
+                prompt: Self.searchPrompt
             )
             .onSubmit(of: .search) {
                 Task { await onlineSearch.search(dbQuery) }

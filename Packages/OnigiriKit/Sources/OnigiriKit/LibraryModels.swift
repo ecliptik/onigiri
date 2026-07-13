@@ -275,11 +275,13 @@ public enum SharedStore {
     /// installs with a goal are flagged true without seeing it.
     public static let hasOnboardedKey = "hasOnboarded"
 
-    /// Text-search database: "off" (OpenFoodFacts, default) or "fdc"
-    /// (USDA FoodData Central). Barcode scans always use OpenFoodFacts.
+    /// Text-search database: "off" (OpenFoodFacts, default), "fdc"
+    /// (USDA FoodData Central), or "both" (one merged list). Barcode
+    /// scans always use OpenFoodFacts.
     public static let textSearchSourceKey = "textSearchSource"
     public static let textSearchSourceOFF = "off"
     public static let textSearchSourceFDC = "fdc"
+    public static let textSearchSourceBoth = "both"
     /// The user's api.data.gov key — device-local on purpose: it never
     /// rides WatchConnectivity (the watch doesn't search) and never
     /// enters the repo.
@@ -298,12 +300,25 @@ public enum SharedStore {
         key.count == 40 && key.allSatisfy { $0.isLetter || $0.isNumber }
     }
 
-    /// Whether text search should hit FDC: the source is selected AND a
-    /// key exists. FDC without a key falls back to OpenFoodFacts (the
-    /// Settings hint says so).
+    /// What a text search actually queries once the key is accounted
+    /// for: fdc/both without a key fall back to OpenFoodFacts alone
+    /// (the Settings hint says so).
+    public enum TextSearchMode: Sendable, Equatable {
+        case openFoodFacts, fdc, both
+    }
+
+    public static var textSearchMode: TextSearchMode {
+        guard !fdcAPIKey.isEmpty else { return .openFoodFacts }
+        switch defaults.string(forKey: textSearchSourceKey) {
+        case textSearchSourceFDC: return .fdc
+        case textSearchSourceBoth: return .both
+        default: return .openFoodFacts
+        }
+    }
+
+    /// Whether text search hits FDC at all (alone or merged).
     public static var usesFDCTextSearch: Bool {
-        defaults.string(forKey: textSearchSourceKey) == textSearchSourceFDC
-            && !fdcAPIKey.isEmpty
+        textSearchMode != .openFoodFacts
     }
 
     /// Days with less intake logged count as untracked — streak-breaking,

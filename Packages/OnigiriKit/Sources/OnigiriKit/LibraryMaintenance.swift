@@ -58,6 +58,25 @@ public enum LibraryMaintenance {
     /// Items already nullified (food == nil) are dropped too — a food-less
     /// item only contributes a phantom 0 kcal line to its meal.
     @MainActor
+    /// Settings' library reset. INSTANCE deletes, not `delete(model:)`:
+    /// batch deletes bypass relationship maintenance and die on the
+    /// mandatory nullify inverse ("Constraint trigger violation …
+    /// MealItem/food" — caught by the reset round-trip E2E). Items go
+    /// first so nothing ever dangles mid-wipe.
+    public static func wipeLibrary(context: ModelContext) throws {
+        for item in try context.fetch(FetchDescriptor<MealItem>()) { context.delete(item) }
+        for meal in try context.fetch(FetchDescriptor<Meal>()) { context.delete(meal) }
+        for food in try context.fetch(FetchDescriptor<Food>()) { context.delete(food) }
+        try context.save()
+    }
+
+    /// Settings' goals reset (the deficit history is the caller's job —
+    /// it lives in defaults, not the store).
+    public static func wipeGoals(context: ModelContext) throws {
+        for goal in try context.fetch(FetchDescriptor<GoalSettings>()) { context.delete(goal) }
+        try context.save()
+    }
+
     public static func repairDanglingFoodReferences(context: ModelContext) {
         guard let meals = try? context.fetch(FetchDescriptor<Meal>()),
               let foods = try? context.fetch(FetchDescriptor<Food>()) else { return }

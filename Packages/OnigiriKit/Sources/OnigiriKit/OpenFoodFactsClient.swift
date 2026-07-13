@@ -164,8 +164,9 @@ public struct OpenFoodFactsClient: Sendable {
 
     /// The same intent scoring for any result type — FDC descriptions
     /// have their own relevance quirks ("Grape leaves, canned" above raw
-    /// grapes) and re-rank with the identical rules.
-    static func rank<Item>(
+    /// grapes) and re-rank with the identical rules. Public: Both-mode
+    /// search merges the two sources' lists and ranks them as one.
+    public static func rank<Item>(
         _ results: [Item],
         query: String,
         name: (Item) -> String,

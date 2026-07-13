@@ -19,13 +19,15 @@ struct LibraryExportTests {
             goal: .init(
                 targetWeightLb: 190,
                 targetDate: Date(timeIntervalSince1970: 1_805_000_000),
-                fallbackCurrentWeightLb: nil
+                fallbackCurrentWeightLb: nil,
+                mode: GoalMode.maintain
             ),
             water: .init(servingOz: 12, goalOz: 64)
         )
         let data = try export.encoded()
         let decoded = try LibraryExport.decode(data)
         #expect(decoded == export)
+        #expect(decoded.goal?.mode == GoalMode.maintain)
     }
 
     @Test func decodesMinimalDocument() throws {
@@ -36,5 +38,19 @@ struct LibraryExportTests {
         let decoded = try LibraryExport.decode(Data(json.utf8))
         #expect(decoded.goal == nil)
         #expect(decoded.foods.isEmpty)
+    }
+
+    @Test func goalFromPreMaintenanceExportDecodesAsLose() throws {
+        // Exports from ≤ v1.7.0 have no "mode" key — nil must mean
+        // .lose (GoalSettings' historical default), not a decode error.
+        let json = """
+        {"version":1,"exportedAt":"2026-07-08T00:00:00Z","foods":[],"meals":[],
+        "goal":{"targetWeightLb":190,"targetDate":"2026-08-01T00:00:00Z"},
+        "water":{"servingOz":12,"goalOz":64}}
+        """
+        let decoded = try LibraryExport.decode(Data(json.utf8))
+        let goal = try #require(decoded.goal)
+        #expect(goal.mode == nil)
+        #expect(goal.targetWeightLb == 190)
     }
 }

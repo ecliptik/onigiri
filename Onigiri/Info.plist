@@ -58,7 +58,7 @@
 			<key>UIApplicationShortcutItemIconSymbolName</key>
 			<string>barcode.viewfinder</string>
 			<key>UIApplicationShortcutItemTitle</key>
-			<string>Scan Barcode</string>
+			<string>Scan Barcode or Label</string>
 			<key>UIApplicationShortcutItemType</key>
 			<string>com.ecliptik.Onigiri.scanBarcode</string>
 		</dict>

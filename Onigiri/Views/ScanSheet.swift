@@ -89,7 +89,7 @@ struct ScanSheet: View {
                         .padding(10)
                         .background(.regularMaterial, in: .rect(cornerRadius: 12))
                 }
-                Text("Point at a barcode, or photograph the Nutrition Facts panel.")
+                Text("Point at a barcode or take a photo of the nutrition facts label.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding(8)

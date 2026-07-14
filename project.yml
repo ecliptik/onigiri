@@ -73,7 +73,7 @@ targets:
             UIApplicationShortcutItemTitle: Log Food
             UIApplicationShortcutItemIconSymbolName: carrot
           - UIApplicationShortcutItemType: com.ecliptik.Onigiri.scanBarcode
-            UIApplicationShortcutItemTitle: Scan Barcode
+            UIApplicationShortcutItemTitle: Scan Barcode or Label
             UIApplicationShortcutItemIconSymbolName: barcode.viewfinder
     entitlements:
       path: Onigiri/Onigiri.entitlements

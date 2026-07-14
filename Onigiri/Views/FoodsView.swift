@@ -155,8 +155,10 @@ struct FoodsView: View {
                 }
                 // The scan entry, a labeled row like the new-food form's
                 // (not a toolbar icon — roadmap 1.8.1). Hidden while
-                // searching so results lead.
-                if searchText.isEmpty {
+                // searching so results lead, and on the Meals scope —
+                // scanning adds a FOOD; meals are built from foods
+                // already added (the user).
+                if searchText.isEmpty, scope != .meals {
                     Section {
                         Button {
                             activeSheet = .scanner

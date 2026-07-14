@@ -182,8 +182,10 @@ struct QuickLogSheet: View {
                 // The scan entry, a labeled row like Foods' (the user:
                 // the toolbar icon was the odd one out once Foods grew
                 // its row — same affordance, same place, both screens).
-                // Hidden while searching so results lead.
-                if searchText.isEmpty {
+                // Hidden while searching so results lead, and on the
+                // Meals scope — scanning adds a FOOD; meals are built
+                // from foods already added (the user).
+                if searchText.isEmpty, kind != .meals {
                     Section {
                         Button {
                             activeSheet = .scanner

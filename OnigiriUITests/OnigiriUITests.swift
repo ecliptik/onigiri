@@ -1033,6 +1033,44 @@ final class OnigiriUITests: XCTestCase {
             "Log-sheet scan handed off to the prefilled form")
     }
 
+    /// Meal-builder shots (opt-in via MEAL_FORM=1, seeded): the typed
+    /// quantity field takes a fraction, and the sort menu leads Recent.
+    @MainActor
+    func testMealBuilderQuantityAndSort() throws {
+        guard ProcessInfo.processInfo.environment["MEAL_FORM"] == "1" else {
+            throw XCTSkip("Set MEAL_FORM=1 to run the meal-builder shots")
+        }
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--seed-sample-data"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        switchTab(in: app, to: "Foods")
+        switchTab(in: app, to: "Add")
+        let addMeal = app.buttons["Add Meal"]
+        XCTAssertTrue(addMeal.waitForExistence(timeout: 5), "Add Meal chooser option")
+        addMeal.tap()
+
+        // Type a fractional quantity into the first food's field.
+        let quantityField = app.textFields.matching(
+            NSPredicate(format: "label BEGINSWITH 'Servings of'")
+        ).firstMatch
+        XCTAssertTrue(quantityField.waitForExistence(timeout: 5), "Typed quantity field")
+        quantityField.tap()
+        quantityField.typeText("0.5")
+        attachShot(named: "meal-builder-typed-quantity")
+
+        // The sort menu: Recent leads, Name is one tap away.
+        let sortMenu = app.buttons["Sort foods"].firstMatch
+        XCTAssertTrue(sortMenu.waitForExistence(timeout: 5), "Sort menu in the Foods header")
+        sortMenu.tap()
+        XCTAssertTrue(app.buttons["Name"].waitForExistence(timeout: 3), "Name sort option")
+        attachShot(named: "meal-builder-sort-menu")
+        app.buttons["Name"].tap()
+    }
+
     /// Adds the Onigiri medium widget to the simulator home screen by driving
     /// springboard. Mutates home-screen state — opt in via ADD_WIDGET=1.
     @MainActor

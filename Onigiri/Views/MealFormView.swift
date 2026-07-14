@@ -15,11 +15,15 @@ struct MealFormView: View {
     @State private var category: String?
     @State private var isFavorite = false
     @State private var foodFilter = ""
+    /// Recent-first by default (the user — the foods you just added are
+    /// the ones the meal is for); remembered across builds.
+    @AppStorage("mealBuilderSortByName") private var sortByName = false
     /// Cancel/drag with edits confirms first — a half-built meal used
     /// to vanish on a stray swipe.
     @State private var confirmDiscard = false
     @State private var initialSnapshot: FieldsSnapshot?
     @State private var isSuggestingName = false
+    @FocusState private var quantityFocused: Bool
 
     private struct FieldsSnapshot: Equatable {
         var name: String
@@ -44,11 +48,17 @@ struct MealFormView: View {
     /// food, filtered out of view or not.
     private var visibleFoods: [Food] {
         let trimmed = foodFilter.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return foods }
-        return foods.filter {
-            $0.name.localizedCaseInsensitiveContains(trimmed)
-                || ($0.category?.localizedCaseInsensitiveContains(trimmed) ?? false)
+        var pool = foods
+        if !trimmed.isEmpty {
+            pool = pool.filter {
+                $0.name.localizedCaseInsensitiveContains(trimmed)
+                    || ($0.category?.localizedCaseInsensitiveContains(trimmed) ?? false)
+            }
         }
+        // The @Query is name-sorted; Recent re-sorts here (ties break
+        // alphabetically, which the stable base order provides).
+        guard !sortByName else { return pool }
+        return pool.sorted { $0.recencyDate > $1.recencyDate }
     }
 
     private var totalKcal: Double {
@@ -91,11 +101,12 @@ struct MealFormView: View {
                 }
                 Toggle("Favorite", isOn: $isFavorite)
 
-                Section("Foods") {
+                Section {
                     ForEach(visibleFoods) { food in
-                        // Quarter steps plus a typed quantity, like the
-                        // portion sheet — the builder was integer-only
-                        // while logging celebrated 0.85 servings.
+                        // Quarter-step ± plus a TYPED quantity, exactly
+                        // like the portion sheet — half a Soylent belongs
+                        // in a meal (the user). The field bypasses the
+                        // Stepper's range, so clamp in the binding too.
                         Stepper(value: binding(for: food), in: 0...20, step: 0.25) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
@@ -105,11 +116,16 @@ struct MealFormView: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                let quantity = quantities[food.persistentModelID] ?? 0
-                                Text(quantity > 0 ? "×\(quantity, format: .number.precision(.fractionLength(0...2)))" : "—")
-                                    .foregroundStyle(quantity > 0 ? .primary : .secondary)
+                                TextField("—", value: typedBinding(for: food),
+                                          format: .number.precision(.fractionLength(0...2)))
+                                    .keyboardType(.decimalPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(maxWidth: 56)
                                     .monospacedDigit()
+                                    .focused($quantityFocused)
+                                    .accessibilityLabel("Servings of \(food.name)")
                             }
+                            .padding(.trailing, 8)
                         }
                     }
                     if visibleFoods.isEmpty {
@@ -120,6 +136,25 @@ struct MealFormView: View {
                             : "No foods match “\(foodFilter.trimmingCharacters(in: .whitespaces))”.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    HStack {
+                        Text("Foods")
+                        Spacer()
+                        // Recent leads; the menu swaps to alphabetical
+                        // (remembered).
+                        Menu {
+                            Picker("Sort", selection: $sortByName) {
+                                Text("Recent").tag(false)
+                                Text("Name").tag(true)
+                            }
+                        } label: {
+                            Label(sortByName ? "Name" : "Recent",
+                                  systemImage: "arrow.up.arrow.down")
+                                .font(.footnote)
+                        }
+                        .textCase(nil)
+                        .accessibilityLabel("Sort foods")
                     }
                 }
 
@@ -151,7 +186,23 @@ struct MealFormView: View {
                     Button("Save") { save() }
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || !hasItems)
                 }
+                // Decimal pads have no return key; surface a Done while a
+                // quantity field is editing (the food form's pattern).
+                if quantityFocused {
+                    ToolbarItem(placement: .principal) {
+                        Button {
+                            quantityFocused = false
+                        } label: {
+                            Text("Done")
+                                .fontWeight(.semibold)
+                                .foregroundStyle(Color.onRicePaper)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.ricePaper)
+                    }
+                }
             }
+            .scrollDismissesKeyboard(.interactively)
             .alert("Discard changes?", isPresented: $confirmDiscard) {
                 Button("Discard", role: .destructive) { dismiss() }
                 Button("Keep Editing", role: .cancel) {}
@@ -191,6 +242,26 @@ struct MealFormView: View {
         Binding(
             get: { quantities[food.persistentModelID] ?? 0 },
             set: { quantities[food.persistentModelID] = $0 }
+        )
+    }
+
+    /// The typed-quantity flavor: empty shows the "—" placeholder
+    /// instead of a wall of zeros, and typed values clamp to the
+    /// stepper's range (0.01 minimum — 0 means "not in the meal",
+    /// reached by clearing the field).
+    private func typedBinding(for food: Food) -> Binding<Double?> {
+        Binding(
+            get: {
+                let quantity = quantities[food.persistentModelID] ?? 0
+                return quantity > 0 ? quantity : nil
+            },
+            set: { newValue in
+                guard let newValue, newValue > 0 else {
+                    quantities[food.persistentModelID] = 0
+                    return
+                }
+                quantities[food.persistentModelID] = min(newValue, 20)
+            }
         )
     }
 

@@ -4,8 +4,8 @@ import PackageDescription
 let package = Package(
     name: "OnigiriKit",
     platforms: [
-        .iOS("26.0"),
-        .watchOS("26.0"),
+        .iOS("18.0"),
+        .watchOS("10.0"),
         .macOS("15.0"),
     ],
     products: [

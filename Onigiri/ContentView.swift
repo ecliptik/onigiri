@@ -191,7 +191,8 @@ struct ContentView: View {
         // content, re-expanding on scroll-up — and pinned full whenever
         // the screen is at the top (the system misses gesture-less
         // returns to the top, like collapsing the log sections).
-        .tabBarMinimizeBehavior(tabBarPin.atTop ? .never : .onScrollDown)
+        // iOS 18 bars never minimize; there is nothing to pin.
+        .modifier(TabBarMinimizePin(atTop: tabBarPin.atTop))
         // Hold the corner + to log a water serving without the sheet —
         // the tap keeps opening the add flow. Checked at fire time so
         // the Settings toggle applies without a relaunch.
@@ -200,6 +201,18 @@ struct ContentView: View {
             Task { await LogActions.logWater(oz: SharedStore.waterServingOz) }
         })
         .toastHost()
+    }
+
+    private struct TabBarMinimizePin: ViewModifier {
+        let atTop: Bool
+
+        func body(content: Content) -> some View {
+            if #available(iOS 26.0, *) {
+                content.tabBarMinimizeBehavior(atTop ? .never : .onScrollDown)
+            } else {
+                content
+            }
+        }
     }
 
     private func handle(_ action: QuickActions.Action) {

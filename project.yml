@@ -6,9 +6,12 @@ include:
   - local.yml
 options:
   bundleIdPrefix: com.ecliptik
+  # iOS 18 / watchOS 10: the lowest floor that gains devices without
+  # losing APIs (see docs/PLAN-1.8.md). 26-era APIs live behind
+  # #available gates — the compiler enforces every new one.
   deploymentTarget:
-    iOS: "26.0"
-    watchOS: "26.0"
+    iOS: "18.0"
+    watchOS: "10.0"
   createIntermediateGroups: true
 
 packages:

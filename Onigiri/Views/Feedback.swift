@@ -57,6 +57,18 @@ extension View {
     }
 }
 
+/// Liquid Glass on iOS 26, frosted material below — same capsule, same
+/// copy, the OS's own idiom either way (PLAN-1.8's floor rule).
+private struct ToastChrome: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.glassEffect(.regular, in: .capsule)
+        } else {
+            content.background(.ultraThinMaterial, in: .capsule)
+        }
+    }
+}
+
 private struct ToastHost: ViewModifier {
     @State private var center = ToastCenter.shared
 
@@ -80,7 +92,7 @@ private struct ToastHost: ViewModifier {
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 14)
-                    .glassEffect(.regular, in: .capsule)
+                    .modifier(ToastChrome())
                     .padding(.bottom, 56)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }

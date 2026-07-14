@@ -109,6 +109,18 @@ cd Packages/OnigiriKit && swift test     # pure-logic tests; ALSO needs the
   WatchConnectivity, log sync is HealthKit's own.
 - OpenFoodFacts: the search index has NO nutrition fields — search rows lazily
   fetch the full product per barcode to show kcal/serving.
+- Label scanning is the third door beside barcode and text search:
+  `LabelScan` (kit) runs Vision OCR — `.accurate`, language correction
+  OFF (correction mangles "0g" → "Og") — into the pure, fixture-tested
+  `LabelParser`. Keep the request configuration in `LabelScan.swift` and
+  `scripts/dump-label-ocr.swift` identical; capture new parser fixtures
+  with that script, never by hand-transcribing. On iOS 26 the
+  documents-request table branch runs first; real photos produce tables,
+  rendered label graphics don't, so the geometry parser is a load-bearing
+  fallback, not legacy. Foundation Models code lives ONLY in
+  `Onigiri/Models/FoodIntelligence.swift` (the kit never imports it);
+  every AI affordance hides behind `FoodIntelligence.isAvailable` and
+  every model failure falls back silently to the deterministic path.
 - Text search can route to USDA FoodData Central instead (Settings →
   Online Database; user-supplied api.data.gov key, device-local). FDC rows
   carry `fdc:{fdcId}` in the barcode slot and arrive with nutrients inline

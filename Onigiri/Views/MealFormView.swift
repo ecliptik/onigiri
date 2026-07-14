@@ -19,6 +19,7 @@ struct MealFormView: View {
     /// to vanish on a stray swipe.
     @State private var confirmDiscard = false
     @State private var initialSnapshot: FieldsSnapshot?
+    @State private var isSuggestingName = false
 
     private struct FieldsSnapshot: Equatable {
         var name: String
@@ -61,7 +62,27 @@ struct MealFormView: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Meal name", text: $name)
+                HStack {
+                    TextField("Meal name", text: $name)
+                    // One tap, one on-device suggestion, freely edited or
+                    // retried — only on Apple Intelligence devices, and
+                    // only once there are foods to name.
+                    if FoodIntelligence.isAvailable, hasItems {
+                        Button {
+                            suggestName()
+                        } label: {
+                            if isSuggestingName {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "sparkles")
+                                    .foregroundStyle(Color.riceToast)
+                            }
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(isSuggestingName)
+                        .accessibilityLabel("Suggest meal name")
+                    }
+                }
                 Picker("Category", selection: $category) {
                     Text("None").tag(String?.none)
                     ForEach(FoodCategory.allCases) { option in
@@ -146,6 +167,22 @@ struct MealFormView: View {
                     })
                 }
                 initialSnapshot = currentSnapshot
+            }
+        }
+    }
+
+    /// Fills the name field with the model's suggestion; any failure
+    /// just leaves the field as it was.
+    private func suggestName() {
+        let members = foods
+            .filter { (quantities[$0.persistentModelID] ?? 0) > 0 }
+            .map(\.name)
+        guard !members.isEmpty, !isSuggestingName else { return }
+        isSuggestingName = true
+        Task {
+            defer { isSuggestingName = false }
+            if let suggestion = await FoodIntelligence.suggestMealName(for: members) {
+                name = suggestion
             }
         }
     }

@@ -68,6 +68,10 @@ struct FoodFormView: View {
     @State private var onlineSearch = OnlineFoodSearch()
     @State private var isLookingUp = false
     @State private var lookupMessage: String?
+    /// "Describe it" quick add (iOS 26 + Apple Intelligence only; the
+    /// field does not exist on other devices).
+    @State private var describeText = ""
+    @State private var isEstimating = false
     @State private var portionTarget: PortionTarget?
     @State private var portionDidLog = false
     /// Cancel/drag with typed data confirms first — twelve typed
@@ -187,6 +191,34 @@ struct FoodFormView: View {
                             .foregroundStyle(.orange)
                     }
                 }
+                }
+
+                // "Describe it": plain language → on-device estimate,
+                // reviewed right here in the form. Renders only when the
+                // Apple Intelligence model is actually available — no AI
+                // affordance exists anywhere else.
+                if isBlankNewFood, FoodIntelligence.isAvailable {
+                    Section {
+                        HStack(spacing: 8) {
+                            Image(systemName: "sparkles")
+                                .foregroundStyle(Color.riceToast)
+                            TextField(
+                                "Describe it — half cup rice, fried egg",
+                                text: $describeText
+                            )
+                            .onSubmit { estimateFromDescription() }
+                            .submitLabel(.done)
+                        }
+                        if isEstimating {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("Estimating…")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } footer: {
+                        Text("On-device estimates — review before saving.")
+                    }
                 }
 
                 // Inline OpenFoodFacts results (the shared section) —
@@ -555,6 +587,32 @@ struct FoodFormView: View {
             // Transient lookup failures toast; lookupMessage stays for
             // the persistent "no calorie data" hint tied to the fields.
             ToastCenter.shared.show(error.localizedDescription)
+        }
+    }
+
+    /// "Describe it" → on-device estimate → the same prefill funnel,
+    /// marked clearly as an estimate. Failure (or the model declining)
+    /// leaves the form exactly as typed.
+    private func estimateFromDescription() {
+        let description = describeText.trimmingCharacters(in: .whitespaces)
+        guard !description.isEmpty, !isEstimating else { return }
+        isEstimating = true
+        Task {
+            defer { isEstimating = false }
+            guard let estimate = await FoodIntelligence.describeFood(description) else {
+                lookupMessage = "Couldn't estimate that — add the numbers by hand."
+                return
+            }
+            apply(ScannedProduct(
+                barcode: "",
+                name: estimate.name,
+                kcal: estimate.kcal,
+                sodiumMg: estimate.sodiumMg,
+                servingDescription: estimate.serving,
+                nutrients: NutrientValues()
+            ))
+            describeText = ""
+            lookupMessage = "On-device estimate — review before saving."
         }
     }
 

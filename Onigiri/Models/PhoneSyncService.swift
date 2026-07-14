@@ -28,6 +28,10 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
     /// reload, and radio. Tracked separately: a send skipped because the
     /// session wasn't ready yet must not suppress the retry.
     @MainActor private var lastMirroredFingerprint: Int?
+    /// The goal+settings slice of the mirror fingerprint — library-only
+    /// changes (a recency bump on every log) must not reload the weight
+    /// trend widget, which reads nothing from the library mirror.
+    @MainActor private var lastSettingsFingerprint: Int?
     @MainActor private var lastSentFingerprint: Int?
 
     func activate(onActivate: @escaping @MainActor () -> Void) {
@@ -153,14 +157,37 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
             sodiumLimitMg: SharedStore.sodiumLimitMg
         )
         let mirrorFingerprint = mirrorPayload.hashValue
+        // The goal+settings slice of the payload (everything but the
+        // library lists): when THIS half moved, the trend widget (goal
+        // target line) needs a reload too; when only the lists moved,
+        // it doesn't.
+        var settingsHasher = Hasher()
+        settingsHasher.combine(mirrorPayload.goal)
+        settingsHasher.combine(mirrorPayload.waterServingOz)
+        settingsHasher.combine(mirrorPayload.waterGoalOz)
+        settingsHasher.combine(mirrorPayload.balanceStyle)
+        settingsHasher.combine(mirrorPayload.foodIcon)
+        settingsHasher.combine(mirrorPayload.waterIcon)
+        settingsHasher.combine(mirrorPayload.rewardIcon)
+        settingsHasher.combine(mirrorPayload.trackedMetricSettings)
+        settingsHasher.combine(mirrorPayload.sodiumLimitMg)
+        let settingsFingerprint = settingsHasher.finalize()
         if mirrorFingerprint != lastMirroredFingerprint {
             lastMirroredFingerprint = mirrorFingerprint
             WatchSync.store(mirrorPayload)
             // Widgets render from the mirror just written — every goal,
             // settings, and library change lands here, so this is the one
             // place a reload keeps them from going up to ~30 min stale.
-            WidgetReloader.requestReloadAll()
+            if settingsFingerprint != lastSettingsFingerprint {
+                WidgetReloader.requestReloadAll()
+            } else {
+                // Library-only (every log bumps recency and lands here):
+                // scoped, like the HealthKit observer's reload — the
+                // full reload was recomputing the trend chart per log.
+                WidgetReloader.requestReload(kinds: WidgetKinds.phoneLogAffected)
+            }
         }
+        lastSettingsFingerprint = settingsFingerprint
 
         // The send-side fingerprint latches only on a successful send: a
         // push skipped here (session still activating, watch briefly

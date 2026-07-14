@@ -92,6 +92,12 @@ struct WatchMetricsView: View {
         let valueColor: Color = mode == .limit
             ? Color.sodiumStatus(mg: total, limitMg: target)
             : (met ? .green : .primary)
+        // The caption carries the limit status in words — the headline's
+        // traffic-light color alone is invisible to colorblind users and
+        // VoiceOver, and the value line has no room on small faces.
+        let status = mode == .limit
+            ? Color.sodiumStatusLabel(mg: total, limitMg: target)
+            : nil
 
         return HStack(spacing: 8) {
             metricIcon(slot: slot, nutrient: nutrient)
@@ -105,7 +111,7 @@ struct WatchMetricsView: View {
                     .monospacedDigit()
                     .minimumScaleFactor(0.7)
                     .lineLimit(1)
-                Text(nutrient.displayName)
+                Text(status.map { "\(nutrient.displayName) · \($0)" } ?? nutrient.displayName)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

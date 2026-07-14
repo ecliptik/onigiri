@@ -377,6 +377,11 @@ struct FoodsView: View {
         }
         .contentShape(.rect)
         .onTapGesture { activeSheet = .editMeal(meal) }
+        // Role + named action, like the Log sheet's rows — the tap-to-edit
+        // is otherwise invisible to VoiceOver. NOT combined: the + capsule
+        // must stay its own element (the water-row lesson).
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: "Edit") { activeSheet = .editMeal(meal) }
         // No row contextMenu: its long-press recognizer would swallow
         // the Log button's portion gesture.
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
@@ -436,6 +441,9 @@ struct FoodsView: View {
         }
         .contentShape(.rect)
         .onTapGesture { activeSheet = .editFood(food) }
+        // Role + named action, like the Log sheet's rows (see mealRow).
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: "Edit") { activeSheet = .editFood(food) }
         // No row contextMenu: its long-press recognizer would swallow
         // the Log button's portion gesture.
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
@@ -476,10 +484,16 @@ struct FoodsView: View {
                 } actions: {
                     // Text-only: with a systemImage, iOS 26 collapses
                     // the label to a bare icon here (as in toolbars).
-                    Button("Import Library…") {
+                    Button {
                         showLibraryImporter = true
+                    } label: {
+                        Text("Import Library…")
+                            // Dark-on-cream: the inherited riceToast tint
+                            // put a white label at ~1.9:1 in dark mode.
+                            .foregroundStyle(Color.onRicePaper)
                     }
                     .buttonStyle(.borderedProminent)
+                    .tint(.ricePaper)
                 }
             } else if !searchText.isEmpty {
                 // Compact on purpose, NOT ContentUnavailableView (the

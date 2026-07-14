@@ -41,10 +41,6 @@ struct ContentView: View {
     @State private var quickActions = QuickActions.shared
     @State private var tabBarPin = TabBarPin.shared
     @AppStorage(SharedStore.hasOnboardedKey, store: SharedStore.defaults) private var hasOnboarded = false
-    /// Holds the HKObserverQuery alive for the app's lifetime — a log
-    /// arriving from the watch (or any app) refreshes the widgets, which
-    /// otherwise stay stale until the next timeline turn or app open.
-    @State private var logObserver = HealthKitService()
     /// Latched in the task below: once onboarding is showing, saving a
     /// goal mid-flow must NOT dismiss it (only finish/skip does, via
     /// hasOnboarded) — gating live on goals.isEmpty cut the flow short
@@ -83,20 +79,8 @@ struct ContentView: View {
             }
             BackupService.backupIfDue(context: context)
             ReminderScheduler.shared.activate()
-            logObserver.startObservingLogChanges {
-                // Debounced funnel: one meal writes a burst of samples (and
-                // the observer covers watch/third-party logs too) — coalesce
-                // them into a single kind-scoped reload.
-                Task { @MainActor in
-                    ToastCenter.shared.noteHealthWrite()
-                    WidgetReloader.requestReload(kinds: WidgetKinds.phoneLogAffected)
-                    // A background wake can suspend before a debounced
-                    // flush would run — reload before the window closes.
-                    if UIApplication.shared.applicationState != .active {
-                        WidgetReloader.flushNow()
-                    }
-                }
-            }
+            // (The HealthKit log observer lives in OnigiriApp.init now —
+            // a background relaunch never runs this .task.)
             // Existing installs never see onboarding: a goal means the
             // app is already set up. Fresh installs latch it on. The
             // context is asked directly — the seeder just ran in this

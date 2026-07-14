@@ -23,28 +23,25 @@ struct WatchLogView: View {
                         .foregroundStyle(model.flashIsError ? .orange : .green)
                 }
                 ForEach(model.foodLog) { entry in
-                    Button {
-                        editing = entry
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(entry.name)
-                                .lineLimit(1)
-                            HStack {
-                                Text(entry.date, style: .time)
-                                Spacer()
-                                Text("\(entry.kcal, format: .number.precision(.fractionLength(0))) kcal")
-                                    .monospacedDigit()
-                            }
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        }
-                    }
-                    .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) {
-                            Task { await model.deleteEntry(entry) }
+                    if entry.editable {
+                        Button {
+                            editing = entry
                         } label: {
-                            Label("Remove", systemImage: "trash")
+                            entryLabel(entry)
                         }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                Task { await model.deleteEntry(entry) }
+                            } label: {
+                                Label("Remove", systemImage: "trash")
+                            }
+                        }
+                    } else {
+                        // Another app's entry (reads span all sources by
+                        // design): counted, but HealthKit refuses our
+                        // deletes — no edit/remove that can only error.
+                        entryLabel(entry)
+                            .accessibilityHint("Logged by another app")
                     }
                 }
             }
@@ -58,6 +55,21 @@ struct WatchLogView: View {
             // Page swipes re-fire this (and TabView pre-renders
             // neighbors) — the model skips when fresh.
             Task { await model.refreshIfStale() }
+        }
+    }
+
+    private func entryLabel(_ entry: FoodLogEntry) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(entry.name)
+                .lineLimit(1)
+            HStack {
+                Text(entry.date, style: .time)
+                Spacer()
+                Text("\(entry.kcal, format: .number.precision(.fractionLength(0))) kcal")
+                    .monospacedDigit()
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
         }
     }
 }

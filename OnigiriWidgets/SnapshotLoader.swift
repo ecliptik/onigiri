@@ -12,6 +12,10 @@ struct DaySnapshot {
     /// Health access never granted — a confident green "0 kcal" before
     /// setup was indistinguishable from a genuinely balanced day.
     var needsSetup = false
+    /// Maintenance mode's gauge counts DOWN from a full budget (share
+    /// left to eat), the deficit gauge counts UP from zero — the
+    /// midnight pre-render below must know which way is "fresh day".
+    var isMaintenance = false
 
     static let placeholder = DaySnapshot(
         summary: DailyEnergySummary(
@@ -44,9 +48,13 @@ struct DaySnapshot {
             deficitTargetKcal: deficitTargetKcal,
             // The full budget again: remaining was budget − intake.
             remainingKcal: remainingKcal.map { $0 + summary.intakeKcal },
-            gaugeProgress: 0,
+            // Deficit gauges start the day empty (nothing banked);
+            // the maintenance gauge starts FULL (whole budget left) —
+            // zero here rendered an empty onigiri all morning.
+            gaugeProgress: isMaintenance ? 1 : 0,
             waterGoalOz: waterGoalOz,
-            needsSetup: needsSetup
+            needsSetup: needsSetup,
+            isMaintenance: isMaintenance
         )
     }
 }
@@ -65,14 +73,16 @@ enum SnapshotLoader {
     /// the shared DailyPlanLoader does the rest, like the watch.
     static func load() async -> DaySnapshot {
         let needsSetup = await PlanCache.needsSetup()
-        let state = await PlanCache.state(goal: WatchSync.loadGoal())
+        let goal = WatchSync.loadGoal()
+        let state = await PlanCache.state(goal: goal)
         return DaySnapshot(
             summary: state.summary,
             deficitTargetKcal: state.deficitTargetKcal,
             remainingKcal: state.remainingKcal,
             gaugeProgress: state.gaugeProgress,
             waterGoalOz: SharedStore.waterGoalOz,
-            needsSetup: needsSetup
+            needsSetup: needsSetup,
+            isMaintenance: goal?.isMaintenance ?? false
         )
     }
 }

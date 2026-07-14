@@ -312,9 +312,15 @@ struct CalendarView: View {
         let value = slotValue(slot: slot, nutrient: nutrient)
         let text: String = value.map { total in
             let totalText = total.formatted(.number.precision(.fractionLength(0)))
-            return mode == .limit
-                ? "\(totalText) \(nutrient.unitSymbol)"
-                : "\(totalText) / \(target.formatted(.number.precision(.fractionLength(0)))) \(nutrient.unitSymbol)"
+            switch mode {
+            case .limit:
+                // Words alongside the traffic-light color (see Today's
+                // tracked-metric row).
+                let status = Color.sodiumStatusLabel(mg: total, limitMg: target)
+                return "\(totalText) \(nutrient.unitSymbol)\(status.map { " · \($0)" } ?? "")"
+            case .goal:
+                return "\(totalText) / \(target.formatted(.number.precision(.fractionLength(0)))) \(nutrient.unitSymbol)"
+            }
         } ?? "—"
         let color: Color = value.map { total in
             mode == .limit

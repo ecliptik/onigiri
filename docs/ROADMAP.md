@@ -20,7 +20,12 @@ when a release starts; this file is the durable to-do between sessions.
 ## 1.9 — Quality pass
 
 - [x] Axiom skills enabled; six-lens review run (2026-07-13).
-- [ ] Findings triaged in PLAN-1.9.md — batches pending review.
+- [x] Batches A (correctness), B (polish/a11y), C (performance)
+  applied — see PLAN-1.9.md status notes; watch-side fixes need the
+  next watch deploy to verify live.
+- [ ] Batch D (product calls: watch tab count, Always-On privacy,
+  locked-phone widget zeros, midnight edges, chart a11y, iOS 26
+  garnish) — discuss before building.
 
 ## 2.0 — Intelligence
 

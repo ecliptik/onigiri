@@ -40,6 +40,13 @@ public struct LogMealIntent: AppIntent {
 
     @Parameter(title: "Meal") public var meal: MealEntity
 
+    /// Required for Spotlight/quick-run surfaces (a required parameter
+    /// with no default hides the intent without one) and gives Shortcuts
+    /// the natural "Log Chicken & rice" phrasing.
+    public static var parameterSummary: some ParameterSummary {
+        Summary("Log \(\.$meal)")
+    }
+
     public init() {}
     public init(meal: MealEntity) {
         self.meal = meal

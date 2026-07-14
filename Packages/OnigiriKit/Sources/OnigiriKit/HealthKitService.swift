@@ -79,24 +79,39 @@ public final class HealthKitService {
     /// waiting out the 30-minute timeline window. Background delivery
     /// needs the healthkit.background-delivery entitlement; where it's
     /// unavailable the observer still covers the foreground.
-    public func startObservingLogChanges(_ onChange: @escaping @Sendable () -> Void) {
+    public func startObservingLogChanges(_ onChange: @escaping @Sendable () async -> Void) {
         // Idempotent: a second registration would double every observer
         // fire (and its widget reload) for the process's lifetime.
         guard !isObservingLogChanges else { return }
         isObservingLogChanges = true
         // .immediate background delivery for both types: water from the
         // watch's dedicated button must reach the phone's water widget
-        // promptly (and vice versa), and the wake is cheap now — one
-        // debounced, kind-scoped reload rendered from PlanCache instead
-        // of a full per-provider query storm.
+        // promptly (and vice versa) — though NOTE watchOS silently caps
+        // most types at hourly, so the watch side leans on its poll.
+        // The wake is cheap now — one debounced, kind-scoped reload
+        // rendered from PlanCache instead of a per-provider query storm.
         for identifier in [HKQuantityTypeIdentifier.dietaryEnergyConsumed, .dietaryWater] {
             let type = HKQuantityType(identifier)
             let query = HKObserverQuery(sampleType: type, predicate: nil) { _, completion, _ in
-                onChange()
-                completion()
+                // Complete AFTER the work: HealthKit re-suspends a
+                // background-woken app once completion() runs, and a
+                // merely-scheduled Task dies with the suspension.
+                // (unsafe transfer: the handler is called once and
+                // HealthKit's completion is safe to call off-queue.)
+                nonisolated(unsafe) let done = completion
+                Task {
+                    await onChange()
+                    done()
+                }
             }
             store.execute(query)
-            store.enableBackgroundDelivery(for: type, frequency: .immediate) { _, _ in }
+            store.enableBackgroundDelivery(for: type, frequency: .immediate) { _, error in
+                // A missing entitlement is a silent no-op otherwise
+                // (CODE_SIGNING_ALLOWED=NO strips it, see CLAUDE.md).
+                if let error {
+                    print("Onigiri: background delivery unavailable: \(error)")
+                }
+            }
         }
     }
 
@@ -311,7 +326,10 @@ public final class HealthKitService {
         let sample = HKQuantitySample(
             type: HKQuantityType(.dietaryWater),
             quantity: HKQuantity(unit: .fluidOunceUS(), doubleValue: oz),
-            start: date, end: date
+            start: date, end: date,
+            // Manually entered, not sensor-derived — Health uses this
+            // for source distinction and Journal suggestions.
+            metadata: [HKMetadataKeyWasUserEntered: true]
         )
         try await store.save(sample)
         waterSampleCache[sample.uuid] = sample
@@ -338,8 +356,14 @@ public final class HealthKitService {
             return []
         }
         waterSampleCache = Dictionary(uniqueKeysWithValues: samples.map { ($0.uuid, $0) })
+        // (editable mirrors the food entries: reads span all sources,
+        // deletes only reach this app family's own samples.)
         return samples.map {
-            WaterLogEntry(id: $0.uuid, oz: $0.quantity.doubleValue(for: .fluidOunceUS()), date: $0.startDate)
+            WaterLogEntry(
+                id: $0.uuid, oz: $0.quantity.doubleValue(for: .fluidOunceUS()),
+                date: $0.startDate,
+                editable: Self.isFamilySource($0.sourceRevision.source)
+            )
         }
     }
 
@@ -378,7 +402,12 @@ public final class HealthKitService {
         category: FoodCategory? = nil,
         date: Date = .now
     ) async throws -> UUID {
-        var metadata: [String: Any] = [HKMetadataKeyFoodType: name]
+        var metadata: [String: Any] = [
+            HKMetadataKeyFoodType: name,
+            // Manually entered, not sensor-derived — Health uses this
+            // for source distinction and Journal suggestions.
+            HKMetadataKeyWasUserEntered: true,
+        ]
         if let category {
             metadata[Self.mealCategoryMetadataKey] = category.rawValue
         }
@@ -506,8 +535,28 @@ public final class HealthKitService {
             date: correlation.startDate,
             category: (correlation.metadata?[Self.mealCategoryMetadataKey] as? String)
                 .flatMap(FoodCategory.init(rawValue:)),
-            nutrients: correlation.nutrientValues
+            nutrients: correlation.nutrientValues,
+            editable: Self.isFamilySource(correlation.sourceRevision.source)
         )
+    }
+
+    /// Whether a sample came from this app or its watch/phone counterpart
+    /// (bundle ids differ only by a suffix, e.g. `.watchkitapp`). Reads
+    /// include every source by design; delete/edit affordances should
+    /// not be offered on rows HealthKit will refuse to delete — only an
+    /// object's own saver (or close family) may remove it.
+    private static func isFamilySource(_ source: HKSource) -> Bool {
+        let mine = HKSource.default().bundleIdentifier
+        let theirs = source.bundleIdentifier
+        return theirs == mine
+            || theirs.hasPrefix(mine + ".")
+            || mine.hasPrefix(theirs + ".")
+    }
+
+    /// True when a failed delete/edit means "saved by another app" —
+    /// the caller should say so instead of blaming Health access.
+    public static func isForeignObjectError(_ error: Error) -> Bool {
+        (error as? HKError)?.code == .errorAuthorizationDenied
     }
 
     /// Delete a logged entry (and its contained samples) by correlation UUID.

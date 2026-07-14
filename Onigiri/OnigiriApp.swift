@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 import OnigiriKit
 
 @main
@@ -14,6 +15,12 @@ struct OnigiriApp: App {
             fatalError("Could not open the shared data store: \(error)")
         }
     }()
+
+    /// Holds the HKObserverQuery alive for the app's lifetime — a log
+    /// arriving from the watch (or any app) refreshes the widgets.
+    /// Registered HERE, not in a view: background delivery can relaunch
+    /// the app without ever running scene content's .task.
+    @State private var logObserver: HealthKitService
 
     init() {
         // Heal stores poisoned before Food↔MealItem had an inverse: a meal
@@ -30,6 +37,25 @@ struct OnigiriApp: App {
             LibraryMaintenance.repairStore(at: url)
         }
         LibraryMaintenance.repairDanglingFoodReferences(context: Self.container.mainContext)
+
+        let observer = HealthKitService()
+        observer.startObservingLogChanges {
+            // Debounced funnel: one meal writes a burst of samples (and
+            // the observer covers watch/third-party logs too) — coalesce
+            // them into a single kind-scoped reload. Runs before the
+            // observer completes, so a background wake can't suspend
+            // out from under it.
+            await MainActor.run {
+                ToastCenter.shared.noteHealthWrite()
+                WidgetReloader.requestReload(kinds: WidgetKinds.phoneLogAffected)
+                // A background wake suspends after completion — flush the
+                // debounce before the window closes.
+                if UIApplication.shared.applicationState != .active {
+                    WidgetReloader.flushNow()
+                }
+            }
+        }
+        _logObserver = State(initialValue: observer)
     }
 
     var body: some Scene {

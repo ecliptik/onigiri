@@ -83,7 +83,15 @@ struct QuickLogSheet: View {
         var isMeal: Bool { meal != nil }
     }
 
-    private var allItems: [Item] {
+    /// The library half of the list, CACHED like historyRows: building
+    /// it walks every meal's relationships and copies every food's
+    /// nutrient dictionary, and a computed property re-ran all of it on
+    /// each search keystroke (the app's most-typed surface). Rebuilt on
+    /// open, when library names change, when a sub-sheet closes (edits,
+    /// portion picks), and after a log (recency bumps reorder it).
+    @State private var libraryItems: [Item] = []
+
+    private func buildLibraryItems() -> [Item] {
         let mealItems = meals.map { meal in
             Item(
                 id: "meal-\(meal.uuid.uuidString)",
@@ -167,7 +175,7 @@ struct QuickLogSheet: View {
     }
 
     var body: some View {
-        let items = allItems + historyRows
+        let items = libraryItems + historyRows
         let ranked = pool(items)
         NavigationStack {
             List {
@@ -302,19 +310,22 @@ struct QuickLogSheet: View {
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    // "Done", not "Cancel": logging commits immediately
-                    // (with its own Undo), so dismissal cancels nothing —
-                    // and the sheet stays open for multi-item lunches.
-                    Button("Done") { dismiss() }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
                     Button {
                         activeSheet = .scanner
                     } label: {
                         Image(systemName: "barcode.viewfinder")
                     }
                     .accessibilityLabel("Scan barcode")
+                }
+                // "Done", not "Cancel": logging commits immediately (with
+                // its own Undo), so dismissal cancels nothing — and the
+                // sheet stays open for multi-item lunches. Confirm SLOT
+                // (top trailing, emphasized) like Settings' Done — it sat
+                // in the cancel slot, the app's one leading Done.
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                        .fontWeight(.semibold)
                 }
             }
             .task {
@@ -334,18 +345,28 @@ struct QuickLogSheet: View {
                         kind = initialKind
                     }
                 }
+                libraryItems = buildLibraryItems()
                 recents = (try? await HealthKitService().recentFoodEntries()) ?? []
                 historyRows = historyItems()
             }
             // Library NAMES changed (add, remove, or in-place rename —
             // identity-based model-array comparison misses renames): the
             // twin-exclusion in the history rows must re-judge.
-            .onChange(of: libraryNames) { historyRows = historyItems() }
+            .onChange(of: libraryNames) {
+                libraryItems = buildLibraryItems()
+                historyRows = historyItems()
+            }
             // An active search hides the toolbar (no Done); deactivate
             // it when any sub-sheet opens so the sheet comes back to
             // its resting state after logging.
             .onChange(of: activeSheet?.id) { _, id in
-                if id != nil { searchPresented = false }
+                if id != nil {
+                    searchPresented = false
+                } else {
+                    // A form or portion sheet just closed — values or
+                    // recency may have moved; refresh the cache.
+                    libraryItems = buildLibraryItems()
+                }
             }
             .sheet(item: $activeSheet) { sheet in
                 switch sheet {
@@ -396,10 +417,16 @@ struct QuickLogSheet: View {
                 } actions: {
                     // Text-only: with a systemImage, iOS 26 collapses
                     // the label to a bare icon here.
-                    Button("Import Library…") {
+                    Button {
                         showLibraryImporter = true
+                    } label: {
+                        Text("Import Library…")
+                            // Dark-on-cream: the inherited riceToast tint
+                            // put a white label at ~1.9:1 in dark mode.
+                            .foregroundStyle(Color.onRicePaper)
                     }
                     .buttonStyle(.borderedProminent)
+                    .tint(.ricePaper)
                 }
             } else if !searchText.isEmpty {
                 // Compact on purpose, NOT ContentUnavailableView: its
@@ -587,7 +614,9 @@ struct QuickLogSheet: View {
                 date: logDate
             )
             isLogging = false
-            // Recency moved — refresh the watch's "Recent foods" list.
+            // Recency moved — refresh the cached list order and the
+            // watch's "Recent foods".
+            libraryItems = buildLibraryItems()
             PhoneSyncService.shared.push(from: context)
         }
     }

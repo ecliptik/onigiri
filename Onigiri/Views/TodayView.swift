@@ -531,7 +531,11 @@ struct TodayView: View {
         Label {
             switch mode {
             case .limit:
-                Text("\(total, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(metricName(nutrient))")
+                // The "· near limit"/"· over limit" tail says in words
+                // what the traffic-light color says — color alone is
+                // invisible to colorblind users and VoiceOver.
+                let status = Color.sodiumStatusLabel(mg: total, limitMg: target)
+                Text("\(total, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(metricName(nutrient))\(status.map { " · \($0)" } ?? "")")
                     .foregroundStyle(Color.sodiumStatus(mg: total, limitMg: target))
                     .fontWeight(.medium)
             case .goal:
@@ -660,26 +664,46 @@ struct TodayView: View {
 
         if !waterCollapsed {
             ForEach(model.waterLog) { entry in
-                HStack(alignment: .firstTextBaseline) {
-                    WaterIconView(raw: waterIcon)
-                    Text(entry.date, style: .time)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("\(entry.oz, format: .number.precision(.fractionLength(0))) oz")
-                        .monospacedDigit()
-                }
-                .padding(.vertical, 12)
-                .padding(.horizontal, 20)
-                .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
+                waterRow(entry)
+            }
+        }
+    }
+
+    /// One water serving: editable rows carry the swipe/tap affordances;
+    /// another app's sample counts toward the day (reads span all sources
+    /// by design) but HealthKit refuses our deletes — no affordances that
+    /// can only end in an error.
+    @ViewBuilder
+    private func waterRow(_ entry: WaterLogEntry) -> some View {
+        let label = HStack(alignment: .firstTextBaseline) {
+            WaterIconView(raw: waterIcon)
+            Text(entry.date, style: .time)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text("\(entry.oz, format: .number.precision(.fractionLength(0))) oz")
+                .monospacedDigit()
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 20)
+        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
+        if entry.editable {
+            let amount = entry.oz.formatted(.number.precision(.fractionLength(0)))
+            label
                 .logRowSwipeActions(
                     active: $rowSwipeActive,
-                    itemName: "\(entry.oz.formatted(.number.precision(.fractionLength(0)))) ounce entry",
+                    itemName: "\(amount) ounce entry",
                     onTap: { activeSheet = .editWater(entry) },
                     onEdit: { activeSheet = .editWater(entry) }
                 ) {
                     Task { await LogActions.deleteWaterEntry(entry) }
                 }
+                // One element with a role — separate time/amount fragments
+                // left VoiceOver with four stops and an invisible
+                // tap-to-edit.
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Edits this entry")
                 .accessibilityAction(named: "Edit") {
                     activeSheet = .editWater(entry)
                 }
@@ -687,7 +711,11 @@ struct TodayView: View {
                     Task { await LogActions.deleteWaterEntry(entry) }
                 }
                 .padding(.horizontal)
-            }
+        } else {
+            label
+                .accessibilityElement(children: .combine)
+                .accessibilityHint("Logged by another app")
+                .padding(.horizontal)
         }
     }
 
@@ -728,26 +756,38 @@ struct TodayView: View {
 
         if !isCollapsed {
             ForEach(entries) { entry in
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(entry.name)
-                        Text(entry.date, style: .time)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(entry.kcal, format: .number.precision(.fractionLength(0))) kcal")
-                            .monospacedDigit()
-                        Text("\(entry.sodiumMg, format: .number.precision(.fractionLength(0))) mg Na")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
-                }
-                .padding(.vertical, 12)
-                .padding(.horizontal, 20)
-                .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
+                foodEntryRow(entry)
+            }
+        }
+    }
+
+    /// One logged food: editable rows carry the swipe/tap affordances;
+    /// another app's entry is counted (reads span all sources by design)
+    /// but not ours to edit or delete.
+    @ViewBuilder
+    private func foodEntryRow(_ entry: FoodLogEntry) -> some View {
+        let label = HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.name)
+                Text(entry.date, style: .time)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(entry.kcal, format: .number.precision(.fractionLength(0))) kcal")
+                    .monospacedDigit()
+                Text("\(entry.sodiumMg, format: .number.precision(.fractionLength(0))) mg Na")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 20)
+        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
+        if entry.editable {
+            label
                 .logRowSwipeActions(
                     active: $rowSwipeActive,
                     itemName: entry.name,
@@ -756,6 +796,12 @@ struct TodayView: View {
                 ) {
                     Task { await LogActions.deleteFoodEntry(entry) }
                 }
+                // One element with a role — name/time/kcal/sodium
+                // fragments left VoiceOver with four stops and an
+                // invisible tap-to-edit.
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Edits this entry")
                 .accessibilityAction(named: "Edit") {
                     activeSheet = .editEntry(entry)
                 }
@@ -763,7 +809,11 @@ struct TodayView: View {
                     Task { await LogActions.deleteFoodEntry(entry) }
                 }
                 .padding(.horizontal)
-            }
+        } else {
+            label
+                .accessibilityElement(children: .combine)
+                .accessibilityHint("Logged by another app")
+                .padding(.horizontal)
         }
     }
 }

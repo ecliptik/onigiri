@@ -15,6 +15,10 @@ public struct FoodLogEntry: Identifiable, Sendable, Equatable {
     /// Extended nutrients read back from the correlation's samples, so a
     /// deleted entry can be re-logged (undo) without losing detail.
     public let nutrients: NutrientValues
+    /// False for entries another app saved — HealthKit refuses deletes
+    /// from anyone but the saver (and this app's watch/phone twin), so
+    /// the UI must not offer Edit/Delete on them.
+    public let editable: Bool
 
     public init(
         id: UUID,
@@ -23,7 +27,8 @@ public struct FoodLogEntry: Identifiable, Sendable, Equatable {
         sodiumMg: Double,
         date: Date,
         category: FoodCategory? = nil,
-        nutrients: NutrientValues = NutrientValues()
+        nutrients: NutrientValues = NutrientValues(),
+        editable: Bool = true
     ) {
         self.id = id
         self.name = name
@@ -32,6 +37,7 @@ public struct FoodLogEntry: Identifiable, Sendable, Equatable {
         self.date = date
         self.category = category ?? FoodCategory.slot(for: date)
         self.nutrients = nutrients
+        self.editable = editable
     }
 }
 

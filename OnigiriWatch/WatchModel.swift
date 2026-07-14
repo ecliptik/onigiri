@@ -114,7 +114,7 @@ final class WatchModel {
         defer { isLogging = false }
         do {
             let scale = entry.kcal > 0 ? kcal / entry.kcal : 1
-            _ = try await health.logFood(
+            let newId = try await health.logFood(
                 name: entry.name,
                 kcal: kcal,
                 sodiumMg: entry.sodiumMg * scale,
@@ -122,17 +122,33 @@ final class WatchModel {
                 category: entry.category,
                 date: entry.date
             )
-            try await health.deleteFoodEntry(id: entry.id)
+            do {
+                try await health.deleteFoodEntry(id: entry.id)
+            } catch {
+                // Roll the replacement back (the phone edit's rule):
+                // leaving it alongside the original double-counts the
+                // meal in every total.
+                try? await health.deleteFoodEntry(id: newId)
+                throw error
+            }
             WKInterfaceDevice.current().play(.success)
             showFlash("✓ \(entry.name) updated", isError: false)
             await refresh()
             return true
         } catch {
             WKInterfaceDevice.current().play(.failure)
-            showFlash("Couldn't save — check Health access", isError: true)
+            showFlash(Self.writeFailureFlash(error, verb: "save"), isError: true)
             await refresh()
             return false
         }
+    }
+
+    /// Health-access blame is wrong (and misleading) when the entry
+    /// simply belongs to another app — say which it is.
+    private static func writeFailureFlash(_ error: Error, verb: String) -> String {
+        HealthKitService.isForeignObjectError(error)
+            ? "Another app logged this — remove it in Health"
+            : "Couldn't \(verb) — check Health access"
     }
 
     @discardableResult
@@ -148,7 +164,7 @@ final class WatchModel {
             return true
         } catch {
             WKInterfaceDevice.current().play(.failure)
-            showFlash("Couldn't remove — check Health access", isError: true)
+            showFlash(Self.writeFailureFlash(error, verb: "remove"), isError: true)
             return false
         }
     }

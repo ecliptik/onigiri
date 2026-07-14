@@ -7,6 +7,7 @@ import OnigiriKit
 /// deficit and calorie budget with safety guardrails.
 struct GoalView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query private var goals: [GoalSettings]
 
     @State private var targetWeightLb: Double?
@@ -17,6 +18,10 @@ struct GoalView: View {
     @State private var averageBurnKcal: Double?
     @State private var weightHistory: [WeightTrend.Point] = []
     @State private var dailyTotals: [DayEnergyTotals] = []
+    /// Cached 7-day smoothing of weightHistory (see .task).
+    @State private var smoothedHistory: [WeightTrend.Point] = []
+    /// Staleness stamp for the .task reads (see .task).
+    @State private var lastLoaded: Date?
     @State private var loaded = false
     @State private var confirmingGoalRemoval = false
     @FocusState private var weightFieldFocused: Bool
@@ -70,11 +75,23 @@ struct GoalView: View {
                 trendSection
 
                 Section {
-                    Picker("Goal", selection: $mode) {
-                        Text("Lose Weight").tag(GoalMode.lose)
-                        Text("Maintain").tag(GoalMode.maintain)
+                    // Segmented controls ignore Dynamic Type — go menu at
+                    // accessibility sizes so the mode names scale too
+                    // (the ScopeBar/PortionSheet rule; this picker was
+                    // the one holdout).
+                    if dynamicTypeSize.isAccessibilitySize {
+                        Picker("Goal", selection: $mode) {
+                            Text("Lose Weight").tag(GoalMode.lose)
+                            Text("Maintain").tag(GoalMode.maintain)
+                        }
+                        .pickerStyle(.menu)
+                    } else {
+                        Picker("Goal", selection: $mode) {
+                            Text("Lose Weight").tag(GoalMode.lose)
+                            Text("Maintain").tag(GoalMode.maintain)
+                        }
+                        .pickerStyle(.segmented)
                     }
-                    .pickerStyle(.segmented)
                 } footer: {
                     if isMaintenance {
                         Text("To hold steady, eat within your average daily burn. Any deficit earns the day's badge.")
@@ -219,10 +236,29 @@ struct GoalView: View {
             }
         }
         .task {
-            healthWeightLb = (try? await health.latestBodyMassLb()) ?? nil
-            averageBurnKcal = (try? await health.averageDailyBurnKcal()) ?? nil
-            weightHistory = (try? await health.bodyMassHistory()) ?? []
-            dailyTotals = (try? await health.dailyEnergyTotals()) ?? []
+            // TabView re-runs this on every visit; a quick tab bounce
+            // shouldn't replay four HealthKit reads over 90-day windows
+            // (TodayModel's staleness rule). Day-roll still refreshes.
+            if let last = lastLoaded,
+               Date.now.timeIntervalSince(last) < 30,
+               Calendar.current.isDate(last, inSameDayAs: .now) {
+            } else {
+                // Independent reads — concurrent, not serial (the trend
+                // chart used to populate a query-chain late).
+                async let weightRead = health.latestBodyMassLb()
+                async let burnRead = health.averageDailyBurnKcal()
+                async let historyRead = health.bodyMassHistory()
+                async let totalsRead = health.dailyEnergyTotals()
+                healthWeightLb = (try? await weightRead) ?? nil
+                averageBurnKcal = (try? await burnRead) ?? nil
+                weightHistory = (try? await historyRead) ?? []
+                dailyTotals = (try? await totalsRead) ?? []
+                // Smooth once per load, not per keystroke: typing a target
+                // weight re-evaluates body per digit, and each evaluation
+                // re-averaged ~90 points and re-fit the slope.
+                smoothedHistory = WeightTrend.movingAverage(weightHistory, windowDays: 7)
+                lastLoaded = .now
+            }
             if !loaded, let goal = goals.first {
                 targetWeightLb = goal.targetWeightLb
                 targetDate = goal.targetDate
@@ -258,9 +294,6 @@ struct GoalView: View {
 
     // MARK: - Weight trend
 
-    private var smoothedHistory: [WeightTrend.Point] {
-        WeightTrend.movingAverage(weightHistory, windowDays: 7)
-    }
 
     /// Projected date of reaching the target at the recent trend, from the
     /// least-squares slope of the last three weeks of smoothed weigh-ins.

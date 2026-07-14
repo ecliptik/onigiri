@@ -113,9 +113,13 @@ struct OnboardingView: View {
             } label: {
                 Text(healthRequested ? "Continue" : "Allow Health Access")
                     .frame(maxWidth: .infinity)
+                    // Dark-on-cream like the keyboard Done buttons: the
+                    // default white label on riceToast fell to ~1.9:1
+                    // contrast in dark mode.
+                    .foregroundStyle(Color.onRicePaper)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.riceToast)
+            .tint(.ricePaper)
             .disabled(isRequestingHealth)
         }
     }
@@ -239,9 +243,10 @@ struct OnboardingView: View {
             } label: {
                 Text("Start Logging")
                     .frame(maxWidth: .infinity)
+                    .foregroundStyle(Color.onRicePaper)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.riceToast)
+            .tint(.ricePaper)
         }
     }
 
@@ -269,9 +274,10 @@ struct OnboardingView: View {
         } label: {
             Text(title)
                 .frame(maxWidth: .infinity)
+                .foregroundStyle(Color.onRicePaper)
         }
         .buttonStyle(.borderedProminent)
-        .tint(.riceToast)
+        .tint(.ricePaper)
     }
 
     /// Same rules as the Goal tab (one shared validator) — a goal used

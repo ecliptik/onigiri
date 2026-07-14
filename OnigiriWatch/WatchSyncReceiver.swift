@@ -18,6 +18,28 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         session.activate()
     }
 
+    /// Background-wake entry (`.backgroundTask(.watchConnectivity)`):
+    /// applies whatever context is queued before the caller returns —
+    /// the delegate path hops queues, and the process re-suspends the
+    /// moment the background task completes, stranding a merely
+    /// scheduled apply.
+    @MainActor
+    func receiveQueuedContext() async {
+        guard WCSession.isSupported() else { return }
+        activate()
+        // Near-instant when already activated; brief poll otherwise so
+        // receivedApplicationContext is populated before we read it.
+        for _ in 0..<20 where WCSession.default.activationState != .activated {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        let context = WCSession.default.receivedApplicationContext
+        guard !context.isEmpty else { return }
+        apply(WatchSync.parse(context))
+        // apply()'s complication reload is debounced — flush it now,
+        // the suspension won't wait for the debounce window.
+        WidgetReloader.flushNow()
+    }
+
     @MainActor
     private func apply(_ payload: SyncPayload) {
         // The phone pushes on every foreground; most contexts change

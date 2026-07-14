@@ -32,6 +32,16 @@ public extension Color {
         return .green
     }
 
+    /// The non-color twin of `sodiumStatus`, colocated so the thresholds
+    /// can't drift: color alone can't carry "near limit"/"over limit"
+    /// (colorblind users, VoiceOver, and the warning tone sits near AA
+    /// limits at small sizes). nil while comfortably under.
+    static func sodiumStatusLabel(mg: Double, limitMg: Double) -> String? {
+        if mg > limitMg { return "over limit" }
+        if mg >= limitMg - 300 { return "near limit" }
+        return nil
+    }
+
     /// Traffic-light for the "kcal left" headline, mirroring sodiumStatus:
     /// green with room, toast yellow within a snack (150 kcal) of the
     /// budget, orange once over.

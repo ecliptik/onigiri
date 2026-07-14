@@ -3,8 +3,28 @@
 Six parallel reviews against the Axiom skill rubrics (2026-07-13):
 HIG/Liquid Glass/SF Symbols/toolbars, SwiftUI + launch performance,
 watchOS + WatchConnectivity + complications, HealthKit, accessibility,
-widgets/App Intents. Findings below are proposals for review — nothing
-here has been applied. Spot-verified in source where marked ✓.
+widgets/App Intents. Spot-verified in source where marked ✓.
+
+**Status: batches A–C APPLIED 2026-07-13** (build + 129 kit tests +
+flow test green). Deviations from the writeup:
+
+- A3: affordances are suppressed only for entries from OUTSIDE the
+  app family (phone/watch twin bundle ids treated as one). Whether
+  the phone can delete the watch twin's entries is unverified — so
+  twin rows keep their affordances and the error message is now
+  honest either way ("Another app logged this entry — remove it in
+  the Health app.").
+- A5 also landed the enableBackgroundDelivery error logging (old #7).
+- A1/A5 watch-side changes compile but need a WATCH DEPLOY to verify
+  live (background context delivery, complication refresh) — check at
+  the next weekly deploy window.
+- C16 splits the mirror fingerprint in two (goal+settings vs library
+  lists): settings changes still reload every widget (the trend
+  widget reads the goal target), library-only changes reload the
+  log-affected kinds. The widget-intent echo suppression (cross-
+  process stamp) was NOT done — deferred with batch D.
+
+Batch D remains open for discussion.
 
 The reviews also confirmed a lot of existing discipline: no unguarded
 iOS 26 API anywhere (the 1.8 floor holds), textbook WatchConnectivity

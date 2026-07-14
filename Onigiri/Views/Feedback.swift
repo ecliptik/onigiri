@@ -27,11 +27,22 @@ final class ToastCenter {
         let item = Item(message: message, undo: undo)
         current = item
         // The toast is the app's primary confirmation channel — without
-        // an announcement it (and its Undo) is sighted-only.
-        UIAccessibility.post(notification: .announcement, argument: message)
+        // an announcement it (and its Undo) is sighted-only. Deletes
+        // have no confirmation alert, so the announcement must SAY an
+        // Undo exists or VoiceOver users never learn about the only
+        // recovery path.
+        UIAccessibility.post(
+            notification: .announcement,
+            argument: undo == nil ? message : "\(message), Undo available"
+        )
         Task {
-            // Undoable toasts linger so the button is actually reachable.
-            try? await Task.sleep(for: .seconds(undo == nil ? 2 : 5))
+            // Undoable toasts linger so the button is actually reachable —
+            // and much longer under VoiceOver, where "reachable" means
+            // locating a transient overlay by touch.
+            let linger: Double = if undo == nil { 2 }
+                else if UIAccessibility.isVoiceOverRunning { 15 }
+                else { 5 }
+            try? await Task.sleep(for: .seconds(linger))
             if current?.id == item.id { current = nil }
         }
     }
@@ -106,6 +117,11 @@ private struct ToastHost: ViewModifier {
 /// surface calling this behaves identically.
 @MainActor
 enum LogActions {
+    /// ONE service for every log/undo: a fresh instance per call owned a
+    /// fresh HKHealthStore and an empty correlation cache, so every undo
+    /// took the by-UUID re-query fallback the cache exists to avoid.
+    private static let health = HealthKitService()
+
     @discardableResult
     static func logFood(
         name: String,
@@ -116,14 +132,14 @@ enum LogActions {
         date: Date = .now
     ) async -> Bool {
         do {
-            let id = try await HealthKitService().logFood(
+            let id = try await health.logFood(
                 name: name, kcal: kcal, sodiumMg: sodiumMg,
                 nutrients: nutrients, category: category, date: date
             )
             didMutate(haptic: .success)
             ToastCenter.shared.show("Logged \(name) ✓") {
                 Task {
-                    try? await HealthKitService().deleteFoodEntry(id: id)
+                    try? await health.deleteFoodEntry(id: id)
                     didMutate(haptic: nil)
                 }
             }
@@ -136,12 +152,12 @@ enum LogActions {
 
     static func logWater(oz: Double, date: Date = .now) async {
         do {
-            let id = try await HealthKitService().logWater(oz: oz, date: date)
+            let id = try await health.logWater(oz: oz, date: date)
             didMutate(haptic: .success)
             let amount = oz.formatted(.number.precision(.fractionLength(0)))
             ToastCenter.shared.show("Logged \(amount) oz water ✓") {
                 Task {
-                    try? await HealthKitService().deleteWaterEntry(id: id)
+                    try? await health.deleteWaterEntry(id: id)
                     didMutate(haptic: nil)
                 }
             }
@@ -163,7 +179,7 @@ enum LogActions {
             // undo restores before it deletes): a failed write can then
             // never lose the entry, only leave both — and the rollback
             // below covers the delete-failed case.
-            let newId = try await HealthKitService().logFood(
+            let newId = try await health.logFood(
                 name: entry.name,
                 kcal: entry.kcal * quantity,
                 sodiumMg: entry.sodiumMg * quantity,
@@ -172,21 +188,21 @@ enum LogActions {
                 date: date ?? entry.date
             )
             do {
-                try await HealthKitService().deleteFoodEntry(id: entry.id)
+                try await health.deleteFoodEntry(id: entry.id)
             } catch {
-                try? await HealthKitService().deleteFoodEntry(id: newId)
+                try? await health.deleteFoodEntry(id: newId)
                 throw error
             }
             didMutate(haptic: .success)
             ToastCenter.shared.show("Updated \(entry.name) ✓") {
                 Task {
                     do {
-                        try await HealthKitService().logFood(
+                        try await health.logFood(
                             name: entry.name, kcal: entry.kcal, sodiumMg: entry.sodiumMg,
                             nutrients: entry.nutrients, category: entry.category,
                             date: entry.date
                         )
-                        try? await HealthKitService().deleteFoodEntry(id: newId)
+                        try? await health.deleteFoodEntry(id: newId)
                         didMutate(haptic: nil)
                     } catch {
                         ToastCenter.shared.show("Couldn't undo: \(error.localizedDescription)")
@@ -194,7 +210,7 @@ enum LogActions {
                 }
             }
         } catch {
-            ToastCenter.shared.show("Couldn't update: \(error.localizedDescription)")
+            ToastCenter.shared.show(failureMessage(error, verb: "update"))
         }
     }
 
@@ -204,12 +220,12 @@ enum LogActions {
     /// false, and made delete a four-gesture trip).
     static func deleteFoodEntry(_ entry: FoodLogEntry) async {
         do {
-            try await HealthKitService().deleteFoodEntry(id: entry.id)
+            try await health.deleteFoodEntry(id: entry.id)
             didMutate(haptic: nil)
             ToastCenter.shared.show("Removed \(entry.name) ✓") {
                 Task {
                     do {
-                        try await HealthKitService().logFood(
+                        try await health.logFood(
                             name: entry.name, kcal: entry.kcal, sodiumMg: entry.sodiumMg,
                             nutrients: entry.nutrients, category: entry.category,
                             date: entry.date
@@ -221,19 +237,19 @@ enum LogActions {
                 }
             }
         } catch {
-            ToastCenter.shared.show("Couldn't delete: \(error.localizedDescription)")
+            ToastCenter.shared.show(failureMessage(error, verb: "delete"))
         }
     }
 
     static func deleteWaterEntry(_ entry: WaterLogEntry) async {
         do {
-            try await HealthKitService().deleteWaterEntry(id: entry.id)
+            try await health.deleteWaterEntry(id: entry.id)
             didMutate(haptic: nil)
             let amount = entry.oz.formatted(.number.precision(.fractionLength(0)))
             ToastCenter.shared.show("Removed \(amount) oz ✓") {
                 Task {
                     do {
-                        try await HealthKitService().logWater(oz: entry.oz, date: entry.date)
+                        try await health.logWater(oz: entry.oz, date: entry.date)
                         didMutate(haptic: nil)
                     } catch {
                         ToastCenter.shared.show("Couldn't undo: \(error.localizedDescription)")
@@ -241,7 +257,7 @@ enum LogActions {
                 }
             }
         } catch {
-            ToastCenter.shared.show("Couldn't delete: \(error.localizedDescription)")
+            ToastCenter.shared.show(failureMessage(error, verb: "delete"))
         }
     }
 
@@ -249,19 +265,19 @@ enum LogActions {
     /// write-then-delete ordering and undo shape as the food edit.
     static func editWaterEntry(_ entry: WaterLogEntry, oz: Double, date: Date) async {
         do {
-            let newId = try await HealthKitService().logWater(oz: oz, date: date)
+            let newId = try await health.logWater(oz: oz, date: date)
             do {
-                try await HealthKitService().deleteWaterEntry(id: entry.id)
+                try await health.deleteWaterEntry(id: entry.id)
             } catch {
-                try? await HealthKitService().deleteWaterEntry(id: newId)
+                try? await health.deleteWaterEntry(id: newId)
                 throw error
             }
             didMutate(haptic: .success)
             ToastCenter.shared.show("Updated water ✓") {
                 Task {
                     do {
-                        try await HealthKitService().logWater(oz: entry.oz, date: entry.date)
-                        try? await HealthKitService().deleteWaterEntry(id: newId)
+                        try await health.logWater(oz: entry.oz, date: entry.date)
+                        try? await health.deleteWaterEntry(id: newId)
                         didMutate(haptic: nil)
                     } catch {
                         ToastCenter.shared.show("Couldn't undo: \(error.localizedDescription)")
@@ -269,8 +285,17 @@ enum LogActions {
                 }
             }
         } catch {
-            ToastCenter.shared.show("Couldn't update: \(error.localizedDescription)")
+            ToastCenter.shared.show(failureMessage(error, verb: "update"))
         }
+    }
+
+    /// Delete/edit failures on entries another app saved come back as
+    /// authorization errors — blaming Health access sends the user to
+    /// Settings for nothing. Name the actual fix.
+    private static func failureMessage(_ error: Error, verb: String) -> String {
+        HealthKitService.isForeignObjectError(error)
+            ? "Another app logged this entry — remove it in the Health app."
+            : "Couldn't \(verb): \(error.localizedDescription)"
     }
 
     private static func didMutate(haptic: UINotificationFeedbackGenerator.FeedbackType?) {

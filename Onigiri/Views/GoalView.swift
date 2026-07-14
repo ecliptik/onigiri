@@ -70,10 +70,8 @@ struct GoalView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // The trend leads: where you ARE against the goal is the
-                // screen's headline; the knobs to change it come after.
-                trendSection
-
+                // Mode first (the user: the Lose/Maintain choice tops the
+                // screen), then the trend chart, then the knobs.
                 Section {
                     // Segmented controls ignore Dynamic Type — go menu at
                     // accessibility sizes so the mode names scale too
@@ -97,6 +95,8 @@ struct GoalView: View {
                         Text("To hold steady, eat within your average daily burn. Any deficit earns the day's badge.")
                     }
                 }
+
+                trendSection
 
                 Section("Current weight") {
                     if let healthWeightLb {

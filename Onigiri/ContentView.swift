@@ -26,11 +26,36 @@ extension View {
     /// state so the tab bar is always full when there's nowhere left to
     /// scroll up (see TabBarPin).
     func expandsTabBarAtTop() -> some View {
-        onScrollGeometryChange(for: Bool.self) { geo in
-            geo.contentOffset.y + geo.contentInsets.top <= 1
-        } action: { _, atTop in
-            TabBarPin.shared.atTop = atTop
-        }
+        modifier(ExpandsTabBarAtTop())
+    }
+}
+
+/// Reaching the top pins immediately (the gesture-less section-collapse
+/// case is the whole reason TabBarPin exists), but LEAVING the top only
+/// commits when the scroll settles: flipping tabBarMinimizeBehavior
+/// re-renders the TabView, and doing that mid-gesture was the "sticky"
+/// first scroll on Foods (felt right as content reached the pinned
+/// scope bar, 2026-07-13). Trade-off: the bar doesn't minimize during
+/// the first downward scroll from the top — it starts minimizing from
+/// the next one.
+private struct ExpandsTabBarAtTop: ViewModifier {
+    @State private var atTopNow = true
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: Bool.self) { geo in
+                geo.contentOffset.y + geo.contentInsets.top <= 1
+            } action: { _, atTop in
+                atTopNow = atTop
+                if atTop {
+                    TabBarPin.shared.atTop = true
+                }
+            }
+            .onScrollPhaseChange { _, newPhase in
+                if newPhase == .idle {
+                    TabBarPin.shared.atTop = atTopNow
+                }
+            }
     }
 }
 

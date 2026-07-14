@@ -669,11 +669,15 @@ struct SettingsView: View {
             }
             if let nutrient {
                 // Menu, not segmented: segments ignore Dynamic Type.
-                Picker("Type", selection: modeBinding(slot: slot, nutrient: nutrient)) {
-                    Text("Limit").tag(TrackedMetricMode.limit.rawValue)
-                    Text("Goal").tag(TrackedMetricMode.goal.rawValue)
+                // Water skips the row — it's always a goal (SharedStore
+                // enforces the same).
+                if nutrient != .water {
+                    Picker("Type", selection: modeBinding(slot: slot, nutrient: nutrient)) {
+                        Text("Limit").tag(TrackedMetricMode.limit.rawValue)
+                        Text("Goal").tag(TrackedMetricMode.goal.rawValue)
+                    }
+                    .pickerStyle(.menu)
                 }
-                .pickerStyle(.menu)
                 switch nutrient {
                 case .sodium:
                     // Generic in presentation; the value stays on the

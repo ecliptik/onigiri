@@ -223,6 +223,9 @@ public enum SharedStore {
     }
 
     public static func trackedMode(slot: Int, nutrient: TrackedNutrient) -> TrackedMetricMode {
+        // Water is always a goal — "limit your water" isn't a thing this
+        // app says, and Settings hides the Type picker for it.
+        if nutrient == .water { return .goal }
         let raw = defaults.string(forKey: slot == 1 ? trackedMetric1ModeKey : trackedMetric2ModeKey)
         return raw.flatMap(TrackedMetricMode.init(rawValue:)) ?? nutrient.defaultMode
     }

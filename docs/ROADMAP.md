@@ -81,6 +81,16 @@ when a release starts; this file is the durable to-do between sessions.
   tappiest device; ruled out after discussion — the Meals/Foods pages
   remain the scope switch, one swipe away).
 
+- "Details ›" everywhere (the user, 2026-07-14): ONE grammar for the
+  three tap-for-more affordances — the Calendar day card's "View &
+  edit on Today" and Today's headline "Details" both become the month
+  card's "Details ›" (text + chevron.right, caption, secondary).
+  Reverses the 2026-07-13 chevron removal on Today, deliberately —
+  the chevron is the "this navigates" signal and text+chevron is the
+  strongest form (audited: no other candidates; Settings' "See Water
+  settings" is a pointer caption, not a tap target). Keep the day
+  card's edit/cross-tab cue in the accessibility hint.
+
 ## Backlog (unscheduled)
 
 - Shared barcode-routing helper (lookUpBarcode exists in FoodsView

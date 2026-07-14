@@ -57,7 +57,11 @@ when a release starts; this file is the durable to-do between sessions.
 - On-device QA still open: pantry tour, both-paths A/B on the 16,
   Foundation Models feel.
 
-## 2.1 — candidates
+## 2.1 — Glance (planned — see PLAN-2.1.md)
+
+Planned 2026-07-14 (PLAN-2.1.md): widget in LARGE + MEDIUM, day
+paging snaps back at day roll, barcode-routing cleanup rides along,
+paid-account question deferred again.
 
 - Today-mirror widget (the user, 2026-07-14, with reference
   screenshot): a medium/large home-screen widget that looks exactly

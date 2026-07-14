@@ -210,8 +210,6 @@ struct SettingsView: View {
             waterIconPicker
         } header: {
             Text("Water")
-        } footer: {
-            Text("Holding the corner + button logs one serving without opening the Add sheet.")
         }
     }
 
@@ -361,7 +359,38 @@ struct SettingsView: View {
         SharedStore.trackedMetric2TargetKey, SharedStore.trackedMetric2IconKey,
         SharedStore.untrackedBelowKey, SharedStore.energyStatsStyleKey,
         SharedStore.textSearchSourceKey, SharedStore.fdcAPIKeyKey,
+        SharedStore.holdToLogWaterKey,
     ]
+
+    /// The preference values as the sheet found them (missing key =
+    /// was unset). Cancel writes these back.
+    @State private var entrySnapshot: [String: Any] = [:]
+
+    private static func captureSnapshot() -> [String: Any] {
+        var snapshot: [String: Any] = [:]
+        for key in preferenceKeys {
+            if let value = SharedStore.defaults.object(forKey: key) {
+                snapshot[key] = value
+            }
+        }
+        return snapshot
+    }
+
+    private func revertToEntrySnapshot() {
+        for key in Self.preferenceKeys {
+            if let value = entrySnapshot[key] {
+                SharedStore.defaults.set(value, forKey: key)
+            } else {
+                SharedStore.defaults.removeObject(forKey: key)
+            }
+        }
+        // The key field's draft and reminders/watch mirrors re-derive
+        // from the restored values.
+        fdcAPIKeyDraft = SharedStore.fdcAPIKey
+        fdcKeyTest = .idle
+        ReminderScheduler.shared.replan()
+        PhoneSyncService.shared.push(from: context)
+    }
 
     private func performReset(_ reset: PendingReset) {
         switch reset {
@@ -384,6 +413,9 @@ struct SettingsView: View {
         // rebuilds the watch mirror and reloads widgets.
         ReminderScheduler.shared.replan()
         PhoneSyncService.shared.push(from: context)
+        // A reset is committed, not a pending edit — Cancel after one
+        // must not resurrect pre-reset settings over wiped data.
+        entrySnapshot = Self.captureSnapshot()
         ToastCenter.shared.show(reset.toast)
     }
 
@@ -693,7 +725,7 @@ struct SettingsView: View {
                         }
                     }
                 case .water:
-                    Text("Water's target is the daily goal in the Water section.")
+                    Text("See Water settings")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 default:
@@ -895,8 +927,23 @@ struct SettingsView: View {
                 healthWriteDenied = HealthKitService().sharingDenied()
             }
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    // Settings applies as you go; Cancel rewinds every
+                    // preference to how the sheet found it. Resets are
+                    // exempt — they re-baseline the snapshot (Cancel
+                    // must not half-resurrect a wiped install).
+                    Button("Cancel") {
+                        revertToEntrySnapshot()
+                        dismiss()
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
+                }
+            }
+            .onAppear {
+                if entrySnapshot.isEmpty {
+                    entrySnapshot = Self.captureSnapshot()
                 }
             }
             .fileExporter(

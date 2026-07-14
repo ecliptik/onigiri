@@ -36,7 +36,7 @@ struct MonthGridView: View {
             ForEach(Array(ordered.enumerated()), id: \.offset) { _, symbol in
                 Text(symbol)
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.nori)
                     .frame(maxWidth: .infinity)
             }
         }

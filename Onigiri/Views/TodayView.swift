@@ -320,7 +320,7 @@ struct TodayView: View {
                 // drops down" (the user).
                 Image(systemName: "calendar")
                     .font(.headline.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.nori)
             }
         }
         .buttonStyle(.plain)
@@ -612,6 +612,8 @@ struct TodayView: View {
                 } label: {
                     Text("Log")
                         .font(.sectionHeader)
+                        // Nori: the structural accent (see Color.nori).
+                        .foregroundStyle(Color.nori)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Log. Collapses or expands every group")
@@ -651,7 +653,7 @@ struct TodayView: View {
             HStack(spacing: 6) {
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.nori)
                     .rotationEffect(.degrees(waterCollapsed ? 0 : 90))
                 Text("Water")
                     .font(.subheadline.weight(.semibold))
@@ -743,7 +745,7 @@ struct TodayView: View {
             HStack(spacing: 6) {
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.nori)
                     .rotationEffect(.degrees(isCollapsed ? 0 : 90))
                 Text(category.rawValue)
                     .font(.subheadline.weight(.semibold))

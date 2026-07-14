@@ -24,6 +24,20 @@ public extension Color {
     static let riceToast = Color(red: 0.89, green: 0.70, blue: 0.42)
     #endif
 
+    /// The nori green off the app icon's seaweed wrap — the brand's
+    /// SECOND accent, for structure (section headers, chrome glyphs):
+    /// riceToast stays the interactive tint, greys stay body text.
+    /// Deep in light mode; lifted in dark so it reads on black.
+    #if canImport(UIKit) && !os(watchOS)
+    static let nori = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.55, green: 0.66, blue: 0.55, alpha: 1)
+            : UIColor(red: 0.20, green: 0.30, blue: 0.21, alpha: 1)
+    })
+    #else
+    static let nori = Color(red: 0.55, green: 0.66, blue: 0.55)
+    #endif
+
     /// The page canvas behind every grouped screen: a warm rice-paper
     /// wash in light mode — the neutral system gray read as any-app
     /// generic once the one-surface idiom landed (the user wanted the

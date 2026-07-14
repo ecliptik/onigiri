@@ -13,6 +13,10 @@ let package = Package(
     ],
     targets: [
         .target(name: "OnigiriKit"),
-        .testTarget(name: "OnigiriKitTests", dependencies: ["OnigiriKit"]),
+        .testTarget(
+            name: "OnigiriKitTests",
+            dependencies: ["OnigiriKit"],
+            resources: [.copy("Fixtures")]
+        ),
     ]
 )

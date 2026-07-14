@@ -28,7 +28,12 @@ flow test green). Deviations from the writeup:
   log-affected kinds. The widget-intent echo suppression (cross-
   process stamp) was NOT done — deferred with batch D.
 
-Batch D remains open for discussion.
+Batch D remains open for discussion. Everything above shipped in
+v1.9.0 (2026-07-14), together with the on-device style arc that
+followed the review: the one-surface grouped idiom, the rice-paper
+canvas (Color.riceCanvas), and the nori structural accent
+(Color.nori) — riceToast for interactive, nori for structure, grey
+for body text.
 
 The reviews also confirmed a lot of existing discipline: no unguarded
 iOS 26 API anywhere (the 1.8 floor holds), textbook WatchConnectivity

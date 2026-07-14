@@ -20,6 +20,14 @@ struct GoalView: View {
     @State private var dailyTotals: [DayEnergyTotals] = []
     /// Cached 7-day smoothing of weightHistory (see .task).
     @State private var smoothedHistory: [WeightTrend.Point] = []
+    /// The chart's derived numbers, cached like the smoothing: as
+    /// computed properties they re-derived (least-squares included) on
+    /// every body evaluation, and the tab-bar pin's scroll-state write
+    /// re-renders this screen mid-scroll — the Goal scroll "stick".
+    @State private var projectedDate: Date?
+    @State private var chartYDomain: ClosedRange<Double> = 0...1
+    @State private var predicted30Lb: Double?
+    @State private var actual30Lb: Double?
     /// Staleness stamp for the .task reads (see .task).
     @State private var lastLoaded: Date?
     @State private var loaded = false
@@ -266,26 +274,50 @@ struct GoalView: View {
                 mode = goal.mode ?? GoalMode.lose
                 loaded = true
             }
+            deriveTrendStats()
         }
+        .onChange(of: targetWeightLb) { deriveTrendStats() }
+        .onChange(of: mode) { deriveTrendStats() }
     }
 
     // MARK: - Predicted vs actual (trailing 30 days)
 
-    private var thirtyDaysAgo: Date {
-        Calendar.current.date(byAdding: .day, value: -30, to: .now) ?? .now
-    }
-
-    /// Nil until the window has logged days — no data, no claim.
-    private var predicted30Lb: Double? {
+    /// Recompute the cached chart stats (see the @State block above).
+    /// Called when the HealthKit reads land and when the target or
+    /// mode edits change what the chart derives from.
+    private func deriveTrendStats() {
+        let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: .now) ?? .now
+        // Nil until the window has logged days — no data, no claim.
         let deficits = dailyTotals
             .filter { $0.day >= thirtyDaysAgo }
             .map(\.deficitKcal)
-        guard !deficits.isEmpty else { return nil }
-        return WeightTrend.Change.predictedLb(totalDeficitKcal: deficits.reduce(0, +))
-    }
+        predicted30Lb = deficits.isEmpty
+            ? nil
+            : WeightTrend.Change.predictedLb(totalDeficitKcal: deficits.reduce(0, +))
+        actual30Lb = WeightTrend.Change.actualLb(history: weightHistory, from: thirtyDaysAgo, to: .now)
 
-    private var actual30Lb: Double? {
-        WeightTrend.Change.actualLb(history: weightHistory, from: thirtyDaysAgo, to: .now)
+        // Projected date of reaching the target at the recent trend,
+        // from the least-squares slope of the last three weeks of
+        // smoothed weigh-ins.
+        projectedDate = nil
+        if let target = targetWeightLb,
+           let current = smoothedHistory.last?.weightLb,
+           current > target,
+           let slope = WeightTrend.slopeLbPerDay(smoothedHistory.suffix(21).map { $0 }),
+           slope < -0.01 {
+            let days = (current - target) / -slope
+            if days < 365 * 3 {
+                projectedDate = Calendar.current.date(byAdding: .day, value: Int(days.rounded(.up)), to: .now)
+            }
+        }
+
+        let weights = weightHistory.map(\.weightLb)
+            + (isMaintenance ? [] : [targetWeightLb].compactMap(\.self))
+        if let lo = weights.min(), let hi = weights.max() {
+            chartYDomain = (lo - 2)...(hi + 2)
+        } else {
+            chartYDomain = 0...1
+        }
     }
 
     private func signedLb(_ value: Double) -> String {
@@ -294,20 +326,6 @@ struct GoalView: View {
 
     // MARK: - Weight trend
 
-
-    /// Projected date of reaching the target at the recent trend, from the
-    /// least-squares slope of the last three weeks of smoothed weigh-ins.
-    private var projectedDate: Date? {
-        guard let target = targetWeightLb,
-              let current = smoothedHistory.last?.weightLb,
-              current > target,
-              let slope = WeightTrend.slopeLbPerDay(smoothedHistory.suffix(21).map { $0 }),
-              slope < -0.01
-        else { return nil }
-        let days = (current - target) / -slope
-        guard days < 365 * 3 else { return nil }
-        return Calendar.current.date(byAdding: .day, value: Int(days.rounded(.up)), to: .now)
-    }
 
     @ViewBuilder
     private var trendSection: some View {
@@ -371,13 +389,6 @@ struct GoalView: View {
                     .foregroundStyle(.secondary)
             }
         }
-    }
-
-    private var chartYDomain: ClosedRange<Double> {
-        let weights = weightHistory.map(\.weightLb)
-            + (isMaintenance ? [] : [targetWeightLb].compactMap(\.self))
-        guard let min = weights.min(), let max = weights.max() else { return 0...1 }
-        return (min - 2)...(max + 2)
     }
 
     private func save() {

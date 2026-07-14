@@ -21,8 +21,14 @@ when a release starts; this file is the durable to-do between sessions.
 
 - [x] Axiom skills enabled; six-lens review run (2026-07-13).
 - [x] Batches A (correctness), B (polish/a11y), C (performance)
-  applied — see PLAN-1.9.md status notes; watch-side fixes need the
-  next watch deploy to verify live.
+  applied — see PLAN-1.9.md status notes. Watch fixes deployed
+  2026-07-13; verify complication freshness over the week.
+- [x] On-device feedback arc (2026-07-13/14): pinned Foods search
+  drawer, first-scroll smoothing, one-surface grouped idiom, the
+  rice-paper canvas, the nori structural accent, month grid on a
+  card, Favorites-first scopes, scan rows with LogButton-sized
+  icons, Goal mode picker on top.
+- [x] RELEASED as v1.9.0 (2026-07-14).
 - [ ] Batch D (product calls: watch tab count, Always-On privacy,
   locked-phone widget zeros, midnight edges, chart a11y, iOS 26
   garnish) — discuss before building.

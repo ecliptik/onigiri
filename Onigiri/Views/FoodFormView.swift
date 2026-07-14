@@ -621,14 +621,7 @@ struct FoodFormView: View {
     /// so anything already typed survives, and only fields the parser
     /// actually read land (never guessed, per the parser's contract).
     private func applyLabel(_ parsed: ParsedLabel) {
-        apply(ScannedProduct(
-            barcode: "",
-            name: name,
-            kcal: parsed.kcal,
-            sodiumMg: parsed.sodiumMg,
-            servingDescription: parsed.servingDescription ?? serving,
-            nutrients: parsed.nutrients
-        ))
+        apply(parsed.scannedProduct(name: name, fallbackServing: serving))
         lookupMessage = parsed.kcal == nil
             ? "Read the label, but not the calories — check the fields."
             : nil

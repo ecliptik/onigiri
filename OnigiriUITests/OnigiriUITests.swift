@@ -973,6 +973,51 @@ final class OnigiriUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(mineralCount.exists, "3 minerals prefilled")
         attachShot(named: "label-scan-prefilled-form")
+
+        // Leg 2 — the Foods screen's own Scan Label row: same pipeline,
+        // but the handoff re-presents the single sheet slot as the
+        // prefilled form (the unknown-barcode route). Values scanned IN
+        // a blank form make it dirty, so this Cancel confirms first —
+        // and the form must be GONE before tapping, or the form's own
+        // Scan Label row shadows the Foods row.
+        func closeFoodForm() {
+            app.buttons["Cancel"].firstMatch.tap()
+            let discard = app.buttons["Discard"]
+            if discard.waitForExistence(timeout: 3) { discard.tap() }
+            let formGone = expectation(
+                for: NSPredicate(format: "exists == false"),
+                evaluatedWith: app.navigationBars["New Food"]
+            )
+            wait(for: [formGone], timeout: 5)
+        }
+        closeFoodForm()
+        let foodsScanLabel = app.buttons["Scan Label"].firstMatch
+        XCTAssertTrue(foodsScanLabel.waitForExistence(timeout: 5), "Scan Label row on Foods")
+        attachShot(named: "label-scan-foods-rows")
+        foodsScanLabel.tap()
+        XCTAssertTrue(sample.waitForExistence(timeout: 5), "Sample row from the Foods surface")
+        sample.tap()
+        XCTAssertTrue(
+            fieldWithValue("280").waitForExistence(timeout: 20),
+            "Foods scan handed off to the prefilled form")
+        attachShot(named: "label-scan-foods-handoff")
+
+        // Leg 3 — the Log sheet's row (opened via the corner pill from
+        // Today); its form carries the log date back. This form arrived
+        // prefilled (untouched), so its Cancel dismisses without the
+        // confirm — closeFoodForm handles either way.
+        closeFoodForm()
+        switchTab(in: app, to: "Today")
+        switchTab(in: app, to: "Add")
+        let logScanLabel = app.buttons["Scan Label"].firstMatch
+        XCTAssertTrue(logScanLabel.waitForExistence(timeout: 5), "Scan Label row on the Log sheet")
+        attachShot(named: "label-scan-log-rows")
+        logScanLabel.tap()
+        XCTAssertTrue(sample.waitForExistence(timeout: 5), "Sample row from the Log sheet")
+        sample.tap()
+        XCTAssertTrue(
+            fieldWithValue("280").waitForExistence(timeout: 20),
+            "Log-sheet scan handed off to the prefilled form")
     }
 
     /// Adds the Onigiri medium widget to the simulator home screen by driving

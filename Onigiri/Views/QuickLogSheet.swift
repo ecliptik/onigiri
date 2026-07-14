@@ -37,6 +37,7 @@ struct QuickLogSheet: View {
     private enum ActiveSheet: Identifiable {
         case portion(PortionTarget)
         case scanner
+        case labelScanner
         case form(ProductPrefill)
         case editFood(Food)
         case editMeal(Meal)
@@ -45,6 +46,7 @@ struct QuickLogSheet: View {
             switch self {
             case .portion(let target): "portion-\(target.name)"
             case .scanner: "scanner"
+            case .labelScanner: "labelScanner"
             case .form(let prefill): "form-\(prefill.id)"
             case .editFood(let food): "editFood-\(food.persistentModelID.hashValue)"
             case .editMeal(let meal): "editMeal-\(meal.uuid.uuidString)"
@@ -189,6 +191,12 @@ struct QuickLogSheet: View {
                             activeSheet = .scanner
                         } label: {
                             ScanBarcodeLabel()
+                        }
+                        .disabled(isLookingUpBarcode)
+                        Button {
+                            activeSheet = .labelScanner
+                        } label: {
+                            ScanLabelLabel()
                         }
                         .disabled(isLookingUpBarcode)
                         if isLookingUpBarcode {
@@ -395,6 +403,17 @@ struct QuickLogSheet: View {
                 case .scanner:
                     BarcodeScannerSheet { code in
                         lookUpBarcode(code)
+                    }
+                case .labelScanner:
+                    // Same handoff as an unknown barcode: the single
+                    // sheet slot re-presents as the prefilled food form,
+                    // whose Log action returns here with logDate intact.
+                    // Deferred one turn — the sheet dismisses itself
+                    // right after this closure, and a synchronous swap
+                    // gets torn down by that dismissal.
+                    LabelScannerSheet { parsed in
+                        let prefill = ProductPrefill(product: parsed.scannedProduct())
+                        Task { activeSheet = .form(prefill) }
                     }
                 case .form(let prefill):
                     // New foods go through the full form — reviewable, complete,

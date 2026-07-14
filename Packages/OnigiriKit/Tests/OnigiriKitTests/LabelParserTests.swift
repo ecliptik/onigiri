@@ -212,6 +212,20 @@ struct LabelParserTests {
 
     // MARK: Targeted behaviors
 
+    @Test func scannedProductCarriesTypedNameAndServing() throws {
+        let label = LabelParser.parse(try fixture("us-fda"))
+        let product = label.scannedProduct(name: "Typed Name")
+        #expect(product.barcode.isEmpty)
+        #expect(product.name == "Typed Name")
+        expectEqual(product.kcal, 280)
+        #expect(product.servingDescription == "1 cup (227g)")
+
+        var empty = ParsedLabel()
+        empty.kcal = 100
+        empty.servingDescription = nil
+        #expect(empty.scannedProduct(fallbackServing: "1 bag").servingDescription == "1 bag")
+    }
+
     @Test func emptyInputParsesToEmptyLabel() {
         let label = LabelParser.parse([])
         #expect(label.isEmpty)

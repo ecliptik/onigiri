@@ -44,6 +44,19 @@ public struct ParsedLabel: Sendable, Equatable {
     public var isEmpty: Bool {
         kcal == nil && sodiumMg == nil && nutrients.isEmpty
     }
+
+    /// The prefill currency the food form consumes. A label carries no
+    /// barcode and no product name — callers pass through anything the
+    /// user already typed so a scan can't erase it.
+    public func scannedProduct(name: String = "", fallbackServing: String = "") -> ScannedProduct {
+        ScannedProduct(
+            barcode: "",
+            name: name,
+            kcal: kcal,
+            sodiumMg: sodiumMg,
+            servingDescription: servingDescription ?? fallbackServing,
+            nutrients: nutrients)
+    }
 }
 
 /// Deterministic nutrition-panel parser: `[(text, box)] → ParsedLabel`.

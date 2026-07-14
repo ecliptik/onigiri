@@ -436,10 +436,13 @@ struct LogButton: View {
     var onLongPress: (() -> Void)?
 
     var body: some View {
+        // Body-size glyph in a ~39 pt circle: proportional to the rows
+        // (the subheadline circle read undersized) while staying inside
+        // the 44 pt frame below, so row heights don't move.
         let circle = Image(systemName: "plus")
-            .font(.subheadline.weight(.bold))
+            .font(.body.weight(.bold))
             .foregroundStyle(Color.riceToast)
-            .padding(8)
+            .padding(9)
             // A static fill, NOT glassEffect: a live glass layer on
             // every list row made Foods stutter on scroll.
             .background(.quaternary.opacity(0.5), in: .circle)

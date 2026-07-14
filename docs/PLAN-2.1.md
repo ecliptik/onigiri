@@ -58,6 +58,14 @@ accessibility hint.
   replacing the FoodsView and QuickLogSheet copies (1.8.1 follow-up).
 - QA-walkthrough tour taps updated for the Favorites-first defaults
   (its meal-form-edit shot silently skips today).
+- OFF search-a-licious `nutrition-facts-completed` filter (folded in
+  2026-07-14): the legacy endpoint already filters out
+  no-nutrition-data products; the primary endpoint still relies on
+  client-side weeding. VERIFY-LIVE-FIRST rule: this filter fails as a
+  clean 200-with-zero-hits (which never trips the legacy fallback),
+  so it lands ONLY after probing the live service with the exact
+  syntax during a stable window — if OFF is flaky that week, the item
+  slips back to the backlog, not into the release.
 - Pantry-tour findings land here as they surface: LabelParser fixture
   additions, Foundation Models prompt tweaks — the 2.0 QA is the
   intake funnel.

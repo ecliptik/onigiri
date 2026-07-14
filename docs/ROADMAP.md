@@ -60,8 +60,9 @@ when a release starts; this file is the durable to-do between sessions.
 ## 2.1 — Glance (planned — see PLAN-2.1.md)
 
 Planned 2026-07-14 (PLAN-2.1.md): widget in LARGE + MEDIUM, day
-paging snaps back at day roll, barcode-routing cleanup rides along,
-paid-account question deferred again.
+paging snaps back at day roll, barcode-routing cleanup AND the OFF
+nutrition-facts filter (verify-live-first) ride along, paid-account
+question deferred again.
 
 - Today-mirror widget (the user, 2026-07-14, with reference
   screenshot): a medium/large home-screen widget that looks exactly
@@ -101,7 +102,5 @@ paid-account question deferred again.
   and QuickLogSheet — 1.8.1 follow-up).
 - Watch complication-freshness verification over a normal week
   (1.9 batch A).
-- OFF search-a-licious nutrition-facts-completed filter, when the
-  service is stable enough to verify against (1.6.1).
 - The paid-developer-account question: CloudKit library sync,
   TestFlight.

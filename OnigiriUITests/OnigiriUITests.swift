@@ -913,6 +913,68 @@ final class OnigiriUITests: XCTestCase {
         wait(for: [filled], timeout: 25)
     }
 
+    /// Label scan: the bundled FDA sample photo through the real Vision
+    /// request and LabelParser into the form (opt-in via LABEL_SCAN=1).
+    /// Photo pickers can't be driven headlessly, so --label-scan-sample
+    /// surfaces a sample-photo row in the Scan Label sheet; everything
+    /// after the pick — OCR, parse, prefill funnel — runs live.
+    @MainActor
+    func testLabelScanPrefillsForm() throws {
+        guard ProcessInfo.processInfo.environment["LABEL_SCAN"] == "1" else {
+            throw XCTSkip("Set LABEL_SCAN=1 to run the label-scan test")
+        }
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--label-scan-sample"]
+        app.launch()
+        skipOnboardingIfPresent(in: app)
+        grantHealthAccess(in: app, timeout: 10)
+
+        switchTab(in: app, to: "Foods")
+        // The corner + pill opens the Food-or-Meal chooser from Foods.
+        switchTab(in: app, to: "Add")
+        let addFood = app.buttons["Add Food"]
+        XCTAssertTrue(addFood.waitForExistence(timeout: 5), "Add Food chooser option")
+        addFood.tap()
+
+        let scanLabel = app.buttons["Scan Label"].firstMatch
+        XCTAssertTrue(scanLabel.waitForExistence(timeout: 5), "Scan Label row in the food form")
+        attachShot(named: "label-scan-form-row")
+        scanLabel.tap()
+
+        let sample = app.buttons["labelScanSample"]
+        XCTAssertTrue(sample.waitForExistence(timeout: 5), "Sample photo row (needs --label-scan-sample)")
+        attachShot(named: "label-scan-sheet")
+        sample.tap()
+
+        // The bundled FDA sample panel: 280 kcal, 1 cup (227g), 850 mg
+        // sodium. The subscript matches identifier/label only, so filled
+        // fields are found by VALUE predicate.
+        func fieldWithValue(_ value: String) -> XCUIElement {
+            app.textFields.matching(NSPredicate(format: "value == %@", value)).firstMatch
+        }
+        XCTAssertTrue(
+            fieldWithValue("280").waitForExistence(timeout: 20),
+            "Calories prefilled from the label")
+        XCTAssertTrue(fieldWithValue("1 cup (227g)").exists, "Serving prefilled from the label")
+
+        // The nutrient groups stay collapsed; their filled counts prove
+        // the rest landed — 8 macros (sodium 850 among them: fat, sat,
+        // cholesterol, sodium, carbs, fiber, sugar, protein) and
+        // 3 minerals (calcium, iron, potassium). Expanding a
+        // DisclosureGroup under XCUITest is unreliable; the counts
+        // assert the same outcome.
+        let macroCount = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS '8 filled'")
+        ).firstMatch
+        XCTAssertTrue(macroCount.waitForExistence(timeout: 5), "8 macronutrients prefilled")
+        let mineralCount = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS '3 filled'")
+        ).firstMatch
+        XCTAssertTrue(mineralCount.exists, "3 minerals prefilled")
+        attachShot(named: "label-scan-prefilled-form")
+    }
+
     /// Adds the Onigiri medium widget to the simulator home screen by driving
     /// springboard. Mutates home-screen state — opt in via ADD_WIDGET=1.
     @MainActor

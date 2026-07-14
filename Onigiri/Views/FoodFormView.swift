@@ -53,7 +53,13 @@ struct FoodFormView: View {
     @State private var category: String?
     @State private var isFavorite = false
 
-    @State private var showScanner = false
+    /// One item drives both scanner sheets — chained .sheet modifiers on
+    /// one view compete (the SwiftData-era landmine list).
+    private enum ScannerKind: String, Identifiable {
+        case barcode, label
+        var id: String { rawValue }
+    }
+    @State private var activeScanner: ScannerKind?
     /// The in-form OpenFoodFacts search: the STANDARD system field
     /// (bottom-placed), results inline via the shared section — the
     /// separate Search Database sheet is retired.
@@ -155,9 +161,17 @@ struct FoodFormView: View {
                 if isBlankNewFood {
                 Section {
                     Button {
-                        showScanner = true
+                        activeScanner = .barcode
                     } label: {
                         Label("Scan Barcode", systemImage: "barcode.viewfinder")
+                    }
+                    .disabled(isLookingUp)
+                    // The third door: label OCR for foods no database
+                    // knows (store brands, imports, no barcode at all).
+                    Button {
+                        activeScanner = .label
+                    } label: {
+                        Label("Scan Label", systemImage: "text.viewfinder")
                     }
                     .disabled(isLookingUp)
                     if isLookingUp {
@@ -320,7 +334,7 @@ struct FoodFormView: View {
                 // not inherit the select-all. The bottom search field is
                 // exempt too — selecting-all an in-progress query on
                 // refocus would surprise.
-                guard !showScanner, !dbSearchActive, portionTarget == nil,
+                guard activeScanner == nil, !dbSearchActive, portionTarget == nil,
                       let field = note.object as? UITextField else { return }
                 DispatchQueue.main.async { field.selectAll(nil) }
             }
@@ -349,9 +363,16 @@ struct FoodFormView: View {
                 Button("Keep Editing", role: .cancel) {}
             }
             .interactiveDismissDisabled(isDirty)
-            .sheet(isPresented: $showScanner) {
-                BarcodeScannerSheet { code in
-                    Task { await lookup(code) }
+            .sheet(item: $activeScanner) { kind in
+                switch kind {
+                case .barcode:
+                    BarcodeScannerSheet { code in
+                        Task { await lookup(code) }
+                    }
+                case .label:
+                    LabelScannerSheet { parsed in
+                        applyLabel(parsed)
+                    }
                 }
             }
             .sheet(item: $portionTarget, onDismiss: {
@@ -373,7 +394,7 @@ struct FoodFormView: View {
                 } else if let prefill {
                     apply(prefill)
                 } else if startScanning {
-                    showScanner = true
+                    activeScanner = .barcode
                 }
                 // After the initial load: a pristine form (or an
                 // untouched prefill) dismisses freely; anything typed
@@ -535,6 +556,24 @@ struct FoodFormView: View {
             // the persistent "no calorie data" hint tied to the fields.
             ToastCenter.shared.show(error.localizedDescription)
         }
+    }
+
+    /// A scanned label prefills through the same funnel as a barcode —
+    /// but a label carries no product name or serving text of its own,
+    /// so anything already typed survives, and only fields the parser
+    /// actually read land (never guessed, per the parser's contract).
+    private func applyLabel(_ parsed: ParsedLabel) {
+        apply(ScannedProduct(
+            barcode: "",
+            name: name,
+            kcal: parsed.kcal,
+            sodiumMg: parsed.sodiumMg,
+            servingDescription: parsed.servingDescription ?? serving,
+            nutrients: parsed.nutrients
+        ))
+        lookupMessage = parsed.kcal == nil
+            ? "Read the label, but not the calories — check the fields."
+            : nil
     }
 
     private func apply(_ product: ScannedProduct) {

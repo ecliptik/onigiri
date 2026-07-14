@@ -17,7 +17,7 @@ struct QuickLogSheet: View {
     @State private var isLoggingWater = false
     @Query(sort: \Meal.name) private var meals: [Meal]
     @Query(sort: \Food.name) private var foods: [Food]
-    @State private var kind: QuickActions.QuickLogKind = .foods
+    @State private var kind: QuickActions.QuickLogKind = .favorites
     @State private var kindLoaded = false
     @State private var searchText = ""
     /// Drives the whole search-active state (not just keyboard focus):
@@ -342,16 +342,16 @@ struct QuickLogSheet: View {
             .task {
                 if !kindLoaded {
                     kindLoaded = true
-                    // Routing kinds aren't scopes: .scan lands on Foods
-                    // with the scanner up, .all just lands on Foods. No
-                    // auto-focused search — the keyboard-on-open version
-                    // was too jarring (Micheal).
+                    // Routing kinds aren't scopes: both land on Favorites
+                    // (the user's default scope), .scan with the scanner
+                    // already up. No auto-focused search — the
+                    // keyboard-on-open version was too jarring (Micheal).
                     switch initialKind {
                     case .scan:
-                        kind = .foods
+                        kind = .favorites
                         activeSheet = .scanner
                     case .all:
-                        kind = .foods
+                        kind = .favorites
                     default:
                         kind = initialKind
                     }

@@ -7,7 +7,6 @@ import OnigiriKit
 /// deficit and calorie budget with safety guardrails.
 struct GoalView: View {
     @Environment(\.modelContext) private var context
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query private var goals: [GoalSettings]
 
     @State private var targetWeightLb: Double?
@@ -81,23 +80,16 @@ struct GoalView: View {
                 // Mode first (the user: the Lose/Maintain choice tops the
                 // screen), then the trend chart, then the knobs.
                 Section {
-                    // Segmented controls ignore Dynamic Type — go menu at
-                    // accessibility sizes so the mode names scale too
-                    // (the ScopeBar/PortionSheet rule; this picker was
-                    // the one holdout).
-                    if dynamicTypeSize.isAccessibilitySize {
-                        Picker("Goal", selection: $mode) {
-                            Text("Lose Weight").tag(GoalMode.lose)
-                            Text("Maintain").tag(GoalMode.maintain)
-                        }
-                        .pickerStyle(.menu)
-                    } else {
-                        Picker("Goal", selection: $mode) {
-                            Text("Lose Weight").tag(GoalMode.lose)
-                            Text("Maintain").tag(GoalMode.maintain)
-                        }
-                        .pickerStyle(.segmented)
-                    }
+                    // The shared ScopeBar, floating on the canvas exactly
+                    // like Foods' Favorites/Foods/Meals bar (the user:
+                    // the card-wrapped picker read as a different
+                    // control). ScopeBar owns the menu-at-AX-sizes rule.
+                    ScopeBar(
+                        options: [("Lose Weight", GoalMode.lose), ("Maintain", GoalMode.maintain)],
+                        selection: $mode
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
                 } footer: {
                     if isMaintenance {
                         Text("To hold steady, eat within your average daily burn. Any deficit earns the day's badge.")

@@ -74,7 +74,9 @@ struct FoodsView: View {
         }
     }
 
-    @State private var scope: Scope = .foods
+    // Favorites lead (the user, 2026-07-14 — supersedes the Foods
+    // default picked a day earlier).
+    @State private var scope: Scope = .favorites
     @State private var activeSheet: ActiveSheet?
     @State private var showAddChooser = false
     @State private var quickActions = QuickActions.shared

@@ -156,6 +156,11 @@ final class OnigiriUITests: XCTestCase {
         // Recent query — and its portion sheet must carry the entry's own
         // values ("as last logged"), the no-library-match path.
         switchTab(in: app, to: "Add")  // the corner + pill opens the Log sheet
+        // Favorites is the default scope (flat ranked list, no Recent
+        // split) — the Recent assertions live on the Foods scope.
+        let logScopeBar = app.segmentedControls.firstMatch
+        XCTAssertTrue(logScopeBar.waitForExistence(timeout: 10), "Log sheet scope bar")
+        logScopeBar.buttons["Foods"].tap()
         // Form rows are lazy: on smaller screens (5.8" XS class) the
         // Recent section starts below the fold — swipe it into existence.
         // Case-insensitive: iOS 18 renders section headers UPPERCASED
@@ -325,6 +330,10 @@ final class OnigiriUITests: XCTestCase {
         app.swipeDown()
 
         switchTab(in: app, to: "Add")  // the corner + pill opens the Log sheet
+        // Favorites opens by default; the seeded tour foods live on Foods.
+        if app.segmentedControls.firstMatch.waitForExistence(timeout: 10) {
+            app.segmentedControls.firstMatch.buttons["Foods"].tap()
+        }
         _ = app.staticTexts["Recent"].waitForExistence(timeout: 10)
         scene("logsheet")
         // The row's Log button is unique to the sheet — the row text also
@@ -455,6 +464,10 @@ final class OnigiriUITests: XCTestCase {
 
         // Log sheet: kinds, no-match search, portion sheet.
         switchTab(in: app, to: "Add")  // the corner + pill opens the Log sheet
+        // Favorites opens by default; start the scope tour from Foods.
+        if app.segmentedControls.firstMatch.waitForExistence(timeout: 10) {
+            app.segmentedControls.firstMatch.buttons["Foods"].tap()
+        }
         _ = app.staticTexts["Recent"].waitForExistence(timeout: 10)
         shot("logsheet-all")
         // At accessibility sizes the kind picker is a menu, not segments;

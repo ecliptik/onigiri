@@ -3,32 +3,90 @@ import SwiftData
 import WidgetKit
 import OnigiriKit
 
-/// The library: saved foods and one-tap meals. Tapping a row logs it to
-/// HealthKit immediately — the fast path for recurring meals. Searchable,
-/// filterable by category, with favorites floating to the top.
+/// The library: saved foods and one-tap meals. Rows tap to edit; the +
+/// capsule logs (foods through the portion sheet, meals one-tap).
+/// Structured like the Log sheet (1.8.1): a Foods/Meals/Favorites scope
+/// bar on top, a Scan Barcode row beneath it, search at the bottom on
+/// iOS 26, filterable by category, favorites floating to the top.
 struct FoodsView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Meal.name) private var meals: [Meal]
     @Query(sort: \Food.name) private var foods: [Food]
 
-    @State private var showNewFood = false
-    @State private var showNewMeal = false
+    /// What the list shows — the Log sheet's scopes (its .all/.scan are
+    /// routing kinds, not scopes, so they have no counterpart here).
+    private enum Scope: String, CaseIterable {
+        case foods = "Foods", meals = "Meals", favorites = "Favorites"
+    }
+
+    /// One sheet slot (the QuickLogSheet pattern): the six chained
+    /// .sheet modifiers this view used to carry compete with each
+    /// other, and the scanner→portion handoff sets the next sheet
+    /// while the scanner is still dismissing — with separate slots
+    /// that presentation could silently fail, eating the scan.
+    private enum ActiveSheet: Identifiable {
+        case newFood
+        case newMeal
+        case form(ProductPrefill)
+        case editFood(Food)
+        case editMeal(Meal)
+        case portion(PortionTarget)
+        case scanner
+
+        var id: String {
+            switch self {
+            case .newFood: "newFood"
+            case .newMeal: "newMeal"
+            case .form(let prefill): "form-\(prefill.id)"
+            case .editFood(let food): "editFood-\(food.persistentModelID.hashValue)"
+            case .editMeal(let meal): "editMeal-\(meal.uuid.uuidString)"
+            case .portion(let target): "portion-\(target.name)"
+            case .scanner: "scanner"
+            }
+        }
+    }
+
+    /// A favorites-scope row: meals and foods mixed in one ranked list,
+    /// like the Log sheet's Favorites.
+    private enum FavoriteEntry: Identifiable {
+        case meal(Meal)
+        case food(Food)
+
+        var id: String {
+            switch self {
+            case .meal(let meal): "meal-\(meal.uuid.uuidString)"
+            case .food(let food): "food-\(food.persistentModelID.hashValue)"
+            }
+        }
+        var recency: Date {
+            switch self {
+            case .meal(let meal): meal.recencyDate
+            case .food(let food): food.recencyDate
+            }
+        }
+        var name: String {
+            switch self {
+            case .meal(let meal): meal.name
+            case .food(let food): food.name
+            }
+        }
+    }
+
+    @State private var scope: Scope = .foods
+    @State private var activeSheet: ActiveSheet?
     @State private var showAddChooser = false
     @State private var quickActions = QuickActions.shared
-    @State private var editingFood: Food?
-    @State private var editingMeal: Meal?
     @State private var isLogging = false
+    @State private var isLookingUpBarcode = false
     @State private var pendingMealDeletes: [Meal] = []
     @State private var pendingFoodDeletes: [Food] = []
     @State private var searchText = ""
     @State private var categoryFilter: FoodCategory?
-    @State private var portionTarget: PortionTarget?
     @State private var onlineSearch = OnlineFoodSearch()
-    @State private var formPrefill: ProductPrefill?
     @State private var showLibraryImporter = false
 
     /// Favorites first, then by recency (last logged, falling back to
-    /// when it was added — Micheal: recent beats slot affinity), then
+    /// when it was added — the user: recent beats slot affinity), then
     /// name for stability.
     private static func ranked(
         _ lhs: (isFavorite: Bool, recency: Date, name: String),
@@ -59,6 +117,17 @@ struct FoodsView: View {
         return category?.localizedCaseInsensitiveContains(searchText) ?? false
     }
 
+    /// The Favorites scope pool: everybody here is starred, so rank by
+    /// recency alone (then name), matching the Log sheet.
+    private func favoriteEntries(meals: [Meal], foods: [Food]) -> [FavoriteEntry] {
+        let entries = meals.filter(\.isFavorite).map(FavoriteEntry.meal)
+            + foods.filter(\.isFavorite).map(FavoriteEntry.food)
+        return entries.sorted { lhs, rhs in
+            if lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+    }
+
     var body: some View {
         // Bound once per evaluation: each access to the computed properties
         // re-filters and re-sorts the whole library (~3× per keystroke).
@@ -66,145 +135,52 @@ struct FoodsView: View {
         let visibleFoods = filteredFoods
         NavigationStack {
             List {
-                if !visibleMeals.isEmpty {
-                    Section("Meals") {
-                        ForEach(visibleMeals) { meal in
-                            HStack(spacing: 10) {
-                                // Just the meal's name — listing every
-                                // member made rows balloon (Micheal).
-                                LibraryRow(
-                                    name: meal.name,
-                                    detail: "",
-                                    kcal: meal.totalKcal,
-                                    sodiumMg: meal.totalSodiumMg,
-                                    isFavorite: meal.isFavorite
-                                )
-                                // Meals stay one-tap: their category rides
-                                // along; long-press still offers portions.
-                                LogButton(name: meal.name) {
-                                    meal.lastUsedAt = .now
-                                    log(name: meal.name, kcal: meal.totalKcal,
-                                        sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
-                                        category: PortionTarget.category(from: meal.category))
-                                } onLongPress: {
-                                    meal.lastUsedAt = .now
-                                    portionTarget = PortionTarget(
-                                        name: meal.name, kcal: meal.totalKcal,
-                                        sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
-                                        serving: "1 meal",
-                                        defaultCategory: PortionTarget.category(from: meal.category)
-                                    )
-                                }
-                            }
-                            .contentShape(.rect)
-                            .onTapGesture { editingMeal = meal }
-                            // No row contextMenu: its long-press recognizer
-                            // would swallow the Log button's portion gesture.
-                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                Button {
-                                    editingMeal = meal
-                                } label: {
-                                    Label("Edit", systemImage: "pencil")
-                                }
-                                .tint(.riceToast)
-                                Button {
-                                    meal.isFavorite.toggle()
-                                    // A light tap: the neighboring delete
-                                    // confirms loudly, this was silent.
-                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                    PhoneSyncService.shared.push(from: context)
-                                } label: {
-                                    Label("Favorite", systemImage: meal.isFavorite ? "star.slash" : "star.fill")
-                                }
-                                .tint(.yellow)
-                            }
-                            // Explicit trailing action (not .onDelete) so
-                            // the reveal shows the same trash icon as the
-                            // Today log's swipe — one delete look app-wide.
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) {
-                                    pendingMealDeletes = [meal]
-                                } label: {
-                                    Label("Delete", systemImage: "trash.fill")
-                                }
-                                // The screen-wide riceToast tint bleeds
-                                // into destructive swipe pills on iOS 26.
-                                .tint(.red)
+                // The scan entry, a labeled row like the new-food form's
+                // (not a toolbar icon — roadmap 1.8.1). Hidden while
+                // searching so results lead.
+                if searchText.isEmpty {
+                    Section {
+                        Button {
+                            activeSheet = .scanner
+                        } label: {
+                            Label("Scan Barcode", systemImage: "barcode.viewfinder")
+                        }
+                        .disabled(isLookingUpBarcode)
+                        if isLookingUpBarcode {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("Looking up product…")
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
                 }
 
-                Section("Foods") {
-                    ForEach(visibleFoods) { food in
-                        HStack(spacing: 10) {
-                            LibraryRow(
-                                name: food.name,
-                                detail: food.servingDescription,
-                                kcal: food.kcal,
-                                sodiumMg: food.sodiumMg,
-                                isFavorite: food.isFavorite
-                            )
-                            // Foods confirm through the portion sheet on
-                            // tap (serving and meal slot stay deliberate);
-                            // a long press skips it and logs the default
-                            // portion — the fast path when the label
-                            // serving is the serving.
-                            LogButton(name: food.name, longPressName: "Log default portion") {
-                                food.lastUsedAt = .now
-                                portionTarget = makePortionTarget(for: food)
-                            } onLongPress: {
-                                food.lastUsedAt = .now
-                                log(name: food.name, kcal: food.kcal,
-                                    sodiumMg: food.sodiumMg, nutrients: food.nutrients,
-                                    category: PortionTarget.category(from: food.category))
-                            }
+                switch scope {
+                case .foods:
+                    Section {
+                        ForEach(visibleFoods) { food in
+                            foodRow(food)
                         }
-                        .contentShape(.rect)
-                        .onTapGesture { editingFood = food }
-                        // No row contextMenu: its long-press recognizer
-                        // would swallow the Log button's portion gesture.
-                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                            Button {
-                                editingFood = food
-                            } label: {
-                                Label("Edit", systemImage: "pencil")
-                            }
-                            .tint(.riceToast)
-                            Button {
-                                food.isFavorite.toggle()
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                PhoneSyncService.shared.push(from: context)
-                            } label: {
-                                Label("Favorite", systemImage: food.isFavorite ? "star.slash" : "star.fill")
-                            }
-                            .tint(.yellow)
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(role: .destructive) {
-                                pendingFoodDeletes = [food]
-                            } label: {
-                                Label("Delete", systemImage: "trash.fill")
-                            }
-                            .tint(.red)
-                        }
+                        emptyState(visibleCount: visibleFoods.count)
                     }
-
-                    if foods.isEmpty {
-                        ContentUnavailableView {
-                            Label("No saved foods yet", systemImage: "fork.knife")
-                        } description: {
-                            Text("Add a food once — calories and nutrients off the label, then log it with a tap.\n\nAlready tracking on another device? Export its library (Settings → Export Library), save the file, and import it here.")
-                        } actions: {
-                            // Text-only: with a systemImage, iOS 26 collapses
-                            // the label to a bare icon here (as in toolbars).
-                            Button("Import Library…") {
-                                showLibraryImporter = true
-                            }
-                            .buttonStyle(.borderedProminent)
+                case .meals:
+                    Section {
+                        ForEach(visibleMeals) { meal in
+                            mealRow(meal)
                         }
-                    } else if visibleFoods.isEmpty && visibleMeals.isEmpty {
-                        ContentUnavailableView.search(text: searchText)
+                        emptyState(visibleCount: visibleMeals.count)
+                    }
+                case .favorites:
+                    let favorites = favoriteEntries(meals: visibleMeals, foods: visibleFoods)
+                    Section {
+                        ForEach(favorites) { entry in
+                            switch entry {
+                            case .meal(let meal): mealRow(meal, badged: true)
+                            case .food(let food): foodRow(food)
+                            }
+                        }
+                        emptyState(visibleCount: favorites.count)
                     }
                 }
 
@@ -215,15 +191,15 @@ struct FoodsView: View {
                         // Known barcodes log fast; new foods go through the
                         // full prefilled form (Save / Save & Log).
                         if let existing = foods.first(where: { $0.barcode == product.barcode }) {
-                            portionTarget = makePortionTarget(for: existing)
+                            activeSheet = .portion(makePortionTarget(for: existing))
                         } else {
-                            formPrefill = ProductPrefill(product: product)
+                            activeSheet = .form(ProductPrefill(product: product))
                         }
                     }, onAddManually: { name in
-                        formPrefill = ProductPrefill(product: ScannedProduct(
+                        activeSheet = .form(ProductPrefill(product: ScannedProduct(
                             barcode: "", name: name, kcal: nil, sodiumMg: nil,
                             servingDescription: "", nutrients: NutrientValues()
-                        ))
+                        )))
                     })
                 }
             }
@@ -231,14 +207,29 @@ struct FoodsView: View {
             .readableContentWidth(groupedBackground: true)
             .expandsTabBarAtTop()
             .navigationTitle("Foods")
+            // Inline like the Log sheet's: the pinned scope bar's
+            // safeAreaInset suppresses large-title rendering (verified
+            // on the 26.5 sim — the title zone reserved space but drew
+            // nothing), and inline is the structural match anyway.
+            .navigationBarTitleDisplayMode(.inline)
+            // The scope bar replaced the combined Meals+Foods sections
+            // (1.8.1) — the Log sheet's picker, one shared component.
+            .scopeBar(
+                options: Scope.allCases.map { ($0.rawValue, $0) },
+                selection: $scope
+            )
             .fileImporter(isPresented: $showLibraryImporter, allowedContentTypes: [.json]) { result in
                 ToastCenter.shared.show(LibraryTransfer.handlePickedFile(result, context: context))
             }
-            // Top drawer BY RULING: the corner Add pill occupies the
-            // system search-tab slot, and iOS reserves bottom search for
-            // that slot — so in-tab search renders as the title drawer
-            // (Apple Music's Library does the same). Micheal chose the
-            // pill over bottom search here; the Log sheet keeps bottom.
+            // The STANDARD system search field, top drawer BY PLATFORM:
+            // 1.8.1 wanted it at the bottom like the Log sheet's, and
+            // DefaultToolbarItem(kind: .search, placement: .bottomBar)
+            // was tried (2026-07-13) — with the corner Add pill occupying
+            // the search-tab slot, the system renders the field BEHIND
+            // the floating tab bar (untappable) and drops the large
+            // title. Bottom search in a TabView belongs to the search
+            // tab; ours is the Add pill, by ruling. iOS 18 is the same
+            // drawer either way.
             .searchable(text: $searchText, prompt: "Foods, Meals, and More")
             .onSubmit(of: .search) {
                 Task { await onlineSearch.search(searchText) }
@@ -265,20 +256,30 @@ struct FoodsView: View {
                     .accessibilityLabel("Filter by category")
                 }
             }
-            .sheet(isPresented: $showNewFood) { FoodFormView(food: nil) }
-            .sheet(item: $formPrefill) { prefill in
-                FoodFormView(food: nil, prefill: prefill.product)
-            }
-            .sheet(item: $editingFood) { FoodFormView(food: $0) }
-            .sheet(isPresented: $showNewMeal) { MealFormView() }
-            .sheet(item: $editingMeal) { MealFormView(meal: $0) }
-            .sheet(item: $portionTarget) { target in
-                PortionSheet(target: target) { quantity, category, _ in
-                    log(name: target.name, kcal: target.kcal,
-                        sodiumMg: target.sodiumMg, nutrients: target.nutrients,
-                        category: category, quantity: quantity)
+            .sheet(item: $activeSheet) { sheet in
+                switch sheet {
+                case .newFood:
+                    FoodFormView(food: nil)
+                case .newMeal:
+                    MealFormView()
+                case .form(let prefill):
+                    FoodFormView(food: nil, prefill: prefill.product)
+                case .editFood(let food):
+                    FoodFormView(food: food)
+                case .editMeal(let meal):
+                    MealFormView(meal: meal)
+                case .portion(let target):
+                    PortionSheet(target: target) { quantity, category, _ in
+                        log(name: target.name, kcal: target.kcal,
+                            sodiumMg: target.sodiumMg, nutrients: target.nutrients,
+                            category: category, quantity: quantity)
+                    }
+                    .presentationDetents([.medium, .large])
+                case .scanner:
+                    BarcodeScannerSheet { code in
+                        lookUpBarcode(code)
+                    }
                 }
-                .presentationDetents([.medium, .large])
             }
             // The corner + while on this tab (the toolbar "+ Add" menu
             // consolidated into it): a Food-or-Meal chooser. Consumable
@@ -290,14 +291,14 @@ struct FoodsView: View {
             .onAppear { consumeAddFoodRequest() }
             // A centered ALERT, the app's standard dialog — the
             // confirmationDialog rendered as an anchored bubble up by
-            // the tab bar (the iOS 26 quote-popover look Micheal keeps
+            // the tab bar (the iOS 26 quote-popover look the user keeps
             // vetoing). Background layer: two alerts already chain on
             // this view.
             .background {
                 Color.clear.alert("Add to your library", isPresented: $showAddChooser) {
-                    Button("Add Food") { showNewFood = true }
+                    Button("Add Food") { activeSheet = .newFood }
                     if !foods.isEmpty {
-                        Button("Add Meal") { showNewMeal = true }
+                        Button("Add Meal") { activeSheet = .newMeal }
                     }
                     Button("Cancel", role: .cancel) {}
                 }
@@ -343,10 +344,201 @@ struct FoodsView: View {
         }
     }
 
+    /// A meal row: name + totals, one-tap log, long-press for portions.
+    /// `badged` marks it "Meal" where the list mixes types (Favorites).
+    private func mealRow(_ meal: Meal, badged: Bool = false) -> some View {
+        HStack(spacing: 10) {
+            // Just the meal's name — listing every member made rows
+            // balloon (the user).
+            LibraryRow(
+                name: meal.name,
+                detail: "",
+                kcal: meal.totalKcal,
+                sodiumMg: meal.totalSodiumMg,
+                isFavorite: meal.isFavorite,
+                isMeal: badged
+            )
+            // Meals stay one-tap: their category rides along;
+            // long-press still offers portions.
+            LogButton(name: meal.name) {
+                meal.lastUsedAt = .now
+                log(name: meal.name, kcal: meal.totalKcal,
+                    sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
+                    category: PortionTarget.category(from: meal.category))
+            } onLongPress: {
+                meal.lastUsedAt = .now
+                activeSheet = .portion(PortionTarget(
+                    name: meal.name, kcal: meal.totalKcal,
+                    sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
+                    serving: "1 meal",
+                    defaultCategory: PortionTarget.category(from: meal.category)
+                ))
+            }
+        }
+        .contentShape(.rect)
+        .onTapGesture { activeSheet = .editMeal(meal) }
+        // No row contextMenu: its long-press recognizer would swallow
+        // the Log button's portion gesture.
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button {
+                activeSheet = .editMeal(meal)
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            .tint(.riceToast)
+            Button {
+                meal.isFavorite.toggle()
+                // A light tap: the neighboring delete confirms loudly,
+                // this was silent.
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                PhoneSyncService.shared.push(from: context)
+            } label: {
+                Label("Favorite", systemImage: meal.isFavorite ? "star.slash" : "star.fill")
+            }
+            .tint(.yellow)
+        }
+        // Explicit trailing action (not .onDelete) so the reveal shows
+        // the same trash icon as the Today log's swipe — one delete
+        // look app-wide.
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                pendingMealDeletes = [meal]
+            } label: {
+                Label("Delete", systemImage: "trash.fill")
+            }
+            // The screen-wide riceToast tint bleeds into destructive
+            // swipe pills on iOS 26.
+            .tint(.red)
+        }
+    }
+
+    /// A food row: tap the + for the portion sheet (serving and meal
+    /// slot stay deliberate); long press skips it and logs the default
+    /// portion — the fast path when the label serving is the serving.
+    private func foodRow(_ food: Food) -> some View {
+        HStack(spacing: 10) {
+            LibraryRow(
+                name: food.name,
+                detail: food.servingDescription,
+                kcal: food.kcal,
+                sodiumMg: food.sodiumMg,
+                isFavorite: food.isFavorite
+            )
+            LogButton(name: food.name, longPressName: "Log default portion") {
+                food.lastUsedAt = .now
+                activeSheet = .portion(makePortionTarget(for: food))
+            } onLongPress: {
+                food.lastUsedAt = .now
+                log(name: food.name, kcal: food.kcal,
+                    sodiumMg: food.sodiumMg, nutrients: food.nutrients,
+                    category: PortionTarget.category(from: food.category))
+            }
+        }
+        .contentShape(.rect)
+        .onTapGesture { activeSheet = .editFood(food) }
+        // No row contextMenu: its long-press recognizer would swallow
+        // the Log button's portion gesture.
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button {
+                activeSheet = .editFood(food)
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            .tint(.riceToast)
+            Button {
+                food.isFavorite.toggle()
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                PhoneSyncService.shared.push(from: context)
+            } label: {
+                Label("Favorite", systemImage: food.isFavorite ? "star.slash" : "star.fill")
+            }
+            .tint(.yellow)
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                pendingFoodDeletes = [food]
+            } label: {
+                Label("Delete", systemImage: "trash.fill")
+            }
+            .tint(.red)
+        }
+    }
+
+    /// Scope-aware empty states, rendered inside the list section.
+    @ViewBuilder
+    private func emptyState(visibleCount: Int) -> some View {
+        if visibleCount == 0 {
+            if scope == .foods && foods.isEmpty {
+                ContentUnavailableView {
+                    Label("No saved foods yet", systemImage: "fork.knife")
+                } description: {
+                    Text("Add a food once — calories and nutrients off the label, then log it with a tap.\n\nAlready tracking on another device? Export its library (Settings → Export Library), save the file, and import it here.")
+                } actions: {
+                    // Text-only: with a systemImage, iOS 26 collapses
+                    // the label to a bare icon here (as in toolbars).
+                    Button("Import Library…") {
+                        showLibraryImporter = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            } else if !searchText.isEmpty {
+                // Compact on purpose, NOT ContentUnavailableView (the
+                // Log sheet's lesson): its full-height layout shoves the
+                // Online section's search button under the search bar.
+                VStack(spacing: 4) {
+                    Text("No matches")
+                        .font(.headline)
+                    Text("Try different words, or search online below.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+            } else if scope == .meals && meals.isEmpty {
+                Text("No saved meals yet — tap + to build one from saved foods.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else if scope == .favorites {
+                Text("No favorites yet — swipe right on a food or meal to star it.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                // Items exist but the category filter excluded them all.
+                Text("Nothing in this category.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private func consumeAddFoodRequest() {
         guard quickActions.addFoodRequest != nil else { return }
         quickActions.addFoodRequest = nil
         showAddChooser = true
+    }
+
+    /// Scan → library check → fetch the product if it's new. Routing
+    /// matches this screen's online-search picks: a known barcode opens
+    /// the fast portion sheet, a new one the prefilled food form. The
+    /// single sheet slot re-presents on the item change, so the handoff
+    /// from the dismissing scanner can't be eaten.
+    private func lookUpBarcode(_ code: String) {
+        if let existing = foods.first(where: { $0.barcode == code }) {
+            existing.lastUsedAt = .now
+            activeSheet = .portion(makePortionTarget(for: existing))
+            return
+        }
+        isLookingUpBarcode = true
+        Task {
+            defer { isLookingUpBarcode = false }
+            do {
+                let product = try await OpenFoodFactsClient().product(barcode: code)
+                activeSheet = .form(ProductPrefill(product: product))
+            } catch {
+                ToastCenter.shared.show(error.localizedDescription)
+            }
+        }
     }
 
     private var deleteMealsTitle: String {
@@ -402,7 +594,7 @@ struct FoodsView: View {
 }
 
 /// Portion helpers shared by the quick menu and the custom sheet.
-// (The fraction-glyph servings format lived here briefly; Micheal
+// (The fraction-glyph servings format lived here briefly; the user
 // prefers plain decimals — 0.85 of a serving fine-tunes calories in a
 // way ¾ never could.)
 
@@ -631,8 +823,9 @@ struct LibraryRow: View {
     let kcal: Double
     let sodiumMg: Double
     var isFavorite = false
-    /// Shown where meals and foods share one list (the Log sheet) —
-    /// the Foods tab's sections already say which is which.
+    /// Shown where meals and foods share one list (the Log sheet, the
+    /// Favorites scope) — the Foods/Meals scopes already say which is
+    /// which.
     var isMeal = false
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize

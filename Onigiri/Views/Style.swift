@@ -49,6 +49,50 @@ private struct ReadableContentWidth: ViewModifier {
 // FoodIconView / WaterIconView moved to OnigiriKit so the watch renders
 // the same personalization.
 
+/// The Foods / Meals / Favorites scope picker pinned above library lists —
+/// ONE implementation for the Foods tab and the Log sheet (the
+/// OnlineResultsSection lesson: shared surfaces drift apart when each
+/// screen grows its own copy). Segmented normally; a menu at
+/// accessibility sizes, because segmented controls ignore Dynamic Type.
+struct ScopeBar<Tag: Hashable>: View {
+    let options: [(label: String, tag: Tag)]
+    @Binding var selection: Tag
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            picker.pickerStyle(.menu)
+        } else {
+            picker.pickerStyle(.segmented)
+        }
+    }
+
+    private var picker: some View {
+        Picker("Show", selection: $selection) {
+            ForEach(options, id: \.tag) { option in
+                Text(option.label).tag(option.tag)
+            }
+        }
+    }
+}
+
+extension View {
+    /// Pins a ScopeBar above a library list, styled like the Log
+    /// sheet's: horizontal padding, bar material, stays put while the
+    /// results scroll (Music-style).
+    func scopeBar<Tag: Hashable>(
+        options: [(label: String, tag: Tag)], selection: Binding<Tag>
+    ) -> some View {
+        safeAreaInset(edge: .top, spacing: 0) {
+            ScopeBar(options: options, selection: selection)
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(.bar)
+        }
+    }
+}
+
 extension Font {
     /// Section headers on scroll screens (Today's "Log", Water's day list) —
     /// proportional to the large controls that sit beside them. Cards keep

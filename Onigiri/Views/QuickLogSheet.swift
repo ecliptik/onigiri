@@ -12,7 +12,6 @@ struct QuickLogSheet: View {
     var logDate: Date = .now
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.modelContext) private var context
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
     @State private var isLoggingWater = false
@@ -275,13 +274,16 @@ struct QuickLogSheet: View {
             .navigationTitle("Log")
             .navigationBarTitleDisplayMode(.inline)
             // Music-style: the kind pills pinned on top of the results,
-            // not scrolled away with them.
-            .safeAreaInset(edge: .top, spacing: 0) {
-                kindPicker
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
-                    .background(.bar)
-            }
+            // not scrolled away with them. Favorites replaced "All"; the
+            // mixed view earned its keep only as a favorites shelf.
+            .scopeBar(
+                options: [
+                    ("Foods", QuickActions.QuickLogKind.foods),
+                    ("Meals", .meals),
+                    ("Favorites", .favorites),
+                ],
+                selection: $kind
+            )
             // The STANDARD system search field (Micheal: as close to
             // Apple's as possible) — the barcode scanner therefore lives
             // in the top toolbar, since the system field can't host an
@@ -378,30 +380,6 @@ struct QuickLogSheet: View {
             }
         }
         .toastHost()
-    }
-
-    /// The kind filter, pinned above the list — Foods, Meals, Favorites
-    /// (Favorites replaced "All"; the mixed view earned its keep only as
-    /// a favorites shelf). Segmented controls don't scale with Dynamic
-    /// Type (UIKit limitation) — at accessibility sizes this becomes a
-    /// menu so the labels grow with everything else.
-    @ViewBuilder
-    private var kindPicker: some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            Picker("Show", selection: $kind) {
-                Text("Foods").tag(QuickActions.QuickLogKind.foods)
-                Text("Meals").tag(QuickActions.QuickLogKind.meals)
-                Text("Favorites").tag(QuickActions.QuickLogKind.favorites)
-            }
-            .pickerStyle(.menu)
-        } else {
-            Picker("Show", selection: $kind) {
-                Text("Foods").tag(QuickActions.QuickLogKind.foods)
-                Text("Meals").tag(QuickActions.QuickLogKind.meals)
-                Text("Favorites").tag(QuickActions.QuickLogKind.favorites)
-            }
-            .pickerStyle(.segmented)
-        }
     }
 
     /// Scope-aware empty states, rendered inside the leading section.

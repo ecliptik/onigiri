@@ -63,6 +63,10 @@ final class OnigiriUITests: XCTestCase {
 
         // A library MEAL logs one-tap and must carry its foods' combined
         // nutrients into HealthKit (the day detail reads them back).
+        // Meals live behind their scope since 1.8.1 — switch first.
+        let scopeBar = app.segmentedControls.firstMatch
+        XCTAssertTrue(scopeBar.waitForExistence(timeout: 5), "Foods scope bar")
+        scopeBar.buttons["Meals"].tap()
         let logMeal = app.buttons["Log Chicken & rice"]
         XCTAssertTrue(logMeal.waitForExistence(timeout: 10), "Seeded library should list meals")
         logMeal.tap()
@@ -476,9 +480,19 @@ final class OnigiriUITests: XCTestCase {
         app.launchArguments.removeAll { $0 == "--seed-sample-data" }
         app.launch()
 
-        // Foods: filter menu, add menu, forms.
+        // Foods: scopes, filter menu, add menu, forms.
         tab("Foods")
         shot("foods")
+        // Scope shots mirror the Log sheet's; segments only exist in
+        // the normal-size pass (a menu at accessibility sizes).
+        if app.segmentedControls.count > 0 {
+            let scopeBar = app.segmentedControls.firstMatch
+            scopeBar.buttons["Meals"].tap()
+            shot("foods-meals")
+            scopeBar.buttons["Favorites"].tap()
+            shot("foods-favorites")
+            scopeBar.buttons["Foods"].tap()
+        }
         if tapIfExists(app.buttons["Filter by category"]) {
             shot("foods-filter-menu")
             if tapIfExists(app.buttons["Breakfast"].firstMatch) {
@@ -812,17 +826,18 @@ final class OnigiriUITests: XCTestCase {
     func testBarcodeLookupPrefillsForm() throws {
         let app = XCUIApplication()
         app.launch()
+        // Fresh sims land on onboarding (no tab bar) — this test used
+        // to depend on an already-onboarded device state.
+        skipOnboardingIfPresent(in: app)
         grantHealthAccess(in: app, timeout: 10)
 
         switchTab(in: app, to: "Foods")
-        // The corner + pill opens the Food-or-Meal chooser now.
-        switchTab(in: app, to: "Add")
-        let addFood = app.buttons["Add Food"]
-        XCTAssertTrue(addFood.waitForExistence(timeout: 5), "Add Food chooser option")
-        addFood.tap()
-
-        let scan = app.buttons["Scan Barcode"]
-        XCTAssertTrue(scan.waitForExistence(timeout: 5), "Scan button in food form")
+        // The Foods scan row (1.8.1): an unknown barcode fetches the
+        // product and opens the prefilled food form directly — no trip
+        // through the Add chooser. (The form keeps its own scan row for
+        // attaching a barcode mid-edit; this exercises the screen's.)
+        let scan = app.buttons["Scan Barcode"].firstMatch
+        XCTAssertTrue(scan.waitForExistence(timeout: 5), "Scan Barcode row on Foods")
         scan.tap()
 
         let field = app.textFields["Barcode"]

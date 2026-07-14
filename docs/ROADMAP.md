@@ -3,20 +3,24 @@
 Working queue for upcoming releases. Details get their own PLAN-x.y.md
 when a release starts; this file is the durable to-do between sessions.
 
-## 1.8.1 — Foods screen restructure
+## 1.8.1 — Foods screen restructure (built — see PLAN-1.8.1.md)
 
-- Move the Foods search field to the bottom, like the Log sheet's.
-- Add a Foods / Meals / Favorites scope menu at the top (like Log),
-  replacing the one combined list.
-- Replace the upper-right barcode toolbar button with a "Scan Barcode"
-  row under the scope menu, like the new-food form's.
-- Review Log vs Foods once the above lands — they'll be structurally
-  similar: consolidate into one screen, or keep them distinct with
-  shared elements? Write up the recommendation before building.
+- [x] Foods / Meals / Favorites scope menu (shared ScopeBar with Log).
+- [x] "Scan Barcode" row under the scope menu (known barcode → portion
+  sheet; new → prefilled form).
+- [x] Sheet consolidation into one `.sheet(item:)` slot.
+- [~] Bottom search: BLOCKED by platform — with the Add pill occupying
+  the search-tab slot, `DefaultToolbarItem(kind: .search, .bottomBar)`
+  renders the field behind the floating tab bar (verified on the 26.5
+  sim, 2026-07-13). Kept the standard top drawer; details in
+  PLAN-1.8.1.md and the FoodsView comment.
+- [x] Log-vs-Foods recommendation written (PLAN-1.8.1.md): keep two
+  screens, share components; three convergence follow-ups listed.
 
 ## 1.9 — Quality pass
 
-- Enable Axiom skills and run a full review with them.
+- [x] Axiom skills enabled; six-lens review run (2026-07-13).
+- [ ] Findings triaged in PLAN-1.9.md — batches pending review.
 
 ## 2.0 — Intelligence
 

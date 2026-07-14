@@ -186,28 +186,41 @@ struct QuickLogSheet: View {
                 // browsed day; long-press offers the other amounts.
                 if searchText.isEmpty {
                     Section {
-                        Button {
-                            logWater(oz: SharedStore.waterServingOz)
-                        } label: {
+                        // Shaped like every other row: name, trailing
+                        // serving (its "calories" column), the + to log.
+                        // Plain primary text — the old full-row Button
+                        // tinted it rice-toast; the blue drop is enough
+                        // distinctness (the user).
+                        HStack(spacing: 10) {
+                            // The other-amounts hold lives on the label
+                            // area only, so it can't swallow the +'s
+                            // gestures (the Foods-row lesson).
                             HStack(spacing: 10) {
                                 WaterIconView(raw: waterIcon)
-                                Text("Log Water")
-                                    .foregroundStyle(.primary)
+                                Text("Water")
                                 Spacer()
                                 Text("\(SharedStore.waterServingOz, format: .number.precision(.fractionLength(0))) oz")
                                     .foregroundStyle(.secondary)
                                     .monospacedDigit()
                             }
-                        }
-                        .disabled(isLoggingWater)
-                        .contextMenu {
-                            ForEach([8.0, 12, 16, 20, 24, 32], id: \.self) { oz in
-                                Button("\(oz, format: .number.precision(.fractionLength(0))) oz") {
-                                    logWater(oz: oz)
+                            .contentShape(.rect)
+                            .contextMenu {
+                                ForEach([8.0, 12, 16, 20, 24, 32], id: \.self) { oz in
+                                    Button("\(oz, format: .number.precision(.fractionLength(0))) oz") {
+                                        logWater(oz: oz)
+                                    }
                                 }
                             }
+                            LogButton(name: "Water", longPressName: "Log a serving") {
+                                logWater(oz: SharedStore.waterServingOz)
+                            } onLongPress: {
+                                // Water's default portion IS the serving —
+                                // a hold must not dead-end.
+                                logWater(oz: SharedStore.waterServingOz)
+                            }
+                            .disabled(isLoggingWater)
                         }
-                        .accessibilityLabel("Log \(SharedStore.waterServingOz.formatted(.number.precision(.fractionLength(0)))) ounces of water")
+                        .accessibilityLabel("Water, \(SharedStore.waterServingOz.formatted(.number.precision(.fractionLength(0)))) ounces — log with the add button; hold the row for other amounts")
                     }
                 }
                 if !searchText.isEmpty || kind == .favorites {

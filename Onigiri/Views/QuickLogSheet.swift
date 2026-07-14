@@ -211,10 +211,12 @@ struct QuickLogSheet: View {
                                     }
                                 }
                             }
-                            // Tap-only: water has no portion sheet to
-                            // hold for — one gesture, one meaning (the
-                            // user). Other amounts stay on the label.
-                            LogButton(name: "Water") {
+                            LogButton(name: "Water", longPressName: "Log a serving") {
+                                logWater(oz: SharedStore.waterServingOz)
+                            } onLongPress: {
+                                // Water's default portion IS the serving —
+                                // a hold must not dead-end (and food rows
+                                // taught thumbs that holding + logs).
                                 logWater(oz: SharedStore.waterServingOz)
                             }
                             .disabled(isLoggingWater)

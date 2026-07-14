@@ -74,6 +74,13 @@ when a release starts; this file is the durable to-do between sessions.
   BalanceAccessoryView, the Log Water control intent, the kit's
   PlanCache/DaySnapshot plumbing.
 
+- Watch home "Log" button (the user, 2026-07-14): rename "Log a
+  meal" → "Log" and shape its sheet exactly like the phone's default
+  Log view — Favorites first (meals + foods mixed), then Recent, one
+  unified list. NO Meal-or-Food chooser (an extra tap per log on the
+  tappiest device; ruled out after discussion — the Meals/Foods pages
+  remain the scope switch, one swipe away).
+
 ## Backlog (unscheduled)
 
 - Shared barcode-routing helper (lookUpBarcode exists in FoodsView

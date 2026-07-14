@@ -21,6 +21,14 @@ struct MealFormView: View {
     @AppStorage("mealBuilderSort") private var sortRaw = LibrarySort.recent.rawValue
 
     private var librarySort: LibrarySort { LibrarySort(rawValue: sortRaw) ?? .recent }
+    // The Total's secondary metric follows the first tracked slot (the
+    // user: sodium was hardcoded; now it customizes with Settings).
+    @AppStorage(SharedStore.trackedMetric1Key, store: SharedStore.defaults) private var trackedMetric1 = "sodium"
+    @AppStorage(SharedStore.trackedMetric2Key, store: SharedStore.defaults) private var trackedMetric2 = "water"
+
+    private var libraryMetric: TrackedNutrient {
+        .firstFoodMetric(slot1: trackedMetric1, slot2: trackedMetric2)
+    }
     /// Cancel/drag with edits confirms first — a half-built meal used
     /// to vanish on a stray swipe.
     @State private var confirmDiscard = false
@@ -76,8 +84,13 @@ struct MealFormView: View {
     private var totalKcal: Double {
         foods.reduce(0) { $0 + $1.kcal * (quantities[$1.persistentModelID] ?? 0) }
     }
-    private var totalSodiumMg: Double {
-        foods.reduce(0) { $0 + $1.sodiumMg * (quantities[$1.persistentModelID] ?? 0) }
+    private var totalMetricAmount: Double {
+        foods.reduce(0) { sum, food in
+            let quantity = quantities[food.persistentModelID] ?? 0
+            guard quantity > 0 else { return sum }
+            let amount = libraryMetric.itemAmount(sodiumMg: food.sodiumMg, nutrients: food.nutrients) ?? 0
+            return sum + amount * quantity
+        }
     }
     private var hasItems: Bool { quantities.values.contains { $0 > 0 } }
 
@@ -116,7 +129,7 @@ struct MealFormView: View {
                 // foods below (the user — the old bottom Total sat off
                 // screen exactly when it was needed).
                 LabeledContent("Total") {
-                    Text("\(totalKcal, format: .number.precision(.fractionLength(0))) kcal • \(totalSodiumMg, format: .number.precision(.fractionLength(0))) mg Na")
+                    Text("\(totalKcal, format: .number.precision(.fractionLength(0))) kcal • \(totalMetricAmount, format: .number.precision(.fractionLength(0...1))) \(libraryMetric.captionUnit)")
                         .monospacedDigit()
                         .foregroundStyle(hasItems ? .primary : .secondary)
                 }

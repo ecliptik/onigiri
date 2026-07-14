@@ -25,6 +25,12 @@ struct TodayView: View {
     @AppStorage(SharedStore.trackedMetric2Key, store: SharedStore.defaults) private var trackedMetric2 = "water"
     @AppStorage(SharedStore.trackedMetric2ModeKey, store: SharedStore.defaults) private var trackedMetric2Mode = ""
     @AppStorage(SharedStore.trackedMetric2TargetKey, store: SharedStore.defaults) private var trackedMetric2Target = 0.0
+
+    /// The log rows' secondary caption metric — the first tracked slot
+    /// that applies to foods (sodium unless customized; the user).
+    private var entryMetric: TrackedNutrient {
+        .firstFoodMetric(slot1: trackedMetric1, slot2: trackedMetric2)
+    }
     @AppStorage(SharedStore.trackedMetric2IconKey, store: SharedStore.defaults) private var trackedMetric2Icon = ""
     @AppStorage(SharedStore.energyStatsStyleKey, store: SharedStore.defaults) private var energyStatsStyle = "cards"
     @State private var activeSheet: TodaySheet?
@@ -784,7 +790,7 @@ struct TodayView: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text("\(entry.kcal, format: .number.precision(.fractionLength(0))) kcal")
                     .monospacedDigit()
-                Text("\(entry.sodiumMg, format: .number.precision(.fractionLength(0))) mg Na")
+                Text("\((entryMetric.itemAmount(sodiumMg: entry.sodiumMg, nutrients: entry.nutrients) ?? 0), format: .number.precision(.fractionLength(0...1))) \(entryMetric.captionUnit)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()

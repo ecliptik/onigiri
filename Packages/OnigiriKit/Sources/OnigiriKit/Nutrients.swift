@@ -224,6 +224,48 @@ public enum TrackedNutrient: Hashable, Sendable, Identifiable {
         }
     }
 
+    /// Per-item amount for library/log rows and meal totals, in this
+    /// metric's unit — nil for water, which is a log, not a food fact.
+    /// Missing nutrients read as 0, matching sodium's long-standing
+    /// "0 mg Na" for foods that never carried it.
+    public func itemAmount(sodiumMg: Double, nutrients: NutrientValues) -> Double? {
+        switch self {
+        case .water: nil
+        case .sodium: sodiumMg
+        case .fat: nutrients.fatG ?? 0
+        case .saturatedFat: nutrients.saturatedFatG ?? 0
+        case .polyunsaturatedFat: nutrients.polyunsaturatedFatG ?? 0
+        case .monounsaturatedFat: nutrients.monounsaturatedFatG ?? 0
+        case .cholesterol: nutrients.cholesterolMg ?? 0
+        case .carbs: nutrients.carbsG ?? 0
+        case .protein: nutrients.proteinG ?? 0
+        case .fiber: nutrients.fiberG ?? 0
+        case .sugar: nutrients.sugarG ?? 0
+        case .caffeine: nutrients.caffeineMg ?? 0
+        case .micro(let micro): nutrients[micro] ?? 0
+        }
+    }
+
+    /// The row-caption unit: sodium keeps its long-standing "mg Na"
+    /// shorthand; everything else names itself ("g Protein",
+    /// "µg Vitamin B12").
+    public var captionUnit: String {
+        switch self {
+        case .sodium: "mg Na"
+        default: "\(unitSymbol) \(displayName)"
+        }
+    }
+
+    /// The first tracked-metric slot that applies to FOOD items — water
+    /// is log-only and a cleared slot doesn't parse, so both skip to the
+    /// next; sodium when nothing qualifies (the long-standing default).
+    public static func firstFoodMetric(slot1: String, slot2: String) -> TrackedNutrient {
+        for key in [slot1, slot2] {
+            if let metric = TrackedNutrient(key: key), metric != .water { return metric }
+        }
+        return .sodium
+    }
+
     /// Whether picking this nutrient starts as a ceiling (limit) or a
     /// floor (goal); the user can flip it.
     public var defaultMode: TrackedMetricMode {

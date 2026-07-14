@@ -91,6 +91,14 @@ struct FoodsView: View {
     /// The list order, remembered (the user liked the meal builder's
     /// sort menu). Default = the favorites blend.
     @AppStorage("foodsLibrarySort") private var sortRaw = LibrarySort.ranked.rawValue
+    // The secondary row metric follows the first tracked slot (the
+    // user: sodium was hardcoded; now it customizes with Settings).
+    @AppStorage(SharedStore.trackedMetric1Key, store: SharedStore.defaults) private var trackedMetric1 = "sodium"
+    @AppStorage(SharedStore.trackedMetric2Key, store: SharedStore.defaults) private var trackedMetric2 = "water"
+
+    private var libraryMetric: TrackedNutrient {
+        .firstFoodMetric(slot1: trackedMetric1, slot2: trackedMetric2)
+    }
 
     private var librarySort: LibrarySort { LibrarySort(rawValue: sortRaw) ?? .ranked }
 
@@ -414,7 +422,9 @@ struct FoodsView: View {
                 name: meal.name,
                 detail: "",
                 kcal: meal.totalKcal,
-                sodiumMg: meal.totalSodiumMg,
+                metric: libraryMetric,
+                metricAmount: libraryMetric.itemAmount(
+                    sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients) ?? 0,
                 isFavorite: meal.isFavorite,
                 isMeal: badged
             )
@@ -486,7 +496,9 @@ struct FoodsView: View {
                 name: food.name,
                 detail: food.servingDescription,
                 kcal: food.kcal,
-                sodiumMg: food.sodiumMg,
+                metric: libraryMetric,
+                metricAmount: libraryMetric.itemAmount(
+                    sodiumMg: food.sodiumMg, nutrients: food.nutrients) ?? 0,
                 isFavorite: food.isFavorite
             )
             LogButton(name: food.name, longPressName: "Log default portion") {
@@ -774,6 +786,12 @@ struct PortionSheet: View {
     let target: PortionTarget
     let editDate: Date?
     let onLog: (Double, FoodCategory, Date?) -> Void
+    @AppStorage(SharedStore.trackedMetric1Key, store: SharedStore.defaults) private var trackedMetric1 = "sodium"
+    @AppStorage(SharedStore.trackedMetric2Key, store: SharedStore.defaults) private var trackedMetric2 = "water"
+
+    private var portionMetric: TrackedNutrient {
+        .firstFoodMetric(slot1: trackedMetric1, slot2: trackedMetric2)
+    }
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var quantity = 1.0
@@ -842,7 +860,7 @@ struct PortionSheet: View {
                         .pickerStyle(.segmented)
                     }
                     LabeledContent("Will log") {
-                        Text("\(target.kcal * quantity, format: .number.precision(.fractionLength(0))) kcal • \(target.sodiumMg * quantity, format: .number.precision(.fractionLength(0))) mg Na")
+                        Text("\(target.kcal * quantity, format: .number.precision(.fractionLength(0))) kcal • \((portionMetric.itemAmount(sodiumMg: target.sodiumMg, nutrients: target.nutrients) ?? 0) * quantity, format: .number.precision(.fractionLength(0...1))) \(portionMetric.captionUnit)")
                             .monospacedDigit()
                     }
                 }
@@ -929,7 +947,10 @@ struct LibraryRow: View {
     let name: String
     let detail: String
     let kcal: Double
-    let sodiumMg: Double
+    /// The secondary caption metric — the first tracked slot that
+    /// applies to foods (sodium unless customized in Settings).
+    let metric: TrackedNutrient
+    let metricAmount: Double
     var isFavorite = false
     /// Shown where meals and foods share one list (the Log sheet, the
     /// Favorites scope) — the Foods/Meals scopes already say which is
@@ -969,7 +990,7 @@ struct LibraryRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Text("\(kcal, format: .number.precision(.fractionLength(0))) kcal · \(sodiumMg, format: .number.precision(.fractionLength(0))) mg Na")
+                Text("\(kcal, format: .number.precision(.fractionLength(0))) kcal · \(metricAmount, format: .number.precision(.fractionLength(0...1))) \(metric.captionUnit)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
@@ -994,7 +1015,7 @@ struct LibraryRow: View {
                 Text("\(kcal, format: .number.precision(.fractionLength(0))) kcal")
                     .foregroundStyle(.primary)
                     .monospacedDigit()
-                Text("\(sodiumMg, format: .number.precision(.fractionLength(0))) mg Na")
+                Text("\(metricAmount, format: .number.precision(.fractionLength(0...1))) \(metric.captionUnit)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()

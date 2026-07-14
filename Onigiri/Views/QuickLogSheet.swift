@@ -23,6 +23,14 @@ struct QuickLogSheet: View {
     /// Recent default preserves the sheet's Recent/Everything-else
     /// split; the other orders read as one flat list.
     @AppStorage("logSheetSort") private var sortRaw = LibrarySort.recent.rawValue
+    // The secondary row metric follows the first tracked slot (the
+    // user: sodium was hardcoded; now it customizes with Settings).
+    @AppStorage(SharedStore.trackedMetric1Key, store: SharedStore.defaults) private var trackedMetric1 = "sodium"
+    @AppStorage(SharedStore.trackedMetric2Key, store: SharedStore.defaults) private var trackedMetric2 = "water"
+
+    private var libraryMetric: TrackedNutrient {
+        .firstFoodMetric(slot1: trackedMetric1, slot2: trackedMetric2)
+    }
 
     private var librarySort: LibrarySort { LibrarySort(rawValue: sortRaw) ?? .recent }
     @State private var searchText = ""
@@ -560,7 +568,9 @@ struct QuickLogSheet: View {
                 name: item.name,
                 detail: item.detail,
                 kcal: item.kcal,
-                sodiumMg: item.sodiumMg,
+                metric: libraryMetric,
+                metricAmount: libraryMetric.itemAmount(
+                    sodiumMg: item.sodiumMg, nutrients: item.nutrients) ?? 0,
                 isFavorite: item.isFavorite,
                 isMeal: item.isMeal
             )

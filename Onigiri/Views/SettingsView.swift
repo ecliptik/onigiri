@@ -205,6 +205,9 @@ struct SettingsView: View {
             // Opt-out (default on) — and the row doubles as the
             // feature's signpost (the user).
             Toggle("Long press + logs water", isOn: $holdToLogWater)
+            // The app-wide water icon (Today, log buttons, watch) —
+            // here unconditionally: one home for every water setting.
+            waterIconPicker
         } header: {
             Text("Water")
         } footer: {
@@ -551,12 +554,8 @@ struct SettingsView: View {
                 customIconRows(current: foodIcon)
             }
             .pickerStyle(.navigationLink)
-            // The water icon rides with the water metric's section below;
-            // it only lives here when neither slot tracks water (it still
-            // drives the log buttons and the watch).
-            if !slotTracksWater {
-                waterIconPicker
-            }
+            // The water icon lives in the Water section — every water
+            // knob in one place (the user).
             Picker("Goal badge", selection: $rewardIcon) {
                 ForEach(Self.rewardIconOptions, id: \.tag) { option in
                     HStack(spacing: 10) {
@@ -627,11 +626,6 @@ struct SettingsView: View {
                 PhoneSyncService.shared.push(from: context)
             }
         }
-    }
-
-    private var slotTracksWater: Bool {
-        TrackedNutrient(key: trackedMetric1) == .water
-            || TrackedNutrient(key: trackedMetric2) == .water
     }
 
     private var waterIconPicker: some View {
@@ -710,10 +704,10 @@ struct SettingsView: View {
                         }
                     }
                 }
-                if nutrient == .water {
-                    // The app-wide water icon (watch and log buttons too).
-                    waterIconPicker
-                } else {
+                // Water's icon is NOT a slot icon: it lives with every
+                // other water knob in the Water section (and drives the
+                // log buttons and watch regardless of tracking).
+                if nutrient != .water {
                     metricIconPicker(slot: slot, nutrient: nutrient)
                 }
             }
@@ -722,7 +716,7 @@ struct SettingsView: View {
         }
         // Sodium's limit keeps coloring the calendar, day details, and
         // Today's log even when no slot tracks it — keep its knob
-        // reachable (the water icon relocates the same way above).
+        // reachable.
         if slot == 2, !slotTracksSodium {
             Section {
                 LabeledContent("Sodium limit") {

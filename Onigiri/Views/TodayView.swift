@@ -295,7 +295,16 @@ struct TodayView: View {
     private func consumeQuickLogRequest() {
         if let day = quickActions.dayRequest {
             quickActions.dayRequest = nil
-            Task { await model.select(day: day) }
+            let kind = quickActions.quickLogRequest
+            quickActions.quickLogRequest = nil
+            Task {
+                // A paired log request (the widget's + deep link) waits
+                // for the browse: the sheet's logDate must be the
+                // requested day's, not the day the view was already on.
+                await model.select(day: day)
+                if let kind { activeSheet = .quickLog(kind) }
+            }
+            return
         }
         guard let kind = quickActions.quickLogRequest else { return }
         quickActions.quickLogRequest = nil

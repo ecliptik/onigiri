@@ -62,6 +62,12 @@ targets:
         NSHealthShareUsageDescription: Onigiri reads your energy burn, weight, and nutrition history to show your daily calorie balance and goal progress.
         NSHealthUpdateUsageDescription: Onigiri saves the food, sodium, and water you log to Apple Health.
         NSCameraUsageDescription: Onigiri uses the camera to scan food barcodes and photograph nutrition labels.
+        # The Today-card widget's + button deep-links into the Log sheet
+        # (onigiri://log?day=YYYY-MM-DD).
+        CFBundleURLTypes:
+          - CFBundleURLName: com.ecliptik.Onigiri
+            CFBundleURLSchemes:
+              - onigiri
         UIApplicationShortcutItems:
           - UIApplicationShortcutItemType: com.ecliptik.Onigiri.logWater
             UIApplicationShortcutItemTitle: Log Water

@@ -169,7 +169,26 @@ struct ContentView: View {
             // Calendar's "View day": land on Today, which consumes the date.
             if day != nil { selectedTab = .today }
         }
+        // The Today-card widget's + button: the Log sheet for the day
+        // the widget was showing (backfill included). No day parameter
+        // means today.
+        .onOpenURL { url in
+            guard url.scheme == "onigiri", url.host() == "log" else { return }
+            selectedTab = .today
+            if let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "day" })?.value,
+               let day = Self.deepLinkDay.date(from: raw) {
+                QuickActions.shared.dayRequest = day
+            }
+            QuickActions.shared.quickLogRequest = .all
+        }
     }
+
+    private static let deepLinkDay: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 
     private var mainTabs: some View {
         TabView(selection: $selectedTab) {

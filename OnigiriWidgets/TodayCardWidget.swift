@@ -2,9 +2,10 @@ import WidgetKit
 import SwiftUI
 import OnigiriKit
 
-/// Large home-screen widget: the top of Today, mirrored — the kcal-left
-/// ring with Burned/Eaten flanking, the tracked-metric pills, the
-/// rice-paper canvas.
+/// Large/medium home-screen widget: the top of Today, mirrored — the
+/// kcal-left ring with Burned/Eaten flanking, the tracked-metric pills,
+/// the rice-paper canvas — with ‹ › day paging, an in-place water
+/// button, and a + that deep-links into the Log sheet for the shown day.
 struct TodayCardWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: WidgetKinds.todayCard, provider: TodayCardProvider()) { entry in
@@ -13,13 +14,15 @@ struct TodayCardWidget: Widget {
         }
         .configurationDisplayName("Today")
         .description("Today's balance, burned and eaten, and your tracked metrics.")
-        .supportedFamilies([.systemLarge])
+        .supportedFamilies([.systemLarge, .systemMedium])
     }
 }
 
 struct TodayCardEntry: TimelineEntry {
     let date: Date
     let snapshot: DaySnapshot
+    /// The browsed day; nil renders today.
+    var day: Date?
 }
 
 struct TodayCardProvider: TimelineProvider {
@@ -42,10 +45,32 @@ struct TodayCardProvider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<TodayCardEntry>) -> Void) {
         Task { @MainActor in
             let now = Date()
-            let snapshot = await SnapshotLoader.load()
             // Push-based reloads keep widgets fresh; this poll is only a fallback.
             let refresh = now.addingTimeInterval(WidgetRefreshPolicy.pollFallback)
-            if let midnight = nextMidnight(after: now), midnight <= refresh {
+            let midnight = nextMidnight(after: now)
+            if let day = TodayCardBrowse.shownDay(now: now),
+               let browsed = await SnapshotLoader.load(day: day) {
+                // Pre-render the snap-back: at midnight the browsed day
+                // goes stale and the card shows the new (empty) today.
+                if let midnight, midnight <= refresh {
+                    let today = await SnapshotLoader.load()
+                    completion(Timeline(
+                        entries: [
+                            TodayCardEntry(date: now, snapshot: browsed, day: day),
+                            TodayCardEntry(date: midnight, snapshot: today.newDay),
+                        ],
+                        policy: .after(midnight)
+                    ))
+                } else {
+                    completion(Timeline(
+                        entries: [TodayCardEntry(date: now, snapshot: browsed, day: day)],
+                        policy: .after(refresh)
+                    ))
+                }
+                return
+            }
+            let snapshot = await SnapshotLoader.load()
+            if let midnight, midnight <= refresh {
                 completion(Timeline(
                     entries: [
                         TodayCardEntry(date: now, snapshot: snapshot),
@@ -64,10 +89,12 @@ struct TodayCardProvider: TimelineProvider {
 }
 
 struct TodayCardView: View {
+    @Environment(\.widgetFamily) private var family
     let entry: TodayCardEntry
 
     private var snapshot: DaySnapshot { entry.snapshot }
     private var summary: DailyEnergySummary { snapshot.summary }
+    private var isLarge: Bool { family == .systemLarge }
 
     var body: some View {
         if snapshot.needsSetup {
@@ -79,16 +106,127 @@ struct TodayCardView: View {
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            VStack(spacing: 16) {
+        } else if isLarge {
+            VStack(spacing: 10) {
+                header
+                Spacer(minLength: 0)
                 HStack(spacing: 12) {
                     energyFlank(summary.totalBurnKcal, "Burned")
                     ringedHeadline
                     energyFlank(summary.intakeKcal, "Eaten")
                 }
+                Spacer(minLength: 0)
                 trackedMetricsRow
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            VStack(spacing: 8) {
+                header
+                HStack(spacing: 14) {
+                    ringedHeadline
+                    VStack(spacing: 6) {
+                        // The flanks fit as one caption line beside the
+                        // ring; full columns didn't.
+                        HStack(spacing: 12) {
+                            miniFlank(summary.totalBurnKcal, "Burned")
+                            miniFlank(summary.intakeKcal, "Eaten")
+                        }
+                        trackedMetricsRow
+                    }
+                }
+                .frame(maxHeight: .infinity)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    // MARK: - Header (paging + logging)
+
+    private var dayTitle: String {
+        guard let day = entry.day else { return "Today" }
+        if Calendar.current.isDateInYesterday(day) { return "Yesterday" }
+        return day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+    }
+
+    /// The shown day's Log-sheet deep link (backfill included — the
+    /// sheet logs into the browsed day, like the app's day browsing).
+    private var logURL: URL {
+        var components = URLComponents()
+        components.scheme = "onigiri"
+        components.host = "log"
+        if let day = entry.day {
+            components.queryItems = [URLQueryItem(name: "day", value: Self.dayFormat.string(from: day))]
+        }
+        return components.url!
+    }
+
+    private static let dayFormat: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    private var atFloor: Bool {
+        guard let floor = Calendar.current.date(
+            byAdding: .day, value: -TodayCardBrowse.daysBack,
+            to: Calendar.current.startOfDay(for: entry.date)
+        ) else { return false }
+        return (entry.day ?? Calendar.current.startOfDay(for: entry.date)) <= floor
+    }
+
+    private var header: some View {
+        HStack(spacing: 4) {
+            Button(intent: PageTodayCardIntent(delta: -1)) {
+                Image(systemName: "chevron.left")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.riceToast)
+                    .frame(width: 26, height: 26)
+                    .background(.quaternary.opacity(0.5), in: .circle)
+            }
+            .buttonStyle(.plain)
+            .disabled(atFloor)
+            .accessibilityLabel("Previous day")
+
+            Text(dayTitle)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .padding(.horizontal, 2)
+                .invalidatableContent()
+
+            Button(intent: PageTodayCardIntent(delta: 1)) {
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.riceToast)
+                    .frame(width: 26, height: 26)
+                    .background(.quaternary.opacity(0.5), in: .circle)
+            }
+            .buttonStyle(.plain)
+            .disabled(entry.day == nil)
+            .accessibilityLabel("Next day")
+
+            Spacer(minLength: 0)
+
+            // In-place water: the same intent as Control Center, logging
+            // the default serving to now (today) — no app launch.
+            Button(intent: LogWaterIntent()) {
+                Image(systemName: "drop.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.blue)
+                    .frame(width: 26, height: 26)
+                    .background(.quaternary.opacity(0.5), in: .circle)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Log water")
+
+            // Into the app's Log sheet for the SHOWN day.
+            Link(destination: logURL) {
+                Image(systemName: "plus")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.onRicePaper)
+                    .frame(width: 26, height: 26)
+                    .background(Color.ricePaper, in: .circle)
+            }
+            .accessibilityLabel("Log food or meal")
         }
     }
 
@@ -113,18 +251,21 @@ struct TodayCardView: View {
                     )
                     .rotationEffect(.degrees(-90))
                 headline
-                    .padding(22)
+                    .padding(isLarge ? 22 : 12)
             }
             // Fixed like Today's 190pt ring (scaled to the widget's
             // canvas) — an HStack-share ring drifted with flank width
             // and squeezed the headline into truncation.
-            .frame(width: 176, height: 176)
+            .frame(width: ringSize, height: ringSize)
             .accessibilityElement(children: .combine)
-            .accessibilityValue("\((eaten * 100).formatted(.number.precision(.fractionLength(0)))) percent of today's budget eaten")
+            .accessibilityValue("\((eaten * 100).formatted(.number.precision(.fractionLength(0)))) percent of \(entry.day == nil ? "today's" : "the day's") budget eaten")
         } else {
             headline
         }
     }
+
+    private var ringSize: CGFloat { isLarge ? 168 : 104 }
+    private var headlineSize: CGFloat { isLarge ? 44 : 26 }
 
     /// The headline number in the user's chosen style (same "Calorie
     /// display" setting as the app/watch).
@@ -133,25 +274,25 @@ struct TodayCardView: View {
             if SharedStore.showsRemainingKcal, let remaining = snapshot.remainingKcal {
                 let headline = CalorieBudget.remainingHeadline(remaining)
                 Text(headline.value, format: .number.precision(.fractionLength(0)))
-                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .font(.system(size: headlineSize, weight: .bold, design: .rounded))
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                     .foregroundStyle(Color.remainingStatus(kcal: remaining))
                     .invalidatableContent()
                 Text(headline.caption)
-                    .font(.caption)
+                    .font(isLarge ? .caption : .caption2)
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                     .foregroundStyle(.secondary)
             } else {
                 Text(summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
-                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .font(.system(size: headlineSize, weight: .bold, design: .rounded))
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                     .foregroundStyle(summary.balanceKcal <= 0 ? Color.green : Color.orange)
                     .invalidatableContent()
                 Text("kcal balance")
-                    .font(.caption)
+                    .font(isLarge ? .caption : .caption2)
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                     .foregroundStyle(.secondary)
@@ -176,16 +317,34 @@ struct TodayCardView: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// The medium family's one-line flank: "1,505 Burned".
+    private func miniFlank(_ value: Double, _ label: String) -> some View {
+        HStack(spacing: 3) {
+            Text(value, format: .number.precision(.fractionLength(0)))
+                .font(.footnote.weight(.bold))
+                .monospacedDigit()
+                .invalidatableContent()
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .lineLimit(1)
+    }
+
     // MARK: - Tracked metrics
 
     /// The two configurable tracked-metric pills (sodium and water by
     /// default) — a slot set to None disappears; a lone survivor centers.
+    /// Large lays them side by side, medium stacks them.
     @ViewBuilder
     private var trackedMetricsRow: some View {
         let first = SharedStore.trackedNutrient(slot: 1)
         let second = SharedStore.trackedNutrient(slot: 2)
         if first != nil || second != nil {
-            HStack(spacing: 10) {
+            let layout = isLarge
+                ? AnyLayout(HStackLayout(spacing: 10))
+                : AnyLayout(VStackLayout(spacing: 6))
+            layout {
                 if let first {
                     trackedMetricPill(slot: 1, nutrient: first)
                 }
@@ -193,7 +352,7 @@ struct TodayCardView: View {
                     trackedMetricPill(slot: 2, nutrient: second)
                 }
             }
-            .font(.footnote)
+            .font(isLarge ? .footnote : .caption)
         }
     }
 

@@ -19,6 +19,12 @@ struct QuickLogSheet: View {
     @Query(sort: \Food.name) private var foods: [Food]
     @State private var kind: QuickActions.QuickLogKind = .favorites
     @State private var kindLoaded = false
+    /// The third library surface with the shared sort (the user).
+    /// Recent default preserves the sheet's Recent/Everything-else
+    /// split; the other orders read as one flat list.
+    @AppStorage("logSheetSort") private var sortRaw = LibrarySort.recent.rawValue
+
+    private var librarySort: LibrarySort { LibrarySort(rawValue: sortRaw) ?? .recent }
     @State private var searchText = ""
     /// Drives the whole search-active state (not just keyboard focus):
     /// an active search hides the toolbar, so sub-sheets must be able
@@ -163,7 +169,8 @@ struct QuickLogSheet: View {
                 || (item.category?.localizedCaseInsensitiveContains(searchText) ?? false)
         }
         return matched.sorted { lhs, rhs in
-            if lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
+            if librarySort == .ranked, lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
+            if librarySort != .name, lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
             return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
     }
@@ -254,9 +261,10 @@ struct QuickLogSheet: View {
                         }
                     }
                 }
-                if !searchText.isEmpty || kind == .favorites {
-                    // Search results (and the Favorites scope) read as
-                    // one flat ranked list — no Recent split.
+                if !searchText.isEmpty || kind == .favorites || librarySort != .recent {
+                    // Search results, the Favorites scope, and the
+                    // non-Recent sort orders read as one flat ranked
+                    // list — no Recent split.
                     Section {
                         ForEach(ranked) { item in
                             row(item)
@@ -339,6 +347,22 @@ struct QuickLogSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                         .fontWeight(.semibold)
+                }
+                ToolbarItem(placement: .topBarLeading) {
+                    // The Foods screen's sort circle, third surface.
+                    Menu {
+                        Picker("Sort", selection: $sortRaw) {
+                            ForEach(LibrarySort.allCases, id: \.rawValue) { option in
+                                Text(option.label).tag(option.rawValue)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: librarySort == .recent
+                              ? "arrow.up.arrow.down.circle"
+                              : "arrow.up.arrow.down.circle.fill")
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                    .accessibilityLabel("Sort")
                 }
             }
             .task {

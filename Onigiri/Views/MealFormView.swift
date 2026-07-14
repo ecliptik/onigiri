@@ -16,8 +16,11 @@ struct MealFormView: View {
     @State private var isFavorite = false
     @State private var foodFilter = ""
     /// Recent-first by default (the user — the foods you just added are
-    /// the ones the meal is for); remembered across builds.
-    @AppStorage("mealBuilderSortByName") private var sortByName = false
+    /// the ones the meal is for); remembered across builds. Shares the
+    /// Foods screen's option set (Favorites / Recent / Name).
+    @AppStorage("mealBuilderSort") private var sortRaw = LibrarySort.recent.rawValue
+
+    private var librarySort: LibrarySort { LibrarySort(rawValue: sortRaw) ?? .recent }
     /// Cancel/drag with edits confirms first — a half-built meal used
     /// to vanish on a stray swipe.
     @State private var confirmDiscard = false
@@ -55,10 +58,19 @@ struct MealFormView: View {
                     || ($0.category?.localizedCaseInsensitiveContains(trimmed) ?? false)
             }
         }
-        // The @Query is name-sorted; Recent re-sorts here (ties break
-        // alphabetically, which the stable base order provides).
-        guard !sortByName else { return pool }
-        return pool.sorted { $0.recencyDate > $1.recencyDate }
+        // The @Query is name-sorted; the other orders re-sort here (ties
+        // break alphabetically, which the stable base order provides).
+        switch librarySort {
+        case .ranked:
+            return pool.sorted {
+                if $0.isFavorite != $1.isFavorite { return $0.isFavorite }
+                return $0.recencyDate > $1.recencyDate
+            }
+        case .recent:
+            return pool.sorted { $0.recencyDate > $1.recencyDate }
+        case .name:
+            return pool
+        }
     }
 
     private var totalKcal: Double {
@@ -149,15 +161,15 @@ struct MealFormView: View {
                     HStack {
                         Text("Foods")
                         Spacer()
-                        // Recent leads; the menu swaps to alphabetical
-                        // (remembered).
+                        // Recent leads; the menu swaps order (remembered).
                         Menu {
-                            Picker("Sort", selection: $sortByName) {
-                                Text("Recent").tag(false)
-                                Text("Name").tag(true)
+                            Picker("Sort", selection: $sortRaw) {
+                                ForEach(LibrarySort.allCases, id: \.rawValue) { option in
+                                    Text(option.label).tag(option.rawValue)
+                                }
                             }
                         } label: {
-                            Label(sortByName ? "Name" : "Recent",
+                            Label(librarySort.label,
                                   systemImage: "arrow.up.arrow.down")
                                 .font(.footnote)
                         }

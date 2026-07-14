@@ -1,6 +1,22 @@
 import SwiftUI
 import OnigiriKit
 
+/// The library-list sort, shared by the Foods screen and the meal
+/// builder (both persist a pick via @AppStorage; defaults differ —
+/// Foods leads with the favorites blend, the builder with Recent).
+/// Raw values are stored preferences: never rename them.
+enum LibrarySort: String, CaseIterable {
+    case ranked, recent, name
+
+    var label: String {
+        switch self {
+        case .ranked: "Favorites"
+        case .recent: "Recent"
+        case .name: "Name"
+        }
+    }
+}
+
 /// App-standard vertical rhythm — compact but still buffered.
 enum Layout {
     /// Gap between top-level groups on ScrollView screens (Today, Water,

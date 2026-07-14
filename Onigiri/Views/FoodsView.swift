@@ -89,20 +89,8 @@ struct FoodsView: View {
     @State private var onlineSearch = OnlineFoodSearch()
     @State private var showLibraryImporter = false
     /// The list order, remembered (the user liked the meal builder's
-    /// sort menu). Default = the favorites-first blend.
+    /// sort menu). Default = the favorites blend.
     @AppStorage("foodsLibrarySort") private var sortRaw = LibrarySort.ranked.rawValue
-
-    enum LibrarySort: String, CaseIterable {
-        case ranked, recent, name
-
-        var label: String {
-            switch self {
-            case .ranked: "Favorites first"
-            case .recent: "Recent"
-            case .name: "Name"
-            }
-        }
-    }
 
     private var librarySort: LibrarySort { LibrarySort(rawValue: sortRaw) ?? .ranked }
 

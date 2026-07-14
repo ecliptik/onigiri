@@ -193,8 +193,10 @@ struct ContentView: View {
         // returns to the top, like collapsing the log sections).
         .tabBarMinimizeBehavior(tabBarPin.atTop ? .never : .onScrollDown)
         // Hold the corner + to log a water serving without the sheet —
-        // the tap keeps opening the add flow.
+        // the tap keeps opening the add flow. Checked at fire time so
+        // the Settings toggle applies without a relaunch.
         .background(AddPillLongPress {
+            guard SharedStore.holdToLogWater else { return }
             Task { await LogActions.logWater(oz: SharedStore.waterServingOz) }
         })
         .toastHost()

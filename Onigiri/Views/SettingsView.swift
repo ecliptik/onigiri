@@ -29,6 +29,7 @@ struct SettingsView: View {
     @AppStorage(SharedStore.remindMealsKey, store: SharedStore.defaults) private var remindMeals = false
     @AppStorage(SharedStore.remindWaterKey, store: SharedStore.defaults) private var remindWater = false
     @AppStorage(SharedStore.remindStreakKey, store: SharedStore.defaults) private var remindStreak = false
+    @AppStorage(SharedStore.holdToLogWaterKey, store: SharedStore.defaults) private var holdToLogWater = true
     @AppStorage(SharedStore.textSearchSourceKey, store: SharedStore.defaults) private var textSearchSource = SharedStore.textSearchSourceOFF
     @AppStorage(SharedStore.fdcAPIKeyKey, store: SharedStore.defaults) private var fdcAPIKey = ""
     /// What the key field shows; only plausible keys flow to storage.
@@ -174,7 +175,7 @@ struct SettingsView: View {
     // goal rides with it. Placed right under the tracked metrics: the
     // water slot's caption points here for its target.
     private var waterSection: some View {
-        Section("Water") {
+        Section {
             Stepper(value: $waterServingOz, in: 4...40, step: 2) {
                 LabeledContent("Serving size") {
                     Text("\(waterServingOz, format: .number.precision(.fractionLength(0))) oz")
@@ -201,6 +202,13 @@ struct SettingsView: View {
                 let previous = (ceil(waterGoalOz / serving - 1e-9) - 1) * serving
                 waterGoalOz = max(serving, previous)
             }
+            // Opt-out (default on) — and the row doubles as the
+            // feature's signpost (the user).
+            Toggle("Long press + logs water", isOn: $holdToLogWater)
+        } header: {
+            Text("Water")
+        } footer: {
+            Text("Holding the corner + button logs one serving without opening the Add sheet.")
         }
     }
 

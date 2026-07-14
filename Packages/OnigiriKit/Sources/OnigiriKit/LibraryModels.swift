@@ -287,6 +287,15 @@ public enum SharedStore {
     /// enters the repo.
     public static let fdcAPIKeyKey = "fdcAPIKey"
 
+    /// Holding the corner + logs a water serving — opt-out, default ON
+    /// (absent means enabled, so existing installs get the feature).
+    public static let holdToLogWaterKey = "holdToLogWater"
+    public static var holdToLogWater: Bool {
+        defaults.object(forKey: holdToLogWaterKey) == nil
+            ? true
+            : defaults.bool(forKey: holdToLogWaterKey)
+    }
+
     /// The user's FDC key, trimmed; empty means "none saved".
     public static var fdcAPIKey: String {
         (defaults.string(forKey: fdcAPIKeyKey) ?? "")

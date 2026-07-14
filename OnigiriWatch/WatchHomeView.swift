@@ -32,7 +32,11 @@ struct WatchHomeView: View {
                         showMeals = true
                     } label: {
                         Label {
-                            Text("Log a meal")
+                            // "Log", not "Log a meal": the sheet mirrors
+                            // the phone's default Log view (favorites +
+                            // recent, meals and foods mixed), not meals
+                            // alone.
+                            Text("Log")
                         } icon: {
                             FoodIconView(raw: foodIcon, tint: Color.onRicePaper)
                         }
@@ -124,10 +128,14 @@ struct WatchHomeView: View {
     }
 }
 
-/// The "Log a meal" sheet: synced meals plus the most recent foods,
-/// one tap to log — the ONE browse surface (the separate Favorites/
-/// Meals/Foods pages were dropped in 1.9.1; this sheet already
-/// carried their content one tap from Home).
+/// The "Log" sheet: the phone's default Log view in miniature —
+/// Favorites first (meals + foods mixed), then Recent, one unified
+/// list, one tap to log. NO Meal-or-Food chooser (ruled out
+/// 2026-07-14: an extra tap per log on the tappiest device); a
+/// non-favorited meal reaches the watch the moment it's starred or
+/// logged, exactly like the phone's Favorites scope. The separate
+/// Favorites/Meals/Foods pages were dropped in 1.9.1; the standalone
+/// all-Meals section followed in 2.1.
 struct MealPickerView: View {
     let model: WatchModel
     @Environment(\.dismiss) private var dismiss
@@ -135,8 +143,8 @@ struct MealPickerView: View {
     var body: some View {
         NavigationStack {
             List {
-                if model.sync.meals.isEmpty && model.sync.recentFoods.isEmpty {
-                    Text("Save meals on your iPhone and they'll appear here.")
+                if model.sync.favorites.isEmpty && model.sync.recentFoods.isEmpty {
+                    Text("Add favorites and log food in app")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -145,8 +153,9 @@ struct MealPickerView: View {
                         .font(.footnote)
                         .foregroundStyle(.orange)
                 }
-                // Favorites lead (their dropped browse page folds in
-                // here — and the phone's scope bars lead with them too).
+                // Favorites lead — meals and foods mixed, like the
+                // phone's default scope (and its dropped browse page
+                // folds in here).
                 if !model.sync.favorites.isEmpty {
                     Section("Favorites") {
                         ForEach(model.sync.favorites.prefix(6).map { $0 }) { item in
@@ -154,17 +163,10 @@ struct MealPickerView: View {
                         }
                     }
                 }
-                if !model.sync.meals.isEmpty {
-                    Section(model.sync.recentFoods.isEmpty && model.sync.favorites.isEmpty ? "" : "Meals") {
-                        ForEach(model.sync.meals) { meal in
-                            row(meal)
-                        }
-                    }
-                }
                 // The phone's most recently logged foods — one serving,
-                // one tap, same path as meals.
+                // one tap, same path as favorites.
                 if !model.sync.recentFoods.isEmpty {
-                    Section("Recent foods") {
+                    Section("Recent") {
                         ForEach(model.sync.recentFoods.prefix(6).map { $0 }) { food in
                             row(food)
                         }

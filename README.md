@@ -10,6 +10,14 @@ A personal calorie, nutrition, and water tracker for iPhone + Apple Watch, built
 |---|---|---|---|
 | ![Today: balance headline, hydration, goal gauge, meters, log](docs/showcase/light/today.png) | ![Food library with meals and foods, dark mode](docs/showcase/dark/foods.png) | ![Goal: weight trend with projection and the daily plan](docs/showcase/light/goal.png) | ![Calendar: month grid of earned onigiri and streaks, dark mode](docs/showcase/dark/calendar.png) |
 
+### iPad & Apple Watch
+
+| iPad portrait | iPad landscape (dark) |
+|---|---|
+| ![Today on iPad, portrait](docs/showcase/light/ipad-portrait.png) | ![Today on iPad, landscape, dark mode](docs/showcase/dark/ipad-landscape.png) |
+
+![Apple Watch: balance headline with one-tap meal and water logging](docs/showcase/watch/home.png)
+
 ## Features
 
 - **Daily calorie meter** — front and center: `Intake − (Active + Resting energy)` from Apple Health, plus remaining budget for the day

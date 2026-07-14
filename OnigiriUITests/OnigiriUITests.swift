@@ -1193,7 +1193,11 @@ final class OnigiriUITests: XCTestCase {
             throw XCTSkip("Set HEADER_SHOTS=1 to run the header-shots capture")
         }
         let app = XCUIApplication()
-        XCUIDevice.shared.orientation = .portrait
+        // HEADER_ORIENTATION=landscape for the iPad README shot;
+        // portrait otherwise (and always on iPhone).
+        XCUIDevice.shared.orientation =
+            ProcessInfo.processInfo.environment["HEADER_ORIENTATION"] == "landscape"
+                ? .landscapeLeft : .portrait
         app.launchArguments = ["--seed-sample-data"]
         app.launch()
         grantHealthAccess(in: app, timeout: 30)

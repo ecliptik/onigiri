@@ -66,8 +66,13 @@ when a release starts; this file is the durable to-do between sessions.
   Interactive: widgets can't scroll, so day paging = ‹ › AppIntent
   buttons swapping the rendered day; a + button deep-links into the
   Log sheet for the shown day (widgetURL routing like the existing
-  quick actions). Existing pieces to build on: DailyProgressWidget,
-  BalanceAccessoryView, the kit's PlanCache/DaySnapshot plumbing.
+  quick actions), and a water button (the water icon/emoji) that logs
+  the default serving IN PLACE — the Control Center "Log Water"
+  AppIntent already does exactly this, so the widget reuses it; one
+  glance at the day, food and water one tap away (the user).
+  Existing pieces to build on: DailyProgressWidget,
+  BalanceAccessoryView, the Log Water control intent, the kit's
+  PlanCache/DaySnapshot plumbing.
 
 ## Backlog (unscheduled)
 

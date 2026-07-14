@@ -220,6 +220,7 @@ struct FoodsView: View {
                 }
             }
             .compactSections()
+            .hardTopScrollEdge()
             .readableContentWidth(groupedBackground: true)
             .expandsTabBarAtTop()
             .navigationTitle("Foods")
@@ -267,6 +268,9 @@ struct FoodsView: View {
                         Image(systemName: categoryFilter == nil
                               ? "line.3.horizontal.decrease.circle"
                               : "line.3.horizontal.decrease.circle.fill")
+                            // The fill/unfill swap morphs instead of
+                            // hard-cutting (iOS 17 API, floor-safe).
+                            .contentTransition(.symbolEffect(.replace))
                     }
                     .accessibilityLabel("Filter by category")
                 }
@@ -682,6 +686,9 @@ struct LogButton: View {
     /// nil = tap-only (the water row: one gesture, one meaning).
     var onLongPress: (() -> Void)?
 
+    /// Drives the tap bounce — the visual twin of the haptic.
+    @State private var bounce = false
+
     var body: some View {
         // Body-size glyph in a ~39 pt circle: proportional to the rows
         // (the subheadline circle read undersized, title3 too chunky —
@@ -689,6 +696,7 @@ struct LogButton: View {
         // below, so row heights don't move.
         let circle = Image(systemName: "plus")
             .font(.body.weight(.bold))
+            .symbolEffect(.bounce, value: bounce)
             .foregroundStyle(Color.riceToast)
             .padding(9)
             // A static fill, NOT glassEffect: a live glass layer on
@@ -700,7 +708,10 @@ struct LogButton: View {
             // HIG minimum touch target; the visible circle stays small.
             .frame(minWidth: 44, minHeight: 44)
             .contentShape(.rect)
-            .onTapGesture { action() }
+            .onTapGesture {
+                bounce.toggle()
+                action()
+            }
             .accessibilityLabel("Log \(name)")
             .accessibilityAddTraits(.isButton)
         if let onLongPress {

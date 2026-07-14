@@ -320,6 +320,18 @@ struct GoalView: View {
         }
     }
 
+    /// The chart's one-sentence VoiceOver reading.
+    private var chartSummary: String {
+        var parts: [String] = []
+        if let latest = smoothedHistory.last?.weightLb {
+            parts.append("7-day average \(latest.formatted(.number.precision(.fractionLength(1)))) pounds")
+        }
+        if !isMaintenance, let target = targetWeightLb {
+            parts.append("target \(target.formatted(.number.precision(.fractionLength(0)))) pounds")
+        }
+        return parts.isEmpty ? "No weigh-ins yet" : parts.joined(separator: ", ")
+    }
+
     private func signedLb(_ value: Double) -> String {
         "\(value.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always(includingZero: false)))) lb"
     }
@@ -363,6 +375,10 @@ struct GoalView: View {
                     }
                 }
                 .chartYScale(domain: chartYDomain)
+                // One spoken sentence, not ~90 unlabeled point stops.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Weight trend chart")
+                .accessibilityValue(chartSummary)
                 .frame(height: 220)
                 .padding(.vertical, 4)
 

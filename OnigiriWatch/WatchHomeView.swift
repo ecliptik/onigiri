@@ -93,6 +93,11 @@ struct WatchHomeView: View {
         }
     }
 
+    /// Fixed 32pt ignored the watch text-size setting (the phone's
+    /// headline got the same fix in 1.7); minimumScaleFactor below
+    /// keeps huge sizes on one line.
+    @ScaledMetric(relativeTo: .largeTitle) private var headlineSize = 32.0
+
     /// Mirrors the phone's Today headline setting: ± balance, or kcal left
     /// toward the deficit goal when the user picked the countdown.
     @ViewBuilder
@@ -101,7 +106,7 @@ struct WatchHomeView: View {
             let headline = CalorieBudget.remainingHeadline(remaining)
             VStack(spacing: 0) {
                 Text(headline.value, format: .number.precision(.fractionLength(0)))
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .font(.system(size: headlineSize, weight: .bold, design: .rounded))
                     .foregroundStyle(Color.remainingStatus(kcal: remaining))
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)
@@ -111,7 +116,7 @@ struct WatchHomeView: View {
             }
         } else {
             Text(model.state.summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
-                .font(.system(size: 32, weight: .bold, design: .rounded))
+                .font(.system(size: headlineSize, weight: .bold, design: .rounded))
                 .foregroundStyle(model.state.summary.balanceKcal <= 0 ? Color.green : Color.orange)
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
@@ -119,9 +124,10 @@ struct WatchHomeView: View {
     }
 }
 
-/// The "Log a meal" sheet: the original quick page — synced meals plus
-/// the six most recent foods, one tap to log. The deeper Favorites/
-/// Meals/Foods browsing lives on the app's own pages past Metrics.
+/// The "Log a meal" sheet: synced meals plus the most recent foods,
+/// one tap to log — the ONE browse surface (the separate Favorites/
+/// Meals/Foods pages were dropped in 1.9.1; this sheet already
+/// carried their content one tap from Home).
 struct MealPickerView: View {
     let model: WatchModel
     @Environment(\.dismiss) private var dismiss
@@ -139,8 +145,17 @@ struct MealPickerView: View {
                         .font(.footnote)
                         .foregroundStyle(.orange)
                 }
+                // Favorites lead (their dropped browse page folds in
+                // here — and the phone's scope bars lead with them too).
+                if !model.sync.favorites.isEmpty {
+                    Section("Favorites") {
+                        ForEach(model.sync.favorites.prefix(6).map { $0 }) { item in
+                            row(item)
+                        }
+                    }
+                }
                 if !model.sync.meals.isEmpty {
-                    Section(model.sync.recentFoods.isEmpty ? "" : "Meals") {
+                    Section(model.sync.recentFoods.isEmpty && model.sync.favorites.isEmpty ? "" : "Meals") {
                         ForEach(model.sync.meals) { meal in
                             row(meal)
                         }
@@ -149,7 +164,6 @@ struct MealPickerView: View {
                 // The phone's most recently logged foods — one serving,
                 // one tap, same path as meals.
                 if !model.sync.recentFoods.isEmpty {
-                    // Six here — the Foods page has the full ten.
                     Section("Recent foods") {
                         ForEach(model.sync.recentFoods.prefix(6).map { $0 }) { food in
                             row(food)
@@ -167,38 +181,6 @@ struct MealPickerView: View {
             // Failure keeps the picker open — dismissing on error
             // looked identical to success.
             dismiss()
-        }
-    }
-}
-
-/// One top-level browse page (Favorites / Meals / Foods): the ten most
-/// recent of its scope, one tap to log — the flash confirms in place,
-/// there's no sheet to dismiss.
-struct LogScopeView: View {
-    let model: WatchModel
-    let title: String
-    let items: [SyncedMeal]
-    let empty: String
-
-    var body: some View {
-        NavigationStack {
-            List {
-                if items.isEmpty {
-                    Text(empty)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                if let flash = model.flash {
-                    Text(flash)
-                        .font(.footnote)
-                        .foregroundStyle(model.flashIsError ? .orange : .green)
-                }
-                ForEach(items) { item in
-                    LogItemRow(model: model, item: item)
-                }
-            }
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
         }
     }
 }

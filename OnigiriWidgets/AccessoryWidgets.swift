@@ -45,13 +45,19 @@ struct StreakProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<StreakEntry>) -> Void) {
         Task { @MainActor in
-            let entry = await load()
-            // The streak only moves when a day completes — refresh at
-            // midnight, with a lazy fallback in between.
+            // The streak only moves when a day completes — pre-render
+            // the post-midnight number (today judged as a completed
+            // day) so yesterday's count never shows into the new day
+            // while WidgetKit waits out its budget.
             let refresh = Date().addingTimeInterval(WidgetRefreshPolicy.pollFallback)
             let midnight = nextMidnight(after: .now)
+            let (streak, atMidnight, needsSetup) = await StreakLoader.loadWithMidnight(midnight ?? .now)
+            var entries = [StreakEntry(date: .now, streak: streak, needsSetup: needsSetup)]
+            if let midnight, midnight <= refresh {
+                entries.append(StreakEntry(date: midnight, streak: atMidnight, needsSetup: needsSetup))
+            }
             completion(Timeline(
-                entries: [entry],
+                entries: entries,
                 policy: .after(midnight.map { min($0, refresh) } ?? refresh)
             ))
         }
@@ -123,6 +129,10 @@ struct MonthEntry: TimelineEntry {
     let tracked: Set<Date>
     let streak: Int
     let needsSetup: Bool
+    /// Which day the grid bolds as "today" — entries are ARCHIVED
+    /// snapshots, so a midnight pre-render must carry its own anchor
+    /// (isDateInToday at render time baked yesterday's highlight in).
+    var todayAnchor: Date = .now
 
     static var placeholder: MonthEntry {
         let calendar = Calendar.current
@@ -150,26 +160,32 @@ struct MonthProvider: TimelineProvider {
             return
         }
         Task { @MainActor in
-            completion(await load())
+            completion(await load(asOf: .now))
         }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<MonthEntry>) -> Void) {
         Task { @MainActor in
-            let entry = await load()
+            // Pre-render the post-midnight grid: today's highlight
+            // moves and a just-completed day gets its final mark, even
+            // if WidgetKit defers the .after(midnight) reload.
             let refresh = Date().addingTimeInterval(WidgetRefreshPolicy.pollFallback)
             let midnight = nextMidnight(after: .now)
+            var entries = [await load(asOf: .now)]
+            if let midnight, midnight <= refresh {
+                entries.append(await load(asOf: midnight))
+            }
             completion(Timeline(
-                entries: [entry],
+                entries: entries,
                 policy: .after(midnight.map { min($0, refresh) } ?? refresh)
             ))
         }
     }
 
     @MainActor
-    private func load() async -> MonthEntry {
+    private func load(asOf anchor: Date) async -> MonthEntry {
         let calendar = Calendar.current
-        let month = calendar.date(from: calendar.dateComponents([.year, .month], from: .now)) ?? .now
+        let month = calendar.date(from: calendar.dateComponents([.year, .month], from: anchor)) ?? anchor
         let needsSetup = await PlanCache.needsSetup()
         let state = await PlanCache.state(goal: WatchSync.loadGoal())
         let totals = await PlanCache.energyTotals()
@@ -177,18 +193,20 @@ struct MonthProvider: TimelineProvider {
             totals: totals,
             targetDeficitKcal: state.deficitTargetKcal,
             targetsByDay: DeficitTargetHistory.targetsByDay(),
-            untrackedBelowKcal: SharedStore.untrackedBelowKcal
+            untrackedBelowKcal: SharedStore.untrackedBelowKcal,
+            today: anchor
         )
         let tracked = Set(totals
             .filter { StreakCalendar.isTracked($0, untrackedBelowKcal: SharedStore.untrackedBelowKcal) }
             .map { calendar.startOfDay(for: $0.day) })
         return MonthEntry(
-            date: .now,
+            date: anchor,
             month: month,
             earned: earned,
             tracked: tracked,
-            streak: StreakCalendar.currentStreak(earned: earned),
-            needsSetup: needsSetup
+            streak: StreakCalendar.currentStreak(earned: earned, today: anchor),
+            needsSetup: needsSetup,
+            todayAnchor: anchor
         )
     }
 }
@@ -253,6 +271,14 @@ struct MonthWidgetView: View {
         }
     }
 
+    /// The whole grid speaks as ONE element — bare day numbers and
+    /// repeated "rice ball" stops carried none of the three-mark story.
+    private var gridSummary: String {
+        let earnedCount = StreakCalendar.earnedCount(inMonthOf: entry.month, earned: entry.earned)
+        let month = entry.month.formatted(.dateTime.month(.wide))
+        return "\(month): goal met \(earnedCount) days, \(entry.streak)-day streak"
+    }
+
     private var grid: some View {
         let days = monthDays()
         return LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 4) {
@@ -260,17 +286,18 @@ struct MonthWidgetView: View {
                 if let day {
                     let dayStart = calendar.startOfDay(for: day)
                     VStack(spacing: 1) {
+                        let isAnchorDay = calendar.isDate(day, inSameDayAs: entry.todayAnchor)
                         Text(day, format: .dateTime.day())
                             .font(.caption2)
-                            .foregroundStyle(calendar.isDateInToday(day)
+                            .foregroundStyle(isAnchorDay
                                 ? Color.riceToast
-                                : (day > .now ? Color.secondary.opacity(0.4) : Color.secondary))
-                            .fontWeight(calendar.isDateInToday(day) ? .bold : .regular)
+                                : (day > entry.todayAnchor ? Color.secondary.opacity(0.4) : Color.secondary))
+                            .fontWeight(isAnchorDay ? .bold : .regular)
                         if entry.earned.contains(dayStart) {
                             Text(SharedStore.rewardEmoji)
                                 .font(.system(size: 10))
                                 .frame(height: 12)
-                        } else if entry.tracked.contains(dayStart), !calendar.isDateInToday(day) {
+                        } else if entry.tracked.contains(dayStart), !calendar.isDate(day, inSameDayAs: entry.todayAnchor) {
                             Circle()
                                 .strokeBorder(Color.secondary.opacity(0.6), lineWidth: 1)
                                 .frame(width: 5, height: 5)
@@ -284,6 +311,8 @@ struct MonthWidgetView: View {
                 }
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(gridSummary)
     }
 
     private func monthDays() -> [Date?] {

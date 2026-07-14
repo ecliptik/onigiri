@@ -1,7 +1,7 @@
 import Foundation
 
 /// Today's totals as read from HealthKit.
-public struct DailyEnergySummary: Sendable, Equatable {
+public struct DailyEnergySummary: Sendable, Equatable, Codable {
     public var intakeKcal: Double
     public var activeBurnKcal: Double
     public var restingBurnKcal: Double

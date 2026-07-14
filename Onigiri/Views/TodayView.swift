@@ -964,9 +964,25 @@ private struct LogRowSwipeActions: ViewModifier {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white)
                 .frame(width: Self.buttonSize, height: Self.buttonSize)
-                .background(tint, in: .circle)
+                .modifier(SwipePillChrome(tint: tint))
         }
         .buttonStyle(.plain)
+    }
+
+    /// Real Liquid Glass on iOS 26 — these buttons were IMITATING the
+    /// system's swipe pills with a solid fill. Only one or two are ever
+    /// visible mid-swipe, so the no-glass-in-list-rows perf rule
+    /// (LogButton's lesson) doesn't apply. Solid fill below 26.
+    private struct SwipePillChrome: ViewModifier {
+        let tint: Color
+
+        func body(content: Content) -> some View {
+            if #available(iOS 26.0, *) {
+                content.glassEffect(.regular.tint(tint).interactive(), in: .circle)
+            } else {
+                content.background(tint, in: .circle)
+            }
+        }
     }
 
     private func settle(_ value: CGFloat) {

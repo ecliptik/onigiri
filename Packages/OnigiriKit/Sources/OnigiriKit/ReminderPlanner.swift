@@ -109,10 +109,12 @@ public enum ReminderPlanner {
             planned.append(streakWarning(at: fire, streak: state.streak))
         }
         // Tomorrow's streak warning is safe to pre-plan only when today is
-        // already earned — otherwise the streak may be dead by then.
+        // already earned — otherwise the streak may be dead by then. By
+        // the time it fires, the earned today has JOINED the streak:
+        // say N+1, not today's N.
         if enabled.streak, state.todayGoalMet, state.streak >= 2,
            let fire = at(streakHour, dayOffset: 1) {
-            planned.append(streakWarning(at: fire, streak: state.streak))
+            planned.append(streakWarning(at: fire, streak: state.streak + 1))
         }
         if enabled.meals {
             for day in 1...horizonDays {

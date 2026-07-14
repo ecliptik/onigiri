@@ -29,9 +29,14 @@ when a release starts; this file is the durable to-do between sessions.
   card, Favorites-first scopes, scan rows with LogButton-sized
   icons, Goal mode picker on top.
 - [x] RELEASED as v1.9.0 (2026-07-14).
-- [ ] Batch D (product calls: watch tab count, Always-On privacy,
-  locked-phone widget zeros, midnight edges, chart a11y, iOS 26
-  garnish) — discuss before building.
+- [x] Batch D shipped as v1.9.1 (2026-07-14, all items except
+  Always-On privacy — declined): watch to 3 pages (favorites fold
+  into the meal picker), locked-phone widgets keep the last-good
+  snapshot, midnight-spanning burn apportions, streak/month widgets
+  pre-render midnight, streak warning says N+1, chart/grid/watch
+  accessibility, complication Smart Stack relevance, widget-intent
+  echo guard, and the gated iOS 26 garnish (hard scroll edges, glass
+  swipe pills, symbol effects).
 
 ## 2.0 — Intelligence
 

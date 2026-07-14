@@ -1,7 +1,7 @@
 import SwiftUI
 import OnigiriKit
 
-/// The watch's view of today's log (page between Metrics and Favorites):
+/// The watch's view of today's log (the last page, after Metrics):
 /// every food entry, tap to adjust its calories or remove it — the
 /// quick fixes for a fat-fingered watch log, without reaching for the
 /// phone. Water stays phone-side; the log here is food only.
@@ -81,6 +81,8 @@ private struct WatchEntryEditSheet: View {
     let entry: FoodLogEntry
     @Environment(\.dismiss) private var dismiss
     @State private var kcal: Double
+    /// Fixed 28pt ignored the watch text-size setting.
+    @ScaledMetric(relativeTo: .title) private var valueSize = 28.0
 
     init(model: WatchModel, entry: FoodLogEntry) {
         self.model = model
@@ -100,7 +102,7 @@ private struct WatchEntryEditSheet: View {
                     adjustButton("minus", by: -25)
                     VStack(spacing: 0) {
                         Text("\(kcal, format: .number.precision(.fractionLength(0)))")
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .font(.system(size: valueSize, weight: .bold, design: .rounded))
                             .monospacedDigit()
                             .contentTransition(.numericText())
                         Text("kcal")
@@ -113,6 +115,18 @@ private struct WatchEntryEditSheet: View {
                         sensitivity: .medium
                     )
                     adjustButton("plus", by: 25)
+                }
+                // One ADJUSTABLE element: VoiceOver read the cluster as
+                // four stops, and crown rotation needs sighted focus.
+                .accessibilityElement()
+                .accessibilityLabel("Calories")
+                .accessibilityValue("\(Int(kcal)) kilocalories")
+                .accessibilityAdjustableAction { direction in
+                    switch direction {
+                    case .increment: kcal = min(5000, kcal + 25)
+                    case .decrement: kcal = max(0, kcal - 25)
+                    @unknown default: break
+                    }
                 }
 
                 Button {

@@ -14,6 +14,28 @@ struct OnigiriWatchWidgetsBundle: WidgetBundle {
 
 // MARK: - Shared provider
 
+/// Smart Stack ranking (batch D): timeline widgets compete for
+/// placement with signals we provide, and without any the stack
+/// never surfaces Onigiri on its own. TimelineEntryRelevance is
+/// watchOS 7 — no availability gate needed at the 10.0 floor.
+enum ComplicationRelevance {
+    /// The balance/summary complications matter most around meals.
+    static func mealWindow(at date: Date) -> TimelineEntryRelevance {
+        let hour = Calendar.current.component(.hour, from: date)
+        let inWindow = (7...8).contains(hour)
+            || (11...13).contains(hour)
+            || (17...19).contains(hour)
+        return TimelineEntryRelevance(score: inWindow ? 60 : 10)
+    }
+
+    /// The streak matters in the evening, while there's still time to
+    /// save the day.
+    static func evening(at date: Date) -> TimelineEntryRelevance {
+        let hour = Calendar.current.component(.hour, from: date)
+        return TimelineEntryRelevance(score: (19...22).contains(hour) ? 50 : 10)
+    }
+}
+
 struct WatchEntry: TimelineEntry {
     let date: Date
     let state: DailyPlanLoader.State
@@ -22,6 +44,7 @@ struct WatchEntry: TimelineEntry {
     /// Health access never granted — a confident green "0 kcal" before
     /// setup was indistinguishable from a genuinely balanced day.
     var needsSetup = false
+    var relevance: TimelineEntryRelevance?
 
     /// The headline number in the user's chosen style: (value, positive-is-good).
     var headline: (kcal: Double, goodAboveZero: Bool) {
@@ -81,15 +104,18 @@ struct WatchProvider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<WatchEntry>) -> Void) {
         Task { @MainActor in
             let now = Date()
-            let entry = await load()
+            var entry = await load()
+            entry.relevance = ComplicationRelevance.mealWindow(at: now)
             // Push-based reloads keep widgets fresh; this poll is only a fallback.
             let refresh = now.addingTimeInterval(WidgetRefreshPolicy.pollFallback)
             let midnight = Calendar.current.date(
                 byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now)
             )
             if let midnight, midnight <= refresh {
+                var fresh = entry.newDay(at: midnight)
+                fresh.relevance = ComplicationRelevance.mealWindow(at: midnight)
                 completion(Timeline(
-                    entries: [entry, entry.newDay(at: midnight)],
+                    entries: [entry, fresh],
                     policy: .after(midnight)
                 ))
             } else {
@@ -193,6 +219,7 @@ struct SummaryEntry: TimelineEntry {
     let slots: [SummarySlot]
     var showsRemaining = false
     var needsSetup = false
+    var relevance: TimelineEntryRelevance?
 
     static let placeholder = SummaryEntry(
         date: .now,
@@ -242,15 +269,18 @@ struct SummaryProvider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<SummaryEntry>) -> Void) {
         Task { @MainActor in
             let now = Date()
-            let entry = await load()
+            var entry = await load()
+            entry.relevance = ComplicationRelevance.mealWindow(at: now)
             // Push-based reloads keep widgets fresh; this poll is only a fallback.
             let refresh = now.addingTimeInterval(WidgetRefreshPolicy.pollFallback)
             let midnight = Calendar.current.date(
                 byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now)
             )
             if let midnight, midnight <= refresh {
+                var fresh = entry.newDay(at: midnight)
+                fresh.relevance = ComplicationRelevance.mealWindow(at: midnight)
                 completion(Timeline(
-                    entries: [entry, entry.newDay(at: midnight)],
+                    entries: [entry, fresh],
                     policy: .after(midnight)
                 ))
             } else {
@@ -363,6 +393,7 @@ struct StreakEntry: TimelineEntry {
     let date: Date
     let streak: Int
     let needsSetup: Bool
+    var relevance: TimelineEntryRelevance?
 
     static let placeholder = StreakEntry(date: .now, streak: 3, needsSetup: false)
 }
@@ -382,15 +413,24 @@ struct StreakComplicationProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<StreakEntry>) -> Void) {
         Task { @MainActor in
-            let entry = await load()
-            // The streak only moves when a day completes — refresh at
-            // midnight, with a lazy fallback in between.
+            // The streak only moves when a day completes — pre-render
+            // the post-midnight number (today judged complete) so
+            // yesterday's count never shows into the new day.
             let refresh = Date().addingTimeInterval(WidgetRefreshPolicy.pollFallback)
             let midnight = Calendar.current.date(
                 byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: .now)
             )
+            let (streak, atMidnight, needsSetup) = await StreakLoader.loadWithMidnight(midnight ?? .now)
+            var entry = StreakEntry(date: .now, streak: streak, needsSetup: needsSetup)
+            entry.relevance = ComplicationRelevance.evening(at: .now)
+            var entries = [entry]
+            if let midnight, midnight <= refresh {
+                var fresh = StreakEntry(date: midnight, streak: atMidnight, needsSetup: needsSetup)
+                fresh.relevance = ComplicationRelevance.evening(at: midnight)
+                entries.append(fresh)
+            }
             completion(Timeline(
-                entries: [entry],
+                entries: entries,
                 policy: .after(midnight.map { min($0, refresh) } ?? refresh)
             ))
         }

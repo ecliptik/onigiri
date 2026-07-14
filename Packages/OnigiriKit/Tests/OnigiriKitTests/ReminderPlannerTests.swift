@@ -114,6 +114,10 @@ struct ReminderPlannerTests {
         )
         #expect(fireHours(planned, kind: .streak).isEmpty)
         #expect(fireHours(planned, kind: .streak, dayOffset: 1) == [20])
+        // By the time tomorrow's warning fires, the earned today has
+        // joined the streak: 6 + today = "7-day streak".
+        let tomorrow = planned.first { $0.kind == .streak }
+        #expect(tomorrow?.body.contains("7-day streak") == true)
     }
 
     @Test func noStreakWarningForShortStreaks() {

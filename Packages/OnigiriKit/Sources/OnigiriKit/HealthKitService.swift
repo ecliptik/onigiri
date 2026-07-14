@@ -167,11 +167,24 @@ public final class HealthKitService {
         return try await sum(nutrient.healthKitIdentifier, unit: nutrient.healthKitUnit, start: start, end: end)
     }
 
+    /// Burn samples can span midnight (a watch basal row can run
+    /// 22:00→02:00); the default overlap predicate lets the statistics
+    /// engine apportion them across days. .strictStartDate DROPPED the
+    /// post-midnight slice from both days — a small systematic burn
+    /// undercount every night. Instantaneous dietary/water samples
+    /// keep strict, which correctly stops a boundary sample from
+    /// matching two days.
+    private static func dayPredicateOptions(for identifier: HKQuantityTypeIdentifier) -> HKQueryOptions {
+        identifier == .activeEnergyBurned || identifier == .basalEnergyBurned
+            ? [] : .strictStartDate
+    }
+
     private func sum(
         _ identifier: HKQuantityTypeIdentifier, unit: HKUnit, start: Date, end: Date
     ) async throws -> Double {
         let inToday = HKQuery.predicateForSamples(
-            withStart: start, end: end, options: .strictStartDate
+            withStart: start, end: end,
+            options: Self.dayPredicateOptions(for: identifier)
         )
         let descriptor = HKStatisticsQueryDescriptor(
             predicate: .quantitySample(type: HKQuantityType(identifier), predicate: inToday),
@@ -184,6 +197,26 @@ public final class HealthKitService {
             // Undetermined reads behave like denied reads elsewhere in
             // HealthKit (silently empty); prompting is start()'s job.
             return 0
+        }
+    }
+
+    /// True when reads fail because the device is locked (file
+    /// protection seals the Health store until first unlock). A
+    /// background widget reload hitting a sealed store reads empty and
+    /// replaced a correct widget with confident zeros until the next
+    /// unlock — callers keep their last-good snapshot instead.
+    public func isStoreLocked() async -> Bool {
+        let descriptor = HKSampleQueryDescriptor(
+            predicates: [.quantitySample(type: HKQuantityType(.dietaryEnergyConsumed))],
+            sortDescriptors: [], limit: 1
+        )
+        do {
+            _ = try await descriptor.result(for: store)
+            return false
+        } catch let error as HKError where error.code == .errorDatabaseInaccessible {
+            return true
+        } catch {
+            return false
         }
     }
 
@@ -244,7 +277,10 @@ public final class HealthKitService {
     private func dailyTotals(
         _ identifier: HKQuantityTypeIdentifier, start: Date, end: Date
     ) async throws -> [Date: Double] {
-        let inRange = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+        let inRange = HKQuery.predicateForSamples(
+            withStart: start, end: end,
+            options: Self.dayPredicateOptions(for: identifier)
+        )
         let descriptor = HKStatisticsCollectionQueryDescriptor(
             predicate: .quantitySample(type: HKQuantityType(identifier), predicate: inRange),
             options: .cumulativeSum,

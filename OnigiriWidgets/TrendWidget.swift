@@ -130,7 +130,22 @@ struct TrendWidgetView: View {
             }
             .chartYScale(domain: yDomain)
             .chartXAxis(.hidden)
+            // One spoken sentence — the marks are unlabeled points.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Weight trend chart")
+            .accessibilityValue(chartSummary)
         }
+    }
+
+    private var chartSummary: String {
+        var parts: [String] = []
+        if let latest = entry.smoothed.last?.weightLb {
+            parts.append("7-day average \(latest.formatted(.number.precision(.fractionLength(1)))) pounds")
+        }
+        if let target = entry.targetLb {
+            parts.append("target \(target.formatted(.number.precision(.fractionLength(0)))) pounds")
+        }
+        return parts.isEmpty ? "No weigh-ins yet" : parts.joined(separator: ", ")
     }
 
     private var yDomain: ClosedRange<Double> {

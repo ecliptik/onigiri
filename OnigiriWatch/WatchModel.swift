@@ -219,6 +219,10 @@ final class WatchModel {
         let generation = flashGeneration
         flash = message
         flashIsError = isError
+        // Spoken too: the transient text + haptic left VoiceOver users
+        // unable to tell a failed log from a success (the model's own
+        // comment about ambiguous haptics, one layer up).
+        AccessibilityNotification.Announcement(message).post()
         Task {
             try? await Task.sleep(for: .seconds(isError ? 4 : 2))
             if generation == flashGeneration { flash = nil }

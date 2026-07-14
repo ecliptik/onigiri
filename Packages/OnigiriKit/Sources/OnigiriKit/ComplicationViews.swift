@@ -186,16 +186,32 @@ public struct WaterAccessoryView: View {
 @MainActor
 public enum StreakLoader {
     public static func load() async -> (streak: Int, needsSetup: Bool) {
+        let (streak, _, needsSetup) = await loadWithMidnight(.now)
+        return (streak, needsSetup)
+    }
+
+    /// The streak now AND as it will read just after `midnight` — the
+    /// second value judges today as a completed day (earned extends the
+    /// streak, missed or untracked resets it), so a pre-rendered
+    /// midnight entry never shows yesterday's number into the new day
+    /// while WidgetKit waits out its budget. Modulo late logs: any
+    /// post-generation log pushes a reload that regenerates both.
+    public static func loadWithMidnight(_ midnight: Date) async -> (streak: Int, atMidnight: Int, needsSetup: Bool) {
         let needsSetup = await PlanCache.needsSetup()
         let state = await PlanCache.state(goal: WatchSync.loadGoal())
         let totals = await PlanCache.energyTotals()
-        let earned = StreakCalendar.earnedDays(
-            totals: totals,
-            targetDeficitKcal: state.deficitTargetKcal,
-            targetsByDay: DeficitTargetHistory.targetsByDay(),
-            untrackedBelowKcal: SharedStore.untrackedBelowKcal
-        )
-        return (StreakCalendar.currentStreak(earned: earned), needsSetup)
+        let targets = DeficitTargetHistory.targetsByDay()
+        func streak(asOf date: Date) -> Int {
+            let earned = StreakCalendar.earnedDays(
+                totals: totals,
+                targetDeficitKcal: state.deficitTargetKcal,
+                targetsByDay: targets,
+                untrackedBelowKcal: SharedStore.untrackedBelowKcal,
+                today: date
+            )
+            return StreakCalendar.currentStreak(earned: earned, today: date)
+        }
+        return (streak(asOf: .now), streak(asOf: midnight), needsSetup)
     }
 }
 

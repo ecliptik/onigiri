@@ -28,7 +28,9 @@ flow test green). Deviations from the writeup:
   log-affected kinds. The widget-intent echo suppression (cross-
   process stamp) was NOT done — deferred with batch D.
 
-Batch D remains open for discussion. Everything above shipped in
+Batch D shipped in v1.9.1 (2026-07-14) — every item except
+Always-On privacy, which the user declined (glanceability beats
+shoulder-surfing on a personal device). Everything above shipped in
 v1.9.0 (2026-07-14), together with the on-device style arc that
 followed the review: the one-surface grouped idiom, the rice-paper
 canvas (Color.riceCanvas), and the nori structural accent

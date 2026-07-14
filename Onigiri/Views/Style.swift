@@ -111,6 +111,20 @@ extension View {
     }
 }
 
+extension View {
+    /// iOS 26's hard scroll-edge under pinned chrome (the always-on
+    /// search field, the Log sheet's scope bar) — content clips
+    /// crisply instead of ghosting through. A no-op on iOS 18.
+    @ViewBuilder
+    func hardTopScrollEdge() -> some View {
+        if #available(iOS 26.0, *) {
+            self.scrollEdgeEffectStyle(.hard, for: .top)
+        } else {
+            self
+        }
+    }
+}
+
 extension Font {
     /// Section headers on scroll screens (Today's "Log", Water's day list) —
     /// proportional to the large controls that sit beside them. Cards keep

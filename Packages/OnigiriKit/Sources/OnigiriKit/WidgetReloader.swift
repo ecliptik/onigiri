@@ -48,7 +48,15 @@ public enum WidgetReloader {
     public static let debounce: Duration = .seconds(2)
 
     public static func requestReload(kinds: [String]) {
-        pendingKinds.formUnion(kinds)
+        // Cross-process echo guard: an interactive intent (widget
+        // process) already reloaded its kinds directly; the same
+        // HealthKit write then wakes the app, whose observer lands
+        // here — the in-memory debounce can't see across processes,
+        // so every widget tap was paying a second full reload burst.
+        let skip = recentDirectKinds()
+        let wanted = kinds.filter { !skip.contains($0) }
+        guard !wanted.isEmpty else { return }
+        pendingKinds.formUnion(wanted)
         schedule()
     }
 
@@ -64,6 +72,23 @@ public enum WidgetReloader {
         for kind in kinds {
             WidgetCenter.shared.reloadTimelines(ofKind: kind)
         }
+        // Stamp AFTER the reloads: if the extension dies mid-intent the
+        // observer echo still covers the write.
+        SharedStore.defaults.set(
+            ["stamp": Date.now.timeIntervalSince1970, "kinds": kinds] as [String: Any],
+            forKey: directStampKey
+        )
+    }
+
+    private static let directStampKey = "widgetReloader.directReload"
+    private static let echoWindow: TimeInterval = 5
+
+    private static func recentDirectKinds() -> Set<String> {
+        guard let dict = SharedStore.defaults.dictionary(forKey: directStampKey),
+              let stamp = dict["stamp"] as? Double,
+              Date.now.timeIntervalSince1970 - stamp < echoWindow,
+              let kinds = dict["kinds"] as? [String] else { return [] }
+        return Set(kinds)
     }
 
     /// Run any pending reload immediately. Call when the scene leaves the

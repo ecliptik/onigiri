@@ -2,7 +2,11 @@ import Foundation
 import OnigiriKit
 
 /// Everything a widget needs to render one moment of the day.
-struct DaySnapshot {
+/// Codable: the last good snapshot persists in the App Group so a
+/// background reload against a LOCKED phone (sealed Health store —
+/// e.g. a watch log syncing in overnight) re-renders it instead of
+/// replacing a correct widget with confident zeros until unlock.
+struct DaySnapshot: Codable {
     var summary: DailyEnergySummary
     var deficitTargetKcal: Double?
     var remainingKcal: Double?
@@ -72,10 +76,17 @@ enum SnapshotLoader {
     /// The phone mirrors the goal into the App Group on every sync push;
     /// the shared DailyPlanLoader does the rest, like the watch.
     static func load() async -> DaySnapshot {
+        // Sealed store (locked phone): serve the last good snapshot —
+        // its values are stale-but-true; zeros are confidently wrong.
+        if await HealthKitService().isStoreLocked(),
+           let data = SharedStore.defaults.data(forKey: lastGoodKey),
+           let cached = try? JSONDecoder().decode(DaySnapshot.self, from: data) {
+            return cached
+        }
         let needsSetup = await PlanCache.needsSetup()
         let goal = WatchSync.loadGoal()
         let state = await PlanCache.state(goal: goal)
-        return DaySnapshot(
+        let snapshot = DaySnapshot(
             summary: state.summary,
             deficitTargetKcal: state.deficitTargetKcal,
             remainingKcal: state.remainingKcal,
@@ -84,5 +95,11 @@ enum SnapshotLoader {
             needsSetup: needsSetup,
             isMaintenance: goal?.isMaintenance ?? false
         )
+        if !needsSetup, let data = try? JSONEncoder().encode(snapshot) {
+            SharedStore.defaults.set(data, forKey: lastGoodKey)
+        }
+        return snapshot
     }
+
+    private static let lastGoodKey = "widget.lastGoodSnapshot"
 }

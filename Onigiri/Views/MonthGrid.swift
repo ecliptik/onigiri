@@ -32,12 +32,16 @@ struct MonthGridView: View {
         let symbols = calendar.veryShortStandaloneWeekdaySymbols
         // Rotate so the row starts on the calendar's first weekday.
         let ordered = Array(symbols[(calendar.firstWeekday - 1)...] + symbols[..<(calendar.firstWeekday - 1)])
+        let full = calendar.standaloneWeekdaySymbols
+        let fullOrdered = Array(full[(calendar.firstWeekday - 1)...] + full[..<(calendar.firstWeekday - 1)])
         return HStack {
-            ForEach(Array(ordered.enumerated()), id: \.offset) { _, symbol in
+            ForEach(Array(ordered.enumerated()), id: \.offset) { index, symbol in
                 Text(symbol)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(Color.nori)
                     .frame(maxWidth: .infinity)
+                    // "Tuesday", not "T… T… S… S…".
+                    .accessibilityLabel(fullOrdered[index])
             }
         }
     }

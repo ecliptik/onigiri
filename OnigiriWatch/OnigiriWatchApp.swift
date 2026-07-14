@@ -43,29 +43,17 @@ struct OnigiriWatchApp: App {
         WindowGroup {
             // Horizontal pages: home (headline + quick log buttons,
             // always immediate on open), Metrics, today's Log (edit or
-            // remove entries), then the three browse pages mirroring the
-            // phone Log sheet's scopes. watchOS's default TabView style
-            // IS horizontal paging with dots, so the pages' own vertical
+            // remove entries). watchOS's default TabView style IS
+            // horizontal paging with dots, so the pages' own vertical
             // scrolling stays crown-friendly.
             TabView {
                 WatchHomeView(model: model)
                 WatchMetricsView(model: model)
                 WatchLogView(model: model)
-                LogScopeView(
-                    model: model, title: "Favorites",
-                    items: model.sync.favorites,
-                    empty: "Favorites from your iPhone appear here."
-                )
-                LogScopeView(
-                    model: model, title: "Meals",
-                    items: Array(model.sync.meals.prefix(10)),
-                    empty: "Save meals on your iPhone and they'll appear here."
-                )
-                LogScopeView(
-                    model: model, title: "Foods",
-                    items: model.sync.recentFoods,
-                    empty: "Foods you log on your iPhone appear here."
-                )
+                // The Favorites/Meals/Foods browse pages were dropped
+                // (batch D): they duplicated the meal-picker sheet one
+                // tap from Home, and six pages is past the 2-5 watchOS
+                // guideline — "Foods" was five swipes away.
             }
             .onChange(of: scenePhase) { _, phase in
                 // Wrist-down right after logging: run the pending reload

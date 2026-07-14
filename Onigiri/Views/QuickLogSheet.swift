@@ -403,11 +403,19 @@ struct QuickLogSheet: View {
                     .buttonStyle(.borderedProminent)
                 }
             } else if !searchText.isEmpty {
-                ContentUnavailableView(
-                    "No matches",
-                    systemImage: "magnifyingglass",
-                    description: Text("Try different words, or search online below.")
-                )
+                // Compact on purpose, NOT ContentUnavailableView: its
+                // full-height layout shoved the Online section's search
+                // button down under the bottom search bar.
+                VStack(spacing: 4) {
+                    Text("No matches")
+                        .font(.headline)
+                    Text("Try different words, or search online below.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
             } else if kind == .favorites {
                 Text("No favorites yet — swipe right on a food or meal to star it.")
                     .font(.subheadline)

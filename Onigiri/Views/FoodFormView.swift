@@ -12,7 +12,7 @@ struct FoodFormView: View {
     static var searchPrompt: String {
         switch SharedStore.textSearchMode {
         case .openFoodFacts: "Search OpenFoodFacts"
-        case .fdc: "Search FoodData Central"
+        case .fdc: "Search FDC"
         case .both: "Search online databases"
         }
     }
@@ -106,11 +106,53 @@ struct FoodFormView: View {
 
     var body: some View {
         NavigationStack {
+            searchableForm
+                .navigationTitle(food == nil && createdFood == nil ? "New Food" : "Edit Food")
+                .navigationBarTitleDisplayMode(.inline)
+        }
+        .toastHost()
+    }
+
+    /// The scanner and online search exist to FILL a blank form. A form
+    /// opened FROM a search result (or editing a saved food) offering
+    /// another search was a loop — they render only for a blank new
+    /// food, the Library-screen add path.
+    private var isBlankNewFood: Bool {
+        food == nil && prefill == nil && createdFood == nil
+    }
+
+    @ViewBuilder
+    private var searchableForm: some View {
+        if isBlankNewFood {
+            formContent
+                // The STANDARD system search field, bottom-placed like
+                // the Log sheet's — the barcode scanner sits in the top
+                // section (the system field can't host it).
+                .searchable(
+                    text: $dbQuery,
+                    isPresented: $dbSearchActive,
+                    prompt: Self.searchPrompt
+                )
+                .onSubmit(of: .search) {
+                    Task { await onlineSearch.search(dbQuery) }
+                }
+                .onChange(of: dbQuery) { _, text in
+                    if text.trimmingCharacters(in: .whitespaces).isEmpty {
+                        onlineSearch.clear()
+                    }
+                }
+        } else {
+            formContent
+        }
+    }
+
+    private var formContent: some View {
             Form {
                 // The scanner leads the form as a labeled row (Micheal's
                 // pick — the toolbar icon crowded the Save cluster);
                 // lookup status lands right beneath it. The search field
                 // lives at the bottom, system placement.
+                if isBlankNewFood {
                 Section {
                     Button {
                         showScanner = true
@@ -131,10 +173,11 @@ struct FoodFormView: View {
                             .foregroundStyle(.orange)
                     }
                 }
+                }
 
                 // Inline OpenFoodFacts results (the shared section) —
                 // picking one prefills the fields below.
-                if !dbQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                if isBlankNewFood, !dbQuery.trimmingCharacters(in: .whitespaces).isEmpty {
                     OnlineResultsSection(query: dbQuery, search: onlineSearch, onPick: { product in
                         apply(product)
                         endDatabaseSearch()
@@ -209,26 +252,18 @@ struct FoodFormView: View {
                     }
                 }
 
-            }
-            .compactSections()
-            .navigationTitle(food == nil && createdFood == nil ? "New Food" : "Edit Food")
-            .navigationBarTitleDisplayMode(.inline)
-            // The STANDARD system search field, bottom-placed like the
-            // Log sheet's — the barcode scanner sits in the top toolbar
-            // on both screens (the system field can't host it).
-            .searchable(
-                text: $dbQuery,
-                isPresented: $dbSearchActive,
-                prompt: Self.searchPrompt
-            )
-            .onSubmit(of: .search) {
-                Task { await onlineSearch.search(dbQuery) }
-            }
-            .onChange(of: dbQuery) { _, text in
-                if text.trimmingCharacters(in: .whitespaces).isEmpty {
-                    onlineSearch.clear()
+                // Where these numbers came from — the OFF product page
+                // directly; FDC's site 404s deep item links (verified
+                // live), so its link opens this food's name searched on
+                // fdc.nal.usda.gov instead.
+                if let provenanceLine {
+                    Section {
+                    } footer: {
+                        Text(.init(provenanceLine))
+                    }
                 }
             }
+            .compactSections()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -344,8 +379,21 @@ struct FoodFormView: View {
                 // or scanned IN the form confirms first.
                 initialSnapshot = currentSnapshot
             }
+    }
+
+    /// "Source:" for a food that carries an online identity — an fdc:
+    /// code or a numeric barcode. Editable name feeds the FDC link, so
+    /// it lives here, not in the shared results section.
+    private var provenanceLine: String? {
+        guard let barcode, !barcode.isEmpty else { return nil }
+        if FoodDataCentralClient.fdcId(fromCode: barcode) != nil {
+            let query = name.trimmingCharacters(in: .whitespaces)
+                .addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+            guard !query.isEmpty else { return nil }
+            return "Source: [FDC](https://fdc.nal.usda.gov/food-search/?query=\(query))"
         }
-        .toastHost()
+        guard barcode.allSatisfy(\.isNumber) else { return nil }
+        return "Source: [OpenFoodFacts](https://world.openfoodfacts.org/product/\(barcode))"
     }
 
     /// A database pick landed in the fields — retire the search UI.

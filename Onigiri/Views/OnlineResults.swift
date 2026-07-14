@@ -114,17 +114,40 @@ final class OnlineFoodSearch {
     }
 
     private func performSearch(_ query: String, generation: Int) async {
-        let (fdc, off) = await fetchLegs(query: query, offPage: 1, fdcPage: 1, generation: generation)
-        guard generation == searchGeneration else { return } // superseded
-        offHasMore = off.fullPage
-        fdcHasMore = fdc.fullPage
-        // FDC first on ties: generic foods are the reason Both exists.
-        var combined = fdc.hits + off.hits
+        var legs: [Leg] = []
         if mode == .both {
-            combined = OpenFoodFactsClient.rank(combined, query: query, name: \.name, brand: \.brand)
+            // Each leg renders the moment it lands. Awaiting both let
+            // OFF's retry ladder (three 15 s timeouts on a bad day) hold
+            // FDC's rows hostage — the device showed 30 s of spinner and
+            // then never the merged list.
+            await withTaskGroup(of: (isFDC: Bool, leg: Leg).self) { group in
+                group.addTask { (true, await self.fetchFDCLeg(query: query, page: 1, generation: generation)) }
+                group.addTask { (false, await self.fetchOFFLeg(query: query, page: 1)) }
+                for await (isFDC, leg) in group {
+                    guard generation == searchGeneration else { return }
+                    if isFDC { fdcHasMore = leg.fullPage } else { offHasMore = leg.fullPage }
+                    legs.append(leg)
+                    // Merge-and-rank everything seen so far; the late
+                    // leg folds into the ranked list when it arrives.
+                    let combined = OpenFoodFactsClient.rank(
+                        legs.flatMap(\.hits), query: query, name: \.name, brand: \.brand
+                    ).filter { !rejected.contains($0.barcode) }
+                    if !combined.isEmpty {
+                        results = combined
+                        isSearching = false
+                    }
+                }
+            }
+        } else {
+            let (fdc, off) = await fetchLegs(query: query, offPage: 1, fdcPage: 1, generation: generation)
+            guard generation == searchGeneration else { return } // superseded
+            offHasMore = off.fullPage
+            fdcHasMore = fdc.fullPage
+            legs = [fdc, off].filter(\.ran)
+            results = (fdc.hits + off.hits).filter { !rejected.contains($0.barcode) }
         }
-        results = combined.filter { !rejected.contains($0.barcode) }
-        let errors = [fdc.error, off.error].compactMap { $0 }
+        guard generation == searchGeneration else { return }
+        let errors = legs.compactMap(\.error)
         if let first = errors.first, results.isEmpty {
             // Every leg that ran failed — toast it (hosts on each
             // sheet); the inline message stays for result states.
@@ -146,7 +169,7 @@ final class OnlineFoodSearch {
     private var sourceDisplayName: String {
         switch mode {
         case .openFoodFacts: "OpenFoodFacts"
-        case .fdc: "FoodData Central"
+        case .fdc: "FDC"
         case .both: "online"
         }
     }
@@ -332,7 +355,7 @@ final class OnlineFoodSearch {
         guard hasSearched else { return nil }
         let encoded = lastQuery.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? lastQuery
         let off = "[OpenFoodFacts](https://world.openfoodfacts.org/cgi/search.pl?search_terms=\(encoded)&action=process)"
-        let fdc = "[FoodData Central](https://fdc.nal.usda.gov/food-search/?query=\(encoded))"
+        let fdc = "[FDC](https://fdc.nal.usda.gov/food-search/?query=\(encoded))"
         switch mode {
         case .openFoodFacts: return "Source: \(off)"
         case .fdc: return "Source: \(fdc)"
@@ -446,7 +469,7 @@ struct OnlineResultsSection: View {
     static var nextSearchName: String {
         switch SharedStore.textSearchMode {
         case .openFoodFacts: "OpenFoodFacts"
-        case .fdc: "FoodData Central"
+        case .fdc: "FDC"
         case .both: "OpenFoodFacts & FDC"
         }
     }

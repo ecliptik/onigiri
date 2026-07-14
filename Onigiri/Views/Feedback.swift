@@ -65,18 +65,21 @@ private struct ToastHost: ViewModifier {
             .overlay(alignment: .bottom) {
                 if let item = center.current {
                     HStack(spacing: 12) {
+                        // Body-size text with roomier padding — the
+                        // subheadline capsule read too small against the
+                        // rest of the app (the user).
                         Text(item.message)
-                            .font(.subheadline.weight(.medium))
+                            .font(.body.weight(.medium))
                         if item.undo != nil {
                             Button("Undo") {
                                 center.performUndo(item)
                             }
-                            .font(.subheadline.weight(.semibold))
+                            .font(.body.weight(.semibold))
                             .foregroundStyle(Color.riceToast)
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 14)
                     .glassEffect(.regular, in: .capsule)
                     .padding(.bottom, 56)
                     .transition(.move(edge: .bottom).combined(with: .opacity))

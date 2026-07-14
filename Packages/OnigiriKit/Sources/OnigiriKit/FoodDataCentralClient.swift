@@ -70,12 +70,14 @@ public enum FoodDataCentralError: Error, LocalizedError {
     /// 5xx — momentary shedding; a short retry often recovers.
     case serverBusy
 
+    // "FDC" throughout: the one long form ("USDA FoodData Central") lives
+    // in Settings, which introduces the acronym — everywhere else uses it.
     public var errorDescription: String? {
         switch self {
-        case .notFound: "That food isn't in FoodData Central."
-        case .badResponse: "FoodData Central didn't respond as expected."
-        case .badAPIKey: "FoodData Central rejected the API key — check it in Settings."
-        case .throttled, .serverBusy: "FoodData Central is busy — wait a minute and try again."
+        case .notFound: "That food isn't in FDC."
+        case .badResponse: "FDC didn't respond as expected."
+        case .badAPIKey: "FDC rejected the API key — check it in Settings."
+        case .throttled, .serverBusy: "FDC is busy — wait a minute and try again."
         }
     }
 

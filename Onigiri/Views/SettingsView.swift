@@ -157,11 +157,11 @@ struct SettingsView: View {
                 try await FoodDataCentralClient(apiKey: key).validateKey()
                 verdict = .success
             } catch let error as FoodDataCentralError where error == .badAPIKey {
-                verdict = .failure("FoodData Central rejected this key")
+                verdict = .failure("FDC rejected this key")
             } catch let error as FoodDataCentralError where error.isBusy {
-                verdict = .failure("FoodData Central is busy — try again in a minute")
+                verdict = .failure("FDC is busy — try again in a minute")
             } catch {
-                verdict = .failure("Couldn't reach FoodData Central")
+                verdict = .failure("Couldn't reach FDC")
             }
             if fdcAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines) == key {
                 fdcKeyTest = verdict
@@ -211,7 +211,7 @@ struct SettingsView: View {
         Section {
             Picker("Source", selection: $textSearchSource) {
                 Text("OpenFoodFacts").tag(SharedStore.textSearchSourceOFF)
-                Text("USDA FoodData Central").tag(SharedStore.textSearchSourceFDC)
+                Text("USDA FoodData Central (FDC)").tag(SharedStore.textSearchSourceFDC)
                 Text("Both").tag(SharedStore.textSearchSourceBoth)
             }
             if textSearchSource != SharedStore.textSearchSourceOFF {

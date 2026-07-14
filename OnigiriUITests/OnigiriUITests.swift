@@ -17,6 +17,17 @@ func switchTab(in app: XCUIApplication, to name: String) {
     anyTab.tap()
 }
 
+
+/// Today's "Details" caption flattens to a Button (single-Text label,
+/// chevron removed 2026-07-13) while Calendar's stays a StaticText —
+/// match by label, not element type.
+@MainActor
+func detailsLink(in app: XCUIApplication) -> XCUIElement {
+    app.descendants(matching: .any).matching(
+        NSPredicate(format: "label == 'Details' AND elementType IN {9, 48}")
+    ).firstMatch
+}
+
 final class OnigiriUITests: XCTestCase {
 
     @MainActor
@@ -103,7 +114,7 @@ final class OnigiriUITests: XCTestCase {
 
         // The meter grid drills into the day's full nutrient breakdown,
         // summed from the seeded meals' extended nutrients.
-        app.staticTexts["Details"].tap()
+        detailsLink(in: app).tap()
         XCTAssertTrue(
             app.navigationBars["Details"].waitForExistence(timeout: 10),
             "Meter grid should push the day nutrition detail"
@@ -256,7 +267,7 @@ final class OnigiriUITests: XCTestCase {
         // Predicted vs actual moved off the card into the pushed month
         // detail. Seeded data has a month of weigh-ins and deficit days,
         // so both rows should carry real values (assert on lb, not —).
-        app.staticTexts["Details"].tap()
+        detailsLink(in: app).tap()
         let predictedRow = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label CONTAINS 'Predicted, by deficit' AND label CONTAINS 'lb'"))
             .firstMatch
@@ -301,7 +312,7 @@ final class OnigiriUITests: XCTestCase {
         expandMealSections(in: app)
         scene("today")
 
-        app.staticTexts["Details"].tap()
+        detailsLink(in: app).tap()
         let macros = app.staticTexts["Macronutrients"]
         if macros.waitForExistence(timeout: 5) {
             macros.tap()
@@ -346,9 +357,9 @@ final class OnigiriUITests: XCTestCase {
         scene("foods")
 
         switchTab(in: app, to: "Calendar")
-        _ = app.staticTexts["Details"].waitForExistence(timeout: 10)
+        _ = detailsLink(in: app).waitForExistence(timeout: 10)
         scene("calendar")
-        app.staticTexts["Details"].tap()
+        detailsLink(in: app).tap()
         scene("month", hold: 3.5)
         app.navigationBars.buttons.firstMatch.tap()
 
@@ -429,12 +440,12 @@ final class OnigiriUITests: XCTestCase {
         // Past days: seeded day-3 has entries; day-5 is empty.
         for _ in 0..<3 { app.buttons["Previous day"].tap() }
         shot("past-day-with-data")
-        app.staticTexts["Details"].tap()
+        detailsLink(in: app).tap()
         shot("nutrition-past-day")
         app.navigationBars["Details"].buttons.firstMatch.tap()
         for _ in 0..<2 { app.buttons["Previous day"].tap() }
         shot("past-day-empty")
-        app.staticTexts["Details"].tap()
+        detailsLink(in: app).tap()
         shot("nutrition-empty-day")
         app.navigationBars["Details"].buttons.firstMatch.tap()
 
@@ -540,7 +551,7 @@ final class OnigiriUITests: XCTestCase {
         if tapIfExists(app.buttons["Previous month"]) {
             shot("calendar-previous-month")
         }
-        if tapIfExists(app.staticTexts["Details"]) {
+        if tapIfExists(detailsLink(in: app)) {
             shot("month-detail-sparse", settle: 1.0)
             tapIfExists(app.navigationBars.buttons.firstMatch)
         }

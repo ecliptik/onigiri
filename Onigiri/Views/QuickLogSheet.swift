@@ -179,11 +179,25 @@ struct QuickLogSheet: View {
         let ranked = pool(items)
         NavigationStack {
             List {
-                if isLookingUpBarcode {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                        Text("Looking up product…")
-                            .foregroundStyle(.secondary)
+                // The scan entry, a labeled row like Foods' (the user:
+                // the toolbar icon was the odd one out once Foods grew
+                // its row — same affordance, same place, both screens).
+                // Hidden while searching so results lead.
+                if searchText.isEmpty {
+                    Section {
+                        Button {
+                            activeSheet = .scanner
+                        } label: {
+                            Label("Scan Barcode", systemImage: "barcode.viewfinder")
+                        }
+                        .disabled(isLookingUpBarcode)
+                        if isLookingUpBarcode {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("Looking up product…")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
                 // Water leads the sheet, above Recent in every scope
@@ -310,19 +324,13 @@ struct QuickLogSheet: View {
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        activeSheet = .scanner
-                    } label: {
-                        Image(systemName: "barcode.viewfinder")
-                    }
-                    .accessibilityLabel("Scan barcode")
-                }
                 // "Done", not "Cancel": logging commits immediately (with
                 // its own Undo), so dismissal cancels nothing — and the
                 // sheet stays open for multi-item lunches. Confirm SLOT
                 // (top trailing, emphasized) like Settings' Done — it sat
                 // in the cancel slot, the app's one leading Done.
+                // (The scanner moved from the toolbar into the list's
+                // Scan Barcode row, matching Foods.)
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                         .fontWeight(.semibold)

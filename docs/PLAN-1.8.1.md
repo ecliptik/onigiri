@@ -70,10 +70,9 @@ What SHOULD still converge (follow-ups, not blockers):
    prefilled form" now lives in three places (Foods scan row, Foods
    online pick, Log's lookup). Extract one shared decision helper;
    each screen keeps its own sheet plumbing.
-2. **Scanner placement** — Log keeps the toolbar icon for now (its
-   list leads with Water + Recent; a scan row would push those down).
-   If the icon proves undiscoverable in use, adopt the Foods row
-   there too. One to judge on-device.
+2. **Scanner placement** — RESOLVED 2026-07-13: judged on-device,
+   the Log sheet adopted the Foods row (toolbar icon retired). Both
+   scan entries are now the same labeled row at the top of the list.
 3. **Ranking** — Foods ranks favorites-first, Log ranks recency-only
    (both user rulings, at different times, for different jobs). Fine
    as-is, but worth a conscious re-confirm now that the screens look

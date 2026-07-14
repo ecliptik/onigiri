@@ -191,6 +191,20 @@ private struct LogItemRow: View {
     let item: SyncedMeal
     var onSuccess: (() -> Void)? = nil
 
+    // The secondary caption follows the phone's first tracked slot —
+    // the slot keys already ride the sync context into shared defaults,
+    // and every synced item carries its nutrients.
+    @AppStorage(SharedStore.trackedMetric1Key, store: SharedStore.defaults) private var trackedMetric1 = "sodium"
+    @AppStorage(SharedStore.trackedMetric2Key, store: SharedStore.defaults) private var trackedMetric2 = "water"
+
+    private var metric: TrackedNutrient {
+        .firstFoodMetric(slot1: trackedMetric1, slot2: trackedMetric2)
+    }
+
+    private var metricAmount: Double {
+        metric.itemAmount(sodiumMg: item.sodiumMg, nutrients: item.nutrients ?? NutrientValues()) ?? 0
+    }
+
     var body: some View {
         Button {
             Task {
@@ -201,7 +215,7 @@ private struct LogItemRow: View {
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
-                Text("\(item.kcal, format: .number.precision(.fractionLength(0))) kcal • \(item.sodiumMg, format: .number.precision(.fractionLength(0))) mg Na")
+                Text("\(item.kcal, format: .number.precision(.fractionLength(0))) kcal • \(metricAmount, format: .number.precision(.fractionLength(0...1))) \(metric.captionUnit)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

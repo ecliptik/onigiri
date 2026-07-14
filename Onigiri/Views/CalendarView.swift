@@ -438,11 +438,16 @@ struct MonthDetailView: View {
                     Text(model.monthFoodEntries.map { "\($0)" } ?? "—")
                         .monospacedDigit()
                 }
+                // Values carry the app's semantic colors so the story
+                // pops out of the grey (the user): water blue, burn red,
+                // and the green/orange outcome pair everywhere a sign
+                // means winning or losing ground.
                 LabeledContent("Total water") {
                     Text(model.monthWaterOz.map {
                         "\($0.formatted(.number.precision(.fractionLength(0)))) oz"
                     } ?? "—")
                     .monospacedDigit()
+                    .foregroundStyle(model.monthWaterOz != nil ? Color.blue : Color.secondary)
                 }
                 // The energy rows read as one sum (the user):
                 // burned − calories = deficit.
@@ -453,20 +458,25 @@ struct MonthDetailView: View {
                 LabeledContent("Total burned") {
                     Text("\(model.totalBurned(inMonthOf: month), format: .number.precision(.fractionLength(0))) kcal")
                         .monospacedDigit()
+                        .foregroundStyle(.red)
                 }
+                // Signed like the weight rows (the user): under burn
+                // reads negative — and green, the day cards' outcome
+                // colors.
                 LabeledContent("Total deficit") {
-                    Text(model.totalDeficit(inMonthOf: month).map {
-                        "\($0.formatted(.number.precision(.fractionLength(0)))) kcal"
-                    } ?? "—")
-                    .monospacedDigit()
+                    Text(model.totalDeficit(inMonthOf: month).map { signedKcal(-$0) } ?? "—")
+                        .monospacedDigit()
+                        .foregroundStyle(outcomeColor(model.totalDeficit(inMonthOf: month).map { -$0 }))
                 }
                 LabeledContent("Predicted") {
                     Text(model.predictedLb(inMonthOf: month).map { "≈ \(signedLb($0))" } ?? "—")
                         .monospacedDigit()
+                        .foregroundStyle(outcomeColor(model.predictedLb(inMonthOf: month)))
                 }
                 LabeledContent("Scale change") {
                     Text(model.actualLb(inMonthOf: month).map(signedLb) ?? "—")
                         .monospacedDigit()
+                        .foregroundStyle(outcomeColor(model.actualLb(inMonthOf: month)))
                 }
             }
             Section("Streaks") {
@@ -489,6 +499,18 @@ struct MonthDetailView: View {
 
     private func signedLb(_ value: Double) -> String {
         "\(value.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always(includingZero: false)))) lb"
+    }
+
+    private func signedKcal(_ value: Double) -> String {
+        "\(value.formatted(.number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))) kcal"
+    }
+
+    /// The day cards' outcome pair: negative (losing ground on the
+    /// scale, eating under burn) is green, positive is orange, absent
+    /// or zero stays quiet.
+    private func outcomeColor(_ value: Double?) -> Color {
+        guard let value, value != 0 else { return .secondary }
+        return value < 0 ? .green : .orange
     }
 }
 

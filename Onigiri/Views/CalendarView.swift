@@ -59,7 +59,8 @@ struct CalendarView: View {
                 }
                 .padding(.horizontal)
             }
-            .readableContentWidth()
+            // Grouped surface idiom, app-wide (see TodayView).
+            .readableContentWidth(groupedBackground: true)
             .expandsTabBarAtTop()
             // Month chevrons in the nav bar with the month as the title —
             // the same browsing pattern as Today.
@@ -272,7 +273,7 @@ struct CalendarView: View {
             }
         }
         .padding(14)
-        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 14))
         .contentShape(.rect)
         // The whole card is the tap target: opens the day's full record
         // (sodium, water, entries, backfill) on Today.
@@ -394,7 +395,7 @@ struct CalendarView: View {
                 .foregroundStyle(.secondary)
             }
             .padding(.vertical, 12)
-            .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
+            .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 14))
         }
         .buttonStyle(.plain)
         .accessibilityHint("Shows the month's deficit, weight change, and records")

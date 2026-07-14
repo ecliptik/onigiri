@@ -132,7 +132,11 @@ struct TodayView: View {
                 }
                 .padding(.bottom, 24)
             }
-            .readableContentWidth()
+            // Grouped surface idiom, app-wide (the user, 2026-07-13):
+            // gray page + secondarySystemGroupedBackground cards, so
+            // every card in the app matches the List screens' cells in
+            // both modes (quaternary-over-background diverged in dark).
+            .readableContentWidth(groupedBackground: true)
             .expandsTabBarAtTop()
             // The large title is rendered in-content (dayTitleButton) so
             // one tap opens the month grid directly — the system title
@@ -687,7 +691,7 @@ struct TodayView: View {
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 20)
-        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 12))
         if entry.editable {
             let amount = entry.oz.formatted(.number.precision(.fractionLength(0)))
             label
@@ -786,7 +790,7 @@ struct TodayView: View {
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 20)
-        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 12))
         if entry.editable {
             label
                 .logRowSwipeActions(
@@ -1200,7 +1204,7 @@ struct DailyGoalCard: View {
             Spacer(minLength: 0)
         }
         .padding(14)
-        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 14))
         .padding(.horizontal)
     }
 }
@@ -1223,7 +1227,7 @@ struct MeterCell<Icon: View>: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
-        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 14))
     }
 }
 

@@ -215,7 +215,22 @@ struct MealFormView: View {
                     }
                 }
             }
-            .scrollDismissesKeyboard(.interactively)
+            // .immediately, not .interactively: after typing a portion
+            // the pad stays up, and the very next gesture is a scroll to
+            // find the NEXT food — the keyboard must not eat half the
+            // list (the user).
+            .scrollDismissesKeyboard(.immediately)
+            // Select-all on focus so typing replaces a portion instead
+            // of appending to it (the food form's pattern). The system
+            // search field is exempt — selecting an in-progress query on
+            // refocus would surprise.
+            .onReceive(NotificationCenter.default.publisher(
+                for: UITextField.textDidBeginEditingNotification
+            )) { note in
+                guard let field = note.object as? UITextField,
+                      !(field is UISearchTextField) else { return }
+                DispatchQueue.main.async { field.selectAll(nil) }
+            }
             .alert("Discard changes?", isPresented: $confirmDiscard) {
                 Button("Discard", role: .destructive) { dismiss() }
                 Button("Keep Editing", role: .cancel) {}

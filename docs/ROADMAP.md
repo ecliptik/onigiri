@@ -38,11 +38,14 @@ when a release starts; this file is the durable to-do between sessions.
   echo guard, and the gated iOS 26 garnish (hard scroll edges, glass
   swipe pills, symbol effects).
 
-## 2.0 — Intelligence
+## 2.0 — Intelligence (planned — see PLAN-2.0.md)
 
-- Vision-framework OCR of nutrition labels: point the camera at a
-  label, prefill the food form (complements barcode scanning for foods
-  without barcodes or not in any database).
-- Survey Apple Intelligence features for genuinely useful additions.
-- Both must respect the iOS 18 floor (see PLAN-1.8.md) — gate anything
-  newer behind #available.
+- Scan Nutrition Label: Vision OCR (RecognizeTextRequest, iOS 18
+  floor-clean) → LabelParser in the kit → the existing prefill path;
+  iOS 26 adds the documents-request table branch, gated.
+- Apple Intelligence (Foundation Models, iOS 26, fully gated):
+  label-parse refinement, a "describe it" quick add, meal-name
+  suggestions — and an explicit decline list (no chat, no coaching,
+  no meal plans, no cloud model).
+- Milestones M1–M5 in PLAN-2.0.md; deterministic paths always
+  precede and outrank the model.

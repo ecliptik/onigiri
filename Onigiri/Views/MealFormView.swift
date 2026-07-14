@@ -68,17 +68,24 @@ struct MealFormView: View {
         }
         // The @Query is name-sorted; the other orders re-sort here (ties
         // break alphabetically, which the stable base order provides).
+        let sorted: [Food]
         switch librarySort {
         case .ranked:
-            return pool.sorted {
+            sorted = pool.sorted {
                 if $0.isFavorite != $1.isFavorite { return $0.isFavorite }
                 return $0.recencyDate > $1.recencyDate
             }
         case .recent:
-            return pool.sorted { $0.recencyDate > $1.recencyDate }
+            sorted = pool.sorted { $0.recencyDate > $1.recencyDate }
         case .name:
-            return pool
+            sorted = pool
         }
+        // The meal's members lead regardless of sort — what's IN the
+        // meal stays visible while adding and editing (the user); the
+        // chosen order still applies within each group.
+        let inMeal = sorted.filter { (quantities[$0.persistentModelID] ?? 0) > 0 }
+        guard !inMeal.isEmpty else { return sorted }
+        return inMeal + sorted.filter { (quantities[$0.persistentModelID] ?? 0) == 0 }
     }
 
     private var totalKcal: Double {
@@ -233,6 +240,9 @@ struct MealFormView: View {
             // find the NEXT food — the keyboard must not eat half the
             // list (the user).
             .scrollDismissesKeyboard(.immediately)
+            // Scoped to quantity changes: a picked food animates up to
+            // the members group instead of teleporting.
+            .animation(.default, value: quantities)
             // Select-all on focus so typing replaces a portion instead
             // of appending to it (the food form's pattern). The system
             // search field is exempt — selecting an in-progress query on

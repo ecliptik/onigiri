@@ -80,7 +80,9 @@ struct ScopeBar<Tag: Hashable>: View {
 extension View {
     /// Pins a ScopeBar above a library list, styled like the Log
     /// sheet's: horizontal padding, bar material, stays put while the
-    /// results scroll (Music-style).
+    /// results scroll (Music-style). SHEETS ONLY — a top safeAreaInset
+    /// suppresses large-title rendering, so the Foods TAB renders its
+    /// ScopeBar as a list row instead.
     func scopeBar<Tag: Hashable>(
         options: [(label: String, tag: Tag)], selection: Binding<Tag>
     ) -> some View {

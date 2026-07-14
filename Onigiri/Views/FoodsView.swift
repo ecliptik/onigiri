@@ -135,6 +135,20 @@ struct FoodsView: View {
         let visibleFoods = filteredFoods
         NavigationStack {
             List {
+                // The scope picker rides IN the list, not a pinned
+                // safeAreaInset: any top inset suppresses large-title
+                // rendering (screenshot-verified twice — blank title
+                // zone with both drawer modes), and matching the other
+                // tabs' large leading title won (the user). At rest the
+                // screen reads the same; the picker just scrolls.
+                Section {
+                    ScopeBar(
+                        options: Scope.allCases.map { ($0.rawValue, $0) },
+                        selection: $scope
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                }
                 // The scan entry, a labeled row like the new-food form's
                 // (not a toolbar icon — roadmap 1.8.1). Hidden while
                 // searching so results lead.
@@ -207,17 +221,6 @@ struct FoodsView: View {
             .readableContentWidth(groupedBackground: true)
             .expandsTabBarAtTop()
             .navigationTitle("Foods")
-            // Inline like the Log sheet's: the pinned scope bar's
-            // safeAreaInset suppresses large-title rendering (verified
-            // on the 26.5 sim — the title zone reserved space but drew
-            // nothing), and inline is the structural match anyway.
-            .navigationBarTitleDisplayMode(.inline)
-            // The scope bar replaced the combined Meals+Foods sections
-            // (1.8.1) — the Log sheet's picker, one shared component.
-            .scopeBar(
-                options: Scope.allCases.map { ($0.rawValue, $0) },
-                selection: $scope
-            )
             .fileImporter(isPresented: $showLibraryImporter, allowedContentTypes: [.json]) { result in
                 ToastCenter.shared.show(LibraryTransfer.handlePickedFile(result, context: context))
             }

@@ -93,16 +93,14 @@ struct TodayView: View {
                             }
                         }
                         nutritionLink {
-                            HStack(spacing: 4) {
-                                Text("Details")
-                                Image(systemName: "chevron.right")
-                                    .font(.caption2.weight(.semibold))
-                            }
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 16)
-                            .contentShape(.rect)
+                            // Text-only (the user dropped the chevron):
+                            // the caption itself is the door.
+                            Text("Details")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.vertical, 6)
+                                .padding(.horizontal, 16)
+                                .contentShape(.rect)
                         }
                     }
                     hydrationRow
@@ -313,7 +311,10 @@ struct TodayView: View {
                 Text(dayTitle)
                     .font(.largeTitle.bold())
                     .foregroundStyle(.primary)
-                Image(systemName: "chevron.down")
+                // A calendar glyph, not a chevron: it SAYS what the tap
+                // opens (the month grid) instead of just "something
+                // drops down" (the user).
+                Image(systemName: "calendar")
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(.secondary)
             }

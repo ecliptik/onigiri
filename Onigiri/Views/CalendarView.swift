@@ -312,23 +312,22 @@ struct CalendarView: View {
         let value = slotValue(slot: slot, nutrient: nutrient)
         let text: String = value.map { total in
             let totalText = total.formatted(.number.precision(.fractionLength(0)))
-            switch mode {
-            case .limit:
-                // Words alongside the traffic-light color (see Today's
-                // tracked-metric row).
-                let status = Color.sodiumStatusLabel(mg: total, limitMg: target)
-                return "\(totalText) \(nutrient.unitSymbol)\(status.map { " · \($0)" } ?? "")"
-            case .goal:
-                return "\(totalText) / \(target.formatted(.number.precision(.fractionLength(0)))) \(nutrient.unitSymbol)"
-            }
+            // Color-only on screen by ruling; VoiceOver gets the limit
+            // status via the value below.
+            return mode == .limit
+                ? "\(totalText) \(nutrient.unitSymbol)"
+                : "\(totalText) / \(target.formatted(.number.precision(.fractionLength(0)))) \(nutrient.unitSymbol)"
         } ?? "—"
         let color: Color = value.map { total in
             mode == .limit
                 ? Color.sodiumStatus(mg: total, limitMg: target)
                 : (total >= target ? .green : .primary)
         } ?? .secondary
+        let status = (mode == .limit ? value : nil)
+            .flatMap { Color.sodiumStatusLabel(mg: $0, limitMg: target) }
         return metric(icon: { slotIcon(slot: slot, nutrient: nutrient) },
                       text: text, color: color)
+            .accessibilityValue(status ?? "")
     }
 
     @ViewBuilder

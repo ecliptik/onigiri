@@ -18,6 +18,10 @@ flow test green). Deviations from the writeup:
 - A1/A5 watch-side changes compile but need a WATCH DEPLOY to verify
   live (background context delivery, complication refresh) — check at
   the next weekly deploy window.
+- B7 amended BY RULING (2026-07-13, on-device): NO visible status
+  words on tracked metrics — "the color speaks". The "near limit"/
+  "over limit" text now lives only in accessibilityValue (VoiceOver),
+  on Today, the Calendar day card, and the watch metrics card.
 - C16 splits the mirror fingerprint in two (goal+settings vs library
   lists): settings changes still reload every widget (the trend
   widget reads the goal target), library-only changes reload the

@@ -531,13 +531,13 @@ struct TodayView: View {
         Label {
             switch mode {
             case .limit:
-                // The "· near limit"/"· over limit" tail says in words
-                // what the traffic-light color says — color alone is
-                // invisible to colorblind users and VoiceOver.
-                let status = Color.sodiumStatusLabel(mg: total, limitMg: target)
-                Text("\(total, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(metricName(nutrient))\(status.map { " · \($0)" } ?? "")")
+                // Color-only ON SCREEN by ruling (the user vetoed a
+                // visible "· near limit" tail — the traffic light IS the
+                // status); VoiceOver still hears it via the value.
+                Text("\(total, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(metricName(nutrient))")
                     .foregroundStyle(Color.sodiumStatus(mg: total, limitMg: target))
                     .fontWeight(.medium)
+                    .accessibilityValue(Color.sodiumStatusLabel(mg: total, limitMg: target) ?? "")
             case .goal:
                 Text("\(total, format: .number.precision(.fractionLength(0))) / \(target, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(metricName(nutrient))")
                     .foregroundStyle(met ? Color.green : Color.secondary)

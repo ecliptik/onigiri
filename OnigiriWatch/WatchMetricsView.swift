@@ -92,9 +92,8 @@ struct WatchMetricsView: View {
         let valueColor: Color = mode == .limit
             ? Color.sodiumStatus(mg: total, limitMg: target)
             : (met ? .green : .primary)
-        // The caption carries the limit status in words — the headline's
-        // traffic-light color alone is invisible to colorblind users and
-        // VoiceOver, and the value line has no room on small faces.
+        // Color-only on screen by ruling (the user vetoed visible
+        // status words); VoiceOver hears it via the card's value.
         let status = mode == .limit
             ? Color.sodiumStatusLabel(mg: total, limitMg: target)
             : nil
@@ -111,7 +110,7 @@ struct WatchMetricsView: View {
                     .monospacedDigit()
                     .minimumScaleFactor(0.7)
                     .lineLimit(1)
-                Text(status.map { "\(nutrient.displayName) · \($0)" } ?? nutrient.displayName)
+                Text(nutrient.displayName)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -121,6 +120,7 @@ struct WatchMetricsView: View {
         .padding(.horizontal, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 10))
+        .accessibilityValue(status ?? "")
     }
 
     /// Sodium/water targets ride their long-standing synced keys.

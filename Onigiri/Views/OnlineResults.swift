@@ -52,7 +52,7 @@ final class OnlineFoodSearch {
     /// sources — and the key — the results came from.
     private var mode: SharedStore.TextSearchMode = .openFoodFacts
     private var fdcClient: FoodDataCentralClient?
-    /// Rows carry an OFF/FDC tag only when one list mixes both.
+    /// Rows carry an OFF/USDA tag only when one list mixes both.
     var showsSourceTags: Bool { mode == .both }
     private(set) var lastQuery = ""
     /// Comparing query strings can't tell a resubmit from the search it
@@ -169,7 +169,7 @@ final class OnlineFoodSearch {
     private var sourceDisplayName: String {
         switch mode {
         case .openFoodFacts: "OpenFoodFacts"
-        case .fdc: "FDC"
+        case .fdc: "USDA"
         case .both: "online"
         }
     }
@@ -355,7 +355,7 @@ final class OnlineFoodSearch {
         guard hasSearched else { return nil }
         let encoded = lastQuery.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? lastQuery
         let off = "[OpenFoodFacts](https://world.openfoodfacts.org/cgi/search.pl?search_terms=\(encoded)&action=process)"
-        let fdc = "[FDC](https://fdc.nal.usda.gov/food-search/?query=\(encoded))"
+        let fdc = "[USDA](https://fdc.nal.usda.gov/food-search/?query=\(encoded))"
         switch mode {
         case .openFoodFacts: return "Source: \(off)"
         case .fdc: return "Source: \(fdc)"
@@ -422,9 +422,9 @@ struct OnlineResultRow: View {
                     Text(result.name)
                         .foregroundStyle(.primary)
                     // In Both mode the caption leads with the row's
-                    // source ("FDC · Survey (FNDDS)", "OFF · Kirkland").
+                    // source ("USDA · Survey (FNDDS)", "OFF · Kirkland").
                     let source = search.showsSourceTags
-                        ? (FoodDataCentralClient.fdcId(fromCode: result.barcode) != nil ? "FDC" : "OFF")
+                        ? (FoodDataCentralClient.fdcId(fromCode: result.barcode) != nil ? "USDA" : "OFF")
                         : nil
                     let caption = [source, result.brand?.isEmpty == false ? result.brand : nil]
                         .compactMap { $0 }
@@ -469,8 +469,8 @@ struct OnlineResultsSection: View {
     static var nextSearchName: String {
         switch SharedStore.textSearchMode {
         case .openFoodFacts: "OpenFoodFacts"
-        case .fdc: "FDC"
-        case .both: "OpenFoodFacts & FDC"
+        case .fdc: "USDA"
+        case .both: "OpenFoodFacts & USDA"
         }
     }
 

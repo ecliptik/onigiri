@@ -83,10 +83,24 @@ struct AddPillLongPress: UIViewRepresentable {
             // Device path: accessibility often lives on non-view
             // elements — find the pill view anywhere in this window and
             // test the touch point against its frame.
-            guard let window = gestureRecognizer.view as? UIWindow,
-                  let pill = Self.findAddPill(in: window) else { return false }
-            let frame = pill.convert(pill.bounds, to: window)
-            return frame.insetBy(dx: -8, dy: -8).contains(touch.location(in: window))
+            guard let window = gestureRecognizer.view as? UIWindow else { return false }
+            if let pill = Self.findAddPill(in: window) {
+                let frame = pill.convert(pill.bounds, to: window)
+                return frame.insetBy(dx: -8, dy: -8).contains(touch.location(in: window))
+            }
+            // Last resort (device 2026-07-13: neither strategy above
+            // found the pill — SwiftUI's tab bar keeps labels on
+            // accessibility elements, not views): the pill is the
+            // floating circle at the bottom-trailing corner, so match
+            // the region itself. Key window only, nothing presented
+            // (a sheet's own bottom corner must not log water), and
+            // compact widths only (iPad tab bars live elsewhere).
+            guard window.isKeyWindow,
+                  window.rootViewController?.presentedViewController == nil,
+                  window.bounds.width < 500 else { return false }
+            let point = touch.location(in: window)
+            return point.x >= window.bounds.width - 84
+                && point.y >= window.bounds.height - 130
         }
 
         static func findAddPill(in view: UIView) -> UIView? {

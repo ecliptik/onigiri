@@ -12,7 +12,7 @@ struct FoodFormView: View {
     static var searchPrompt: String {
         switch SharedStore.textSearchMode {
         case .openFoodFacts: "Search OpenFoodFacts"
-        case .fdc: "Search FDC"
+        case .fdc: "Search USDA"
         case .both: "Search online databases"
         }
     }
@@ -390,7 +390,7 @@ struct FoodFormView: View {
             let query = name.trimmingCharacters(in: .whitespaces)
                 .addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
             guard !query.isEmpty else { return nil }
-            return "Source: [FDC](https://fdc.nal.usda.gov/food-search/?query=\(query))"
+            return "Source: [USDA](https://fdc.nal.usda.gov/food-search/?query=\(query))"
         }
         guard barcode.allSatisfy(\.isNumber) else { return nil }
         return "Source: [OpenFoodFacts](https://world.openfoodfacts.org/product/\(barcode))"

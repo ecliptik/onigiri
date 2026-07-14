@@ -144,7 +144,7 @@ struct MealPickerView: View {
         NavigationStack {
             List {
                 if model.sync.favorites.isEmpty && model.sync.recentFoods.isEmpty {
-                    Text("Add favorites and log food in app")
+                    Text("Add favorites or log food in app")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

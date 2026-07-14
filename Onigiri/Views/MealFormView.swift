@@ -100,6 +100,14 @@ struct MealFormView: View {
                     }
                 }
                 Toggle("Favorite", isOn: $isFavorite)
+                // The running size of the meal, visible while picking
+                // foods below (the user — the old bottom Total sat off
+                // screen exactly when it was needed).
+                LabeledContent("Total") {
+                    Text("\(totalKcal, format: .number.precision(.fractionLength(0))) kcal • \(totalSodiumMg, format: .number.precision(.fractionLength(0))) mg Na")
+                        .monospacedDigit()
+                        .foregroundStyle(hasItems ? .primary : .secondary)
+                }
 
                 Section {
                     ForEach(visibleFoods) { food in
@@ -155,13 +163,6 @@ struct MealFormView: View {
                         }
                         .textCase(nil)
                         .accessibilityLabel("Sort foods")
-                    }
-                }
-
-                Section {
-                    LabeledContent("Total") {
-                        Text("\(totalKcal, format: .number.precision(.fractionLength(0))) kcal • \(totalSodiumMg, format: .number.precision(.fractionLength(0))) mg Na")
-                            .monospacedDigit()
                     }
                 }
             }
@@ -241,7 +242,12 @@ struct MealFormView: View {
     private func binding(for food: Food) -> Binding<Double> {
         Binding(
             get: { quantities[food.persistentModelID] ?? 0 },
-            set: { quantities[food.persistentModelID] = $0 }
+            set: { newValue in
+                // The first + selects ONE serving (the default portion),
+                // not a quarter of one; ± nudges by quarters from there.
+                let old = quantities[food.persistentModelID] ?? 0
+                quantities[food.persistentModelID] = (old == 0 && newValue == 0.25) ? 1 : newValue
+            }
         )
     }
 

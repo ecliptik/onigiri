@@ -88,29 +88,54 @@ struct FoodsView: View {
     @State private var categoryFilter: FoodCategory?
     @State private var onlineSearch = OnlineFoodSearch()
     @State private var showLibraryImporter = false
+    /// The list order, remembered (the user liked the meal builder's
+    /// sort menu). Default = the favorites-first blend.
+    @AppStorage("foodsLibrarySort") private var sortRaw = LibrarySort.ranked.rawValue
+
+    enum LibrarySort: String, CaseIterable {
+        case ranked, recent, name
+
+        var label: String {
+            switch self {
+            case .ranked: "Favorites first"
+            case .recent: "Recent"
+            case .name: "Name"
+            }
+        }
+    }
+
+    private var librarySort: LibrarySort { LibrarySort(rawValue: sortRaw) ?? .ranked }
 
     /// Favorites first, then by recency (last logged, falling back to
     /// when it was added — the user: recent beats slot affinity), then
-    /// name for stability.
-    private static func ranked(
+    /// name for stability. The sort menu can flatten this to plain
+    /// recency or alphabetical.
+    private func ranked(
         _ lhs: (isFavorite: Bool, recency: Date, name: String),
         _ rhs: (isFavorite: Bool, recency: Date, name: String)
     ) -> Bool {
-        if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
-        if lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
+        switch librarySort {
+        case .ranked:
+            if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
+            if lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
+        case .recent:
+            if lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
+        case .name:
+            break
+        }
         return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
     }
 
     private var filteredMeals: [Meal] {
         meals
             .filter { matches(name: $0.name, category: $0.category) }
-            .sorted { Self.ranked(($0.isFavorite, $0.recencyDate, $0.name), ($1.isFavorite, $1.recencyDate, $1.name)) }
+            .sorted { ranked(($0.isFavorite, $0.recencyDate, $0.name), ($1.isFavorite, $1.recencyDate, $1.name)) }
     }
 
     private var filteredFoods: [Food] {
         foods
             .filter { matches(name: $0.name, category: $0.category) }
-            .sorted { Self.ranked(($0.isFavorite, $0.recencyDate, $0.name), ($1.isFavorite, $1.recencyDate, $1.name)) }
+            .sorted { ranked(($0.isFavorite, $0.recencyDate, $0.name), ($1.isFavorite, $1.recencyDate, $1.name)) }
     }
 
     private func matches(name: String, category: String?) -> Bool {
@@ -122,12 +147,13 @@ struct FoodsView: View {
     }
 
     /// The Favorites scope pool: everybody here is starred, so rank by
-    /// recency alone (then name), matching the Log sheet.
+    /// recency alone (then name), matching the Log sheet — unless the
+    /// sort menu asked for names.
     private func favoriteEntries(meals: [Meal], foods: [Food]) -> [FavoriteEntry] {
         let entries = meals.filter(\.isFavorite).map(FavoriteEntry.meal)
             + foods.filter(\.isFavorite).map(FavoriteEntry.food)
         return entries.sorted { lhs, rhs in
-            if lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
+            if librarySort != .name, lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
             return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
     }
@@ -277,6 +303,21 @@ struct FoodsView: View {
                             .contentTransition(.symbolEffect(.replace))
                     }
                     .accessibilityLabel("Filter by category")
+                }
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        Picker("Sort", selection: $sortRaw) {
+                            ForEach(LibrarySort.allCases, id: \.rawValue) { option in
+                                Text(option.label).tag(option.rawValue)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: librarySort == .ranked
+                              ? "arrow.up.arrow.down.circle"
+                              : "arrow.up.arrow.down.circle.fill")
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                    .accessibilityLabel("Sort")
                 }
             }
             .sheet(item: $activeSheet) { sheet in

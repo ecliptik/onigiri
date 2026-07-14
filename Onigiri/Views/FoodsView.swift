@@ -432,10 +432,11 @@ struct LogButton: View {
     /// long press is the OTHER type's tap).
     var longPressName = "Custom portion"
     let action: () -> Void
-    let onLongPress: () -> Void
+    /// nil = tap-only (the water row: one gesture, one meaning).
+    var onLongPress: (() -> Void)?
 
     var body: some View {
-        Image(systemName: "plus")
+        let circle = Image(systemName: "plus")
             .font(.subheadline.weight(.bold))
             .foregroundStyle(Color.riceToast)
             .padding(8)
@@ -445,15 +446,20 @@ struct LogButton: View {
             .overlay(
                 Circle().strokeBorder(Color.riceToast.opacity(0.5), lineWidth: 1)
             )
-            // The long-press affordance, reachable without the gesture.
-            .accessibilityAction(named: longPressName) { onLongPress() }
             // HIG minimum touch target; the visible circle stays small.
             .frame(minWidth: 44, minHeight: 44)
             .contentShape(.rect)
             .onTapGesture { action() }
-            .onLongPressGesture(minimumDuration: 0.4) { onLongPress() }
             .accessibilityLabel("Log \(name)")
             .accessibilityAddTraits(.isButton)
+        if let onLongPress {
+            circle
+                // The long-press affordance, reachable without the gesture.
+                .accessibilityAction(named: longPressName) { onLongPress() }
+                .onLongPressGesture(minimumDuration: 0.4) { onLongPress() }
+        } else {
+            circle
+        }
     }
 }
 

@@ -316,39 +316,6 @@ struct FoodsView: View {
                     .accessibilityLabel("Sort")
                 }
             }
-            .sheet(item: $activeSheet) { sheet in
-                switch sheet {
-                case .newFood:
-                    FoodFormView(food: nil)
-                case .newMeal:
-                    MealFormView()
-                case .form(let prefill):
-                    FoodFormView(food: nil, prefill: prefill.product)
-                case .editFood(let food):
-                    FoodFormView(food: food)
-                case .editMeal(let meal):
-                    MealFormView(meal: meal)
-                case .portion(let target):
-                    PortionSheet(target: target) { quantity, category, _ in
-                        log(name: target.name, kcal: target.kcal,
-                            sodiumMg: target.sodiumMg, nutrients: target.nutrients,
-                            category: category, quantity: quantity)
-                    }
-                    .presentationDetents([.medium, .large])
-                case .scanner:
-                    // A parsed label takes the unknown-barcode route: the
-                    // single sheet slot re-presents as the prefilled food
-                    // form. Deferred one turn — the sheet dismisses itself
-                    // right after this closure, and a synchronous swap
-                    // gets torn down by that dismissal.
-                    ScanSheet(onCode: { code in
-                        lookUpBarcode(code)
-                    }, onLabel: { parsed in
-                        let prefill = ProductPrefill(product: parsed.scannedProduct())
-                        Task { activeSheet = .form(prefill) }
-                    })
-                }
-            }
             // The corner + while on this tab (the toolbar "+ Add" menu
             // consolidated into it): a Food-or-Meal chooser. Consumable
             // Optional, checked on change and appear (the Bool-flag
@@ -408,6 +375,44 @@ struct FoodsView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text(deleteFoodsMessage)
+            }
+        }
+        // On the NavigationStack, NOT the searchable List: presenting a
+        // sheet over the search drawer's view leaves the drawer's search
+        // controller unable to take focus after the dismissal — taps
+        // land, the keyboard never rises (iOS 26, reproduced by
+        // testFoodsSearchAfterSave after any form save).
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .newFood:
+                FoodFormView(food: nil)
+            case .newMeal:
+                MealFormView()
+            case .form(let prefill):
+                FoodFormView(food: nil, prefill: prefill.product)
+            case .editFood(let food):
+                FoodFormView(food: food)
+            case .editMeal(let meal):
+                MealFormView(meal: meal)
+            case .portion(let target):
+                PortionSheet(target: target) { quantity, category, _ in
+                    log(name: target.name, kcal: target.kcal,
+                        sodiumMg: target.sodiumMg, nutrients: target.nutrients,
+                        category: category, quantity: quantity)
+                }
+                .presentationDetents([.medium, .large])
+            case .scanner:
+                // A parsed label takes the unknown-barcode route: the
+                // single sheet slot re-presents as the prefilled food
+                // form. Deferred one turn — the sheet dismisses itself
+                // right after this closure, and a synchronous swap
+                // gets torn down by that dismissal.
+                ScanSheet(onCode: { code in
+                    lookUpBarcode(code)
+                }, onLabel: { parsed in
+                    let prefill = ProductPrefill(product: parsed.scannedProduct())
+                    Task { activeSheet = .form(prefill) }
+                })
             }
         }
     }

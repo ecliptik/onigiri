@@ -1033,6 +1033,62 @@ final class OnigiriUITests: XCTestCase {
             "Log-sheet scan handed off to the prefilled form")
     }
 
+    /// Foods-search-after-save probe (opt-in via SEARCH_PROBE=1, seeded):
+    /// the user hit dead search taps after saving a food or meal — the
+    /// iOS 26 drawer desync class. Saves a food through the form, then
+    /// activates the Foods search and REQUIRES keyboard focus.
+    @MainActor
+    func testFoodsSearchAfterSave() throws {
+        guard ProcessInfo.processInfo.environment["SEARCH_PROBE"] == "1" else {
+            throw XCTSkip("Set SEARCH_PROBE=1 to run the search-after-save probe")
+        }
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--seed-sample-data"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        switchTab(in: app, to: "Foods")
+        // The Add-pill path — the one that wedged the drawer: the pill
+        // rides the search-role tab slot, and the selection bounce used
+        // to abort its activation mid-transition. (The edit-path save
+        // never broke it; verified while isolating.)
+        switchTab(in: app, to: "Add")
+        let addFood = app.buttons["Add Food"]
+        XCTAssertTrue(addFood.waitForExistence(timeout: 5), "Add Food chooser option")
+        addFood.tap()
+        let nameField = app.textFields["Name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.tap()
+        nameField.typeText("Probe food")
+        let kcalField = app.textFields["Calories (kcal)"].firstMatch
+        // LabeledContent stretches the row; the editable part sits trailing.
+        kcalField.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        kcalField.typeText("100")
+        app.buttons["Save"].firstMatch.tap()
+
+        // The form dismissed back to Foods — now the search must still
+        // take a tap. Diagnostic matrix: single tap, settle+retap, so
+        // the failure mode (dead vs transient) is visible in the log.
+        let search = app.searchFields["Foods, Meals, and More"].firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5), "Foods search field after save")
+        Thread.sleep(forTimeInterval: 1.0)
+        search.tap()
+        let focusedAfterOneTap = (search.value(forKey: "hasKeyboardFocus") as? Bool) ?? false
+        print("PROBE: focus after single tap = \(focusedAfterOneTap)")
+        if !focusedAfterOneTap {
+            Thread.sleep(forTimeInterval: 1.5)
+            search.tap()
+            let focusedAfterRetap = (search.value(forKey: "hasKeyboardFocus") as? Bool) ?? false
+            print("PROBE: focus after second tap = \(focusedAfterRetap)")
+        }
+        search.typeText("probe")
+        XCTAssertTrue(
+            (search.value as? String)?.localizedCaseInsensitiveContains("probe") == true,
+            "Search field must take focus and text after a save (drawer desync)")
+    }
+
     /// Meal-builder shots (opt-in via MEAL_FORM=1, seeded): the typed
     /// quantity field takes a fraction, and the sort menu leads Recent.
     @MainActor

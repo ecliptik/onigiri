@@ -185,15 +185,22 @@ struct ContentView: View {
         .tint(.riceToast)
         .onChange(of: selectedTab) { old, new in
             guard new == .log else { return }
-            selectedTab = old == .log ? .today : old
-            if old == .foods {
-                // The Library's +: straight to the new-food form.
-                QuickActions.shared.addFoodRequest = true
-            } else {
-                // Everywhere else: the Log sheet (search-first, scanner
-                // and favorites inside).
-                selectedTab = .today
-                QuickActions.shared.quickLogRequest = .all
+            // Deferred one turn: bouncing synchronously mid-transition
+            // aborts the search-role slot's own activation halfway and
+            // leaves the ORIGIN tab's search drawer wedged — dead taps
+            // on Foods' search after using the pill (the user; pinned
+            // by testFoodsSearchAfterSave).
+            Task {
+                selectedTab = old == .log ? .today : old
+                if old == .foods {
+                    // The Library's +: straight to the new-food form.
+                    QuickActions.shared.addFoodRequest = true
+                } else {
+                    // Everywhere else: the Log sheet (search-first,
+                    // scanner and favorites inside).
+                    selectedTab = .today
+                    QuickActions.shared.quickLogRequest = .all
+                }
             }
         }
         // Liquid Glass: the tab bar shrinks out of the way while scrolling

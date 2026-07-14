@@ -20,6 +20,11 @@ struct DaySnapshot: Codable {
     /// left to eat), the deficit gauge counts UP from zero — the
     /// midnight pre-render below must know which way is "fresh day".
     var isMaintenance = false
+    /// Day totals for the two tracked-metric slots (Today card only).
+    /// Optional so a pre-2.1 cached last-good snapshot still decodes;
+    /// nil falls back to the summary's sodium/water, which is also the
+    /// answer whenever the slots hold their defaults.
+    var trackedTotals: [Double]?
 
     static let placeholder = DaySnapshot(
         summary: DailyEnergySummary(
@@ -58,8 +63,24 @@ struct DaySnapshot: Codable {
             gaugeProgress: isMaintenance ? 1 : 0,
             waterGoalOz: waterGoalOz,
             needsSetup: needsSetup,
-            isMaintenance: isMaintenance
+            isMaintenance: isMaintenance,
+            trackedTotals: [0, 0]
         )
+    }
+
+    /// A slot's day total. Sodium/water ride the summary — no second
+    /// query, and the numbers can't disagree with the rest of the card
+    /// (TodayModel's rule); custom nutrients read the dedicated query's
+    /// result, 0 when a pre-2.1 cached snapshot predates it.
+    func trackedTotal(slot: Int) -> Double {
+        switch SharedStore.trackedNutrient(slot: slot) {
+        case .sodium?: return summary.sodiumMg
+        case .water?: return summary.waterOz
+        case nil: return 0
+        default:
+            guard let totals = trackedTotals, totals.indices.contains(slot - 1) else { return 0 }
+            return totals[slot - 1]
+        }
     }
 }
 
@@ -93,12 +114,28 @@ enum SnapshotLoader {
             gaugeProgress: state.gaugeProgress,
             waterGoalOz: SharedStore.waterGoalOz,
             needsSetup: needsSetup,
-            isMaintenance: goal?.isMaintenance ?? false
+            isMaintenance: goal?.isMaintenance ?? false,
+            trackedTotals: await trackedTotals()
         )
         if !needsSetup, let data = try? JSONEncoder().encode(snapshot) {
             SharedStore.defaults.set(data, forKey: lastGoodKey)
         }
         return snapshot
+    }
+
+    /// Day totals for the tracked slots the summary doesn't already
+    /// carry: only a slot customized away from sodium/water costs a
+    /// query (one statistics sum, same day bounds as the summary).
+    private static func trackedTotals() async -> [Double] {
+        var totals: [Double] = [0, 0]
+        for slot in 1...2 {
+            switch SharedStore.trackedNutrient(slot: slot) {
+            case nil, .sodium?, .water?: break
+            case .some(let nutrient):
+                totals[slot - 1] = (try? await HealthKitService().dayTotal(of: nutrient)) ?? 0
+            }
+        }
+        return totals
     }
 
     private static let lastGoodKey = "widget.lastGoodSnapshot"

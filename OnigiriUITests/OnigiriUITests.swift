@@ -1188,6 +1188,80 @@ final class OnigiriUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 5)
     }
 
+    /// Adds the LARGE Today-card widget to the simulator home screen and
+    /// attaches a screenshot of the result. Seeds the app first so the
+    /// card has real numbers. Mutates home-screen state — opt in via
+    /// ADD_TODAY_WIDGET=1.
+    @MainActor
+    func testAddTodayCardWidget() throws {
+        guard ProcessInfo.processInfo.environment["ADD_TODAY_WIDGET"] == "1" else {
+            throw XCTSkip("Set ADD_TODAY_WIDGET=1 to run the Today-card widget installer")
+        }
+        // Seed Health + goal so the widget renders real numbers (the
+        // goal mirror reaches the App Group via the launch sync push).
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--seed-sample-data"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+        Thread.sleep(forTimeInterval: 3)
+
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        springboard.activate()
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 1)
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 1)
+
+        springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+            .press(forDuration: 2)
+        let edit = springboard.buttons["Edit"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 5), "Jiggle-mode Edit button")
+        edit.tap()
+        let addWidget = springboard.buttons["Add Widget"]
+        XCTAssertTrue(addWidget.waitForExistence(timeout: 5), "Add Widget menu item")
+        addWidget.tap()
+
+        // NOT firstMatch: the App Library's offscreen search field can
+        // match first when the home screen rests on its last page.
+        let searchField = springboard.searchFields["Search Widgets"]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8), "Gallery search field")
+        searchField.tap()
+        searchField.typeText("Onigiri")
+        let result = springboard.staticTexts["Onigiri"].firstMatch
+        XCTAssertTrue(result.waitForExistence(timeout: 8), "Onigiri in gallery results")
+        result.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        let add = springboard.buttons[" Add Widget"].exists
+            ? springboard.buttons[" Add Widget"]
+            : springboard.buttons["Add Widget"]
+        XCTAssertTrue(add.waitForExistence(timeout: 8), "Add Widget confirm button")
+        // Page the family pager to the Today card (matched by its
+        // description, robust to bundle order).
+        let pager = springboard.scrollViews.firstMatch
+        let todayPage = springboard.staticTexts[
+            "Today's balance, burned and eaten, and your tracked metrics."
+        ]
+        var swipes = 0
+        while !todayPage.exists && swipes < 10 {
+            if pager.exists { pager.swipeLeft() } else { springboard.swipeLeft() }
+            Thread.sleep(forTimeInterval: 0.5)
+            swipes += 1
+        }
+        XCTAssertTrue(todayPage.exists, "Today card page in the family pager")
+        attachShot(named: "widget-gallery-today-card", settle: 1)
+        add.tap()
+
+        let done = springboard.buttons["Done"]
+        if done.waitForExistence(timeout: 5) {
+            done.tap()
+        }
+        // Give the timeline a moment to load Health data and render.
+        Thread.sleep(forTimeInterval: 8)
+        attachShot(named: "home-screen-today-card", settle: 1)
+    }
+
     /// Adds the MEDIUM widget, opens Edit Widget, and verifies the meal
     /// picker lists a synced meal. Opt in via EDIT_WIDGET=1.
     @MainActor

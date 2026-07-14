@@ -38,14 +38,44 @@ when a release starts; this file is the durable to-do between sessions.
   echo guard, and the gated iOS 26 garnish (hard scroll edges, glass
   swipe pills, symbol effects).
 
-## 2.0 — Intelligence (planned — see PLAN-2.0.md)
+## 2.0 — Intelligence (RELEASED 2026-07-14 — see PLAN-2.0.md)
 
-- Scan Nutrition Label: Vision OCR (RecognizeTextRequest, iOS 18
-  floor-clean) → LabelParser in the kit → the existing prefill path;
-  iOS 26 adds the documents-request table branch, gated.
-- Apple Intelligence (Foundation Models, iOS 26, fully gated):
-  label-parse refinement, a "describe it" quick add, meal-name
-  suggestions — and an explicit decline list (no chat, no coaching,
-  no meal plans, no cloud model).
-- Milestones M1–M5 in PLAN-2.0.md; deterministic paths always
-  precede and outrank the model.
+- [x] Scan Nutrition Label: Vision OCR → kit LabelParser (five real
+  fixture transcripts) → the existing prefill path; iOS 26
+  documents-request table branch, gated; ONE scan row + ONE camera
+  ("Scan Barcode or Nutrition Label", shutter on the live scanner).
+- [x] Apple Intelligence (Foundation Models, iOS 26, fully gated):
+  label-parse refinement (fills blanks only), "describe it" quick
+  add, meal-name suggestions; deterministic paths precede and
+  outrank the model everywhere; decline list held.
+- [x] Same-day UX round from on-device feedback: Goal ScopeBar,
+  Favorites-first scopes, meal-builder overhaul (typed fractional
+  portions, live Total, members-first, sort), sort menus on all
+  library surfaces, first-tracked-slot metric captions (phone +
+  watch), Month Details arithmetic + semantic colors, the Add-pill
+  search wedge and the TabBarPin gesture-storm fixes.
+- On-device QA still open: pantry tour, both-paths A/B on the 16,
+  Foundation Models feel.
+
+## 2.1 — candidates
+
+- Today-mirror widget (the user, 2026-07-14, with reference
+  screenshot): a medium/large home-screen widget that looks exactly
+  like the top of Today — the kcal-left ring with Burned/Eaten
+  flanking, the sodium/water metric pills, the rice-paper canvas.
+  Interactive: widgets can't scroll, so day paging = ‹ › AppIntent
+  buttons swapping the rendered day; a + button deep-links into the
+  Log sheet for the shown day (widgetURL routing like the existing
+  quick actions). Existing pieces to build on: DailyProgressWidget,
+  BalanceAccessoryView, the kit's PlanCache/DaySnapshot plumbing.
+
+## Backlog (unscheduled)
+
+- Shared barcode-routing helper (lookUpBarcode exists in FoodsView
+  and QuickLogSheet — 1.8.1 follow-up).
+- Watch complication-freshness verification over a normal week
+  (1.9 batch A).
+- OFF search-a-licious nutrition-facts-completed filter, when the
+  service is stable enough to verify against (1.6.1).
+- The paid-developer-account question: CloudKit library sync,
+  TestFlight.

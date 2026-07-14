@@ -1,16 +1,18 @@
 # 2.0 — Intelligence: label scanning + Apple Intelligence
 
-> **Status (2026-07-14):** M1–M4 implemented and sim-verified. M1
-> fixtures are real Vision dumps (`scripts/dump-label-ocr.swift`); the
-> M3 table branch was validated against real
-> `RecognizeDocumentsRequest` output (real photos yield tables,
-> rendered graphics don't — the M2 parser stays the fallback, and its
-> LABEL_SCAN test doubles as the fallback regression on iOS 18 sims).
-> Foundation Models paths compile and gate correctly (no AI affordance
-> renders on non-AI devices — verified by screenshot); their behavior
-> needs the iPhone 16, since no Mac-hosted simulator here carries the
-> model. Remaining: on-device pantry tour + both-paths A/B on the 16,
-> describe-it/meal-name feel, then M5 docs/screenshots/release.
+> **Status: RELEASED as v2.0.0 (2026-07-14).** M1–M4 shipped as
+> planned; M1 fixtures are real Vision dumps
+> (`scripts/dump-label-ocr.swift`), the M3 table branch was validated
+> against real `RecognizeDocumentsRequest` output (real photos yield
+> tables, rendered graphics don't — the M2 parser is a load-bearing
+> fallback, regression-tested on iOS 18 sims), and every Foundation
+> Models affordance gates on availability (screenshot-verified absent
+> on non-AI devices). The capture UI went beyond the plan mid-release:
+> ONE scan row ("Scan Barcode or Nutrition Label") backed by ONE
+> camera — the live barcode scanner grew a shutter for the label still
+> (`DataScannerViewController.capturePhoto()`) — on Foods, the Log
+> sheet, and the blank food form. Remaining on-device QA: the pantry
+> tour, both-paths A/B on the 16, and Foundation Models feel.
 
 Two features, one bar: they must make *entering a food faster or
 better* — the app's philosophy stays "targeted, alongside Apple

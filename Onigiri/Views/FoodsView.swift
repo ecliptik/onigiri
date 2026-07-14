@@ -230,7 +230,17 @@ struct FoodsView: View {
             // title. Bottom search in a TabView belongs to the search
             // tab; ours is the Add pill, by ruling. iOS 18 is the same
             // drawer either way.
-            .searchable(text: $searchText, prompt: "Foods, Meals, and More")
+            // displayMode .always: with the pinned scope bar's
+            // safeAreaInset below it, the default hide-on-scroll drawer
+            // re-expands BLANK after a scroll — element present, field
+            // invisible (screenshot-verified 2026-07-13, the second
+            // drawer-desync after the old GeometryReader one). Pinning
+            // the drawer skips the collapse/re-expand cycle entirely.
+            .searchable(
+                text: $searchText,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Foods, Meals, and More"
+            )
             .onSubmit(of: .search) {
                 Task { await onlineSearch.search(searchText) }
             }

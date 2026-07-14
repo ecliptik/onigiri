@@ -27,6 +27,21 @@ enum DebugSeeder {
             ], category: "Dinner"))
         }
 
+        // A page-plus of filler so scroll-dependent behavior (search
+        // drawer collapse, tab-bar minimize) is reproducible in tests —
+        // the four-item library above never scrolls. Opt-in, and only
+        // on a fresh install (every seeding launch ADDS, per CLAUDE.md).
+        if foodCount == 0,
+           ProcessInfo.processInfo.arguments.contains("--seed-big-library") {
+            for index in 1...30 {
+                context.insert(Food(
+                    name: "Filler food \(index)", kcal: Double(100 + index),
+                    sodiumMg: Double(10 * index), servingDescription: "1 serving",
+                    category: "Snack"
+                ))
+            }
+        }
+
         let goalCount = (try? context.fetchCount(FetchDescriptor<GoalSettings>())) ?? 0
         if goalCount == 0 {
             let target = Calendar.current.date(byAdding: .day, value: 60, to: .now) ?? .now

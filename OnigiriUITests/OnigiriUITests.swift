@@ -820,6 +820,53 @@ final class OnigiriUITests: XCTestCase {
         app.buttons["Done"].tap()
     }
 
+    /// Regression: the Foods search field must survive a scroll. After
+    /// the 1.8.1 scope-bar inset it collapsed on scroll-down and never
+    /// came back (the same desync class as the old GeometryReader bug).
+    @MainActor
+    func testFoodsSearchSurvivesScroll() throws {
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        // Big library: the drawer only collapses when the list truly
+        // scrolls; the four-item seed can't reproduce the bug.
+        app.launchArguments = ["--seed-sample-data", "--seed-big-library"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        switchTab(in: app, to: "Foods")
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 10), "Search field at rest")
+        attachShot(named: "foods-scroll-rest")
+
+        // The drawer is pinned (.always): scrolling must not hide it —
+        // the collapsing drawer re-expanded BLANK over the scope bar's
+        // safeAreaInset (element present, field invisible).
+        app.swipeUp()
+        app.swipeUp()
+        attachShot(named: "foods-scrolled-down")
+        XCTAssertTrue(search.exists, "Pinned search field visible mid-scroll")
+        app.swipeDown()
+        app.swipeDown()
+        attachShot(named: "foods-scrolled-back")
+        XCTAssertTrue(search.waitForExistence(timeout: 5), "Search field back after scroll")
+        XCTAssertTrue(search.isHittable, "Search field hittable after scroll")
+
+        // And it still works: activating and typing filters the list.
+        search.tap()
+        search.typeText("egg")
+        attachShot(named: "foods-search-egg", settle: 1.0)
+        // Any-element label match: the rows carry an .isButton trait, so
+        // their texts aren't exposed as StaticTexts.
+        let match = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS 'Two eggs'")
+        ).firstMatch
+        XCTAssertTrue(
+            match.waitForExistence(timeout: 5),
+            "Search filters after the scroll round-trip"
+        )
+    }
+
     /// Barcode → OpenFoodFacts lookup prefills the food form. Uses the
     /// manual-entry fallback (no camera in the simulator) and live network.
     @MainActor

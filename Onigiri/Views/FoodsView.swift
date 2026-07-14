@@ -159,7 +159,7 @@ struct FoodsView: View {
                         Button {
                             activeSheet = .scanner
                         } label: {
-                            Label("Scan Barcode", systemImage: "barcode.viewfinder")
+                            ScanBarcodeLabel()
                         }
                         .disabled(isLookingUpBarcode)
                         if isLookingUpBarcode {
@@ -640,6 +640,32 @@ struct PortionTarget: Identifiable {
 
     static func category(from stored: String?) -> FoodCategory {
         stored.flatMap(FoodCategory.init(rawValue:)) ?? .slot(for: .now)
+    }
+}
+
+/// The Scan Barcode rows' leading icon, drawn with LogButton's exact
+/// circle treatment (same font, padding, fill, rim) so the row carries
+/// the same visual weight as the + capsules beside it (the user).
+/// Shared by the Foods tab and the Log sheet.
+struct ScanBarcodeLabel: View {
+    var body: some View {
+        Label {
+            Text("Scan Barcode")
+        } icon: {
+            Image(systemName: "barcode.viewfinder")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(Color.riceToast)
+                // FIXED frame, not padding: the barcode glyph is wider
+                // than the plus, so equal padding drew a bigger circle.
+                // 35pt matches LogButton's RENDERED circle (the plus
+                // glyph is narrower than its font's full height, so its
+                // glyph+9pt padding lands at ~35, not 39 — measured).
+                .frame(width: 35, height: 35)
+                .background(.quaternary.opacity(0.5), in: .circle)
+                .overlay(
+                    Circle().strokeBorder(Color.riceToast.opacity(0.5), lineWidth: 1)
+                )
+        }
     }
 }
 

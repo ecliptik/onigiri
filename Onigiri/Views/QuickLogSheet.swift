@@ -188,7 +188,7 @@ struct QuickLogSheet: View {
                         Button {
                             activeSheet = .scanner
                         } label: {
-                            Label("Scan Barcode", systemImage: "barcode.viewfinder")
+                            ScanBarcodeLabel()
                         }
                         .disabled(isLookingUpBarcode)
                         if isLookingUpBarcode {

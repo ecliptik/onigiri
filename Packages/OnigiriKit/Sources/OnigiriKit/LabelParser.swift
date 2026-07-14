@@ -34,6 +34,10 @@ public struct ParsedLabel: Sendable, Equatable {
     public var sodiumMg: Double?
     public var nutrients = NutrientValues()
     public var isPer100g = false
+    /// Set when a per-100g panel was converted to per-serving — anything
+    /// later read off the raw transcript (the Foundation Models
+    /// refinement pass) must apply the same factor to stay on basis.
+    public var per100gScaleFactor: Double?
 
     public init() {}
 
@@ -246,6 +250,44 @@ public enum LabelParser {
         return start..<end
     }
 
+    // MARK: Table transcripts (iOS 26 documents request)
+
+    /// Lays a semantic table (rows of cell transcripts, as
+    /// RecognizeDocumentsRequest returns them) onto a synthetic grid so
+    /// the same geometry parser handles both pipelines. Cell transcripts
+    /// keep their line breaks: each wrapped line becomes its own band,
+    /// which is what lets a merged "Saturated … ⏎ + Trans …" cell claim
+    /// two nutrients and a stacked "2252/ ⏎ 539" cell read as kJ/kcal.
+    public static func observations(fromTableRows tableRows: [[String]]) -> [LabelObservation] {
+        let maxColumns = tableRows.map(\.count).max() ?? 0
+        guard maxColumns > 0 else { return [] }
+        let lineRows = tableRows.map { row in
+            row.map { cell in
+                cell.split(separator: "\n")
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty }
+            }
+        }
+        let bandsPerRow = lineRows.map { row in max(row.map(\.count).max() ?? 1, 1) }
+        let step = 1.0 / Double(bandsPerRow.reduce(0, +) + 2)
+        var result: [LabelObservation] = []
+        var band = 0
+        for (rowIndex, row) in lineRows.enumerated() {
+            for (columnIndex, lines) in row.enumerated() {
+                for (lineIndex, line) in lines.enumerated() {
+                    result.append(LabelObservation(
+                        text: line,
+                        x: 0.02 + 0.9 * Double(columnIndex) / Double(maxColumns),
+                        y: 1.0 - Double(band + lineIndex + 1) * step,
+                        w: 0.85 / Double(maxColumns),
+                        h: step * 0.7))
+                }
+            }
+            band += bandsPerRow[rowIndex]
+        }
+        return result
+    }
+
     // MARK: Parse
 
     public static func parse(_ observations: [LabelObservation]) -> ParsedLabel {
@@ -276,9 +318,11 @@ public enum LabelParser {
 
         // %DV column boundary: the leftmost header that *starts* with %.
         // Amount candidates at or right of it, on rows below it, are %DV
-        // noise regardless of whether OCR kept their % sign.
+        // noise regardless of whether OCR kept their % sign. Must sit
+        // right of the name column — bilingual headers wrap "% Daily
+        // Value" onto a left-edge line that is not a column boundary.
         let dvHeader = kept
-            .filter { $0.text.hasPrefix("%") }
+            .filter { $0.text.hasPrefix("%") && $0.x > 0.3 }
             .min(by: { $0.x < $1.x })
 
         // The topmost nutrient row separates the header region (title,
@@ -323,18 +367,20 @@ public enum LabelParser {
         }
 
         // EU panels have no serving line; the portion column header carries
-        // a bare weight ("15g") above the first nutrient row.
+        // a bare weight ("15g") above the first nutrient row — sometimes
+        // embedded in a longer multilingual header fragment.
         if isPer100g, servingGrams == nil {
             let headerCells = rows
                 .filter { $0.midY > firstNutrientRowY }
                 .flatMap(\.cells)
                 .sorted { $0.x < $1.x }
-            for cell in headerCells {
-                guard let match = fold(cell.text).wholeMatch(of: /(?<num>\d{1,3}(?:[.,]\d+)?)\s?g/),
-                      let grams = Double(match.num.replacing(",", with: ".")),
-                      grams != 100, grams <= 500 else { continue }
-                servingGrams = grams
-                break
+            outer: for cell in headerCells {
+                for match in fold(cell.text).matches(of: /\b(?<num>\d{1,3}(?:[.,]\d+)?)\s?g\b/) {
+                    guard let grams = Double(match.num.replacing(",", with: ".")),
+                          grams != 100, grams <= 500 else { continue }
+                    servingGrams = grams
+                    break outer
+                }
             }
         }
 
@@ -531,6 +577,7 @@ public enum LabelParser {
                 label.kcal = label.kcal.map { $0 * factor }
                 label.sodiumMg = label.sodiumMg.map { $0 * factor }
                 label.nutrients = label.nutrients.scaled(by: factor)
+                label.per100gScaleFactor = factor
                 label.servingGrams = grams
                 label.servingDescription = servingDescription
                     ?? "1 portion (\(grams.formatted(.number.precision(.fractionLength(0...1)))) g)"

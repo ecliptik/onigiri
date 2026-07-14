@@ -113,15 +113,18 @@ struct LabelScannerSheet: View {
             return
         }
         do {
-            let observations = try await LabelScan.observations(
-                from: cgImage,
+            let result = try await LabelScan.scan(
+                cgImage,
                 orientation: CGImagePropertyOrientation(image.imageOrientation))
-            let parsed = LabelParser.parse(observations)
+            // iOS 26 + Apple Intelligence: the on-device model fills
+            // whatever the deterministic parse left blank — invisible,
+            // and every model failure keeps the deterministic result.
+            let parsed = await FoodIntelligence.refine(result.parsed, transcript: result.transcript)
             if parsed.isEmpty {
-                scanLog.notice("Label parse empty from \(observations.count) observations")
+                scanLog.notice("Label parse empty from \(result.transcript.count) observations")
                 failureMessage = "Couldn't read a nutrition panel there — try a closer, straighter shot with the whole panel in frame."
             } else {
-                scanLog.notice("Label parsed: kcal \(parsed.kcal.map(String.init(describing:)) ?? "nil"), \(observations.count) observations")
+                scanLog.notice("Label parsed: kcal \(parsed.kcal.map(String.init(describing:)) ?? "nil"), \(result.transcript.count) observations")
                 onParsed(parsed)
                 dismiss()
             }

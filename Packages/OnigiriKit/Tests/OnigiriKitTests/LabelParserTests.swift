@@ -135,6 +135,81 @@ struct LabelParserTests {
         expectEqual(label.nutrients[.calcium], 20)
     }
 
+    // MARK: iOS 26 documents-request tables
+
+    /// The trilingual EU jar, as RecognizeDocumentsRequest actually
+    /// returned it (captured 2026-07-14): wrapped names merged into
+    /// single cells, kJ/kcal stacked in one cell, per-100g and portion
+    /// columns side by side, the same "b3" OCR damage. The synthetic
+    /// grid must parse identically to the raw-geometry path.
+    @Test func euTableRows() {
+        let rows: [[String]] = [
+            ["Valeurs nutriionnelles /\nViedingswaarden /\nNahnwerte", "", "Per/ je 100 g",
+             "Pour / Parportion / % par\nPer porte /\nJe Portion perpore /\n15g", "pordon/ je Portion"],
+            ["Energie", "0kJ/1\nkcal):", "2252/\n539", "336/\n80", ""],
+            ["Matières grasses /Vetten / Fett (g)", "", "30,9", "4,6", ""],
+            ["dont acides gras saturés /\nwaarvan verzaciode verzuren/\ndavon desalbote rensauren",
+             "(g)", "10,6", "", "8"],
+            ["Glucides / Koolhydraten /\nKohlentydrate", "向", "57,5", "98", "3"],
+            ["dont sucres / waarvan suikers / davon Zucker", "", "56,3", "", "9"],
+            ["Protéines / Eitten / Eweiß", "(g)", "b3", "", ""],
+            ["Sel/Zout / Salz", "", "0,107", "0,016", ""],
+        ]
+        let label = LabelParser.parse(LabelParser.observations(fromTableRows: rows))
+        expectEqual(label.servingGrams, 15)
+        expectEqual(label.per100gScaleFactor ?? -1, 0.15)
+        expectEqual(label.kcal, 539 * 0.15, accuracy: 0.1)
+        expectEqual(label.nutrients.fatG, 30.9 * 0.15)
+        expectEqual(label.nutrients.saturatedFatG, 10.6 * 0.15)
+        expectEqual(label.nutrients.carbsG, 57.5 * 0.15)
+        expectEqual(label.nutrients.sugarG, 56.3 * 0.15)
+        expectEqual(label.sodiumMg, 0.107 * 0.4 * 1000 * 0.15)
+        #expect(label.nutrients.proteinG == nil, "the 'b3' misread stays nil in the table path too")
+    }
+
+    /// The bilingual Canadian panel as a semantic table. One cell merges
+    /// "Saturated … + Trans …" — split on its line break, it must claim
+    /// BOTH nutrients (the raw-geometry path gets them as separate
+    /// observations).
+    @Test func canadianTableRows() {
+        let rows: [[String]] = [
+            ["Per 1/3 cup (30 g)*/ Pour 1/3 tasse (30 g)*"],
+            ["Amount\n% Daily Value\nTeneur\n% valeur quotidienne"],
+            ["Calories / Calories 110", ""],
+            ["Fat / Lipides 0 g", "0 %"],
+            ["Saturated / saturés 0 g\n+ Trans / trans 0 g", "0 %"],
+            ["Cholesterol / Cholestérol 0 mg", ""],
+            ["Sodium / Sodium 0 mg", "0 %"],
+            ["Carbohydrate / Glucides 25 g", "8 %"],
+            ["Fibre / Fibres 0 g", "0 %"],
+            ["Sugars / Sucres 0 g"],
+            ["Protein / Protéines 2 g", ""],
+            ["Vitamin A / Vitamine A", "0 %"],
+            ["Vitamin C / Vitamine C", "0 %"],
+            ["Calcium / Calcium", "0 %"],
+            ["Iron / Fer", "2%"],
+        ]
+        let label = LabelParser.parse(LabelParser.observations(fromTableRows: rows))
+        #expect(label.servingDescription == "1/3 cup (30 g)")
+        expectEqual(label.servingGrams, 30)
+        expectEqual(label.kcal, 110)
+        expectEqual(label.nutrients.fatG, 0)
+        expectEqual(label.nutrients.saturatedFatG, 0)
+        expectEqual(label.nutrients.transFatG, 0, "the merged Saturated+Trans cell claims both")
+        expectEqual(label.nutrients.cholesterolMg, 0)
+        expectEqual(label.sodiumMg, 0)
+        expectEqual(label.nutrients.carbsG, 25)
+        expectEqual(label.nutrients.fiberG, 0)
+        expectEqual(label.nutrients.sugarG, 0)
+        expectEqual(label.nutrients.proteinG, 2)
+        #expect(label.nutrients[.iron] == nil, "%DV-only vitamin tail stays nil")
+    }
+
+    @Test func emptyTableMapsToNothing() {
+        #expect(LabelParser.observations(fromTableRows: []).isEmpty)
+        #expect(LabelParser.parse(LabelParser.observations(fromTableRows: [["", ""]])).isEmpty)
+    }
+
     // MARK: Targeted behaviors
 
     @Test func emptyInputParsesToEmptyLabel() {

@@ -24,6 +24,22 @@ public extension Color {
     static let riceToast = Color(red: 0.89, green: 0.70, blue: 0.42)
     #endif
 
+    /// The page canvas behind every grouped screen: a warm rice-paper
+    /// wash in light mode — the neutral system gray read as any-app
+    /// generic once the one-surface idiom landed (the user wanted the
+    /// onigiri personality back) — and the system grouped black in
+    /// dark, where riceToast already pops. Cards stay white/system on
+    /// top of it, so contrast and readability don't move.
+    #if canImport(UIKit) && !os(watchOS)
+    static let riceCanvas = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? .systemGroupedBackground
+            : UIColor(red: 0.99, green: 0.96, blue: 0.92, alpha: 1)
+    })
+    #else
+    static let riceCanvas = Color(red: 0.99, green: 0.96, blue: 0.92)
+    #endif
+
     /// Traffic-light color for a sodium total against the daily limit:
     /// green when comfortably under, toast yellow within 300 mg, red over.
     static func sodiumStatus(mg: Double, limitMg: Double) -> Color {

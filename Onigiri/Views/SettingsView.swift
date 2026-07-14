@@ -883,6 +883,7 @@ struct SettingsView: View {
                 resetSection
             }
             .compactSections()
+            .riceCanvas()
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             // Centered alert, never confirmationDialog (the row-anchored

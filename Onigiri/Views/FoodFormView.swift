@@ -264,6 +264,7 @@ struct FoodFormView: View {
                 }
             }
             .compactSections()
+            .riceCanvas()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {

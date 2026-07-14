@@ -36,11 +36,16 @@ private struct ReadableContentWidth: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            // Lists/Forms must drop their own system gray or the warm
+            // canvas never shows; a no-op for ScrollView screens.
+            .scrollContentBackground(groupedBackground ? .hidden : .automatic)
             .frame(maxWidth: maxWidth)
             .frame(maxWidth: .infinity)
             .background {
                 if groupedBackground {
-                    Color(.systemGroupedBackground).ignoresSafeArea()
+                    // The brand canvas, not systemGroupedBackground —
+                    // see Color.riceCanvas (identical in dark mode).
+                    Color.riceCanvas.ignoresSafeArea()
                 }
             }
     }
@@ -92,6 +97,17 @@ extension View {
                 .padding(.vertical, 8)
                 .background(.bar)
         }
+    }
+}
+
+extension View {
+    /// The warm paper canvas for grouped sheets and forms that don't
+    /// go through readableContentWidth (Log sheet, Settings, the food
+    /// and meal forms) — one surface color everywhere, with the
+    /// onigiri warmth in light mode. See Color.riceCanvas.
+    func riceCanvas() -> some View {
+        scrollContentBackground(.hidden)
+            .background(Color.riceCanvas.ignoresSafeArea())
     }
 }
 

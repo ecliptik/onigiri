@@ -293,6 +293,7 @@ struct QuickLogSheet: View {
                 }
             }
             .compactSections()
+            .riceCanvas()
             .navigationTitle("Log")
             .navigationBarTitleDisplayMode(.inline)
             // Music-style: the kind pills pinned on top of the results,

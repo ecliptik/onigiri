@@ -110,6 +110,7 @@ struct MealFormView: View {
                 }
             }
             .compactSections()
+            .riceCanvas()
             .navigationTitle(meal == nil ? "New Meal" : "Edit Meal")
             .navigationBarTitleDisplayMode(.inline)
             // System search, matching Foods and the Log sheet (bottom

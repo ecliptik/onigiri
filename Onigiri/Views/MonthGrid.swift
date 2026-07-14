@@ -21,6 +21,11 @@ struct MonthGridView: View {
             weekdayHeader
             grid
         }
+        .padding(12)
+        // Its own card, like every other block (one-surface idiom):
+        // bare on the grouped page — and on sheet material over it —
+        // the day numbers went dim in light mode.
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 14))
     }
 
     private var weekdayHeader: some View {

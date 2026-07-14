@@ -300,9 +300,10 @@ struct QuickLogSheet: View {
             // mixed view earned its keep only as a favorites shelf.
             .scopeBar(
                 options: [
-                    ("Foods", QuickActions.QuickLogKind.foods),
+                    // Favorites leads (the user), matching Foods.
+                    ("Favorites", QuickActions.QuickLogKind.favorites),
+                    ("Foods", .foods),
                     ("Meals", .meals),
-                    ("Favorites", .favorites),
                 ],
                 selection: $kind
             )

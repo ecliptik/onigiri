@@ -16,7 +16,9 @@ struct FoodsView: View {
     /// What the list shows — the Log sheet's scopes (its .all/.scan are
     /// routing kinds, not scopes, so they have no counterpart here).
     private enum Scope: String, CaseIterable {
-        case foods = "Foods", meals = "Meals", favorites = "Favorites"
+        // Declaration order IS segment order: Favorites leads (the
+        // user — the starred shortlist should be the easiest reach).
+        case favorites = "Favorites", foods = "Foods", meals = "Meals"
     }
 
     /// One sheet slot (the QuickLogSheet pattern): the six chained

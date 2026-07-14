@@ -438,15 +438,21 @@ struct MonthDetailView: View {
                     Text(model.monthFoodEntries.map { "\($0)" } ?? "—")
                         .monospacedDigit()
                 }
-                LabeledContent("Total calories") {
-                    Text("\(model.totalCalories(inMonthOf: month), format: .number.precision(.fractionLength(0))) kcal")
-                        .monospacedDigit()
-                }
                 LabeledContent("Total water") {
                     Text(model.monthWaterOz.map {
                         "\($0.formatted(.number.precision(.fractionLength(0)))) oz"
                     } ?? "—")
                     .monospacedDigit()
+                }
+                // The energy rows read as one sum (the user):
+                // burned − calories = deficit.
+                LabeledContent("Total calories") {
+                    Text("\(model.totalCalories(inMonthOf: month), format: .number.precision(.fractionLength(0))) kcal")
+                        .monospacedDigit()
+                }
+                LabeledContent("Total burned") {
+                    Text("\(model.totalBurned(inMonthOf: month), format: .number.precision(.fractionLength(0))) kcal")
+                        .monospacedDigit()
                 }
                 LabeledContent("Total deficit") {
                     Text(model.totalDeficit(inMonthOf: month).map {
@@ -454,7 +460,7 @@ struct MonthDetailView: View {
                     } ?? "—")
                     .monospacedDigit()
                 }
-                LabeledContent("Predicted, by deficit") {
+                LabeledContent("Predicted") {
                     Text(model.predictedLb(inMonthOf: month).map { "≈ \(signedLb($0))" } ?? "—")
                         .monospacedDigit()
                 }

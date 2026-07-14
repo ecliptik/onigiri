@@ -175,6 +175,13 @@ final class CalendarModel {
         trackedDays(inMonthOf: month).map(\.intakeKcal).reduce(0, +)
     }
 
+    /// Total burn across tracked days — with total calories and total
+    /// deficit it makes the month's arithmetic visible (the user):
+    /// burned − calories = deficit.
+    func totalBurned(inMonthOf month: Date) -> Double {
+        trackedDays(inMonthOf: month).map(\.burnKcal).reduce(0, +)
+    }
+
     func earnedCount(inMonthOf month: Date) -> Int {
         StreakCalendar.earnedCount(inMonthOf: month, earned: earned)
     }

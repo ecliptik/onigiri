@@ -274,7 +274,7 @@ final class OnigiriUITests: XCTestCase {
         // so both rows should carry real values (assert on lb, not —).
         detailsLink(in: app).tap()
         let predictedRow = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label CONTAINS 'Predicted, by deficit' AND label CONTAINS 'lb'"))
+            .matching(NSPredicate(format: "label CONTAINS 'Predicted' AND label CONTAINS 'lb'"))
             .firstMatch
         XCTAssertTrue(predictedRow.waitForExistence(timeout: 10),
                       "Month detail should show a predicted change in lb")

@@ -30,16 +30,20 @@ extension View {
     }
 }
 
-/// Reaching the top pins immediately (the gesture-less section-collapse
-/// case is the whole reason TabBarPin exists), but LEAVING the top only
-/// commits when the scroll settles: flipping tabBarMinimizeBehavior
-/// re-renders the TabView, and doing that mid-gesture was the "sticky"
-/// first scroll on Foods (felt right as content reached the pinned
-/// scope bar, 2026-07-13). Trade-off: the bar doesn't minimize during
-/// the first downward scroll from the top — it starts minimizing from
-/// the next one.
+/// EVERY pin commit defers to scroll-idle while a gesture is in flight:
+/// flipping tabBarMinimizeBehavior re-renders the TabView, and doing it
+/// mid-gesture was the "sticky" scroll — first the leave-the-top flip
+/// (Foods, 2026-07-13), then the reach-the-top flip, which fired
+/// repeatedly DURING the large-title collapse/expand because the title
+/// transition shifts contentInsets and oscillates the at-top boundary
+/// (Today/Goal, the user, 2026-07-14). Gesture-less at-top changes
+/// (collapsing the log sections — the whole reason TabBarPin exists)
+/// still commit immediately: no phases fire without a gesture, so idle
+/// would never come. Trade-off unchanged: the bar doesn't minimize
+/// during the first downward scroll from the top.
 private struct ExpandsTabBarAtTop: ViewModifier {
     @State private var atTopNow = true
+    @State private var isScrolling = false
 
     func body(content: Content) -> some View {
         content
@@ -47,15 +51,27 @@ private struct ExpandsTabBarAtTop: ViewModifier {
                 geo.contentOffset.y + geo.contentInsets.top <= 1
             } action: { _, atTop in
                 atTopNow = atTop
-                if atTop {
-                    TabBarPin.shared.atTop = true
+                if atTop, !isScrolling {
+                    Self.commit(true)
                 }
             }
             .onScrollPhaseChange { _, newPhase in
+                isScrolling = newPhase != .idle
                 if newPhase == .idle {
-                    TabBarPin.shared.atTop = atTopNow
+                    Self.commit(atTopNow)
                 }
             }
+    }
+
+    /// @Observable fires on EVERY set, equal value or not — and each
+    /// fire re-evaluates the TabView, which can cancel an in-flight
+    /// scroll gesture. Unguarded, sitting at the top turned every swipe
+    /// attempt into an invalidation storm (dead swipes on Today after a
+    /// day jump — the user, 2026-07-14). Commit only actual changes.
+    private static func commit(_ atTop: Bool) {
+        if TabBarPin.shared.atTop != atTop {
+            TabBarPin.shared.atTop = atTop
+        }
     }
 }
 

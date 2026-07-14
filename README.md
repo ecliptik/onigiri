@@ -2,6 +2,8 @@
 
 A personal calorie, nutrition, and water tracker for iPhone + Apple Watch, built with SwiftUI and integrated with Apple Health.
 
+Runs on iOS/iPadOS **18.0+** and watchOS **10.0+** — back to the iPhone XS, iPad (7th gen), and Apple Watch Series 4. On iOS 26+ the app wears Liquid Glass; older versions get the standard system look, same features.
+
 **This project was 100% built agentically using [Claude Code](https://claude.com/claude-code).**
 
 ## Screenshots

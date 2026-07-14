@@ -82,9 +82,10 @@ final class OnigiriUITests: XCTestCase {
             app.staticTexts["24 / 64 oz water"].waitForExistence(timeout: 10),
             "Seeded water total should show in the hydration row"
         )
-        // Water logs from the Log sheet's pinned top row now.
+        // Water logs from the Log sheet's pinned top row — restyled to
+        // the row grammar: the + capsule ("Log Water") is the tap target.
         switchTab(in: app, to: "Add")
-        let waterButton = app.buttons["Log 12 ounces of water"]
+        let waterButton = app.buttons["Log Water"]
         XCTAssertTrue(waterButton.waitForExistence(timeout: 10),
                       "Log sheet should pin the water row on top")
         waterButton.tap()
@@ -140,11 +141,24 @@ final class OnigiriUITests: XCTestCase {
         // Recent query — and its portion sheet must carry the entry's own
         // values ("as last logged"), the no-library-match path.
         switchTab(in: app, to: "Add")  // the corner + pill opens the Log sheet
+        // Form rows are lazy: on smaller screens (5.8" XS class) the
+        // Recent section starts below the fold — swipe it into existence.
+        // Case-insensitive: iOS 18 renders section headers UPPERCASED
+        // ('RECENT'); iOS 26's design stopped uppercasing.
+        let recentHeader = app.staticTexts.matching(
+            NSPredicate(format: "label ==[c] 'Recent'")
+        ).firstMatch
+        for _ in 0..<4 where !recentHeader.exists {
+            app.swipeUp()
+        }
         XCTAssertTrue(
-            app.staticTexts["Recent"].waitForExistence(timeout: 10),
+            recentHeader.waitForExistence(timeout: 10),
             "Log sheet should lead with a Recent section"
         )
         let recentBurrito = app.buttons["Log Chicken burrito"]
+        for _ in 0..<3 where !recentBurrito.exists {
+            app.swipeUp()
+        }
         XCTAssertTrue(recentBurrito.waitForExistence(timeout: 5),
                       "History-only food should surface in Recents")
         recentBurrito.tap()

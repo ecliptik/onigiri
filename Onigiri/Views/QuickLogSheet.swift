@@ -211,6 +211,14 @@ struct QuickLogSheet: View {
                                     }
                                 }
                             }
+                            // The label area speaks for itself; the row
+                            // must NOT take one big accessibilityLabel —
+                            // that collapses it to a single element and
+                            // hides the + from VoiceOver (and XCUITest;
+                            // caught by the flow test on the 18.6 sim).
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("Water, \(SharedStore.waterServingOz.formatted(.number.precision(.fractionLength(0)))) ounces per serving")
+                            .accessibilityHint("Hold for other amounts")
                             LogButton(name: "Water", longPressName: "Log a serving") {
                                 logWater(oz: SharedStore.waterServingOz)
                             } onLongPress: {
@@ -221,7 +229,6 @@ struct QuickLogSheet: View {
                             }
                             .disabled(isLoggingWater)
                         }
-                        .accessibilityLabel("Water, \(SharedStore.waterServingOz.formatted(.number.precision(.fractionLength(0)))) ounces — log with the add button; hold the row for other amounts")
                     }
                 }
                 if !searchText.isEmpty || kind == .favorites {

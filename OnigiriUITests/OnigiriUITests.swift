@@ -894,7 +894,7 @@ final class OnigiriUITests: XCTestCase {
         // product and opens the prefilled food form directly — no trip
         // through the Add chooser. (The form keeps its own scan row for
         // attaching a barcode mid-edit; this exercises the screen's.)
-        let scan = app.buttons["Scan Barcode"].firstMatch
+        let scan = app.buttons["Scan Barcode or Nutrition Label"].firstMatch
         XCTAssertTrue(scan.waitForExistence(timeout: 5), "Scan Barcode row on Foods")
         scan.tap()
 
@@ -937,7 +937,7 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(addFood.waitForExistence(timeout: 5), "Add Food chooser option")
         addFood.tap()
 
-        let scanLabel = app.buttons["Scan Label"].firstMatch
+        let scanLabel = app.buttons["Scan Barcode or Nutrition Label"].firstMatch
         XCTAssertTrue(scanLabel.waitForExistence(timeout: 5), "Scan Label row in the food form")
         attachShot(named: "label-scan-form-row")
         scanLabel.tap()
@@ -991,7 +991,7 @@ final class OnigiriUITests: XCTestCase {
             wait(for: [formGone], timeout: 5)
         }
         closeFoodForm()
-        let foodsScanLabel = app.buttons["Scan Label"].firstMatch
+        let foodsScanLabel = app.buttons["Scan Barcode or Nutrition Label"].firstMatch
         XCTAssertTrue(foodsScanLabel.waitForExistence(timeout: 5), "Scan Label row on Foods")
         attachShot(named: "label-scan-foods-rows")
         foodsScanLabel.tap()
@@ -1009,7 +1009,7 @@ final class OnigiriUITests: XCTestCase {
         closeFoodForm()
         switchTab(in: app, to: "Today")
         switchTab(in: app, to: "Add")
-        let logScanLabel = app.buttons["Scan Label"].firstMatch
+        let logScanLabel = app.buttons["Scan Barcode or Nutrition Label"].firstMatch
         XCTAssertTrue(logScanLabel.waitForExistence(timeout: 5), "Scan Label row on the Log sheet")
         attachShot(named: "label-scan-log-rows")
         logScanLabel.tap()

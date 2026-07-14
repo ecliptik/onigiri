@@ -53,13 +53,7 @@ struct FoodFormView: View {
     @State private var category: String?
     @State private var isFavorite = false
 
-    /// One item drives both scanner sheets — chained .sheet modifiers on
-    /// one view compete (the SwiftData-era landmine list).
-    private enum ScannerKind: String, Identifiable {
-        case barcode, label
-        var id: String { rawValue }
-    }
-    @State private var activeScanner: ScannerKind?
+    @State private var showScanner = false
     /// The in-form OpenFoodFacts search: the STANDARD system field
     /// (bottom-placed), results inline via the shared section — the
     /// separate Search Database sheet is retired.
@@ -164,18 +158,13 @@ struct FoodFormView: View {
                 // lives at the bottom, system placement.
                 if isBlankNewFood {
                 Section {
+                    // ONE camera behind one row: barcode fires live,
+                    // the shutter photographs the label (the third door
+                    // — foods no database knows).
                     Button {
-                        activeScanner = .barcode
+                        showScanner = true
                     } label: {
-                        Label("Scan Barcode", systemImage: "barcode.viewfinder")
-                    }
-                    .disabled(isLookingUp)
-                    // The third door: label OCR for foods no database
-                    // knows (store brands, imports, no barcode at all).
-                    Button {
-                        activeScanner = .label
-                    } label: {
-                        Label("Scan Label", systemImage: "text.viewfinder")
+                        Label("Scan Barcode or Nutrition Label", systemImage: "barcode.viewfinder")
                     }
                     .disabled(isLookingUp)
                     if isLookingUp {
@@ -366,7 +355,7 @@ struct FoodFormView: View {
                 // not inherit the select-all. The bottom search field is
                 // exempt too — selecting-all an in-progress query on
                 // refocus would surprise.
-                guard activeScanner == nil, !dbSearchActive, portionTarget == nil,
+                guard !showScanner, !dbSearchActive, portionTarget == nil,
                       let field = note.object as? UITextField else { return }
                 DispatchQueue.main.async { field.selectAll(nil) }
             }
@@ -395,17 +384,12 @@ struct FoodFormView: View {
                 Button("Keep Editing", role: .cancel) {}
             }
             .interactiveDismissDisabled(isDirty)
-            .sheet(item: $activeScanner) { kind in
-                switch kind {
-                case .barcode:
-                    BarcodeScannerSheet { code in
-                        Task { await lookup(code) }
-                    }
-                case .label:
-                    LabelScannerSheet { parsed in
-                        applyLabel(parsed)
-                    }
-                }
+            .sheet(isPresented: $showScanner) {
+                ScanSheet(onCode: { code in
+                    Task { await lookup(code) }
+                }, onLabel: { parsed in
+                    applyLabel(parsed)
+                })
             }
             .sheet(item: $portionTarget, onDismiss: {
                 // Cancelled portion after Log: the save already happened —
@@ -426,7 +410,7 @@ struct FoodFormView: View {
                 } else if let prefill {
                     apply(prefill)
                 } else if startScanning {
-                    activeScanner = .barcode
+                    showScanner = true
                 }
                 // After the initial load: a pristine form (or an
                 // untouched prefill) dismisses freely; anything typed

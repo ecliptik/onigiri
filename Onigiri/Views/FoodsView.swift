@@ -34,7 +34,6 @@ struct FoodsView: View {
         case editMeal(Meal)
         case portion(PortionTarget)
         case scanner
-        case labelScanner
 
         var id: String {
             switch self {
@@ -45,7 +44,6 @@ struct FoodsView: View {
             case .editMeal(let meal): "editMeal-\(meal.uuid.uuidString)"
             case .portion(let target): "portion-\(target.name)"
             case .scanner: "scanner"
-            case .labelScanner: "labelScanner"
             }
         }
     }
@@ -161,13 +159,7 @@ struct FoodsView: View {
                         Button {
                             activeSheet = .scanner
                         } label: {
-                            ScanBarcodeLabel()
-                        }
-                        .disabled(isLookingUpBarcode)
-                        Button {
-                            activeSheet = .labelScanner
-                        } label: {
-                            ScanLabelLabel()
+                            ScanRowLabel()
                         }
                         .disabled(isLookingUpBarcode)
                         if isLookingUpBarcode {
@@ -303,19 +295,17 @@ struct FoodsView: View {
                     }
                     .presentationDetents([.medium, .large])
                 case .scanner:
-                    BarcodeScannerSheet { code in
-                        lookUpBarcode(code)
-                    }
-                case .labelScanner:
-                    // Same handoff as an unknown barcode: the single
-                    // sheet slot re-presents as the prefilled food form.
-                    // Deferred one turn — the sheet dismisses itself
+                    // A parsed label takes the unknown-barcode route: the
+                    // single sheet slot re-presents as the prefilled food
+                    // form. Deferred one turn — the sheet dismisses itself
                     // right after this closure, and a synchronous swap
                     // gets torn down by that dismissal.
-                    LabelScannerSheet { parsed in
+                    ScanSheet(onCode: { code in
+                        lookUpBarcode(code)
+                    }, onLabel: { parsed in
                         let prefill = ProductPrefill(product: parsed.scannedProduct())
                         Task { activeSheet = .form(prefill) }
-                    }
+                    })
                 }
             }
             // The corner + while on this tab (the toolbar "+ Add" menu
@@ -665,32 +655,17 @@ struct PortionTarget: Identifiable {
     }
 }
 
-/// The scan rows share one grammar: Scan Barcode leads, Scan Label
-/// sits under it. Shared by the Foods tab and the Log sheet.
-struct ScanBarcodeLabel: View {
-    var body: some View {
-        ScanRowLabel(title: "Scan Barcode", systemImage: "barcode.viewfinder")
-    }
-}
-
-struct ScanLabelLabel: View {
-    var body: some View {
-        ScanRowLabel(title: "Scan Label", systemImage: "text.viewfinder")
-    }
-}
-
-/// The scan rows' leading icon, drawn with LogButton's exact circle
-/// treatment (same font, padding, fill, rim) so the row carries the
-/// same visual weight as the + capsules beside it (the user).
-private struct ScanRowLabel: View {
-    let title: String
-    let systemImage: String
-
+/// ONE scan row, one camera behind it (the user's copy) — barcode fires
+/// live, the shutter photographs the label. Leading icon drawn with
+/// LogButton's exact circle treatment (same font, padding, fill, rim)
+/// so the row carries the same visual weight as the + capsules beside
+/// it (the user). Shared by the Foods tab and the Log sheet.
+struct ScanRowLabel: View {
     var body: some View {
         Label {
-            Text(title)
+            Text("Scan Barcode or Nutrition Label")
         } icon: {
-            Image(systemName: systemImage)
+            Image(systemName: "barcode.viewfinder")
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(Color.riceToast)
                 // FIXED frame, not padding: the barcode glyph is wider

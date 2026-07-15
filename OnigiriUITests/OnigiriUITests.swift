@@ -1342,18 +1342,14 @@ final class OnigiriUITests: XCTestCase {
             ? springboard.buttons[" Add Widget"]
             : springboard.buttons["Add Widget"]
         XCTAssertTrue(add.waitForExistence(timeout: 8), "Add Widget confirm")
-        // First matching page is the medium family (declared before large).
-        let pager = springboard.scrollViews.firstMatch
-        let todayPage = springboard.staticTexts[
-            "Today's balance, burned and eaten, and your tracked metrics."
-        ]
-        var swipes = 0
-        while !todayPage.exists && swipes < 10 {
-            if pager.exists { pager.swipeLeft() } else { springboard.swipeLeft() }
-            Thread.sleep(forTimeInterval: 0.5)
-            swipes += 1
-        }
-        XCTAssertTrue(todayPage.exists, "Today card gallery page")
+        // The family pager holds small/medium/large, and the description
+        // text exists for ALL of them at once — so waiting on it never
+        // swipes and adds the small default. Swipe the preview once
+        // (small → medium) by coordinate, the reliable lever.
+        springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.4))
+            .press(forDuration: 0.05,
+                   thenDragTo: springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.4)))
+        Thread.sleep(forTimeInterval: 1)
         add.tap()
         if springboard.buttons["Done"].waitForExistence(timeout: 5) {
             springboard.buttons["Done"].tap()

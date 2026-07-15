@@ -3,7 +3,7 @@
 Working queue for upcoming releases. Details get their own PLAN-x.y.md
 when a release starts; this file is the durable to-do between sessions.
 
-## 1.8.1 — Foods screen restructure (built — see PLAN-1.8.1.md)
+## 1.8.1 — Foods screen restructure (built — see archive/PLAN-1.8.1.md)
 
 - [x] Foods / Meals / Favorites scope menu (shared ScopeBar with Log).
 - [x] "Scan Barcode" row under the scope menu (known barcode → portion
@@ -13,15 +13,15 @@ when a release starts; this file is the durable to-do between sessions.
   the search-tab slot, `DefaultToolbarItem(kind: .search, .bottomBar)`
   renders the field behind the floating tab bar (verified on the 26.5
   sim, 2026-07-13). Kept the standard top drawer; details in
-  PLAN-1.8.1.md and the FoodsView comment.
-- [x] Log-vs-Foods recommendation written (PLAN-1.8.1.md): keep two
+  archive/PLAN-1.8.1.md and the FoodsView comment.
+- [x] Log-vs-Foods recommendation written (archive/PLAN-1.8.1.md): keep two
   screens, share components; three convergence follow-ups listed.
 
 ## 1.9 — Quality pass
 
 - [x] Axiom skills enabled; six-lens review run (2026-07-13).
 - [x] Batches A (correctness), B (polish/a11y), C (performance)
-  applied — see PLAN-1.9.md status notes. Watch fixes deployed
+  applied — see archive/PLAN-1.9.md status notes. Watch fixes deployed
   2026-07-13; verify complication freshness over the week.
 - [x] On-device feedback arc (2026-07-13/14): pinned Foods search
   drawer, first-scroll smoothing, one-surface grouped idiom, the
@@ -38,7 +38,7 @@ when a release starts; this file is the durable to-do between sessions.
   echo guard, and the gated iOS 26 garnish (hard scroll edges, glass
   swipe pills, symbol effects).
 
-## 2.0 — Intelligence (RELEASED 2026-07-14 — see PLAN-2.0.md)
+## 2.0 — Intelligence (RELEASED 2026-07-14 — see archive/PLAN-2.0.md)
 
 - [x] Scan Nutrition Label: Vision OCR → kit LabelParser (five real
   fixture transcripts) → the existing prefill path; iOS 26

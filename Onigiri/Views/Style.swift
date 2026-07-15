@@ -17,6 +17,29 @@ enum LibrarySort: String, CaseIterable {
     }
 }
 
+/// The shared "Details ›" tap-for-more caption — one grammar for the
+/// three affordances that open more detail: the Calendar month card,
+/// the Calendar day card, and Today's headline. (The 2026-07-13 chevron
+/// removal on Today was reversed deliberately in 2.1 to unify them.)
+/// The trailing chevron says "there's more behind this tap"; where the
+/// tap ALSO crosses tabs or enables editing, that cue lives in the
+/// host's accessibility hint, not extra visible words.
+struct DetailsCaption: View {
+    var body: some View {
+        HStack(spacing: 4) {
+            Text("Details")
+            // Decorative "there's more" cue — hidden from VoiceOver so
+            // the affordance reads simply as "Details" (and the flow
+            // test can still match it by that label).
+            Image(systemName: "chevron.right")
+                .font(.caption2.weight(.semibold))
+                .accessibilityHidden(true)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+}
+
 /// App-standard vertical rhythm — compact but still buffered.
 enum Layout {
     /// Gap between top-level groups on ScrollView screens (Today, Water,

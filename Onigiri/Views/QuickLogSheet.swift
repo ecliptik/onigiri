@@ -539,23 +539,13 @@ struct QuickLogSheet: View {
     /// sheet slot re-presents on the item change, so a known barcode can
     /// hand the dismissing scanner off to the portion sheet directly.
     private func lookUpBarcode(_ code: String) {
-        if let target = libraryTarget(forBarcode: code) {
-            activeSheet = .portion(target)
-            return
-        }
-        isLookingUpBarcode = true
-        Task {
-            defer { isLookingUpBarcode = false }
-            do {
-                let product = try await OpenFoodFactsClient().product(barcode: code)
-                activeSheet = .form(ProductPrefill(product: product))
-            } catch {
-                // Transient failures toast, like everything else; the
-                // sheet has its own toastHost (the root's renders behind
-                // presented sheets).
-                ToastCenter.shared.show(error.localizedDescription)
-            }
-        }
+        BarcodeRouter.lookUp(
+            code,
+            savedTarget: { libraryTarget(forBarcode: $0) },
+            isLookingUp: $isLookingUpBarcode,
+            presentPortion: { activeSheet = .portion($0) },
+            presentForm: { activeSheet = .form($0) }
+        )
     }
 
     /// In a sheet named "Log", tap = log: the row opens the portion

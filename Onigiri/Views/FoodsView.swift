@@ -615,21 +615,17 @@ struct FoodsView: View {
     /// single sheet slot re-presents on the item change, so the handoff
     /// from the dismissing scanner can't be eaten.
     private func lookUpBarcode(_ code: String) {
-        if let existing = foods.first(where: { $0.barcode == code }) {
-            existing.lastUsedAt = .now
-            activeSheet = .portion(makePortionTarget(for: existing))
-            return
-        }
-        isLookingUpBarcode = true
-        Task {
-            defer { isLookingUpBarcode = false }
-            do {
-                let product = try await OpenFoodFactsClient().product(barcode: code)
-                activeSheet = .form(ProductPrefill(product: product))
-            } catch {
-                ToastCenter.shared.show(error.localizedDescription)
-            }
-        }
+        BarcodeRouter.lookUp(
+            code,
+            savedTarget: { code in
+                guard let existing = foods.first(where: { $0.barcode == code }) else { return nil }
+                existing.lastUsedAt = .now
+                return makePortionTarget(for: existing)
+            },
+            isLookingUp: $isLookingUpBarcode,
+            presentPortion: { activeSheet = .portion($0) },
+            presentForm: { activeSheet = .form($0) }
+        )
     }
 
     private var deleteMealsTitle: String {

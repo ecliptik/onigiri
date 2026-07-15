@@ -18,9 +18,11 @@ func switchTab(in app: XCUIApplication, to name: String) {
 }
 
 
-/// Today's "Details" caption flattens to a Button (single-Text label,
-/// chevron removed 2026-07-13) while Calendar's stays a StaticText —
-/// match by label, not element type.
+/// The "Details ›" caption is one shared grammar across Today, the
+/// Calendar day card, and the month card (2.1 restored Today's chevron
+/// to match). The trailing chevron is accessibilityHidden, so all three
+/// still read simply as "Details" — match by label, across StaticText
+/// (Calendar) and Button (Today's NavigationLink).
 @MainActor
 func detailsLink(in app: XCUIApplication) -> XCUIElement {
     app.descendants(matching: .any).matching(
@@ -541,11 +543,36 @@ final class OnigiriUITests: XCTestCase {
                 tapIfExists(app.buttons["Cancel"].firstMatch)
             }
         }
-        if tapIfExists(app.staticTexts["Protein shake"].firstMatch) {
+        // The edit shots need the Foods LIST back (the add-food flow
+        // above leaves its sheet up) and the right scope per item: a
+        // food shows in Foods, a meal ONLY in Meals/Favorites. Dismiss
+        // any lingering sheet until the scope bar reappears, then pick
+        // the scope. The meal shot silently skipped once Favorites (not
+        // "All") became the default and the tour ran its scope walk from
+        // Foods — hence the explicit Meals switch.
+        var dismissTries = 0
+        while !app.segmentedControls.firstMatch.waitForExistence(timeout: 2), dismissTries < 4 {
+            if !tapIfExists(app.buttons["Cancel"].firstMatch, timeout: 1) {
+                app.swipeDown()
+            }
+            dismissTries += 1
+        }
+        // A library row is a Button labeled by its name
+        // (accessibilityAddTraits(.isButton)) — NOT a staticText, which
+        // is why the old app.staticTexts[name] never matched and both
+        // edit shots silently skipped. ("Log <name>" is the separate +
+        // button, unaffected by the exact-label match.)
+        if app.segmentedControls.count > 0 {
+            app.segmentedControls.firstMatch.buttons["Foods"].tap()
+        }
+        if tapIfExists(app.buttons["Protein shake"].firstMatch, timeout: 5) {
             shot("food-form-edit", settle: 1.2)
             tapIfExists(app.buttons["Cancel"].firstMatch)
         }
-        if tapIfExists(app.staticTexts["Chicken & rice"].firstMatch) {
+        if app.segmentedControls.count > 0 {
+            app.segmentedControls.firstMatch.buttons["Meals"].tap()
+        }
+        if tapIfExists(app.buttons["Chicken & rice"].firstMatch, timeout: 5) {
             shot("meal-form-edit", settle: 1.2)
             tapIfExists(app.buttons["Cancel"].firstMatch)
         }

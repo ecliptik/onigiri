@@ -99,11 +99,11 @@ struct TodayView: View {
                             }
                         }
                         nutritionLink {
-                            // Text-only (the user dropped the chevron):
-                            // the caption itself is the door.
-                            Text("Details")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            // The shared "Details ›" caption — 2.1 restored
+                            // the trailing chevron here to match the month
+                            // and day cards (the 2026-07-13 removal reversed
+                            // deliberately).
+                            DetailsCaption()
                                 .padding(.vertical, 6)
                                 .padding(.horizontal, 16)
                                 .contentShape(.rect)

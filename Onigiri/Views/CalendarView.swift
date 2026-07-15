@@ -263,13 +263,12 @@ struct CalendarView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            // The tap is a cross-tab jump — the bare chevron never said
-            // so, and the behavior was VoiceOver-hint-only discoverable.
+            // Same "Details ›" grammar as the month card and Today; the
+            // cross-tab/edit nature of the tap moved into the hint below
+            // (2.1 unified the three affordances).
             HStack {
                 Spacer()
-                Text("View & edit on Today")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                DetailsCaption()
             }
         }
         .padding(14)
@@ -281,7 +280,7 @@ struct CalendarView: View {
             QuickActions.shared.dayRequest = selectedDay
         }
         .accessibilityAddTraits(.isButton)
-        .accessibilityHint("Opens this day on Today")
+        .accessibilityHint("Opens this day on Today, where you can view and edit it")
         .animation(.snappy, value: selectedDay)
     }
 
@@ -386,13 +385,7 @@ struct CalendarView: View {
                         color: model.streak > 0 ? .green : .secondary
                     )
                 }
-                HStack(spacing: 4) {
-                    Text("Details")
-                    Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.semibold))
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                DetailsCaption()
             }
             .padding(.vertical, 12)
             .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 14))

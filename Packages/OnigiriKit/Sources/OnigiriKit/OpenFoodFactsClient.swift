@@ -272,6 +272,17 @@ public struct OpenFoodFactsClient: Sendable {
             // Rank/return fields in the user's language, not whichever
             // language edited the database last.
             .init(name: "langs", value: Self.languageCode),
+            // DEFERRED to the backlog (2.1, 2026-07-14): the legacy leg
+            // filters to nutrition-facts-completed products (unfilled
+            // entries are unloggable and crowd the page); this leg should
+            // match via search-a-licious's query DSL, likely appending
+            // `states_tags:en:nutrition-facts-completed` to `q`. NOT added
+            // yet — a wrong filter here fails as a clean 200-with-zero-
+            // hits that never trips the legacy fallback and would break
+            // search outright, so it lands ONLY after a live probe of the
+            // exact syntax during a STABLE window. Probed 2026-07-14:
+            // search-a-licious 502, legacy 503 — service mid-outage,
+            // syntax unverifiable. Re-probe before shipping.
         ]
         guard let url = components.url else { throw OpenFoodFactsError.badResponse }
         let data = try await fetch(url)

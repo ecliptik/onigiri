@@ -30,6 +30,17 @@ func detailsLink(in app: XCUIApplication) -> XCUIElement {
     ).firstMatch
 }
 
+/// The Calendar tab's MONTH summary card, which pushes the month detail.
+/// Since 2.1 the day card ALSO shows "Details ›" (grammar unified), so a
+/// bare detailsLink is ambiguous on this tab — target the month card by
+/// the streak line only its combined label carries.
+@MainActor
+func calendarMonthCard(in app: XCUIApplication) -> XCUIElement {
+    app.buttons.matching(
+        NSPredicate(format: "label CONTAINS 'current streak'")
+    ).firstMatch
+}
+
 final class OnigiriUITests: XCTestCase {
 
     @MainActor
@@ -274,7 +285,13 @@ final class OnigiriUITests: XCTestCase {
         // Predicted vs actual moved off the card into the pushed month
         // detail. Seeded data has a month of weigh-ins and deficit days,
         // so both rows should carry real values (assert on lb, not —).
-        detailsLink(in: app).tap()
+        // Target the MONTH card specifically: since 2.1 the day card
+        // also shows "Details ›" (grammar unified), so a bare
+        // detailsLink is ambiguous on this tab.
+        let monthCard = calendarMonthCard(in: app)
+        XCTAssertTrue(monthCard.waitForExistence(timeout: 5),
+                      "Calendar month summary card")
+        monthCard.tap()
         let predictedRow = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label CONTAINS 'Predicted' AND label CONTAINS 'lb'"))
             .firstMatch
@@ -368,9 +385,9 @@ final class OnigiriUITests: XCTestCase {
         scene("foods")
 
         switchTab(in: app, to: "Calendar")
-        _ = detailsLink(in: app).waitForExistence(timeout: 10)
+        _ = calendarMonthCard(in: app).waitForExistence(timeout: 10)
         scene("calendar")
-        detailsLink(in: app).tap()
+        calendarMonthCard(in: app).tap()
         scene("month", hold: 3.5)
         app.navigationBars.buttons.firstMatch.tap()
 
@@ -591,7 +608,7 @@ final class OnigiriUITests: XCTestCase {
         if tapIfExists(app.buttons["Previous month"]) {
             shot("calendar-previous-month")
         }
-        if tapIfExists(detailsLink(in: app)) {
+        if tapIfExists(calendarMonthCard(in: app)) {
             shot("month-detail-sparse", settle: 1.0)
             tapIfExists(app.navigationBars.buttons.firstMatch)
         }

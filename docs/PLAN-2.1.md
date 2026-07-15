@@ -105,19 +105,24 @@ accessibility hint.
 
 ## Status (2026-07-14)
 
-- **M1–M4 built and committed.** M5 docs done; release (tag + push)
-  gated on the on-device verdict.
-- **Simulator limit on M2 interactivity:** interactive widget intents
-  don't dispatch on the simulator — linkd doesn't index widget-intent
-  metadata, and the SHIPPED Control Center water button fails
-  identically there (`linkd: Missing …:LogWaterIntent`). So the ‹ ›
-  paging and in-place water need on-device confirmation; the +
-  deep link (Link/openURL, not an intent) and both widget renders are
-  simulator-verified. Two real fixes surfaced along the way: the
-  paging intent had to move into OnigiriKit (registered into the
-  widget process via `OnigiriKitIntents`), and `isDiscoverable = false`
-  had to go (a non-discoverable intent is absent from the metadata the
-  action runner queries at tap time).
+- **Built + on-device tested.** Release (tag + push) gated on the
+  final verdict.
+- **Interactive widget buttons DROPPED after the device pass.** The
+  planned ‹ › day paging and in-place water were WidgetKit AppIntent
+  buttons; they wouldn't dispatch on the device (no-op / flash) and
+  couldn't on the simulator either — linkd doesn't index widget-intent
+  metadata, and the SHIPPED Control Center water button failed
+  identically there. Neither moving the intent into OnigiriKit nor
+  dropping `isDiscoverable = false` nor a version bump fixed it. The
+  Today card now keeps the glance + a prominent Log button (a
+  Link/openURL deep link, which dispatches reliably), and gained a
+  small family so "Today" leads the gallery. LogWaterIntent stays for
+  Control Center / Siri.
+- **Widget lineup trimmed further (the user):** removed Calorie Meter,
+  Daily Progress, Month, and the Weight Trend chart; added a Month
+  Stats card (goal-met days + streak). Onigiri gauge lost its water
+  button; all home-screen widgets wear the rice-paper canvas. Bumped
+  to 2.1.0 (build 2).
 - **OFF filter slipped to the backlog:** the verify-live-first probe
   on 2026-07-14 hit search-a-licious 502 / legacy 503 (service
   mid-outage), so the exact filter syntax couldn't be confirmed.

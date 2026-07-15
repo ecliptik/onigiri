@@ -22,7 +22,7 @@ Runs on iOS/iPadOS **18.0+** and watchOS **10.0+** — back to the iPhone XS, iP
 
 ### Home-screen widget
 
-![Today-mirror widget: the kcal-left ring with Burned and Eaten, sodium and water pills, day paging, and one-tap logging](docs/showcase/widget/today-card.png)
+![Today card widget (small): the kcal ring with the day's balance, on the rice-paper canvas — also available in medium and large with burned/eaten, the tracked-metric pills, and a Log button](docs/showcase/widget/today-card.png)
 
 ## Features
 
@@ -32,7 +32,7 @@ Runs on iOS/iPadOS **18.0+** and watchOS **10.0+** — back to the iPhone XS, iP
 - **Meals** — bundle saved foods into one-tap recurring meals
 - **Water tracking** — configurable serving size (e.g., 12 oz) and daily goal
 - **Apple Watch app** — glanceable meter, one-tap logging from a unified Favorites-then-Recent list, watch-face complications (balance + water)
-- **Home-screen widgets** — a Today-mirror card (large + medium) that reflects the top of Today with ‹ › day paging, in-place water, and a + that deep-links into logging; plus a small onigiri gauge and a medium meter with a configurable one-tap meal button (no app launch)
+- **Home-screen widgets** — a Today card (small/medium/large) reflecting the top of Today: the kcal ring with burned/eaten, your tracked-metric pills, and a Log button one tap from the log sheet; plus an onigiri gauge, a Month Stats card (goal-met days + streak), Water and Streak lock-screen widgets, and a Control Center Log Water button
 
 ## Architecture at a glance
 

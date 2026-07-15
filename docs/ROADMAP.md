@@ -64,23 +64,31 @@ paging snaps back at day roll, barcode-routing cleanup AND the OFF
 nutrition-facts filter (verify-live-first) ride along, paid-account
 question deferred again.
 
-- [x] Built 2026-07-14. TodayCardWidget (large + medium) with ‹ ›
-  AppIntent day paging (snap-back at day roll, bounded by the 92-day
-  window), in-place water reusing the Control Center Log Water intent,
-  and a + deep link into the Log sheet for the shown day. Watch home
-  "Log" rename + unified Favorites→Recent sheet. Details› grammar
-  unified across the three sites. Shared BarcodeRouter replaces the
-  FoodsView/QuickLogSheet copies. QA-tour edit shots fixed.
-- Simulator can't dispatch interactive widget intents (linkd doesn't
-  index widget-intent metadata — the shipped Control Center water
-  button fails identically there), so the ‹ › paging and in-place
-  water need on-device verification; the + deep link (Link/openURL)
-  and both widget renders ARE simulator-verified.
+- [x] Built + on-device tested 2026-07-14. TodayCardWidget in
+  small/medium/large: the kcal ring with burned/eaten, the tracked
+  pills, and a prominent Log button (a Link deep into the Log sheet).
+  Watch home "Log" rename + unified Favorites→Recent sheet. Details›
+  grammar unified across the three sites. Shared BarcodeRouter
+  replaces the FoodsView/QuickLogSheet copies. QA-tour edit shots
+  fixed.
+- Interactive widget AppIntent buttons DROPPED after the on-device
+  pass: the planned ‹ › day paging and in-place water wouldn't
+  dispatch as WidgetKit buttons on the device (they no-op'd / flashed)
+  and couldn't on the simulator either (linkd doesn't index
+  widget-intent metadata; the shipped Control Center water button
+  failed identically). The card keeps the glance + the reliable Log
+  deep link (Link/openURL). LogWaterIntent stays for Control Center /
+  Siri.
+- Widget lineup trimmed (the user): removed Calorie Meter, Daily
+  Progress, Month, and the Weight Trend chart; added a Month Stats
+  card (goal-met days + streak). The onigiri gauge lost its water
+  button. All home-screen widgets wear the Today card's rice-paper
+  canvas. Bumped to MARKETING_VERSION 2.1.0 (build 2).
 - OFF search-a-licious nutrition-facts-completed filter SLIPPED back
   to the backlog: probed 2026-07-14, search-a-licious returned 502 and
   legacy 503 (service mid-outage), so the exact filter syntax couldn't
   be verified — and its failure mode is a silent 200-with-zero-hits.
-- Release (tag + push) pending the on-device verdict.
+- Release (tag + push) pending the final on-device verdict.
 
 - Today-mirror widget (the user, 2026-07-14, with reference
   screenshot): a medium/large home-screen widget that looks exactly

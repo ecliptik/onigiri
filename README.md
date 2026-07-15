@@ -35,11 +35,15 @@ It runs on iPhone, iPad, and Apple Watch, back to the iPhone XS and Apple Watch 
 
 ### Apple Watch
 
-<img src="docs/showcase/watch/home.png" width="240" alt="Apple Watch: balance headline with a one-tap Log button and Log water">
+<p align="center">
+  <img src="docs/showcase/watch/home.png" width="240" alt="Apple Watch: balance headline with a one-tap Log button and Log water">
+</p>
 
 ### Home Screen widget
 
-<img src="docs/showcase/widget/home-screen.png" width="300" alt="The medium Today widget on the Home Screen — calorie ring, burned and eaten, sodium and water, and a Log button — beside the stock iOS widgets">
+<p align="center">
+  <img src="docs/showcase/widget/home-screen.png" width="300" alt="The medium Today widget on the Home Screen — calorie ring, burned and eaten, sodium and water, and a Log button — beside the stock iOS widgets">
+</p>
 
 ## Architecture at a glance
 

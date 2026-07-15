@@ -57,12 +57,30 @@ when a release starts; this file is the durable to-do between sessions.
 - On-device QA still open: pantry tour, both-paths A/B on the 16,
   Foundation Models feel.
 
-## 2.1 — Glance (planned — see PLAN-2.1.md)
+## 2.1 — Glance (BUILT 2026-07-14 — see PLAN-2.1.md; awaiting on-device verdict)
 
 Planned 2026-07-14 (PLAN-2.1.md): widget in LARGE + MEDIUM, day
 paging snaps back at day roll, barcode-routing cleanup AND the OFF
 nutrition-facts filter (verify-live-first) ride along, paid-account
 question deferred again.
+
+- [x] Built 2026-07-14. TodayCardWidget (large + medium) with ‹ ›
+  AppIntent day paging (snap-back at day roll, bounded by the 92-day
+  window), in-place water reusing the Control Center Log Water intent,
+  and a + deep link into the Log sheet for the shown day. Watch home
+  "Log" rename + unified Favorites→Recent sheet. Details› grammar
+  unified across the three sites. Shared BarcodeRouter replaces the
+  FoodsView/QuickLogSheet copies. QA-tour edit shots fixed.
+- Simulator can't dispatch interactive widget intents (linkd doesn't
+  index widget-intent metadata — the shipped Control Center water
+  button fails identically there), so the ‹ › paging and in-place
+  water need on-device verification; the + deep link (Link/openURL)
+  and both widget renders ARE simulator-verified.
+- OFF search-a-licious nutrition-facts-completed filter SLIPPED back
+  to the backlog: probed 2026-07-14, search-a-licious returned 502 and
+  legacy 503 (service mid-outage), so the exact filter syntax couldn't
+  be verified — and its failure mode is a silent 200-with-zero-hits.
+- Release (tag + push) pending the on-device verdict.
 
 - Today-mirror widget (the user, 2026-07-14, with reference
   screenshot): a medium/large home-screen widget that looks exactly
@@ -98,8 +116,14 @@ question deferred again.
 
 ## Backlog (unscheduled)
 
-- Shared barcode-routing helper (lookUpBarcode exists in FoodsView
-  and QuickLogSheet — 1.8.1 follow-up).
+- OFF search-a-licious `nutrition-facts-completed` filter (slipped
+  from 2.1, 2026-07-14): the legacy leg already filters unfilled
+  entries; the primary leg still weeds client-side. Add the equivalent
+  via search-a-licious's query DSL (likely appending
+  `states_tags:en:nutrition-facts-completed` to `q`) — but ONLY after
+  a live probe of the exact syntax during a STABLE window, since a
+  wrong filter fails as a silent 200-with-zero-hits that never trips
+  the legacy fallback. Breadcrumb in `OpenFoodFactsClient.searchALicious`.
 - Watch complication-freshness verification over a normal week
   (1.9 batch A).
 - The paid-developer-account question: CloudKit library sync,

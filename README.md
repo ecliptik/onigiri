@@ -18,7 +18,11 @@ Runs on iOS/iPadOS **18.0+** and watchOS **10.0+** — back to the iPhone XS, iP
 |---|---|
 | ![Today on iPad, portrait](docs/showcase/light/ipad-portrait.png) | ![Today on iPad, landscape, dark mode](docs/showcase/dark/ipad-landscape.png) |
 
-![Apple Watch: balance headline with one-tap meal and water logging](docs/showcase/watch/home.png)
+![Apple Watch: balance headline with a one-tap Log button and Log water](docs/showcase/watch/home.png)
+
+### Home-screen widget
+
+![Today-mirror widget: the kcal-left ring with Burned and Eaten, sodium and water pills, day paging, and one-tap logging](docs/showcase/widget/today-card.png)
 
 ## Features
 
@@ -27,8 +31,8 @@ Runs on iOS/iPadOS **18.0+** and watchOS **10.0+** — back to the iPhone XS, iP
 - **Food library** — save foods with calories + sodium (manual entry or barcode scan via OpenFoodFacts)
 - **Meals** — bundle saved foods into one-tap recurring meals
 - **Water tracking** — configurable serving size (e.g., 12 oz) and daily goal
-- **Apple Watch app** — glanceable meter, one-tap water and meal logging, watch-face complications (balance + water)
-- **Home-screen widgets** — small onigiri gauge, and a medium meter with instant add-water and a configurable one-tap meal button (no app launch)
+- **Apple Watch app** — glanceable meter, one-tap logging from a unified Favorites-then-Recent list, watch-face complications (balance + water)
+- **Home-screen widgets** — a Today-mirror card (large + medium) that reflects the top of Today with ‹ › day paging, in-place water, and a + that deep-links into logging; plus a small onigiri gauge and a medium meter with a configurable one-tap meal button (no app launch)
 
 ## Architecture at a glance
 

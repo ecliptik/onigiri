@@ -102,3 +102,24 @@ accessibility hint.
   story.
 - Any new Apple Intelligence surface — 2.0's set holds until the
   on-device QA says otherwise.
+
+## Status (2026-07-14)
+
+- **M1–M4 built and committed.** M5 docs done; release (tag + push)
+  gated on the on-device verdict.
+- **Simulator limit on M2 interactivity:** interactive widget intents
+  don't dispatch on the simulator — linkd doesn't index widget-intent
+  metadata, and the SHIPPED Control Center water button fails
+  identically there (`linkd: Missing …:LogWaterIntent`). So the ‹ ›
+  paging and in-place water need on-device confirmation; the +
+  deep link (Link/openURL, not an intent) and both widget renders are
+  simulator-verified. Two real fixes surfaced along the way: the
+  paging intent had to move into OnigiriKit (registered into the
+  widget process via `OnigiriKitIntents`), and `isDiscoverable = false`
+  had to go (a non-discoverable intent is absent from the metadata the
+  action runner queries at tap time).
+- **OFF filter slipped to the backlog:** the verify-live-first probe
+  on 2026-07-14 hit search-a-licious 502 / legacy 503 (service
+  mid-outage), so the exact filter syntax couldn't be confirmed.
+  Breadcrumb left in `OpenFoodFactsClient.searchALicious`; re-probe
+  during a stable window before shipping it.

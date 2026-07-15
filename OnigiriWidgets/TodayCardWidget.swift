@@ -2,10 +2,16 @@ import WidgetKit
 import SwiftUI
 import OnigiriKit
 
-/// Large/medium home-screen widget: the top of Today, mirrored — the
-/// kcal-left ring with Burned/Eaten flanking, the tracked-metric pills,
-/// the rice-paper canvas — with ‹ › day paging, an in-place water
-/// button, and a + that deep-links into the Log sheet for the shown day.
+/// Home-screen widget: the top of Today, mirrored — the kcal-left ring
+/// with Burned/Eaten flanking, the tracked-metric pills, the rice-paper
+/// canvas — plus a prominent Log button that deep-links into the Log
+/// sheet. Small/medium/large.
+///
+/// The interactive ‹ › day paging and in-place water button were removed
+/// after on-device testing: WidgetKit AppIntent buttons wouldn't dispatch
+/// on the device (they no-op'd / flashed), while the Log deep link (a
+/// Link/openURL, not an intent) works reliably — so the widget keeps the
+/// glance and the one working action.
 struct TodayCardWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: WidgetKinds.todayCard, provider: TodayCardProvider()) { entry in
@@ -14,15 +20,13 @@ struct TodayCardWidget: Widget {
         }
         .configurationDisplayName("Today")
         .description("Today's balance, burned and eaten, and your tracked metrics.")
-        .supportedFamilies([.systemLarge, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
 
 struct TodayCardEntry: TimelineEntry {
     let date: Date
     let snapshot: DaySnapshot
-    /// The browsed day; nil renders today.
-    var day: Date?
 }
 
 struct TodayCardProvider: TimelineProvider {
@@ -45,32 +49,10 @@ struct TodayCardProvider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<TodayCardEntry>) -> Void) {
         Task { @MainActor in
             let now = Date()
+            let snapshot = await SnapshotLoader.load()
             // Push-based reloads keep widgets fresh; this poll is only a fallback.
             let refresh = now.addingTimeInterval(WidgetRefreshPolicy.pollFallback)
-            let midnight = nextMidnight(after: now)
-            if let day = TodayCardBrowse.shownDay(now: now),
-               let browsed = await SnapshotLoader.load(day: day) {
-                // Pre-render the snap-back: at midnight the browsed day
-                // goes stale and the card shows the new (empty) today.
-                if let midnight, midnight <= refresh {
-                    let today = await SnapshotLoader.load()
-                    completion(Timeline(
-                        entries: [
-                            TodayCardEntry(date: now, snapshot: browsed, day: day),
-                            TodayCardEntry(date: midnight, snapshot: today.newDay),
-                        ],
-                        policy: .after(midnight)
-                    ))
-                } else {
-                    completion(Timeline(
-                        entries: [TodayCardEntry(date: now, snapshot: browsed, day: day)],
-                        policy: .after(refresh)
-                    ))
-                }
-                return
-            }
-            let snapshot = await SnapshotLoader.load()
-            if let midnight, midnight <= refresh {
+            if let midnight = nextMidnight(after: now), midnight <= refresh {
                 completion(Timeline(
                     entries: [
                         TodayCardEntry(date: now, snapshot: snapshot),
@@ -88,6 +70,11 @@ struct TodayCardProvider: TimelineProvider {
     }
 }
 
+/// The Log-sheet deep link (onigiri://log → the app opens the Log sheet
+/// for today). A Link/openURL, not an AppIntent — this dispatches on the
+/// device where interactive widget intents didn't.
+private let logURL = URL(string: "onigiri://log")!
+
 struct TodayCardView: View {
     @Environment(\.widgetFamily) private var family
     let entry: TodayCardEntry
@@ -95,19 +82,18 @@ struct TodayCardView: View {
     private var snapshot: DaySnapshot { entry.snapshot }
     private var summary: DailyEnergySummary { snapshot.summary }
     private var isLarge: Bool { family == .systemLarge }
+    private var isSmall: Bool { family == .systemSmall }
 
     var body: some View {
         if snapshot.needsSetup {
-            VStack(spacing: 8) {
-                OnigiriGauge(progress: 0)
-                    .frame(width: 64, height: 64)
-                Text("Open Onigiri to set up")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            setup
+        } else if isSmall {
+            // Small: the ring glance, whole widget taps into the Log sheet.
+            ringedHeadline
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .widgetURL(logURL)
         } else if isLarge {
-            VStack(spacing: 10) {
+            VStack(spacing: 12) {
                 header
                 Spacer(minLength: 0)
                 HStack(spacing: 12) {
@@ -125,8 +111,6 @@ struct TodayCardView: View {
                 HStack(spacing: 14) {
                     ringedHeadline
                     VStack(spacing: 6) {
-                        // The flanks fit as one caption line beside the
-                        // ring; full columns didn't.
                         HStack(spacing: 12) {
                             miniFlank(summary.totalBurnKcal, "Burned")
                             miniFlank(summary.intakeKcal, "Eaten")
@@ -140,101 +124,43 @@ struct TodayCardView: View {
         }
     }
 
-    // MARK: - Header (paging + logging)
-
-    private var dayTitle: String {
-        guard let day = entry.day else { return "Today" }
-        if Calendar.current.isDateInYesterday(day) { return "Yesterday" }
-        return day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
-    }
-
-    /// The shown day's Log-sheet deep link (backfill included — the
-    /// sheet logs into the browsed day, like the app's day browsing).
-    private var logURL: URL {
-        var components = URLComponents()
-        components.scheme = "onigiri"
-        components.host = "log"
-        if let day = entry.day {
-            components.queryItems = [URLQueryItem(name: "day", value: Self.dayFormat.string(from: day))]
+    private var setup: some View {
+        VStack(spacing: 8) {
+            OnigiriGauge(progress: 0)
+                .frame(width: isSmall ? 48 : 64, height: isSmall ? 48 : 64)
+            Text("Open Onigiri to set up")
+                .font(isSmall ? .caption2 : .subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
-        return components.url!
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private static let dayFormat: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
-
-    private var atFloor: Bool {
-        guard let floor = Calendar.current.date(
-            byAdding: .day, value: -TodayCardBrowse.daysBack,
-            to: Calendar.current.startOfDay(for: entry.date)
-        ) else { return false }
-        return (entry.day ?? Calendar.current.startOfDay(for: entry.date)) <= floor
-    }
+    // MARK: - Header (title + prominent Log button)
 
     private var header: some View {
-        HStack(spacing: 4) {
-            Button(intent: PageTodayCardIntent(delta: -1)) {
-                Image(systemName: "chevron.left")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.riceToast)
-                    .frame(width: 26, height: 26)
-                    .background(.quaternary.opacity(0.5), in: .circle)
-            }
-            .buttonStyle(.plain)
-            .disabled(atFloor)
-            .accessibilityLabel("Previous day")
-
-            Text(dayTitle)
+        HStack(spacing: 8) {
+            Text("Today")
                 .font(.subheadline.weight(.semibold))
-                .lineLimit(1)
-                .padding(.horizontal, 2)
-                .invalidatableContent()
-
-            Button(intent: PageTodayCardIntent(delta: 1)) {
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.riceToast)
-                    .frame(width: 26, height: 26)
-                    .background(.quaternary.opacity(0.5), in: .circle)
-            }
-            .buttonStyle(.plain)
-            .disabled(entry.day == nil)
-            .accessibilityLabel("Next day")
-
             Spacer(minLength: 0)
-
-            // In-place water: the same intent as Control Center, logging
-            // the default serving to now (today) — no app launch.
-            Button(intent: LogWaterIntent()) {
-                Image(systemName: "drop.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.blue)
-                    .frame(width: 26, height: 26)
-                    .background(.quaternary.opacity(0.5), in: .circle)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Log water")
-
-            // Into the app's Log sheet for the SHOWN day.
+            // The one action: bigger, labeled, ricePaper — deep-links
+            // into the Log sheet.
             Link(destination: logURL) {
-                Image(systemName: "plus")
-                    .font(.footnote.weight(.semibold))
+                Label("Log", systemImage: "plus")
+                    .font(.subheadline.weight(.bold))
                     .foregroundStyle(Color.onRicePaper)
-                    .frame(width: 26, height: 26)
-                    .background(Color.ricePaper, in: .circle)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(Color.ricePaper, in: .capsule)
             }
-            .accessibilityLabel("Log food or meal")
+            .accessibilityLabel("Log food or water")
         }
     }
 
     // MARK: - Ring
 
-    /// Today's headline ring, in miniature: how much of the day's calorie
-    /// budget is eaten, orange when over. Without a plan the plain
-    /// headline renders, exactly like Today.
+    /// Today's headline ring: how much of the day's calorie budget is
+    /// eaten, orange when over. Without a plan the plain headline renders.
     @ViewBuilder
     private var ringedHeadline: some View {
         if let budget = snapshot.planState.dailyBudgetKcal, budget > 0 {
@@ -242,33 +168,29 @@ struct TodayCardView: View {
             let over = summary.intakeKcal > budget
             ZStack {
                 Circle()
-                    .stroke(.quaternary, lineWidth: 6)
+                    .stroke(.quaternary, lineWidth: isSmall ? 5 : 6)
                 Circle()
                     .trim(from: 0, to: eaten)
                     .stroke(
                         over ? Color.orange : Color.riceToast,
-                        style: StrokeStyle(lineWidth: 6, lineCap: .round)
+                        style: StrokeStyle(lineWidth: isSmall ? 5 : 6, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
                 headline
-                    .padding(isLarge ? 22 : 12)
+                    .padding(isLarge ? 22 : (isSmall ? 14 : 12))
             }
-            // Fixed like Today's 190pt ring (scaled to the widget's
-            // canvas) — an HStack-share ring drifted with flank width
-            // and squeezed the headline into truncation.
             .frame(width: ringSize, height: ringSize)
             .accessibilityElement(children: .combine)
-            .accessibilityValue("\((eaten * 100).formatted(.number.precision(.fractionLength(0)))) percent of \(entry.day == nil ? "today's" : "the day's") budget eaten")
+            .accessibilityValue("\((eaten * 100).formatted(.number.precision(.fractionLength(0)))) percent of today's budget eaten")
         } else {
             headline
         }
     }
 
-    private var ringSize: CGFloat { isLarge ? 168 : 104 }
-    private var headlineSize: CGFloat { isLarge ? 44 : 26 }
+    private var ringSize: CGFloat { isLarge ? 168 : (isSmall ? 118 : 104) }
+    private var headlineSize: CGFloat { isLarge ? 44 : (isSmall ? 30 : 26) }
 
-    /// The headline number in the user's chosen style (same "Calorie
-    /// display" setting as the app/watch).
+    /// The headline number in the user's chosen style.
     private var headline: some View {
         VStack(spacing: 2) {
             if SharedStore.showsRemainingKcal, let remaining = snapshot.remainingKcal {
@@ -278,7 +200,6 @@ struct TodayCardView: View {
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                     .foregroundStyle(Color.remainingStatus(kcal: remaining))
-                    .invalidatableContent()
                 Text(headline.caption)
                     .font(isLarge ? .caption : .caption2)
                     .minimumScaleFactor(0.5)
@@ -290,7 +211,6 @@ struct TodayCardView: View {
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                     .foregroundStyle(summary.balanceKcal <= 0 ? Color.green : Color.orange)
-                    .invalidatableContent()
                 Text("kcal balance")
                     .font(isLarge ? .caption : .caption2)
                     .minimumScaleFactor(0.5)
@@ -300,8 +220,7 @@ struct TodayCardView: View {
         }
     }
 
-    /// One side of the ring: total burned or eaten kcal, like Today's
-    /// compact energy mode.
+    /// One side of the ring: total burned or eaten kcal (large layout).
     private func energyFlank(_ value: Double, _ label: String) -> some View {
         VStack(spacing: 2) {
             Text(value, format: .number.precision(.fractionLength(0)))
@@ -309,7 +228,6 @@ struct TodayCardView: View {
                 .monospacedDigit()
                 .minimumScaleFactor(0.7)
                 .lineLimit(1)
-                .invalidatableContent()
             Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -323,7 +241,6 @@ struct TodayCardView: View {
             Text(value, format: .number.precision(.fractionLength(0)))
                 .font(.footnote.weight(.bold))
                 .monospacedDigit()
-                .invalidatableContent()
             Text(label)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -334,8 +251,7 @@ struct TodayCardView: View {
     // MARK: - Tracked metrics
 
     /// The two configurable tracked-metric pills (sodium and water by
-    /// default) — a slot set to None disappears; a lone survivor centers.
-    /// Large lays them side by side, medium stacks them.
+    /// default). Large lays them side by side, medium stacks them.
     @ViewBuilder
     private var trackedMetricsRow: some View {
         let first = SharedStore.trackedNutrient(slot: 1)
@@ -356,10 +272,7 @@ struct TodayCardView: View {
         }
     }
 
-    /// One tracked metric, pill-shaped like Today's progress-gauges mode:
-    /// limit mode reads and colors like sodium always has, goal mode like
-    /// water ("x / target", green when met); the soft fill is the
-    /// fraction of the target reached.
+    /// One tracked metric, pill-shaped like Today's progress-gauges mode.
     private func trackedMetricPill(slot: Int, nutrient: TrackedNutrient) -> some View {
         let mode = SharedStore.trackedMode(slot: slot, nutrient: nutrient)
         let target = SharedStore.trackedTarget(slot: slot, nutrient: nutrient)
@@ -372,8 +285,6 @@ struct TodayCardView: View {
         return Label {
             switch mode {
             case .limit:
-                // Color-only, like Today (the traffic light IS the
-                // status); VoiceOver still hears it via the value.
                 Text("\(total, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(nutrient.inlineName)")
                     .foregroundStyle(Color.sodiumStatus(mg: total, limitMg: target))
                     .fontWeight(.medium)
@@ -392,7 +303,6 @@ struct TodayCardView: View {
         }
         .lineLimit(1)
         .minimumScaleFactor(0.8)
-        .invalidatableContent()
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
         .padding(.horizontal, 8)

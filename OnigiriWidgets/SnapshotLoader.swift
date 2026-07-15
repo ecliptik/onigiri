@@ -123,53 +123,16 @@ enum SnapshotLoader {
         return snapshot
     }
 
-    /// A browsed past day for the Today card. The plan numbers (budget,
-    /// deficit target) come from the CURRENT plan — exactly how the app
-    /// renders past days. Nil when the store is sealed: a page-tap
-    /// implies an unlocked phone, so a sealed store here is a background
-    /// reload — the caller falls back to the today path and its
-    /// last-good snapshot instead of confident zeros for a past day.
-    static func load(day: Date) async -> DaySnapshot? {
-        let health = HealthKitService()
-        if await health.isStoreLocked() { return nil }
-        let needsSetup = await PlanCache.needsSetup()
-        let goal = WatchSync.loadGoal()
-        let state = await PlanCache.state(goal: goal)
-        let summary = (try? await health.daySummary(for: day)) ?? .zero
-        let budget = state.dailyBudgetKcal
-        let isMaintenance = goal?.isMaintenance ?? false
-        // The day's own gauge fill, same rules as DailyPlanLoader:
-        // maintenance counts the budget left, a deficit plan counts the
-        // day's banked deficit against the target.
-        let progress: Double = if isMaintenance {
-            budget.map { $0 > 0 ? max(0, min(1, 1 - summary.intakeKcal / $0)) : 0 } ?? 0
-        } else if let target = state.deficitTargetKcal, target > 0 {
-            max(0, min(1, -summary.balanceKcal / target))
-        } else {
-            0
-        }
-        return DaySnapshot(
-            summary: summary,
-            deficitTargetKcal: state.deficitTargetKcal,
-            remainingKcal: budget.map { $0 - summary.intakeKcal },
-            gaugeProgress: progress,
-            waterGoalOz: SharedStore.waterGoalOz,
-            needsSetup: needsSetup,
-            isMaintenance: isMaintenance,
-            trackedTotals: await trackedTotals(day: day)
-        )
-    }
-
     /// Day totals for the tracked slots the summary doesn't already
     /// carry: only a slot customized away from sodium/water costs a
     /// query (one statistics sum, same day bounds as the summary).
-    private static func trackedTotals(day: Date = .now) async -> [Double] {
+    private static func trackedTotals() async -> [Double] {
         var totals: [Double] = [0, 0]
         for slot in 1...2 {
             switch SharedStore.trackedNutrient(slot: slot) {
             case nil, .sodium?, .water?: break
             case .some(let nutrient):
-                totals[slot - 1] = (try? await HealthKitService().dayTotal(of: nutrient, for: day)) ?? 0
+                totals[slot - 1] = (try? await HealthKitService().dayTotal(of: nutrient)) ?? 0
             }
         }
         return totals

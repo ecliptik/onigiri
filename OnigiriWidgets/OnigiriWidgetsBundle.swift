@@ -8,7 +8,7 @@ struct OnigiriWidgetsBundle: WidgetBundle {
         GaugeWidget()
         WaterWidget()
         StreakWidget()
-        TrendWidget()
+        MonthStatsWidget()
         LogWaterControl()
     }
 }

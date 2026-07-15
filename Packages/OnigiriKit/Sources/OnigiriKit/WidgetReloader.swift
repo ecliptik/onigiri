@@ -10,7 +10,7 @@ public enum WidgetKinds {
     public static let gauge = "OnigiriGauge"
     public static let waterAccessory = "OnigiriWaterAccessory"
     public static let streak = "OnigiriStreak" // also the watch streak complication
-    public static let trend = "OnigiriTrend"
+    public static let monthStats = "OnigiriMonthStats"
     public static let todayCard = "OnigiriTodayCard"
     // Watch complications.
     public static let balance = "OnigiriBalance"
@@ -19,7 +19,7 @@ public enum WidgetKinds {
 
     /// Phone widgets a food/water log can change — everything but the
     /// weigh-in trend chart (which polls on its own).
-    public static let phoneLogAffected = [gauge, waterAccessory, streak, todayCard]
+    public static let phoneLogAffected = [gauge, waterAccessory, streak, monthStats, todayCard]
     /// Watch complications a log can change (all of them).
     public static let watchAll = [balance, water, streak, summary]
 }

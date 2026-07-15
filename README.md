@@ -20,18 +20,19 @@ It runs on iPhone, iPad, and Apple Watch, back to the iPhone XS and Apple Watch 
 - **Water tracking** — set your serving size and daily goal; log from the app, a widget, the watch, or a long-press on the add button.
 - **Apple Watch app** — log on the go from a Favorites-then-Recent list, check your balance at a glance, and add balance and water complications to your watch face.
 - **Widgets** — a Today widget (small, medium, large) with your calorie ring and a one-tap Log button, plus a month-stats card, water and streak widgets, and a Control Center water button.
+- **Light & dark mode** — the app and its widgets follow your system appearance (screenshots below are light mode).
 
 ## Screenshots
 
 | Foods | Goal | Calendar |
 |---|---|---|
-| ![Food library with meals and foods, dark mode](docs/showcase/dark/foods.png) | ![Goal: weight trend with projection and the daily plan](docs/showcase/light/goal.png) | ![Calendar: month grid of earned onigiri and streaks, dark mode](docs/showcase/dark/calendar.png) |
+| ![Food library with meals and foods](docs/showcase/light/foods.png) | ![Goal: weight trend with projection and the daily plan](docs/showcase/light/goal.png) | ![Calendar: month grid of earned onigiri and streaks](docs/showcase/light/calendar.png) |
 
 ### iPad
 
-| Portrait | Landscape (dark) |
-|---|---|
-| ![Today on iPad, portrait](docs/showcase/light/ipad-portrait.png) | ![Today on iPad, landscape, dark mode](docs/showcase/dark/ipad-landscape.png) |
+<p align="center">
+  <img src="docs/showcase/light/ipad-landscape.png" width="640" alt="Today on iPad, landscape">
+</p>
 
 ### Apple Watch
 

@@ -1,8 +1,8 @@
 # Onigiri 🍙
 
-A personal calorie, nutrition, and water tracker for iPhone, iPad, and Apple Watch. Everything you log is saved to Apple Health, so it lives alongside the rest of your health data — no separate account, no lock-in.
+A personal calorie, nutrition, and water tracker for iPhone, iPad, and Apple Watch. Everything you log is saved to Apple Health, right alongside the rest of your health data, so there's no account to sign up for and nothing to lose if you ever move on to another app.
 
-It runs on iPhone, iPad, and Apple Watch, back to the iPhone XS and Apple Watch Series 4 (iOS 18 / watchOS 10 or newer). On the latest iOS it takes on Apple's Liquid Glass look.
+It runs on iPhone, iPad, and Apple Watch, back to the iPhone XS and Apple Watch Series 4 (iOS 18 / watchOS 10 or newer).
 
 **Built 100% agentically with [Claude Code](https://claude.com/claude-code).**
 
@@ -33,13 +33,13 @@ It runs on iPhone, iPad, and Apple Watch, back to the iPhone XS and Apple Watch 
 |---|---|
 | ![Today on iPad, portrait](docs/showcase/light/ipad-portrait.png) | ![Today on iPad, landscape, dark mode](docs/showcase/dark/ipad-landscape.png) |
 
-### Apple Watch & widgets
+### Apple Watch
 
-<p>
-  <img src="docs/showcase/watch/home.png" width="200" alt="Apple Watch: balance headline with a one-tap Log button and Log water">
-  &nbsp;&nbsp;
-  <img src="docs/showcase/widget/home-screen.png" width="300" alt="The Today widget on the Home Screen alongside stock iOS widgets">
-</p>
+<img src="docs/showcase/watch/home.png" width="240" alt="Apple Watch: balance headline with a one-tap Log button and Log water">
+
+### Home Screen widget
+
+<img src="docs/showcase/widget/home-screen.png" width="300" alt="The medium Today widget on the Home Screen — calorie ring, burned and eaten, sodium and water, and a Log button — beside the stock iOS widgets">
 
 ## Architecture at a glance
 

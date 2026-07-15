@@ -12,14 +12,6 @@ struct OnigiriWidgetsPackage: AppIntentsPackage {
     }
 }
 
-/// Widget configuration: which saved meal the quick-log button targets.
-struct MeterWidgetConfiguration: WidgetConfigurationIntent {
-    static let title: LocalizedStringResource = "Onigiri"
-    static let description = IntentDescription("Choose the meal for the quick-log button.")
-
-    @Parameter(title: "Meal") var meal: MealEntity?
-}
-
 /// Control Center / Action button: one press logs a serving of water.
 struct LogWaterControl: ControlWidget {
     var body: some ControlWidgetConfiguration {

@@ -5,14 +5,12 @@ import WidgetKit
 /// Every widget kind in both bundles, so reloads can be scoped to the
 /// widgets an event can actually change.
 public enum WidgetKinds {
-    // iPhone widgets.
+    // iPhone widgets. (Meter/Progress/Month removed 2.1 — the user
+    // trimmed the lineup to the Today card + gauge/water/streak/trend.)
     public static let gauge = "OnigiriGauge"
     public static let waterAccessory = "OnigiriWaterAccessory"
     public static let streak = "OnigiriStreak" // also the watch streak complication
-    public static let month = "OnigiriMonth"
-    public static let meter = "OnigiriMeter"
     public static let trend = "OnigiriTrend"
-    public static let progress = "OnigiriProgress"
     public static let todayCard = "OnigiriTodayCard"
     // Watch complications.
     public static let balance = "OnigiriBalance"
@@ -21,7 +19,7 @@ public enum WidgetKinds {
 
     /// Phone widgets a food/water log can change — everything but the
     /// weigh-in trend chart (which polls on its own).
-    public static let phoneLogAffected = [gauge, waterAccessory, streak, month, meter, progress, todayCard]
+    public static let phoneLogAffected = [gauge, waterAccessory, streak, todayCard]
     /// Watch complications a log can change (all of them).
     public static let watchAll = [balance, water, streak, summary]
 }

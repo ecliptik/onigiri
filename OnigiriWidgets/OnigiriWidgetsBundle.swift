@@ -5,12 +5,9 @@ import SwiftUI
 struct OnigiriWidgetsBundle: WidgetBundle {
     var body: some Widget {
         TodayCardWidget()
-        MeterWidget()
         GaugeWidget()
-        ProgressWidget()
         WaterWidget()
         StreakWidget()
-        MonthWidget()
         TrendWidget()
         LogWaterControl()
     }

@@ -22,14 +22,15 @@ public struct LogWaterIntent: AppIntent {
 
     @MainActor
     public func perform() async throws -> some IntentResult {
+        configLog.info("LogWaterIntent.perform starting")
         try await HealthKitService().logWater(oz: SharedStore.waterServingOz)
         // Immediate and scoped: the intent process may die before a
-        // debounced flush, and a water log can't move the weight trend,
-        // streak, or month widgets.
+        // debounced flush, and a water log can't move the weight trend
+        // or streak widgets.
         WidgetReloader.reloadNow(kinds: [
-            WidgetKinds.meter, WidgetKinds.waterAccessory, WidgetKinds.progress,
-            WidgetKinds.todayCard,
+            WidgetKinds.waterAccessory, WidgetKinds.todayCard,
         ])
+        configLog.info("LogWaterIntent.perform done")
         return .result()
     }
 }
@@ -74,8 +75,7 @@ public struct LogMealIntent: AppIntent {
         // Immediate and scoped (see LogWaterIntent) — a meal touches every
         // energy surface but not water or the weight trend.
         WidgetReloader.reloadNow(kinds: [
-            WidgetKinds.gauge, WidgetKinds.meter, WidgetKinds.progress,
-            WidgetKinds.streak, WidgetKinds.month, WidgetKinds.todayCard,
+            WidgetKinds.gauge, WidgetKinds.streak, WidgetKinds.todayCard,
         ])
         return .result()
     }
@@ -148,6 +148,7 @@ public struct PageTodayCardIntent: AppIntent {
 
     @MainActor
     public func perform() async throws -> some IntentResult {
+        configLog.info("PageTodayCardIntent.perform delta=\(delta)")
         TodayCardBrowse.page(by: delta)
         // The extension may die before a debounced flush; reload now.
         WidgetReloader.reloadNow(kinds: [WidgetKinds.todayCard])

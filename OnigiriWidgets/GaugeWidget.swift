@@ -7,7 +7,7 @@ struct GaugeWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "OnigiriGauge", provider: GaugeProvider()) { entry in
             GaugeWidgetView(entry: entry)
-                .containerBackground(.fill.tertiary, for: .widget)
+                .containerBackground(Color.riceCanvas, for: .widget)
         }
         .configurationDisplayName("Onigiri Gauge")
         .description("Daily goal progress at a glance.")
@@ -85,19 +85,9 @@ struct GaugeWidgetView: View {
                     .multilineTextAlignment(.center)
             }
         } else {
+            // Pure gauge now — the water button was removed 2.1 (the
+            // user); water lives on the Today card and Control Center.
             gauge
-                // W3: one-tap water without leaving the home screen —
-                // a small intent button riding the gauge's corner.
-                .overlay(alignment: .bottomTrailing) {
-                    Button(intent: LogWaterIntent()) {
-                        Image(systemName: "drop.fill")
-                            .font(.caption2)
-                            .foregroundStyle(.blue)
-                            .padding(6)
-                            .background(.quaternary.opacity(0.6), in: .circle)
-                    }
-                    .buttonStyle(.plain)
-                }
         }
     }
 

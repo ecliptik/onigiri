@@ -41,8 +41,13 @@ struct TodayView: View {
     @State private var collapsedSections: Set<FoodCategory> = Set(FoodCategory.allCases)
     @State private var waterCollapsed = true
     /// True while a log row is mid swipe-to-delete, so the day-paging
-    /// swipe on the whole screen stands down.
-    @State private var rowSwipeActive = false
+    /// swipe on the whole screen stands down. Held in an @Observable box,
+    /// NOT a plain @State the body reads: a row's swipe writes it, but the
+    /// only reader is the day-paging gesture's onEnded closure (evaluated
+    /// at gesture-end, not during body eval), so flipping it no longer
+    /// invalidates the whole screen mid-gesture — the old shared @State
+    /// turned every swipe into a full-body re-render (dead taps).
+    @State private var rowSwipe = RowSwipeState()
     /// The headline number follows the user's text size (Dynamic Type);
     /// minimumScaleFactor keeps huge accessibility sizes on one line.
     @ScaledMetric(relativeTo: .largeTitle) private var headlineSize = 60.0
@@ -250,7 +255,7 @@ struct TodayView: View {
             }
             .simultaneousGesture(
                 DragGesture(minimumDistance: 30).onEnded { value in
-                    guard !rowSwipeActive else { return }
+                    guard !rowSwipe.active else { return }
                     guard abs(value.translation.width) > abs(value.translation.height) else { return }
                     if value.translation.width < -60 {
                         Task { await model.goToNextDay() }
@@ -431,6 +436,7 @@ struct TodayView: View {
                 showsRemaining: model.isToday,
                 weeklyTrendLb: model.weeklyTrendLb
             )
+            .equatable()
         } else {
             Text(goals.isEmpty
                  ? "Set a weight goal in the Goal tab to track your daily deficit here."
@@ -604,7 +610,7 @@ struct TodayView: View {
     }
 
     private var loggedSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        LazyVStack(alignment: .leading, spacing: 10) {
             // ALL logging lives behind the corner + pill now — water is
             // the sheet's pinned top row (Micheal's final water home;
             // widget/watch/app icon keep the 1-tap paths).
@@ -643,15 +649,46 @@ struct TodayView: View {
                     .padding(.horizontal)
             }
 
+            // Each meal group is its own Equatable view: toggling ONE
+            // group — or a refresh that didn't touch this slot — leaves
+            // the others' inputs unchanged, so SwiftUI skips their bodies
+            // instead of rebuilding every row on screen (the scroll-perf
+            // pass: a single chevron tap used to rebuild the whole log).
             ForEach(FoodCategory.allCases) { category in
-                let entries = model.foodLog.filter { $0.category == category }
+                let entries = model.foodByCategory[category] ?? []
                 if !entries.isEmpty {
-                    mealSection(category, entries: entries)
+                    MealSectionView(
+                        category: category,
+                        entries: entries,
+                        isCollapsed: collapsedSections.contains(category),
+                        entryMetric: entryMetric,
+                        swipe: rowSwipe,
+                        onToggle: {
+                            withAnimation(.snappy) {
+                                if collapsedSections.contains(category) {
+                                    collapsedSections.remove(category)
+                                } else {
+                                    collapsedSections.insert(category)
+                                }
+                            }
+                        },
+                        onEdit: { entry in activeSheet = .editEntry(entry) }
+                    )
+                    .equatable()
                 }
             }
 
             if !model.waterLog.isEmpty {
-                waterSection
+                WaterSectionView(
+                    entries: model.waterLog,
+                    totalOz: model.summary.waterOz,
+                    isCollapsed: waterCollapsed,
+                    waterIcon: waterIcon,
+                    swipe: rowSwipe,
+                    onToggle: { withAnimation(.snappy) { waterCollapsed.toggle() } },
+                    onEdit: { entry in activeSheet = .editWater(entry) }
+                )
+                .equatable()
             }
         }
         // Full width regardless of content, so the header stays left-pinned
@@ -659,104 +696,44 @@ struct TodayView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The day's water servings, folded into the log like a meal slot.
-    @ViewBuilder
-    private var waterSection: some View {
-        Button {
-            withAnimation(.snappy) { waterCollapsed.toggle() }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.nori)
-                    .rotationEffect(.degrees(waterCollapsed ? 0 : 90))
-                Text("Water")
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) oz")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal)
-        .accessibilityLabel("Water, \(model.summary.waterOz.formatted(.number.precision(.fractionLength(0)))) ounces, \(waterCollapsed ? "collapsed" : "expanded")")
+}
 
-        if !waterCollapsed {
-            ForEach(model.waterLog) { entry in
-                waterRow(entry)
-            }
-        }
+/// Shared "is a row mid-swipe?" flag for the day-paging gesture. An
+/// @Observable box, not a @State the body reads: rows WRITE it during a
+/// drag, but the only READ is the day-paging gesture's onEnded (which runs
+/// at gesture end, outside body evaluation), so writes never invalidate
+/// TodayView. The old shared @State turned every swipe into a full-body
+/// re-render.
+@MainActor @Observable final class RowSwipeState {
+    var active = false
+}
+
+/// One meal-slot group: a tappable header with the slot's total that
+/// collapses its entries. Equatable on its data so a sibling group's
+/// toggle (or an unrelated refresh) skips this whole subtree.
+private struct MealSectionView: View, Equatable {
+    let category: FoodCategory
+    let entries: [FoodLogEntry]
+    let isCollapsed: Bool
+    let entryMetric: TrackedNutrient
+    let swipe: RowSwipeState
+    let onToggle: () -> Void
+    let onEdit: (FoodLogEntry) -> Void
+
+    /// Closures are excluded on purpose — they're recreated every parent
+    /// render but capture only stable @State storage, so ignoring them is
+    /// what lets an unchanged group skip its body.
+    static func == (lhs: MealSectionView, rhs: MealSectionView) -> Bool {
+        lhs.category == rhs.category
+            && lhs.isCollapsed == rhs.isCollapsed
+            && lhs.entryMetric == rhs.entryMetric
+            && lhs.entries == rhs.entries
     }
 
-    /// One water serving: editable rows carry the swipe/tap affordances;
-    /// another app's sample counts toward the day (reads span all sources
-    /// by design) but HealthKit refuses our deletes — no affordances that
-    /// can only end in an error.
-    @ViewBuilder
-    private func waterRow(_ entry: WaterLogEntry) -> some View {
-        let label = HStack(alignment: .firstTextBaseline) {
-            WaterIconView(raw: waterIcon)
-            Text(entry.date, style: .time)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text("\(entry.oz, format: .number.precision(.fractionLength(0))) oz")
-                .monospacedDigit()
-        }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 20)
-        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 12))
-        if entry.editable {
-            let amount = entry.oz.formatted(.number.precision(.fractionLength(0)))
-            label
-                .logRowSwipeActions(
-                    active: $rowSwipeActive,
-                    itemName: "\(amount) ounce entry",
-                    onTap: { activeSheet = .editWater(entry) },
-                    onEdit: { activeSheet = .editWater(entry) }
-                ) {
-                    Task { await LogActions.deleteWaterEntry(entry) }
-                }
-                // One element with a role — separate time/amount fragments
-                // left VoiceOver with four stops and an invisible
-                // tap-to-edit.
-                .accessibilityElement(children: .combine)
-                .accessibilityAddTraits(.isButton)
-                .accessibilityHint("Edits this entry")
-                .accessibilityAction(named: "Edit") {
-                    activeSheet = .editWater(entry)
-                }
-                .accessibilityAction(named: "Delete") {
-                    Task { await LogActions.deleteWaterEntry(entry) }
-                }
-                .padding(.horizontal)
-        } else {
-            label
-                .accessibilityElement(children: .combine)
-                .accessibilityHint("Logged by another app")
-                .padding(.horizontal)
-        }
-    }
+    private var total: Double { entries.reduce(0) { $0 + $1.kcal } }
 
-    /// One meal-slot group: a tappable header with the slot's total that
-    /// collapses its entries to keep long days readable.
-    @ViewBuilder
-    private func mealSection(_ category: FoodCategory, entries: [FoodLogEntry]) -> some View {
-        let total = entries.reduce(0) { $0 + $1.kcal }
-        let isCollapsed = collapsedSections.contains(category)
-
-        Button {
-            withAnimation(.snappy) {
-                if isCollapsed {
-                    collapsedSections.remove(category)
-                } else {
-                    collapsedSections.insert(category)
-                }
-            }
-        } label: {
+    var body: some View {
+        Button(action: onToggle) {
             HStack(spacing: 6) {
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
@@ -778,16 +755,76 @@ struct TodayView: View {
 
         if !isCollapsed {
             ForEach(entries) { entry in
-                foodEntryRow(entry)
+                FoodLogRow(entry: entry, entryMetric: entryMetric, swipe: swipe, onEdit: onEdit)
+                    .equatable()
             }
         }
     }
+}
 
-    /// One logged food: editable rows carry the swipe/tap affordances;
-    /// another app's entry is counted (reads span all sources by design)
-    /// but not ours to edit or delete.
-    @ViewBuilder
-    private func foodEntryRow(_ entry: FoodLogEntry) -> some View {
+/// The day's water servings, folded into the log like a meal slot.
+private struct WaterSectionView: View, Equatable {
+    let entries: [WaterLogEntry]
+    let totalOz: Double
+    let isCollapsed: Bool
+    let waterIcon: String
+    let swipe: RowSwipeState
+    let onToggle: () -> Void
+    let onEdit: (WaterLogEntry) -> Void
+
+    static func == (lhs: WaterSectionView, rhs: WaterSectionView) -> Bool {
+        lhs.isCollapsed == rhs.isCollapsed
+            && lhs.totalOz == rhs.totalOz
+            && lhs.waterIcon == rhs.waterIcon
+            && lhs.entries == rhs.entries
+    }
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.nori)
+                    .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                Text("Water")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text("\(totalOz, format: .number.precision(.fractionLength(0))) oz")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal)
+        .accessibilityLabel("Water, \(totalOz.formatted(.number.precision(.fractionLength(0)))) ounces, \(isCollapsed ? "collapsed" : "expanded")")
+
+        if !isCollapsed {
+            ForEach(entries) { entry in
+                WaterLogRow(entry: entry, waterIcon: waterIcon, swipe: swipe, onEdit: onEdit)
+                    .equatable()
+            }
+        }
+    }
+}
+
+/// One logged food: editable rows carry the swipe/tap affordances;
+/// another app's entry is counted (reads span all sources by design) but
+/// not ours to edit or delete. Its own Equatable view so a whole-screen
+/// re-render doesn't rebuild it unless THIS entry (or the caption metric)
+/// changed.
+private struct FoodLogRow: View, Equatable {
+    let entry: FoodLogEntry
+    let entryMetric: TrackedNutrient
+    let swipe: RowSwipeState
+    let onEdit: (FoodLogEntry) -> Void
+
+    static func == (lhs: FoodLogRow, rhs: FoodLogRow) -> Bool {
+        lhs.entry == rhs.entry && lhs.entryMetric == rhs.entryMetric
+    }
+
+    var body: some View {
         let label = HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.name)
@@ -811,10 +848,10 @@ struct TodayView: View {
         if entry.editable {
             label
                 .logRowSwipeActions(
-                    active: $rowSwipeActive,
+                    swipe: swipe,
                     itemName: entry.name,
-                    onTap: { activeSheet = .editEntry(entry) },
-                    onEdit: { activeSheet = .editEntry(entry) }
+                    onTap: { onEdit(entry) },
+                    onEdit: { onEdit(entry) }
                 ) {
                     Task { await LogActions.deleteFoodEntry(entry) }
                 }
@@ -824,11 +861,67 @@ struct TodayView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(.isButton)
                 .accessibilityHint("Edits this entry")
-                .accessibilityAction(named: "Edit") {
-                    activeSheet = .editEntry(entry)
-                }
+                .accessibilityAction(named: "Edit") { onEdit(entry) }
                 .accessibilityAction(named: "Delete") {
                     Task { await LogActions.deleteFoodEntry(entry) }
+                }
+                .padding(.horizontal)
+        } else {
+            label
+                .accessibilityElement(children: .combine)
+                .accessibilityHint("Logged by another app")
+                .padding(.horizontal)
+        }
+    }
+}
+
+/// One water serving: editable rows carry the swipe/tap affordances;
+/// another app's sample counts toward the day (reads span all sources by
+/// design) but HealthKit refuses our deletes — no affordances that can
+/// only end in an error.
+private struct WaterLogRow: View, Equatable {
+    let entry: WaterLogEntry
+    let waterIcon: String
+    let swipe: RowSwipeState
+    let onEdit: (WaterLogEntry) -> Void
+
+    static func == (lhs: WaterLogRow, rhs: WaterLogRow) -> Bool {
+        lhs.entry == rhs.entry && lhs.waterIcon == rhs.waterIcon
+    }
+
+    var body: some View {
+        let label = HStack(alignment: .firstTextBaseline) {
+            WaterIconView(raw: waterIcon)
+            Text(entry.date, style: .time)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text("\(entry.oz, format: .number.precision(.fractionLength(0))) oz")
+                .monospacedDigit()
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 20)
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 12))
+        if entry.editable {
+            let amount = entry.oz.formatted(.number.precision(.fractionLength(0)))
+            label
+                .logRowSwipeActions(
+                    swipe: swipe,
+                    itemName: "\(amount) ounce entry",
+                    onTap: { onEdit(entry) },
+                    onEdit: { onEdit(entry) }
+                ) {
+                    Task { await LogActions.deleteWaterEntry(entry) }
+                }
+                // One element with a role — separate time/amount fragments
+                // left VoiceOver with four stops and an invisible
+                // tap-to-edit.
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Edits this entry")
+                .accessibilityAction(named: "Edit") { onEdit(entry) }
+                .accessibilityAction(named: "Delete") {
+                    Task { await LogActions.deleteWaterEntry(entry) }
                 }
                 .padding(.horizontal)
         } else {
@@ -866,14 +959,14 @@ private extension View {
     }
 
     func logRowSwipeActions(
-        active: Binding<Bool>,
+        swipe: RowSwipeState,
         itemName: String,
         onTap: (() -> Void)? = nil,
         onEdit: (() -> Void)? = nil,
         onDelete: @escaping () -> Void
     ) -> some View {
         modifier(LogRowSwipeActions(
-            rowSwipeActive: active, itemName: itemName,
+            swipe: swipe, itemName: itemName,
             onTap: onTap, onEdit: onEdit, onDelete: onDelete
         ))
     }
@@ -884,9 +977,11 @@ private extension View {
 /// the action outright. Today's log lives in a ScrollView (collapsible
 /// custom sections), so there are no native swipeActions — this drags the
 /// row over button reveals instead, and reports drag activity through the
-/// binding so the day-paging swipe stands down.
+/// swipe coordinator so the day-paging swipe stands down.
 private struct LogRowSwipeActions: ViewModifier {
-    @Binding var rowSwipeActive: Bool
+    /// Written (never read) here — see RowSwipeState: keeping the read out
+    /// of any rendered body is what stops a swipe from re-rendering Today.
+    let swipe: RowSwipeState
     let itemName: String
     /// Tap on a closed row (an open row's tap just settles it shut) —
     /// free discoverability for the edit hidden behind the swipe.
@@ -903,6 +998,33 @@ private struct LogRowSwipeActions: ViewModifier {
     private static let revealWidth: CGFloat = 60
     private static let fullSwipe: CGFloat = 220
 
+    /// How far past the reveal the row may visually travel, however fast or
+    /// far the finger goes. Capping this bounds the settle's snap-back
+    /// distance, so a fast flick no longer snaps back abruptly (a slow
+    /// swipe barely overshot, which is why only fast swipes felt too quick
+    /// — the user, 2026-07-15).
+    private static let maxOvershoot: CGFloat = 14
+
+    /// Rubber-band the row past the reveal so it doesn't slide 1:1 with the
+    /// finger — native .swipeActions resists once the button is exposed,
+    /// and without this the custom row felt "loose/too quick" (the user,
+    /// 2026-07-15). The reveal/full-swipe DECISIONS stay on true finger
+    /// travel (see onEnded); only the visible offset is damped and capped.
+    private static func rubberBand(_ raw: CGFloat) -> CGFloat {
+        guard abs(raw) > revealWidth else { return raw }
+        let sign: CGFloat = raw < 0 ? -1 : 1
+        let damped = revealWidth + (abs(raw) - revealWidth) * 0.4
+        return sign * min(damped, revealWidth + maxOvershoot)
+    }
+
+    /// Native-style zoom: the pill scales up from small as it's revealed
+    /// (and back down on close, since the settle animates `offset`), instead
+    /// of just popping in via opacity (the user, 2026-07-15). `revealed` is
+    /// the current reveal distance for this side (always ≥ 0).
+    private static func revealScale(_ revealed: CGFloat) -> CGFloat {
+        0.4 + 0.6 * min(1, max(0, revealed / revealWidth))
+    }
+
     func body(content: Content) -> some View {
         content
             .offset(x: offset)
@@ -914,11 +1036,12 @@ private struct LogRowSwipeActions: ViewModifier {
                                 settle(0)
                                 onEdit?()
                             }
+                            .scaleEffect(Self.revealScale(offset))
                             .accessibilityLabel("Edit \(itemName)")
                             Spacer(minLength: 0)
                         }
                         .padding(.leading, 8)
-                        .opacity(min(1, offset / 40))
+                        .opacity(min(1, offset / 30))
                     }
                     if offset < 0 {
                         HStack {
@@ -927,10 +1050,11 @@ private struct LogRowSwipeActions: ViewModifier {
                                 settle(0)
                                 onDelete()
                             }
+                            .scaleEffect(Self.revealScale(-offset))
                             .accessibilityLabel("Delete \(itemName)")
                         }
                         .padding(.trailing, 8)
-                        .opacity(min(1, -offset / 40))
+                        .opacity(min(1, -offset / 30))
                     }
                 }
             }
@@ -942,31 +1066,46 @@ private struct LogRowSwipeActions: ViewModifier {
                     onTap?()
                 }
             }
+            // NOTE (2026-07-15): a plain .gesture here COMPETES with the
+            // ScrollView's pan — a vertical swipe that starts on a row is
+            // claimed by this recognizer (it fires at 15pt, then its
+            // onChanged bails for vertical drags), so the scroll doesn't
+            // engage until the second swipe. That is the confirmed cause of
+            // the "first swipe up on a row does nothing" stick. A prior
+            // .simultaneousGesture attempt let the scroll through but made
+            // the sideways swipe feel too fast and only helped partially,
+            // so it was reverted — the proper fix (a gesture that yields to
+            // vertical without over-eager horizontal) is still open.
             .gesture(
                 DragGesture(minimumDistance: 15)
                     .onChanged { value in
                         guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                        var next = restOffset + value.translation.width
-                        if onEdit == nil { next = min(0, next) }
-                        offset = next
-                        if abs(offset) > 10 { rowSwipeActive = true }
+                        var raw = restOffset + value.translation.width
+                        if onEdit == nil { raw = min(0, raw) }
+                        offset = Self.rubberBand(raw)
+                        if abs(offset) > 10 { swipe.active = true }
                     }
-                    .onEnded { _ in
-                        if offset < -Self.fullSwipe {
+                    .onEnded { value in
+                        // Decisions on true finger travel, not the damped
+                        // offset — so rubber-banding changes only the feel,
+                        // not how far you must swipe to reveal or commit.
+                        var raw = restOffset + value.translation.width
+                        if onEdit == nil { raw = min(0, raw) }
+                        if raw < -Self.fullSwipe {
                             settle(0)
                             onDelete()
-                        } else if offset > Self.fullSwipe, let onEdit {
+                        } else if raw > Self.fullSwipe, let onEdit {
                             settle(0)
                             onEdit()
-                        } else if offset < -Self.revealWidth * 0.6 {
+                        } else if raw < -Self.revealWidth * 0.6 {
                             settle(-Self.revealWidth)
-                        } else if offset > Self.revealWidth * 0.6, onEdit != nil {
+                        } else if raw > Self.revealWidth * 0.6, onEdit != nil {
                             settle(Self.revealWidth)
                         } else {
                             settle(0)
                         }
                         // After the outer day-swipe's onEnded has run.
-                        DispatchQueue.main.async { rowSwipeActive = false }
+                        DispatchQueue.main.async { swipe.active = false }
                     }
             )
     }
@@ -1001,7 +1140,11 @@ private struct LogRowSwipeActions: ViewModifier {
     }
 
     private func settle(_ value: CGFloat) {
-        withAnimation(.snappy) { offset = value }
+        // .smooth (no bounce), not .snappy: the row glides to rest instead
+        // of snapping back abruptly, matching the native swipe settle (the
+        // user, 2026-07-15). Only the swipe uses this — section-collapse
+        // animations keep .snappy.
+        withAnimation(.smooth(duration: 0.45)) { offset = value }
         restOffset = value
     }
 }
@@ -1151,7 +1294,7 @@ private struct DayJumpSheet: View {
     }
 }
 
-struct DailyGoalCard: View {
+struct DailyGoalCard: View, Equatable {
     let bankedKcal: Double
     let intakeKcal: Double
     let plan: CalorieBudget.Plan
@@ -1160,6 +1303,19 @@ struct DailyGoalCard: View {
     /// nil when Health has too few weigh-ins to say.
     var weeklyTrendLb: Double? = nil
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
+
+    /// Skip the whole card — including the OnigiriGauge's GeometryReader —
+    /// when a re-render didn't touch its numbers (scroll-settle, an
+    /// unrelated Settings change, the incidental evals around a log). The
+    /// @AppStorage reward icon isn't compared: its own observation still
+    /// updates the card independently of this equality.
+    static func == (lhs: DailyGoalCard, rhs: DailyGoalCard) -> Bool {
+        lhs.bankedKcal == rhs.bankedKcal
+            && lhs.intakeKcal == rhs.intakeKcal
+            && lhs.plan == rhs.plan
+            && lhs.showsRemaining == rhs.showsRemaining
+            && lhs.weeklyTrendLb == rhs.weeklyTrendLb
+    }
 
     /// A zero-deficit plan is maintenance: the gauge tracks budget left
     /// instead of deficit banked, and the copy talks budget, not goal.

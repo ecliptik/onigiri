@@ -5,6 +5,11 @@ import OnigiriKit
 final class TodayModel {
     private(set) var summary: DailyEnergySummary = .zero
     private(set) var foodLog: [FoodLogEntry] = []
+    /// The food log pre-grouped by meal slot, computed once per refresh so
+    /// the Today view never re-filters the whole day on a re-render (the
+    /// per-category `.filter` in the body used to rerun on every unrelated
+    /// state change — see the scroll-perf pass).
+    private(set) var foodByCategory: [FoodCategory: [FoodLogEntry]] = [:]
     private(set) var waterLog: [WaterLogEntry] = []
     /// Day totals for the two configurable tracked-metric slots, in each
     /// nutrient's label unit (sodium/water reuse the summary's numbers).
@@ -184,6 +189,7 @@ final class TodayModel {
             guard generation == refreshGeneration else { return }
             self.summary = loadedSummary
             self.foodLog = loadedFood
+            self.foodByCategory = Dictionary(grouping: loadedFood, by: \.category)
             self.waterLog = loadedWater
             // Sodium/water ride the summary — no second query, and the
             // numbers can't disagree with the rest of the screen.

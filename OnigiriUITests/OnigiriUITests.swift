@@ -1878,7 +1878,12 @@ final class OnigiriUITests: XCTestCase {
         app.launch()
         skipOnboardingIfPresent(in: app)
         grantHealthAccess(in: app, timeout: 30)
-        Thread.sleep(forTimeInterval: 3)
+        // Deterministic settle with an actual assertion — the bare 3 s
+        // sleep proved nothing and slowed every full-suite run.
+        XCTAssertTrue(
+            app.buttons["Today"].waitForExistence(timeout: 10),
+            "App reaches its tab bar after the Health grant"
+        )
     }
 
     /// Fresh installs without a seeded goal land on onboarding — tests

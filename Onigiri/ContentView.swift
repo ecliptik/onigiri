@@ -33,6 +33,16 @@ struct ContentView: View {
                 mainTabs
             }
         }
+        .overlay {
+            // The app-switcher snapshot otherwise shows the day's health
+            // numbers to anyone flipping through cards. Covered from
+            // .inactive on — the snapshot is taken before .background
+            // settles. (Also flashes during Control Center pulls; the
+            // standard trade for a health app.)
+            if scenePhase != .active {
+                PrivacyShield()
+            }
+        }
         .task {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--seed-sample-data") {
@@ -232,6 +242,19 @@ struct ContentView: View {
             // not the Foods-tab new-food form.
             selectedTab = .today
             QuickActions.shared.quickLogRequest = .scan
+        }
+    }
+}
+
+/// Full-screen cover for the app-switcher snapshot — the rice canvas
+/// and the mascot, none of the numbers.
+private struct PrivacyShield: View {
+    var body: some View {
+        ZStack {
+            Color.riceCanvas.ignoresSafeArea()
+            Text("🍙")
+                .font(.system(size: 64))
+                .accessibilityHidden(true)
         }
     }
 }

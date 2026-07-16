@@ -4,6 +4,8 @@ A personal calorie, nutrition, and water tracker for iPhone, iPad, and Apple Wat
 
 Runs on iPhone, iPad, and Apple Watch (iOS 18 / watchOS 10 or newer).
 
+**[User Guide](https://ecliptik.github.io/onigiri/guide/)** · **[Privacy Policy](https://ecliptik.github.io/onigiri/privacy/)**
+
 **Built 100% agentically with [Claude Code](https://claude.com/claude-code).**
 
 <p align="center">

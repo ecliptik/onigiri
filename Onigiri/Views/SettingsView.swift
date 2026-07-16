@@ -359,8 +359,8 @@ struct SettingsView: View {
             VStack(spacing: 2) {
                 Text("Onigiri \(Bundle.main.appVersion)")
                 Text("© 2026 Micheal Waltz")
-                // The public mirror — Forgejo is the push origin, GitHub
-                // is the face.
+                // GitHub is the origin (2026-07-16, was the Forgejo
+                // mirror's face) and hosts the docs site.
                 Link("https://github.com/ecliptik/onigiri",
                      destination: URL(string: "https://github.com/ecliptik/onigiri")!)
                 // ODbL requires attribution for Open Food Facts data;

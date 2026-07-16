@@ -58,8 +58,11 @@ public enum DailyPlanLoader {
             // the gauge shows the budget still left to eat. The current
             // weight plays no part — don't query it.
             let summary = (try? await summaryRead) ?? .zero
-            let averageBurn = ((try? await burnRead) ?? nil)
-                ?? max(summary.totalBurnKcal, 2000)
+            // Never less than today's actual burn: once you've burned past
+            // your average, the budget must follow or the widget/complication
+            // read "0" while the phone (and reality) show room left. Mirrors
+            // TodayModel.expectedDailyBurnKcal.
+            let averageBurn = max(((try? await burnRead) ?? nil) ?? 0, summary.totalBurnKcal, 2000)
             let plan = CalorieBudget.maintenancePlan(averageDailyBurn: averageBurn)
             let progress = plan.dailyBudget > 0
                 ? max(0, min(1, 1 - summary.intakeKcal / plan.dailyBudget))
@@ -77,8 +80,8 @@ public enum DailyPlanLoader {
         guard let weight = healthWeight ?? goal.fallbackCurrentWeightLb else {
             return State(summary: summary, deficitTargetKcal: nil, gaugeProgress: 0)
         }
-        let averageBurn = ((try? await burnRead) ?? nil)
-            ?? max(summary.totalBurnKcal, 2000)
+        // Never less than today's actual burn (see the maintenance branch).
+        let averageBurn = max(((try? await burnRead) ?? nil) ?? 0, summary.totalBurnKcal, 2000)
         let days = Calendar.current.dateComponents(
             [.day],
             from: Calendar.current.startOfDay(for: .now),

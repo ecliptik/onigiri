@@ -1,8 +1,8 @@
 # Onigiri 🍙
 
-A personal calorie, nutrition, and water tracker for iPhone, iPad, and Apple Watch. Everything you log is saved to Apple Health, right alongside the rest of your health data, so there's no account to sign up for and nothing to lose if you ever move on to another app.
+A personal calorie, nutrition, and water tracker for iPhone, iPad, and Apple Watch. Everything logged is saved to Apple Health, there's no account to sign up for and data always remains yours.
 
-It runs on iPhone, iPad, and Apple Watch, back to the iPhone XS and Apple Watch Series 4 (iOS 18 / watchOS 10 or newer).
+Runs on iPhone, iPad, and Apple Watch (iOS 18 / watchOS 10 or newer).
 
 **Built 100% agentically with [Claude Code](https://claude.com/claude-code).**
 
@@ -26,7 +26,7 @@ It runs on iPhone, iPad, and Apple Watch, back to the iPhone XS and Apple Watch 
 
 | Foods | Goal | Calendar |
 |---|---|---|
-| ![Food library with meals and foods](docs/showcase/light/foods.png) | ![Goal: weight trend with projection and the daily plan](docs/showcase/light/goal.png) | ![Calendar: month grid of earned onigiri and streaks](docs/showcase/light/calendar.png) |
+| <img src="docs/showcase/light/foods.png" width="260" alt="Food library with meals and foods"> | <img src="docs/showcase/light/goal.png" width="260" alt="Goal: weight trend with projection and the daily plan"> | <img src="docs/showcase/light/calendar.png" width="260" alt="Calendar: month grid of earned onigiri and streaks"> |
 
 ### iPad
 

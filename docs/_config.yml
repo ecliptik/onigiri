@@ -1,0 +1,5 @@
+# GitHub Pages (serves /docs off main): the default Primer theme,
+# titled properly — without this, pages render as "Page | onigiri".
+title: Onigiri
+description: A personal calorie, nutrition, and water tracker for iPhone, iPad, and Apple Watch
+theme: jekyll-theme-primer

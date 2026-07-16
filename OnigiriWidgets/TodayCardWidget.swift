@@ -181,10 +181,19 @@ struct TodayCardView: View {
             }
             .frame(width: ringSize, height: ringSize)
             .accessibilityElement(children: .combine)
-            .accessibilityValue("\((eaten * 100).formatted(.number.precision(.fractionLength(0)))) percent of today's budget eaten")
+            .accessibilityValue("\((eaten * 100).formatted(.number.precision(.fractionLength(0)))) percent of today's budget eaten\(remainingStatusValue.map { ", \($0)" } ?? "")")
         } else {
             headline
+                .accessibilityElement(children: .combine)
+                .accessibilityValue(remainingStatusValue ?? "")
         }
+    }
+
+    /// VoiceOver twin of the headline's amber "near budget" tint — the
+    /// warning is otherwise color-only (remainingStatusLabel discipline).
+    private var remainingStatusValue: String? {
+        guard SharedStore.showsRemainingKcal, let remaining = snapshot.remainingKcal else { return nil }
+        return Color.remainingStatusLabel(kcal: remaining)
     }
 
     private var ringSize: CGFloat { isLarge ? 168 : (isSmall ? 118 : 104) }

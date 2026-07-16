@@ -385,10 +385,18 @@ struct TodayView: View {
             }
             .frame(width: 190, height: 190)
             .accessibilityElement(children: .combine)
-            .accessibilityValue("\((eaten * 100).formatted(.number.precision(.fractionLength(0)))) percent of today's budget eaten")
+            .accessibilityValue("\((eaten * 100).formatted(.number.precision(.fractionLength(0)))) percent of today's budget eaten\(remainingStatusSuffix)")
         } else {
             balanceHeadline
         }
+    }
+
+    /// VoiceOver twin of the headline's amber "near budget" tint — the
+    /// warning is otherwise color-only (remainingStatusLabel discipline).
+    private var remainingStatusSuffix: String {
+        remainingHeadlineKcal
+            .flatMap { Color.remainingStatusLabel(kcal: $0) }
+            .map { ", \($0)" } ?? ""
     }
 
     private var balanceHeadline: some View {
@@ -423,6 +431,11 @@ struct TodayView: View {
             }
         }
         .padding(.top, 16)
+        // Read number + caption as one element, carrying the near/over
+        // budget status the amber tint alone can't (the ring variant
+        // overrides this with its own combined value + same suffix).
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(remainingHeadlineKcal.flatMap { Color.remainingStatusLabel(kcal: $0) } ?? "")
     }
 
     @ViewBuilder

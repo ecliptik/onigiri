@@ -80,4 +80,14 @@ public extension Color {
         if kcal <= 150 { return .riceToast }
         return .green
     }
+
+    /// The non-color twin of `remainingStatus`, colocated so the
+    /// thresholds can't drift (the sodiumStatusLabel discipline): the
+    /// amber "near budget" warning is otherwise purely visual on every
+    /// surface that shows the headline. nil while comfortably under.
+    static func remainingStatusLabel(kcal: Double) -> String? {
+        if kcal < 0 { return "over budget" }
+        if kcal <= 150 { return "near budget" }
+        return nil
+    }
 }

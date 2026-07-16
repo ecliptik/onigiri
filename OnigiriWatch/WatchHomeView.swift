@@ -118,6 +118,10 @@ struct WatchHomeView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+            // Carry the near/over budget status the amber tint alone
+            // can't (remainingStatusLabel discipline).
+            .accessibilityElement(children: .combine)
+            .accessibilityValue(Color.remainingStatusLabel(kcal: remaining) ?? "")
         } else {
             Text(model.state.summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
                 .font(.system(size: headlineSize, weight: .bold, design: .rounded))

@@ -364,6 +364,8 @@ struct SummaryComplicationView: View {
             let headline = CalorieBudget.remainingHeadline(remaining)
             Text("\(headline.value, format: .number.precision(.fractionLength(0))) \(headline.caption)")
                 .foregroundStyle(Color.remainingStatus(kcal: remaining))
+                // The amber near-budget tint needs a non-color twin.
+                .accessibilityValue(Color.remainingStatusLabel(kcal: remaining) ?? "")
         } else {
             let balance = entry.state.summary.balanceKcal
             Text("\(balance, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))) kcal")

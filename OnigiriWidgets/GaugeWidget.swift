@@ -113,5 +113,15 @@ struct GaugeWidgetView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        // Carry the near/over budget status the amber tint alone can't
+        // (remainingStatusLabel discipline; empty while comfortably under).
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(remainingStatusValue ?? "")
+    }
+
+    /// VoiceOver twin of the headline's amber "near budget" tint.
+    private var remainingStatusValue: String? {
+        guard SharedStore.showsRemainingKcal, let remaining = entry.snapshot.remainingKcal else { return nil }
+        return Color.remainingStatusLabel(kcal: remaining)
     }
 }

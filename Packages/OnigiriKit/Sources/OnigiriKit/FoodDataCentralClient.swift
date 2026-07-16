@@ -242,7 +242,7 @@ public struct FoodDataCentralClient: Sendable {
 
     private func fetch(_ request: URLRequest) async throws -> Data {
         var request = request
-        request.setValue("Onigiri/0.1 (personal calorie tracker)", forHTTPHeaderField: "User-Agent")
+        request.setValue(ClientIdentity.userAgent, forHTTPHeaderField: "User-Agent")
         let (data, response) = try await Self.session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw FoodDataCentralError.badResponse }
         switch http.statusCode {

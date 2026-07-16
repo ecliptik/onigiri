@@ -341,7 +341,7 @@ public struct OpenFoodFactsClient: Sendable {
 
     private func fetch(_ url: URL) async throws -> Data {
         var request = URLRequest(url: url)
-        request.setValue("Onigiri/0.1 (personal calorie tracker)", forHTTPHeaderField: "User-Agent")
+        request.setValue(ClientIdentity.userAgent, forHTTPHeaderField: "User-Agent")
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw OpenFoodFactsError.badResponse }
         guard http.statusCode != 404 else { throw OpenFoodFactsError.notFound }

@@ -363,6 +363,15 @@ struct SettingsView: View {
                 // is the face.
                 Link("https://github.com/ecliptik/onigiri",
                      destination: URL(string: "https://github.com/ecliptik/onigiri")!)
+                // ODbL requires attribution for Open Food Facts data;
+                // FDC is public domain but deserves the credit.
+                Text("Food data from [Open Food Facts](https://world.openfoodfacts.org) (ODbL) and [USDA FoodData Central](https://fdc.nal.usda.gov).")
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 6)
+                // Budgets and projections are arithmetic over Health
+                // data, not medicine — say so where the user can read it.
+                Text("Calorie budgets and weight projections are informational estimates, not medical advice.")
+                    .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 8)

@@ -50,7 +50,7 @@ Runs on iPhone, iPad, and Apple Watch (iOS 18 / watchOS 10 or newer).
 
 ## How the daily goal works
 
-Onigiri reads your weight, what you eat, and what you burn from Apple Health, then does the math for you.
+Onigiri reads your weight, what you eat, and what you burn from Apple Health, then turns them into a daily goal you can act on.
 
 1. **Set a goal** — a target weight and date. Onigiri works out the **daily calorie deficit** you need to get there (burning more than you eat).
 2. **Eat within your budget** — your budget is your average daily burn minus that deficit. As you log food, the Today ring shows **how much you can still eat today** and stay on pace.

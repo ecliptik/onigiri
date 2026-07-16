@@ -107,14 +107,23 @@ struct ContentView: View {
         // the widget was showing (backfill included). No day parameter
         // means today.
         .onOpenURL { url in
-            guard url.scheme == "onigiri", url.host() == "log" else { return }
-            selectedTab = .today
-            if let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-                .queryItems?.first(where: { $0.name == "day" })?.value,
-               let day = Self.deepLinkDay.date(from: raw) {
-                QuickActions.shared.dayRequest = day
+            guard url.scheme == "onigiri" else { return }
+            switch url.host() {
+            case "log":
+                selectedTab = .today
+                if let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                    .queryItems?.first(where: { $0.name == "day" })?.value,
+                   let day = Self.deepLinkDay.date(from: raw) {
+                    QuickActions.shared.dayRequest = day
+                }
+                QuickActions.shared.quickLogRequest = .all
+            case "calendar":
+                // The month-stats widget: land on the Calendar tab, not
+                // wherever the app happened to be.
+                selectedTab = .calendar
+            default:
+                break
             }
-            QuickActions.shared.quickLogRequest = .all
         }
     }
 

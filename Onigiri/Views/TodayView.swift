@@ -35,6 +35,12 @@ struct TodayView: View {
     @AppStorage(SharedStore.energyStatsStyleKey, store: SharedStore.defaults) private var energyStatsStyle = "cards"
     @State private var activeSheet: TodaySheet?
     @State private var quickActions = QuickActions.shared
+    /// Value-routed push so the deep-link path can force-pop: a bare
+    /// NavigationLink push isn't addressable, so the quick-log sheet
+    /// used to present OVER a stale Day Nutrition push (and dismissing
+    /// stranded the user there instead of on Today).
+    private enum Route: Hashable { case nutrition }
+    @State private var navPath: [Route] = []
     @State private var toastCenter = ToastCenter.shared
     // Collapsed by default: a full day is four one-line totals; expand what
     // you want to inspect.
@@ -51,6 +57,10 @@ struct TodayView: View {
     /// The headline number follows the user's text size (Dynamic Type);
     /// minimumScaleFactor keeps huge accessibility sizes on one line.
     @ScaledMetric(relativeTo: .largeTitle) private var headlineSize = 60.0
+    /// The headline ring's frame follows Dynamic Type (capped — the
+    /// gauge emoji inside scales with the frame, so a fixed 190 left
+    /// the badge frozen while @ScaledMetric text grew around it).
+    @ScaledMetric(relativeTo: .largeTitle) private var ringDiameter = 190.0
 
     /// One sheet slot: multiple .sheet modifiers chained on the same view
     /// compete and only one reliably presents. The kind is part of the
@@ -77,7 +87,7 @@ struct TodayView: View {
 
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navPath) {
             ScrollView {
                 VStack(spacing: Layout.screenSpacing) {
                     // The day title is the date-jump door (one tap to the
@@ -177,6 +187,11 @@ struct TodayView: View {
                     }
                     .disabled(model.isToday)
                     .accessibilityLabel("Next day")
+                }
+            }
+            .navigationDestination(for: Route.self) { route in
+                switch route {
+                case .nutrition: DayNutritionView(model: model)
                 }
             }
             // No onDismiss refresh: every mutation a sheet can make lands
@@ -301,6 +316,9 @@ struct TodayView: View {
             quickActions.dayRequest = nil
             let kind = quickActions.quickLogRequest
             quickActions.quickLogRequest = nil
+            // Pop any pushed Day Nutrition first: the sheet must open
+            // over Today's root, not over a stale detail push.
+            navPath.removeAll()
             Task {
                 // A paired log request (the widget's + deep link) waits
                 // for the browse: the sheet's logDate must be the
@@ -312,6 +330,7 @@ struct TodayView: View {
         }
         guard let kind = quickActions.quickLogRequest else { return }
         quickActions.quickLogRequest = nil
+        navPath.removeAll()
         activeSheet = .quickLog(kind)
     }
 
@@ -383,7 +402,7 @@ struct TodayView: View {
                 balanceHeadline
                     .padding(24)
             }
-            .frame(width: 190, height: 190)
+            .frame(width: min(ringDiameter, 260), height: min(ringDiameter, 260))
             .accessibilityElement(children: .combine)
             .accessibilityValue("\((eaten * 100).formatted(.number.precision(.fractionLength(0)))) percent of today's budget eaten\(remainingStatusSuffix)")
         } else {
@@ -473,11 +492,10 @@ struct TodayView: View {
         )
     }
 
-    /// Push to the day's full nutrient breakdown.
+    /// Push to the day's full nutrient breakdown (value-routed so the
+    /// path binding tracks it — see `Route`).
     private func nutritionLink(@ViewBuilder _ content: () -> some View) -> some View {
-        NavigationLink {
-            DayNutritionView(model: model)
-        } label: {
+        NavigationLink(value: Route.nutrition) {
             content()
         }
         .buttonStyle(.plain)
@@ -1311,6 +1329,11 @@ struct DailyGoalCard: View, Equatable {
     /// nil when Health has too few weigh-ins to say.
     var weeklyTrendLb: Double? = nil
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
+    /// The gauge badge scales with its frame, so the frame must follow
+    /// Dynamic Type or the badge stays frozen beside growing text.
+    /// (Not compared in ==: ScaledMetric is a DynamicProperty — its
+    /// changes re-render the card on their own.)
+    @ScaledMetric(relativeTo: .headline) private var gaugeSize = 84.0
 
     /// Skip the whole card — including the OnigiriGauge's GeometryReader —
     /// when a re-render didn't touch its numbers (scroll-settle, an
@@ -1342,7 +1365,7 @@ struct DailyGoalCard: View, Equatable {
     var body: some View {
         HStack(spacing: 16) {
             OnigiriGauge(progress: progress, emoji: SharedStore.rewardEmoji(for: rewardIcon))
-                .frame(width: 84, height: 84)
+                .frame(width: min(gaugeSize, 120), height: min(gaugeSize, 120))
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {

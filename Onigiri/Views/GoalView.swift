@@ -15,6 +15,9 @@ struct GoalView: View {
     @State private var manualWeightLb: Double?
     @State private var healthWeightLb: Double?
     @State private var averageBurnKcal: Double?
+    /// Today's actual burn, floor for the plan's expected burn (the
+    /// shared clamp — without it this preview lags Today on active days).
+    @State private var todayBurnKcal: Double = 0
     @State private var weightHistory: [WeightTrend.Point] = []
     @State private var dailyTotals: [DayEnergyTotals] = []
     /// Cached 7-day smoothing of weightHistory (see .task).
@@ -59,18 +62,21 @@ struct GoalView: View {
     }
 
     private var plan: CalorieBudget.Plan? {
-        if isMaintenance {
-            return CalorieBudget.maintenancePlan(averageDailyBurn: averageBurnKcal ?? 2000)
+        // The preview keeps GoalUpsert's target-below-current rule;
+        // derivation itself is the shared kit path (clamped burn — this
+        // preview used to lag Today on high-burn days by skipping the
+        // today-actual floor).
+        if !isMaintenance {
+            guard let current = currentWeightLb, let target = targetWeightLb, target < current
+            else { return nil }
         }
-        guard let current = currentWeightLb, let target = targetWeightLb, target < current else { return nil }
-        let days = Calendar.current.dateComponents(
-            [.day], from: Calendar.current.startOfDay(for: .now), to: targetDate
-        ).day ?? 0
-        return CalorieBudget.plan(
-            currentWeightLb: current,
-            targetWeightLb: target,
-            daysRemaining: days,
-            averageDailyBurn: averageBurnKcal ?? 2000
+        return CalorieBudget.derivePlan(
+            isMaintenance: isMaintenance,
+            currentWeightLb: currentWeightLb,
+            targetWeightLb: targetWeightLb,
+            targetDate: targetDate,
+            averageDailyBurnKcal: averageBurnKcal,
+            todayActualBurnKcal: todayBurnKcal
         )
     }
 
@@ -248,10 +254,12 @@ struct GoalView: View {
                 async let burnRead = health.averageDailyBurnKcal()
                 async let historyRead = health.bodyMassHistory()
                 async let totalsRead = health.dailyEnergyTotals()
+                async let todayRead = health.todaySummary()
                 healthWeightLb = (try? await weightRead) ?? nil
                 averageBurnKcal = (try? await burnRead) ?? nil
                 weightHistory = (try? await historyRead) ?? []
                 dailyTotals = (try? await totalsRead) ?? []
+                todayBurnKcal = ((try? await todayRead) ?? .zero).totalBurnKcal
                 // Smooth once per load, not per keystroke: typing a target
                 // weight re-evaluates body per digit, and each evaluation
                 // re-averaged ~90 points and re-fit the slope.

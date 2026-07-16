@@ -461,19 +461,15 @@ struct TodayView: View {
     }
 
     private func plan(for goal: GoalSettings) -> CalorieBudget.Plan? {
-        // Maintenance needs no weight or date — the budget IS the burn.
-        if goal.isMaintenance {
-            return CalorieBudget.maintenancePlan(averageDailyBurn: model.expectedDailyBurnKcal)
-        }
-        guard let weight = model.currentWeightLb ?? goal.fallbackCurrentWeightLb else { return nil }
-        let days = Calendar.current.dateComponents(
-            [.day], from: Calendar.current.startOfDay(for: .now), to: goal.targetDate
-        ).day ?? 0
-        return CalorieBudget.plan(
-            currentWeightLb: weight,
+        // The shared kit derivation — one clamp, one days-to-target rule
+        // for Today, Goal, onboarding, the widgets, and the watch.
+        CalorieBudget.derivePlan(
+            isMaintenance: goal.isMaintenance,
+            currentWeightLb: model.currentWeightLb ?? goal.fallbackCurrentWeightLb,
             targetWeightLb: goal.targetWeightLb,
-            daysRemaining: days,
-            averageDailyBurn: model.expectedDailyBurnKcal
+            targetDate: goal.targetDate,
+            averageDailyBurnKcal: model.averageBurnKcal,
+            todayActualBurnKcal: model.summary.totalBurnKcal
         )
     }
 

@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import OnigiriKit
 
@@ -70,5 +71,80 @@ struct CalorieBudgetTests {
         #expect(over.value == 138)
         #expect(over.caption == "kcal over")
         #expect(CalorieBudget.remainingHeadline(0).caption == "kcal left")
+    }
+
+    // MARK: - expectedDailyBurn (the 2.1.4 clamp, shared by every surface)
+
+    @Test func expectedBurnColdStartsAt2000() {
+        #expect(CalorieBudget.expectedDailyBurn(averageKcal: nil) == 2000)
+        #expect(CalorieBudget.expectedDailyBurn(averageKcal: 1500) == 2000)
+    }
+
+    @Test func expectedBurnUsesTheAverageWithRoomLeftInTheDay() {
+        #expect(CalorieBudget.expectedDailyBurn(averageKcal: 2800, todayActualKcal: 1900) == 2800)
+    }
+
+    @Test func expectedBurnFollowsTodayOnceItTopsTheAverage() {
+        // The fix behind "phone reads 150 left, widget reads 0 over" on
+        // active days: today's actual burn outranks the average.
+        #expect(CalorieBudget.expectedDailyBurn(averageKcal: 2800, todayActualKcal: 3100) == 3100)
+    }
+
+    // MARK: - derivePlan (one derivation for Today/Goal/onboarding/watch)
+
+    private static let cal = Calendar(identifier: .gregorian)
+    private static let now = cal.date(from: DateComponents(year: 2026, month: 7, day: 16, hour: 9))!
+
+    @Test func derivedWeightPlanSpreadsPoundsOverDays() throws {
+        // 10 lb * 3500 / 100 days = 350 kcal/day deficit off a 2800 burn.
+        let target = Self.cal.date(byAdding: .day, value: 100, to: Self.now)!
+        let plan = try #require(CalorieBudget.derivePlan(
+            isMaintenance: false,
+            currentWeightLb: 200, targetWeightLb: 190, targetDate: target,
+            averageDailyBurnKcal: 2800,
+            calendar: Self.cal, now: Self.now
+        ))
+        #expect(abs(plan.requiredDailyDeficit - 350) < 0.01)
+        #expect(abs(plan.dailyBudget - 2450) < 0.01)
+    }
+
+    @Test func derivedPlanBudgetFollowsTodaysBurn() throws {
+        // Same goal on a high-burn day: the deficit holds, the budget
+        // rises with the clamped burn — Goal's preview used to miss this.
+        let target = Self.cal.date(byAdding: .day, value: 100, to: Self.now)!
+        let plan = try #require(CalorieBudget.derivePlan(
+            isMaintenance: false,
+            currentWeightLb: 200, targetWeightLb: 190, targetDate: target,
+            averageDailyBurnKcal: 2800, todayActualBurnKcal: 3100,
+            calendar: Self.cal, now: Self.now
+        ))
+        #expect(abs(plan.requiredDailyDeficit - 350) < 0.01)
+        #expect(abs(plan.dailyBudget - 2750) < 0.01)
+    }
+
+    @Test func derivedMaintenancePlanEatsTheClampedBurn() throws {
+        let plan = try #require(CalorieBudget.derivePlan(
+            isMaintenance: true,
+            averageDailyBurnKcal: 2800, todayActualBurnKcal: 3100
+        ))
+        #expect(plan.requiredDailyDeficit == 0)
+        #expect(plan.dailyBudget == 3100)
+    }
+
+    @Test func derivedMaintenancePlanColdStartsAt2000() throws {
+        let plan = try #require(CalorieBudget.derivePlan(
+            isMaintenance: true, averageDailyBurnKcal: nil
+        ))
+        #expect(plan.dailyBudget == 2000)
+    }
+
+    @Test func derivedWeightPlanNeedsAWeight() {
+        let target = Self.cal.date(byAdding: .day, value: 100, to: Self.now)!
+        #expect(CalorieBudget.derivePlan(
+            isMaintenance: false,
+            currentWeightLb: nil, targetWeightLb: 190, targetDate: target,
+            averageDailyBurnKcal: 2800,
+            calendar: Self.cal, now: Self.now
+        ) == nil)
     }
 }

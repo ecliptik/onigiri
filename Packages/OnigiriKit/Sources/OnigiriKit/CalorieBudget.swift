@@ -28,6 +28,51 @@ public enum CalorieBudget {
         Plan(requiredDailyDeficit: 0, dailyBudget: averageDailyBurn, isAggressive: false)
     }
 
+    /// The burn figure every plan derivation must use: the historical
+    /// average, floored by today's actual burn and the 2000 kcal
+    /// cold-start default. Once today's burn tops the average, the
+    /// budget must follow or surfaces read "0 left"/"over" while
+    /// reality has room (the 2.1.4 fix). Colocated here so Today, Goal,
+    /// onboarding, the widgets, and the watch can't drift apart again.
+    public static func expectedDailyBurn(
+        averageKcal: Double?,
+        todayActualKcal: Double = 0
+    ) -> Double {
+        max(averageKcal ?? 0, todayActualKcal, 2000)
+    }
+
+    /// The one shared answer to "what plan does this goal imply right
+    /// now": maintenance eats what you burn; a weight goal spreads the
+    /// remaining pounds over the days to the target date. nil when a
+    /// weight goal lacks a current weight, target, or date. Both modes
+    /// ride the `expectedDailyBurn` clamp.
+    public static func derivePlan(
+        isMaintenance: Bool,
+        currentWeightLb: Double? = nil,
+        targetWeightLb: Double? = nil,
+        targetDate: Date? = nil,
+        averageDailyBurnKcal: Double?,
+        todayActualBurnKcal: Double = 0,
+        calendar: Calendar = .current,
+        now: Date = .now
+    ) -> Plan? {
+        let burn = expectedDailyBurn(
+            averageKcal: averageDailyBurnKcal, todayActualKcal: todayActualBurnKcal
+        )
+        if isMaintenance { return maintenancePlan(averageDailyBurn: burn) }
+        guard let current = currentWeightLb, let target = targetWeightLb, let targetDate
+        else { return nil }
+        let days = calendar.dateComponents(
+            [.day], from: calendar.startOfDay(for: now), to: targetDate
+        ).day ?? 0
+        return plan(
+            currentWeightLb: current,
+            targetWeightLb: target,
+            daysRemaining: days,
+            averageDailyBurn: burn
+        )
+    }
+
     public static func plan(
         currentWeightLb: Double,
         targetWeightLb: Double,

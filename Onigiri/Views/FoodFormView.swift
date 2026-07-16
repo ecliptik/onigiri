@@ -745,6 +745,10 @@ struct FoodFormView: View {
             context.insert(new)
             createdFood = new
         }
+        // Explicit save (GoalUpsert's discipline): autosave usually
+        // lands this, but a crash/force-quit in the window loses the
+        // edit — and the sync push below should read persisted state.
+        try? context.save()
         PhoneSyncService.shared.push(from: context)
     }
 }

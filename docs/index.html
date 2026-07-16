@@ -174,11 +174,13 @@
     padding: 8px 18px; font-size: 14.5px; font-weight: 600; background: rgba(140,168,140,.07);
   }
 
-  /* ---- wide shots ---- */
-  .wide { max-width: 900px; margin: 56px auto 0; }
-  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(28px, 5vw, 64px); align-items: center; max-width: 860px; margin: 56px auto 0; }
-  @media (max-width: 700px) { .duo { grid-template-columns: 1fr; } }
-  .caption { text-align: center; color: var(--muted); font-size: 14.5px; margin-top: 16px; }
+  /* ---- surface blocks (watch → widget → iPad) ---- */
+  .surface { margin: clamp(56px, 9vh, 96px) auto 0; }
+  .surface h3 { font-size: clamp(20px, 2.8vw, 27px); font-weight: 720; letter-spacing: -0.01em; }
+  .surface .media { margin-top: 30px; }
+  .surface .plain-shot { max-width: min(430px, 86vw); margin: 0 auto; }
+  .surface .wide { max-width: 900px; margin: 0 auto; }
+  .caption { text-align: center; color: var(--muted); font-size: 14.5px; margin-top: 16px; max-width: 56ch; margin-left: auto; margin-right: auto; }
 
   /* ---- footer ---- */
   footer {
@@ -317,20 +319,28 @@
     <p class="lead reveal d1" style="max-width:60ch;margin-left:auto;margin-right:auto">Log from the watch without touching your phone. Glance at widgets that
     refresh within seconds of any log — even one made on the other device.</p>
 
-    <div class="duo">
-      <div class="reveal">
+    <div class="surface reveal">
+      <h3>On your wrist</h3>
+      <div class="media">
         <div class="device watch"><img src="showcase/watch/home.png" alt="Apple Watch app: balance headline and log buttons" loading="lazy"></div>
-        <p class="caption">The watch app stands alone — Favorites-then-Recent logging, crown-adjusted edits, complications for every face.</p>
       </div>
-      <div class="reveal d1">
-        <div class="plain-shot"><img src="showcase/widget/home-screen.png" alt="The Today widget on the Home Screen" loading="lazy"></div>
-        <p class="caption">Today card, gauge, water, streak, and month-stats widgets — plus a Control Center water button.</p>
-      </div>
+      <p class="caption">The watch app stands alone — Favorites-then-Recent logging, crown-adjusted edits, complications for every face.</p>
     </div>
 
-    <div class="wide reveal">
-      <div class="device pad"><img src="showcase/light/ipad-landscape.png" alt="Today on iPad: sidebar navigation with the summary beside the log" loading="lazy"></div>
-      <p class="caption">On iPad, Today uses the width — summary beside the log, sidebar navigation, every multitasking mode.</p>
+    <div class="surface reveal">
+      <h3>On your Home and Lock Screens</h3>
+      <div class="media">
+        <div class="plain-shot"><img src="showcase/widget/home-screen.png" alt="The Today widget on the Home Screen" loading="lazy"></div>
+      </div>
+      <p class="caption">Today card, gauge, water, streak, and month-stats widgets — plus a Control Center water button.</p>
+    </div>
+
+    <div class="surface reveal">
+      <h3>On your iPad</h3>
+      <div class="media">
+        <div class="wide"><div class="device pad"><img src="showcase/light/ipad-landscape.png" alt="Today on iPad: sidebar navigation with the summary beside the log" loading="lazy"></div></div>
+      </div>
+      <p class="caption">Today uses the width — summary beside the log, sidebar navigation, every multitasking mode.</p>
     </div>
   </div>
 </section>

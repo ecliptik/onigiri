@@ -90,4 +90,14 @@ See [docs/PLAN.md](docs/PLAN.md) for the full design and roadmap.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+[PolyForm Noncommercial 1.0.0](LICENSE) — read it, build it, modify it,
+and run it freely for any noncommercial purpose. Commercial use,
+including selling this app or a derivative of it, is not permitted.
+Releases through v2.2.0 were published under MIT and remain so.
+
+Required Notice: Copyright (c) 2026 Micheal Waltz
+
+The **Onigiri** name and icon identify this project and its official
+builds; distribute forks under a different name and icon. This is a
+personal project — issues are welcome, pull requests generally aren't
+(see [CONTRIBUTING.md](CONTRIBUTING.md)).

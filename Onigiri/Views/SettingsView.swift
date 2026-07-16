@@ -31,9 +31,13 @@ struct SettingsView: View {
     @AppStorage(SharedStore.remindStreakKey, store: SharedStore.defaults) private var remindStreak = false
     @AppStorage(SharedStore.holdToLogWaterKey, store: SharedStore.defaults) private var holdToLogWater = true
     @AppStorage(SharedStore.textSearchSourceKey, store: SharedStore.defaults) private var textSearchSource = SharedStore.textSearchSourceOFF
-    @AppStorage(SharedStore.fdcAPIKeyKey, store: SharedStore.defaults) private var fdcAPIKey = ""
-    /// What the key field shows; only plausible keys flow to storage.
+    /// What the key field shows; only plausible keys flow to storage
+    /// (the Keychain now — see SharedStore.saveFDCAPIKey).
     @State private var fdcAPIKeyDraft = SharedStore.fdcAPIKey
+    /// The Keychain key as Settings found it; Cancel restores it (the
+    /// field applies as-you-go like the rest of Settings, and the FDC key
+    /// is no longer in the defaults snapshot).
+    @State private var fdcKeyAtOpen = SharedStore.fdcAPIKey
     /// The "Test Key" round-trip's verdict; editing the key voids it.
     @State private var fdcKeyTest = FDCKeyTest.idle
 
@@ -236,7 +240,7 @@ struct SettingsView: View {
                     .onChange(of: fdcAPIKeyDraft) { _, raw in
                         let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
                         if key.isEmpty || SharedStore.isPlausibleFDCKey(key) {
-                            fdcAPIKey = key
+                            SharedStore.saveFDCAPIKey(key)
                         }
                         // A different key means the last verdict is
                         // about someone else.
@@ -358,7 +362,7 @@ struct SettingsView: View {
         SharedStore.trackedMetric2Key, SharedStore.trackedMetric2ModeKey,
         SharedStore.trackedMetric2TargetKey, SharedStore.trackedMetric2IconKey,
         SharedStore.untrackedBelowKey, SharedStore.energyStatsStyleKey,
-        SharedStore.textSearchSourceKey, SharedStore.fdcAPIKeyKey,
+        SharedStore.textSearchSourceKey,
         SharedStore.holdToLogWaterKey,
     ]
 
@@ -384,6 +388,9 @@ struct SettingsView: View {
                 SharedStore.defaults.removeObject(forKey: key)
             }
         }
+        // The FDC key lives in the Keychain, outside the defaults
+        // snapshot — restore it to what Settings opened with by hand.
+        SharedStore.saveFDCAPIKey(fdcKeyAtOpen)
         // The key field's draft and reminders/watch mirrors re-derive
         // from the restored values.
         fdcAPIKeyDraft = SharedStore.fdcAPIKey
@@ -406,6 +413,8 @@ struct SettingsView: View {
             // means the caches, the watch mirror, and the onboarding
             // flag go too (onboarding replays on next launch).
             SharedStore.defaults.removePersistentDomain(forName: SharedStore.appGroupID)
+            // The domain wipe doesn't reach the Keychain — clear the key too.
+            SharedStore.saveFDCAPIKey("")
             fdcAPIKeyDraft = ""
             fdcKeyTest = .idle
         }
@@ -416,6 +425,7 @@ struct SettingsView: View {
         // A reset is committed, not a pending edit — Cancel after one
         // must not resurrect pre-reset settings over wiped data.
         entrySnapshot = Self.captureSnapshot()
+        fdcKeyAtOpen = SharedStore.fdcAPIKey
         ToastCenter.shared.show(reset.toast)
     }
 
@@ -444,6 +454,8 @@ struct SettingsView: View {
         for key in Self.preferenceKeys {
             SharedStore.defaults.removeObject(forKey: key)
         }
+        // The FDC key is in the Keychain, not the defaults list.
+        SharedStore.saveFDCAPIKey("")
         // The key field's draft mirrors storage by hand.
         fdcAPIKeyDraft = ""
         fdcKeyTest = .idle
@@ -945,6 +957,7 @@ struct SettingsView: View {
             .onAppear {
                 if entrySnapshot.isEmpty {
                     entrySnapshot = Self.captureSnapshot()
+                    fdcKeyAtOpen = SharedStore.fdcAPIKey
                 }
             }
             .fileExporter(

@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import SwiftData
 
 @Model
@@ -299,10 +300,80 @@ public enum SharedStore {
             : defaults.bool(forKey: holdToLogWaterKey)
     }
 
-    /// The user's FDC key, trimmed; empty means "none saved".
+    // The FDC key is a credential, so it lives in the Keychain, not the
+    // App Group defaults plist (which any process with the container can
+    // read). AfterFirstUnlockThisDeviceOnly = encrypted at rest, readable
+    // after the first unlock (so a backgrounded search still works), never
+    // in a backup and never off this device — matching its long-standing
+    // "device-local, never synced" intent.
+    private static let fdcKeychainService = "com.ecliptik.Onigiri.fdc"
+    private static let fdcKeychainAccount = "fdcAPIKey"
+
+    private static func fdcKeychainQuery() -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: fdcKeychainService,
+            kSecAttrAccount as String: fdcKeychainAccount,
+        ]
+    }
+
+    /// The user's FDC key, trimmed; empty means "none saved". Reads the
+    /// Keychain, migrating a value left in the legacy defaults slot on
+    /// first read (then clearing the plaintext copy).
     public static var fdcAPIKey: String {
-        (defaults.string(forKey: fdcAPIKeyKey) ?? "")
+        if let stored = readFDCKeychain() { return stored }
+        let legacy = (defaults.string(forKey: fdcAPIKeyKey) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !legacy.isEmpty {
+            _ = writeFDCKeychain(legacy)
+            defaults.removeObject(forKey: fdcAPIKeyKey)
+            return legacy
+        }
+        return ""
+    }
+
+    /// Save (non-empty) or clear (empty) the FDC key in the Keychain. Also
+    /// drops any legacy defaults copy so a plaintext key can't linger.
+    @discardableResult
+    public static func saveFDCAPIKey(_ raw: String) -> Bool {
+        let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        defaults.removeObject(forKey: fdcAPIKeyKey)
+        if key.isEmpty {
+            SecItemDelete(fdcKeychainQuery() as CFDictionary)
+            return true
+        }
+        return writeFDCKeychain(key)
+    }
+
+    private static func readFDCKeychain() -> String? {
+        var query = fdcKeychainQuery()
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data,
+              let str = String(data: data, encoding: .utf8) else { return nil }
+        let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// Upsert (update-then-add), never delete-then-add — the latter races
+    /// and drops item metadata.
+    @discardableResult
+    private static func writeFDCKeychain(_ key: String) -> Bool {
+        let data = Data(key.utf8)
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
+        var status = SecItemUpdate(fdcKeychainQuery() as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            var add = fdcKeychainQuery()
+            add[kSecValueData as String] = data
+            add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            status = SecItemAdd(add as CFDictionary, nil)
+        }
+        return status == errSecSuccess
     }
 
     /// api.data.gov keys are 40 letters and digits; anything else is a

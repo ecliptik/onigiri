@@ -144,6 +144,8 @@ struct ContentView: View {
     }()
 
     private var mainTabs: some View {
+        // iPad: the top tab bar can become a sidebar at the user's
+        // choice (no effect on iPhone's bottom bar).
         TabView(selection: $selectedTab) {
             // Today sits first and is the app's home; water lives inside it
             // (hydration row + a Water group in the log).
@@ -170,6 +172,9 @@ struct ContentView: View {
                 Color.clear
             }
         }
+        // iPad: the tab bar can become a sidebar at the user's choice
+        // (top-bar toggle); no effect on iPhone's bottom bar.
+        .tabViewStyle(.sidebarAdaptable)
         .tint(.riceToast)
         .onChange(of: selectedTab) { old, new in
             guard new == .log else { return }

@@ -52,6 +52,11 @@ targets:
         # export-compliance prompt on every upload.
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
+        # iPhone is portrait-only, matching what's designed and tested
+        # (the UI tests force portrait; landscape was an undeclared,
+        # untested stretch). iPad below keeps all four.
+        UISupportedInterfaceOrientations~iphone:
+          - UIInterfaceOrientationPortrait
         # Full multitasking on iPad (Split View/Slide Over/Stage
         # Manager) requires supporting all four orientations.
         UISupportedInterfaceOrientations~ipad:

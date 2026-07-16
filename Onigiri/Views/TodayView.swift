@@ -9,6 +9,8 @@ struct TodayView: View {
     /// Backs the goal card's month-detail push; refreshed on push.
     @State private var monthModel = CalendarModel()
     @Environment(\.scenePhase) private var scenePhase
+    /// Regular width lays the summary beside the log (two panes).
+    @Environment(\.horizontalSizeClass) private var hSizeClass
     @Query private var goals: [GoalSettings]
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
@@ -96,59 +98,18 @@ struct TodayView: View {
                     // a link around the whole headline swallowed half of
                     // the day-paging swipes.
                     dayTitleButton
-                    VStack(spacing: 8) {
-                        // Compact energy mode: Burned/Eaten flank the
-                        // headline and the meter cards below disappear —
-                        // one row less between the user and the log.
-                        HStack(spacing: 12) {
-                            if energyStatsStyle == "compact" {
-                                energyFlank(model.summary.totalBurnKcal, "Burned")
-                            }
-                            if progressGauges {
-                                gaugedHeadline
-                            } else {
-                                balanceHeadline
-                            }
-                            if energyStatsStyle == "compact" {
-                                energyFlank(model.summary.intakeKcal, "Eaten")
-                            }
+                    if hSizeClass == .regular {
+                        // iPad/regular width: the summary beside the log,
+                        // not a phone column stretched across the canvas.
+                        HStack(alignment: .top, spacing: Layout.screenSpacing) {
+                            VStack(spacing: Layout.screenSpacing) { summaryStack }
+                                .frame(maxWidth: .infinity)
+                            VStack(spacing: Layout.screenSpacing) { logStack }
+                                .frame(maxWidth: .infinity)
                         }
-                        nutritionLink {
-                            // The shared "Details ›" caption — 2.1 restored
-                            // the trailing chevron here to match the month
-                            // and day cards (the 2026-07-13 removal reversed
-                            // deliberately).
-                            DetailsCaption()
-                                .padding(.vertical, 6)
-                                .padding(.horizontal, 16)
-                                .contentShape(.rect)
-                        }
-                    }
-                    hydrationRow
-                    // Pure display: its numbers are on its face, and the
-                    // day summary already has its one door ("Details").
-                    goalCard
-                    if energyStatsStyle == "cards" {
-                        meterGrid
-                    }
-                    loggedSection
-
-                    if let message = model.errorMessage {
-                        Text(message)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
-                    // Denied write access fails every log with an opaque
-                    // toast; iOS can't deep-link the Health sharing pane,
-                    // so instructions are the recovery path.
-                    if model.healthWriteDenied {
-                        Text("Health access is off, so logging can't save. Turn it on in the Health app: Profile → Apps → Onigiri.")
-                            .font(.footnote)
-                            .foregroundStyle(.orange)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
+                    } else {
+                        summaryStack
+                        logStack
                     }
                 }
                 .padding(.bottom, 24)
@@ -157,7 +118,8 @@ struct TodayView: View {
             // gray page + secondarySystemGroupedBackground cards, so
             // every card in the app matches the List screens' cells in
             // both modes (quaternary-over-background diverged in dark).
-            .readableContentWidth(groupedBackground: true)
+            // Two panes need more canvas than one phone column.
+            .readableContentWidth(max: hSizeClass == .regular ? 1100 : 700, groupedBackground: true)
             // The large title is rendered in-content (dayTitleButton) so
             // one tap opens the month grid directly — the system title
             // menu forced an intermediate "Jump to date…" tap. The bar
@@ -416,6 +378,71 @@ struct TodayView: View {
         remainingHeadlineKcal
             .flatMap { Color.remainingStatusLabel(kcal: $0) }
             .map { ", \($0)" } ?? ""
+    }
+
+    /// Everything above the log in the phone column: headline (ringed
+    /// or plain, with compact flanks), hydration, goal card, meters.
+    @ViewBuilder
+    private var summaryStack: some View {
+        VStack(spacing: 8) {
+            // Compact energy mode: Burned/Eaten flank the
+            // headline and the meter cards below disappear —
+            // one row less between the user and the log.
+            HStack(spacing: 12) {
+                if energyStatsStyle == "compact" {
+                    energyFlank(model.summary.totalBurnKcal, "Burned")
+                }
+                if progressGauges {
+                    gaugedHeadline
+                } else {
+                    balanceHeadline
+                }
+                if energyStatsStyle == "compact" {
+                    energyFlank(model.summary.intakeKcal, "Eaten")
+                }
+            }
+            nutritionLink {
+                // The shared "Details ›" caption — 2.1 restored
+                // the trailing chevron here to match the month
+                // and day cards (the 2026-07-13 removal reversed
+                // deliberately).
+                DetailsCaption()
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 16)
+                    .contentShape(.rect)
+            }
+        }
+        hydrationRow
+        // Pure display: its numbers are on its face, and the
+        // day summary already has its one door ("Details").
+        goalCard
+        if energyStatsStyle == "cards" {
+            meterGrid
+        }
+    }
+
+    /// The log and its trouble states — the second pane on regular width.
+    @ViewBuilder
+    private var logStack: some View {
+        loggedSection
+
+        if let message = model.errorMessage {
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(.red)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+        }
+        // Denied write access fails every log with an opaque
+        // toast; iOS can't deep-link the Health sharing pane,
+        // so instructions are the recovery path.
+        if model.healthWriteDenied {
+            Text("Health access is off, so logging can't save. Turn it on in the Health app: Profile → Apps → Onigiri.")
+                .font(.footnote)
+                .foregroundStyle(.orange)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
     }
 
     private var balanceHeadline: some View {

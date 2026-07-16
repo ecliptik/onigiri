@@ -94,10 +94,12 @@ struct AddPillLongPress: UIViewRepresentable {
             // floating circle at the bottom-trailing corner, so match
             // the region itself. Key window only, nothing presented
             // (a sheet's own bottom corner must not log water), and
-            // compact widths only (iPad tab bars live elsewhere).
+            // compact width only — the SIZE CLASS, not a 500pt guess:
+            // Split View/Stage Manager windows cross any fixed width
+            // while the trait tracks where the tab bar actually is.
             guard window.isKeyWindow,
                   window.rootViewController?.presentedViewController == nil,
-                  window.bounds.width < 500 else { return false }
+                  window.traitCollection.horizontalSizeClass == .compact else { return false }
             let point = touch.location(in: window)
             return point.x >= window.bounds.width - 84
                 && point.y >= window.bounds.height - 130

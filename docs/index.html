@@ -100,7 +100,7 @@
     border: 1px solid rgba(227,179,107,.22);
     box-shadow: 0 24px 80px rgba(0,0,0,.55), 0 0 120px rgba(227,179,107,.06);
   }
-  .device img { border-radius: 34px; }
+  .device img, .device video { border-radius: 34px; display: block; width: 100%; }
   .device.pad { border-radius: 30px; padding: 12px; }
   .device.pad img { border-radius: 20px; }
   .device.watch { border-radius: 38px; padding: 10px; width: min(230px, 60vw); margin: 0 auto; }
@@ -242,7 +242,7 @@
         <li><strong>Every entry editable</strong> — swipe to adjust or delete, one-tap undo.</li>
       </ul>
     </div>
-    <div class="media reveal d1"><div class="shot device"><img src="showcase/light/today.png" alt="Today screen" loading="lazy"></div></div>
+    <div class="media reveal d1"><div class="shot device"><video autoplay muted loop playsinline preload="metadata" poster="media/day-swipe-poster.jpg" aria-label="Swiping through three days on the Today screen and back to today"><source src="media/day-swipe.mp4" type="video/mp4"></video></div></div>
   </div>
 
   <div class="row flip">
@@ -257,7 +257,7 @@
         <li><strong>Duplicates caught</strong> by barcode, so your library stays clean.</li>
       </ul>
     </div>
-    <div class="media reveal d1"><div class="shot device"><img src="showcase/light/foods.png" alt="The Foods library" loading="lazy"></div></div>
+    <div class="media reveal d1"><div class="shot device"><video autoplay muted loop playsinline preload="metadata" poster="media/add-food-poster.jpg" aria-label="Tapping the add button, then logging a favorite food in one tap"><source src="media/add-food.mp4" type="video/mp4"></video></div></div>
   </div>
 
   <div class="row">
@@ -393,6 +393,10 @@
     for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
   }, { threshold: 0.12, rootMargin: "0px 0px -40px" });
   document.querySelectorAll(".reveal:not(.in)").forEach(el => io.observe(el));
+  // Reduced motion: no auto-playing videos — the posters stand in.
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    document.querySelectorAll("video[autoplay]").forEach(v => { v.removeAttribute("autoplay"); v.pause(); });
+  }
   // Nav hairline once the page moves.
   const nav = document.getElementById("nav");
   addEventListener("scroll", () => nav.classList.toggle("scrolled", scrollY > 8), { passive: true });

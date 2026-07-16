@@ -46,6 +46,22 @@ It runs on iPhone, iPad, and Apple Watch, back to the iPhone XS and Apple Watch 
   <img src="docs/showcase/widget/home-screen.png" width="300" alt="The medium Today widget on the Home Screen — calorie ring, burned and eaten, sodium and water, and a Log button — beside the stock iOS widgets">
 </p>
 
+## How the daily goal works
+
+Onigiri reads your weight, what you eat, and what you burn from Apple Health, then does the math for you.
+
+1. **Set a goal** — a target weight and date. Onigiri works out the **daily calorie deficit** you need to get there (burning more than you eat).
+2. **Eat within your budget** — your budget is your average daily burn minus that deficit. As you log food, the Today ring shows **how much you can still eat today** and stay on pace.
+3. **Lose weight** — finish each day at or under your budget and you hit the deficit; do it consistently and the scale follows.
+
+**Example.** Your average burn is ~2,800 kcal/day and your goal needs a **350 kcal/day** deficit, leaving a **2,450 kcal budget**. You've eaten 2,300 so far, so the ring reads **150 kcal left** — room for 150 more and you'll still land on your target deficit by bedtime.
+
+- **`kcal left` ≥ 0** → on track (still losing at your target pace).
+- **Over budget** → you'll fall short of the pace for your target date (you may still lose, just slower).
+- Eat nothing more and the deficit only grows — you'd *stop* losing only if you ate all the way up to your full burn (~2,800).
+
+The **Daily goal** card shows the same thing from the deficit side: "245 of 350 kcal deficit" is what you've banked *so far* — the rest of the day's burn is still coming, which is why "245 banked" and "150 left to eat" both point at the same 350 target.
+
 ## Architecture at a glance
 
 - **SwiftUI** apps for iOS and watchOS; shared `OnigiriKit` Swift package for models and logic

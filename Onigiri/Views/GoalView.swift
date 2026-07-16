@@ -207,7 +207,6 @@ struct GoalView: View {
             }
             .compactSections()
             .readableContentWidth(groupedBackground: true)
-            .expandsTabBarAtTop()
             .navigationTitle("Goal")
             .scrollDismissesKeyboard(.interactively)
             .toolbar {

@@ -10,77 +10,11 @@ enum AppTab: Hashable {
     case log
 }
 
-/// The visible screen reports whether it's scrolled to the top; while it
-/// is, the tab bar is pinned expanded. The system re-expands only on an
-/// upward scroll GESTURE — collapsing log sections shrinks the content
-/// with no gesture, stranding a minimized bar at the very top.
-@Observable
-@MainActor
-final class TabBarPin {
-    static let shared = TabBarPin()
-    var atTop = true
-}
-
-extension View {
-    /// Attach to a screen's root scroll container: reports its at-top
-    /// state so the tab bar is always full when there's nowhere left to
-    /// scroll up (see TabBarPin).
-    func expandsTabBarAtTop() -> some View {
-        modifier(ExpandsTabBarAtTop())
-    }
-}
-
-/// EVERY pin commit defers to scroll-idle while a gesture is in flight:
-/// flipping tabBarMinimizeBehavior re-renders the TabView, and doing it
-/// mid-gesture was the "sticky" scroll — first the leave-the-top flip
-/// (Foods, 2026-07-13), then the reach-the-top flip, which fired
-/// repeatedly DURING the large-title collapse/expand because the title
-/// transition shifts contentInsets and oscillates the at-top boundary
-/// (Today/Goal, the user, 2026-07-14). Gesture-less at-top changes
-/// (collapsing the log sections — the whole reason TabBarPin exists)
-/// still commit immediately: no phases fire without a gesture, so idle
-/// would never come. Trade-off unchanged: the bar doesn't minimize
-/// during the first downward scroll from the top.
-private struct ExpandsTabBarAtTop: ViewModifier {
-    @State private var atTopNow = true
-    @State private var isScrolling = false
-
-    func body(content: Content) -> some View {
-        content
-            .onScrollGeometryChange(for: Bool.self) { geo in
-                geo.contentOffset.y + geo.contentInsets.top <= 1
-            } action: { _, atTop in
-                atTopNow = atTop
-                if atTop, !isScrolling {
-                    Self.commit(true)
-                }
-            }
-            .onScrollPhaseChange { _, newPhase in
-                isScrolling = newPhase != .idle
-                if newPhase == .idle {
-                    Self.commit(atTopNow)
-                }
-            }
-    }
-
-    /// @Observable fires on EVERY set, equal value or not — and each
-    /// fire re-evaluates the TabView, which can cancel an in-flight
-    /// scroll gesture. Unguarded, sitting at the top turned every swipe
-    /// attempt into an invalidation storm (dead swipes on Today after a
-    /// day jump — the user, 2026-07-14). Commit only actual changes.
-    private static func commit(_ atTop: Bool) {
-        if TabBarPin.shared.atTop != atTop {
-            TabBarPin.shared.atTop = atTop
-        }
-    }
-}
-
 struct ContentView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: AppTab = .today
     @State private var quickActions = QuickActions.shared
-    @State private var tabBarPin = TabBarPin.shared
     @AppStorage(SharedStore.hasOnboardedKey, store: SharedStore.defaults) private var hasOnboarded = false
     /// Latched in the task below: once onboarding is showing, saving a
     /// goal mid-flow must NOT dismiss it (only finish/skip does, via
@@ -239,11 +173,15 @@ struct ContentView: View {
             }
         }
         // Liquid Glass: the tab bar shrinks out of the way while scrolling
-        // content, re-expanding on scroll-up — and pinned full whenever
-        // the screen is at the top (the system misses gesture-less
-        // returns to the top, like collapsing the log sections).
-        // iOS 18 bars never minimize; there is nothing to pin.
-        .modifier(TabBarMinimizePin(atTop: tabBarPin.atTop))
+        // content, re-expanding on scroll-up. Constant .onScrollDown, not
+        // flipped to .never at the top: the flip committed "left the top"
+        // only at scroll-idle, so the FIRST scroll from the top never
+        // minimized — worst on Foods/Goal, where you scroll once and stop,
+        // so it read as "never minimizes" (the user, 2026-07-16). Trade-off:
+        // after a gesture-less collapse of Today's log while scrolled, the
+        // bar can sit minimized until the next scroll. iOS 18 bars never
+        // minimize; the modifier is a no-op there.
+        .modifier(TabBarMinimizePin())
         // Hold the corner + to log a water serving without the sheet —
         // the tap keeps opening the add flow. Checked at fire time so
         // the Settings toggle applies without a relaunch.
@@ -255,11 +193,9 @@ struct ContentView: View {
     }
 
     private struct TabBarMinimizePin: ViewModifier {
-        let atTop: Bool
-
         func body(content: Content) -> some View {
             if #available(iOS 26.0, *) {
-                content.tabBarMinimizeBehavior(atTop ? .never : .onScrollDown)
+                content.tabBarMinimizeBehavior(.onScrollDown)
             } else {
                 content
             }

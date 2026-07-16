@@ -40,6 +40,8 @@ struct SettingsView: View {
     @State private var fdcKeyAtOpen = SharedStore.fdcAPIKey
     /// The "Test Key" round-trip's verdict; editing the key voids it.
     @State private var fdcKeyTest = FDCKeyTest.idle
+    /// The key masks to dots by default; the eye toggle reveals it.
+    @State private var showFDCKey = false
 
     enum FDCKeyTest: Equatable {
         case idle, testing, success
@@ -232,7 +234,17 @@ struct SettingsView: View {
                 // paste. It edits a DRAFT: only a plausible key (or a
                 // deliberate clear) reaches storage, so a mis-paste
                 // can't silently break search.
-                TextField("API key", text: $fdcAPIKeyDraft)
+                HStack {
+                    // Masked by default (it's a credential), revealed by
+                    // the eye toggle. Both edit the same draft, so paste
+                    // and the plausibility gate work either way.
+                    Group {
+                        if showFDCKey {
+                            TextField("API key", text: $fdcAPIKeyDraft)
+                        } else {
+                            SecureField("API key", text: $fdcAPIKeyDraft)
+                        }
+                    }
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .keyboardType(.asciiCapable)
@@ -246,6 +258,15 @@ struct SettingsView: View {
                         // about someone else.
                         fdcKeyTest = .idle
                     }
+                    Button {
+                        showFDCKey.toggle()
+                    } label: {
+                        Image(systemName: showFDCKey ? "eye.slash" : "eye")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel(showFDCKey ? "Hide API key" : "Show API key")
+                }
                 let draft = fdcAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
                 if draft.isEmpty {
                     Text("An API key is required to use the USDA FoodData Central, go to [fdc.nal.usda.gov/api-guide](https://fdc.nal.usda.gov/api-guide) to request a key")

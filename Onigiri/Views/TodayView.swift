@@ -148,7 +148,6 @@ struct TodayView: View {
             // every card in the app matches the List screens' cells in
             // both modes (quaternary-over-background diverged in dark).
             .readableContentWidth(groupedBackground: true)
-            .expandsTabBarAtTop()
             // The large title is rendered in-content (dayTitleButton) so
             // one tap opens the month grid directly — the system title
             // menu forced an intermediate "Jump to date…" tap. The bar

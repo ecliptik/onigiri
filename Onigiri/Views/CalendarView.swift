@@ -61,7 +61,6 @@ struct CalendarView: View {
             }
             // Grouped surface idiom, app-wide (see TodayView).
             .readableContentWidth(groupedBackground: true)
-            .expandsTabBarAtTop()
             // Month chevrons in the nav bar with the month as the title —
             // the same browsing pattern as Today.
             .navigationTitle(displayedMonth.formatted(.dateTime.month(.wide).year()))

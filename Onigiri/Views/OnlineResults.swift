@@ -127,13 +127,18 @@ final class OnlineFoodSearch {
                     guard generation == searchGeneration else { return }
                     if isFDC { fdcHasMore = leg.fullPage } else { offHasMore = leg.fullPage }
                     legs.append(leg)
-                    // Merge-and-rank everything seen so far; the late
-                    // leg folds into the ranked list when it arrives.
-                    let combined = OpenFoodFactsClient.rank(
-                        legs.flatMap(\.hits), query: query, name: \.name, brand: \.brand
-                    ).filter { !rejected.contains($0.barcode) }
-                    if !combined.isEmpty {
-                        results = combined
+                    // Stable-append: rank THIS leg's hits among themselves
+                    // and append the ones not already shown, leaving the
+                    // fast source's list in place when the slow one lands.
+                    // Re-ranking the whole combined list here reordered the
+                    // rows the user was already reading (FDC returns in a
+                    // blink, OFF a few seconds later — the jarring re-sort).
+                    let shown = Set(results.map(\.barcode))
+                    let ranked = OpenFoodFactsClient.rank(
+                        leg.hits, query: query, name: \.name, brand: \.brand
+                    ).filter { !rejected.contains($0.barcode) && !shown.contains($0.barcode) }
+                    if !ranked.isEmpty {
+                        results.append(contentsOf: ranked)
                         isSearching = false
                     }
                 }

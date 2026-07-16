@@ -1588,9 +1588,16 @@ final class OnigiriUITests: XCTestCase {
             switchTab(in: app, to: tab)
             attachShot(named: "tab-\(tab.lowercased())", settle: 2)
         }
+        // The Foods library segment — Favorites is the default and shows
+        // only the starred item; the README's Foods shot wants the list.
+        switchTab(in: app, to: "Foods")
+        let librarySegments = app.segmentedControls.firstMatch
+        if librarySegments.waitForExistence(timeout: 5) {
+            librarySegments.buttons["Foods"].tap()
+            attachShot(named: "tab-foods-library", settle: 2)
+        }
         // The Foods search drawer, activated — catches the
         // field-disappears-on-tap class of bug.
-        switchTab(in: app, to: "Foods")
         let foodsSearch = app.searchFields.firstMatch
         if foodsSearch.waitForExistence(timeout: 5) {
             foodsSearch.tap()

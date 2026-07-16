@@ -31,7 +31,7 @@ Runs on iPhone, iPad, and Apple Watch (iOS 18 / watchOS 10 or newer).
 ### iPad
 
 <p align="center">
-  <img src="docs/showcase/light/ipad-landscape.png" width="640" alt="Today on iPad, landscape">
+  <img src="docs/showcase/light/ipad-landscape.png" width="640" alt="Today on iPad: sidebar navigation with the day summary and the log side by side">
 </p>
 
 ### Apple Watch

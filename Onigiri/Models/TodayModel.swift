@@ -72,15 +72,9 @@ final class TodayModel {
         await refresh()
     }
 
-    /// Expected full-day burn: the 14-day average, but never less than what
-    /// you've already burned today (nor a conservative floor). Early in the
-    /// day the average projects the full day; once today's actual burn
-    /// passes the average, the budget follows it — otherwise a higher-burn
-    /// day's real deficit ("665 of 504") would outrun the average-based
-    /// budget and the ring would read "0 over" while you actually had room.
-    var expectedDailyBurnKcal: Double {
-        max(averageBurnKcal ?? 0, summary.totalBurnKcal, 2000)
-    }
+    // Expected full-day burn (14-day average floored by today's actual
+    // burn) moved to CalorieBudget.expectedDailyBurn — TodayView's plan
+    // now comes from the shared derivePlan, same as every other surface.
 
     /// One-time startup: prompt for HealthKit access if never asked, then load.
     /// The view's .task can re-fire on tab switches — only run once.

@@ -1,8 +1,9 @@
-#if canImport(HealthKit)
 import Foundation
 
 /// Combines today's HealthKit summary with a (possibly synced) goal into the
-/// numbers the watch app and complications render.
+/// numbers the watch app and complications render. Plan assembly
+/// (`makeState`) is pure and lives outside the HealthKit guard so the
+/// macOS test host can reach it; only the fetch layer needs the store.
 @MainActor
 public enum DailyPlanLoader {
     public struct State: Sendable {
@@ -33,37 +34,28 @@ public enum DailyPlanLoader {
         public static let empty = State(summary: .zero, deficitTargetKcal: nil, gaugeProgress: 0)
     }
 
-    public static func load(goal: SyncedGoal?) async -> State {
-        let state = await computePlan(goal: goal)
-        // Every plan load stamps today's target, so history keeps being
-        // judged by the goal in force that day even after the goal (or
-        // the weight behind it) changes.
-        DeficitTargetHistory.recordToday(targetKcal: state.deficitTargetKcal)
-        return state
-    }
-
-    private static func computePlan(goal: SyncedGoal?) async -> State {
-        let health = HealthKitService()
+    /// Assemble the rendered state from already-fetched Health numbers.
+    /// Maintenance: eat what you burn — deficitTarget stays nil (the
+    /// any-deficit badge rule, no "% of goal" captions) and the gauge
+    /// shows budget left. A weight goal banks deficit toward the target;
+    /// without a current weight anywhere there is no plan. Both modes
+    /// ride the shared clamped-burn derivation.
+    public static func makeState(
+        goal: SyncedGoal?,
+        summary: DailyEnergySummary,
+        averageBurnKcal: Double?,
+        healthWeightLb: Double?,
+        calendar: Calendar = .current,
+        now: Date = .now
+    ) -> State {
         guard let goal else {
-            let summary = (try? await health.todaySummary()) ?? .zero
             return State(summary: summary, deficitTargetKcal: nil, gaugeProgress: 0)
         }
-        // The reads are independent — run them concurrently; this path
-        // is complication/widget refresh latency.
-        async let summaryRead = health.todaySummary()
-        async let burnRead = health.averageDailyBurnKcal()
         if goal.isMaintenance {
-            // Maintenance: eat what you burn. deficitTarget stays nil
-            // (any-deficit badge rule, and no "% of goal" captions);
-            // the gauge shows the budget still left to eat. The current
-            // weight plays no part — don't query it.
-            let summary = (try? await summaryRead) ?? .zero
-            // Never less than today's actual burn: once you've burned past
-            // your average, the budget must follow or the widget/complication
-            // read "0" while the phone (and reality) show room left. Mirrors
-            // TodayModel.expectedDailyBurnKcal.
-            let averageBurn = max(((try? await burnRead) ?? nil) ?? 0, summary.totalBurnKcal, 2000)
-            let plan = CalorieBudget.maintenancePlan(averageDailyBurn: averageBurn)
+            let burn = CalorieBudget.expectedDailyBurn(
+                averageKcal: averageBurnKcal, todayActualKcal: summary.totalBurnKcal
+            )
+            let plan = CalorieBudget.maintenancePlan(averageDailyBurn: burn)
             let progress = plan.dailyBudget > 0
                 ? max(0, min(1, 1 - summary.intakeKcal / plan.dailyBudget))
                 : 0
@@ -74,25 +66,18 @@ public enum DailyPlanLoader {
                 dailyBudgetKcal: plan.dailyBudget
             )
         }
-        async let weightRead = health.latestBodyMassLb()
-        let summary = (try? await summaryRead) ?? .zero
-        let healthWeight = (try? await weightRead) ?? nil
-        guard let weight = healthWeight ?? goal.fallbackCurrentWeightLb else {
+        guard let plan = CalorieBudget.derivePlan(
+            isMaintenance: false,
+            currentWeightLb: healthWeightLb ?? goal.fallbackCurrentWeightLb,
+            targetWeightLb: goal.targetWeightLb,
+            targetDate: goal.targetDate,
+            averageDailyBurnKcal: averageBurnKcal,
+            todayActualBurnKcal: summary.totalBurnKcal,
+            calendar: calendar,
+            now: now
+        ) else {
             return State(summary: summary, deficitTargetKcal: nil, gaugeProgress: 0)
         }
-        // Never less than today's actual burn (see the maintenance branch).
-        let averageBurn = max(((try? await burnRead) ?? nil) ?? 0, summary.totalBurnKcal, 2000)
-        let days = Calendar.current.dateComponents(
-            [.day],
-            from: Calendar.current.startOfDay(for: .now),
-            to: goal.targetDate
-        ).day ?? 0
-        let plan = CalorieBudget.plan(
-            currentWeightLb: weight,
-            targetWeightLb: goal.targetWeightLb,
-            daysRemaining: days,
-            averageDailyBurn: averageBurn
-        )
         let progress = plan.requiredDailyDeficit > 0
             ? max(0, min(1, -summary.balanceKcal / plan.requiredDailyDeficit))
             : 1
@@ -101,6 +86,73 @@ public enum DailyPlanLoader {
             deficitTargetKcal: plan.requiredDailyDeficit,
             gaugeProgress: progress,
             dailyBudgetKcal: plan.dailyBudget
+        )
+    }
+}
+
+#if canImport(HealthKit)
+/// The reads the loader performs — injectable so tests can stub the
+/// store (the audit's HealthKitService-injection gap, scoped to the
+/// loader's surface).
+@MainActor
+public protocol HealthPlanReading: Sendable {
+    func todaySummary() async throws -> DailyEnergySummary
+    func averageDailyBurnKcal() async throws -> Double?
+    func latestBodyMassLb() async throws -> Double?
+}
+
+extension HealthKitService: HealthPlanReading {
+    // Defaulted-parameter methods can't witness protocol requirements;
+    // these forward to the real implementations.
+    public func todaySummary() async throws -> DailyEnergySummary {
+        try await todaySummary(now: .now)
+    }
+
+    public func averageDailyBurnKcal() async throws -> Double? {
+        try await averageDailyBurnKcal(days: 14, now: .now)
+    }
+}
+
+public extension DailyPlanLoader {
+    static func load(
+        goal: SyncedGoal?,
+        health: any HealthPlanReading = HealthKitService()
+    ) async -> State {
+        let state = await computeState(goal: goal, health: health)
+        // Every plan load stamps today's target, so history keeps being
+        // judged by the goal in force that day even after the goal (or
+        // the weight behind it) changes.
+        DeficitTargetHistory.recordToday(targetKcal: state.deficitTargetKcal)
+        return state
+    }
+
+    private static func computeState(
+        goal: SyncedGoal?,
+        health: any HealthPlanReading
+    ) async -> State {
+        guard let goal else {
+            let summary = (try? await health.todaySummary()) ?? .zero
+            return makeState(goal: nil, summary: summary, averageBurnKcal: nil, healthWeightLb: nil)
+        }
+        // The reads are independent — run them concurrently; this path
+        // is complication/widget refresh latency.
+        async let summaryRead = health.todaySummary()
+        async let burnRead = health.averageDailyBurnKcal()
+        if goal.isMaintenance {
+            // The current weight plays no part — don't query it.
+            return makeState(
+                goal: goal,
+                summary: (try? await summaryRead) ?? .zero,
+                averageBurnKcal: (try? await burnRead) ?? nil,
+                healthWeightLb: nil
+            )
+        }
+        async let weightRead = health.latestBodyMassLb()
+        return makeState(
+            goal: goal,
+            summary: (try? await summaryRead) ?? .zero,
+            averageBurnKcal: (try? await burnRead) ?? nil,
+            healthWeightLb: (try? await weightRead) ?? nil
         )
     }
 }

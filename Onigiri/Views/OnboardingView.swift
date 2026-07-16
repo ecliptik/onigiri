@@ -19,6 +19,8 @@ struct OnboardingView: View {
     @State private var manualWeightLb: Double?
     @State private var targetWeightLb: Double?
     @State private var averageBurnKcal: Double?
+    /// Today's actual burn — the shared clamp's floor, same as Goal/Today.
+    @State private var todayBurnKcal: Double = 0
     @State private var targetDate = Calendar.current.date(byAdding: .day, value: 90, to: .now) ?? .now
     @FocusState private var weightFieldFocused: Bool
 
@@ -138,6 +140,7 @@ struct OnboardingView: View {
         healthRequested = true
         healthWeightLb = try? await health.latestBodyMassLb()
         averageBurnKcal = (try? await health.averageDailyBurnKcal()) ?? nil
+        todayBurnKcal = ((try? await health.todaySummary()) ?? .zero).totalBurnKcal
         if advance, selection == 1 {
             withAnimation { selection = 2 }
         }
@@ -287,20 +290,17 @@ struct OnboardingView: View {
         GoalUpsert.validate(targetLb: targetWeightLb, currentLb: healthWeightLb ?? manualWeightLb)
     }
 
-    /// The plan a valid goal implies, GoalView's math (2000 kcal burn
-    /// assumed until Health has history, like everywhere else).
+    /// The plan a valid goal implies — the shared kit derivation
+    /// (clamped burn, 2000 kcal cold-start until Health has history).
     private var previewPlan: CalorieBudget.Plan? {
-        guard goalValidation == .valid,
-              let current = healthWeightLb ?? manualWeightLb,
-              let target = targetWeightLb else { return nil }
-        let days = Calendar.current.dateComponents(
-            [.day], from: Calendar.current.startOfDay(for: .now), to: targetDate
-        ).day ?? 0
-        return CalorieBudget.plan(
-            currentWeightLb: current,
-            targetWeightLb: target,
-            daysRemaining: days,
-            averageDailyBurn: averageBurnKcal ?? 2000
+        guard goalValidation == .valid else { return nil }
+        return CalorieBudget.derivePlan(
+            isMaintenance: false,
+            currentWeightLb: healthWeightLb ?? manualWeightLb,
+            targetWeightLb: targetWeightLb,
+            targetDate: targetDate,
+            averageDailyBurnKcal: averageBurnKcal,
+            todayActualBurnKcal: todayBurnKcal
         )
     }
 

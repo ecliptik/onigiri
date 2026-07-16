@@ -326,6 +326,9 @@ struct CalendarView: View {
             .flatMap { Color.sodiumStatusLabel(mg: $0, limitMg: target) }
         return metric(icon: { slotIcon(slot: slot, nutrient: nutrient) },
                       text: text, color: color)
+            // Without grouping, the value never reaches VoiceOver — it
+            // must sit on a combined element, not a plain HStack.
+            .accessibilityElement(children: .combine)
             .accessibilityValue(status ?? "")
     }
 

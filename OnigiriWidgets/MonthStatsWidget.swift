@@ -84,6 +84,9 @@ struct MonthStatsWidget: Widget {
         StaticConfiguration(kind: WidgetKinds.monthStats, provider: MonthStatsProvider()) { entry in
             MonthStatsWidgetView(entry: entry)
                 .containerBackground(Color.riceCanvas, for: .widget)
+                // Month stats live on the Calendar tab — route there,
+                // not to whatever tab the app was left on.
+                .widgetURL(URL(string: "onigiri://calendar"))
         }
         .configurationDisplayName("Month Stats")
         .description("This month's goal-met days and your current streak.")
@@ -97,12 +100,15 @@ struct MonthStatsWidgetView: View {
 
     private var isSmall: Bool { family == .systemSmall }
     private var emoji: String { SharedStore.rewardEmoji }
+    /// Fixed pixel sizes ignored Larger Text (Dynamic Type backfill);
+    /// the scale rides one metric so the family ratios hold.
+    @ScaledMetric(relativeTo: .largeTitle) private var textScale = 1.0
     private var monthName: String { entry.month.formatted(.dateTime.month(.wide)) }
 
     var body: some View {
         if entry.needsSetup {
             VStack(spacing: 6) {
-                Text(emoji).font(.system(size: isSmall ? 34 : 40))
+                Text(emoji).font(.system(size: (isSmall ? 34 : 40) * textScale))
                 Text("Open Onigiri to set up")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -116,7 +122,7 @@ struct MonthStatsWidgetView: View {
                     .foregroundStyle(Color.nori)
                 Spacer(minLength: 0)
                 Text("\(emoji) \(entry.earnedCount)")
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .font(.system(size: 30 * textScale, weight: .bold, design: .rounded))
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)
                 Text(entry.earnedCount == 1 ? "goal-met day" : "goal-met days")

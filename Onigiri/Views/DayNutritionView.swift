@@ -83,15 +83,19 @@ struct DayNutritionView: View {
                     .foregroundStyle(deficit >= 0 ? Color.green : Color.orange)
                     .monospacedDigit()
             }
+            // Both rows carry a VoiceOver twin of their status colors —
+            // near/over limit and goal-met are otherwise color-only.
             iconRow("Sodium", icon: { Text("🧂") }) {
                 Text("\(model.summary.sodiumMg, format: .number.precision(.fractionLength(0))) / \(sodiumLimitMg, format: .number.precision(.fractionLength(0))) mg")
                     .foregroundStyle(Color.sodiumStatus(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg))
                     .monospacedDigit()
+                    .accessibilityValue(Color.sodiumStatusLabel(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg) ?? "")
             }
             iconRow("Water", icon: { WaterIconView(raw: waterIcon) }) {
                 Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
                     .foregroundStyle(model.summary.waterOz >= waterGoalOz ? Color.green : Color.secondary)
                     .monospacedDigit()
+                    .accessibilityValue(model.summary.waterOz >= waterGoalOz ? "goal met" : "")
             }
         }
     }

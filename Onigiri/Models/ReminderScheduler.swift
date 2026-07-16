@@ -158,4 +158,30 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
     ) async -> UNNotificationPresentationOptions {
         [.banner, .sound]
     }
+
+    /// Tapping a reminder routes into the action it nags about, like
+    /// the app-icon quick actions for the same intents — it used to
+    /// just open the app wherever it was left.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier else { return }
+        let id = response.notification.request.identifier
+        let kind = PlannedReminder.Kind.allCases.first {
+            id.hasPrefix("onigiri.reminder.\($0.rawValue).")
+        }
+        guard let kind else { return }
+        await MainActor.run {
+            switch kind {
+            case .water:
+                // One tap = one serving, the app's water idiom (the
+                // logWater shortcut, the widget button, the long-press).
+                QuickActions.shared.pending = .logWater
+            case .meals, .streak:
+                // Both ask "log something" — land in the Log sheet.
+                QuickActions.shared.pending = .logMeal
+            }
+        }
+    }
 }

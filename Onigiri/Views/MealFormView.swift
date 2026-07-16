@@ -102,6 +102,10 @@ struct MealFormView: View {
     private var hasItems: Bool { quantities.values.contains { $0 > 0 } }
 
     var body: some View {
+        // Bound once per evaluation, like FoodsView: each access to the
+        // computed property re-filters and re-sorts the whole library,
+        // and the picker section reads it twice.
+        let visibleFoods = visibleFoods
         NavigationStack {
             Form {
                 HStack {
@@ -343,6 +347,8 @@ struct MealFormView: View {
         } else {
             context.insert(Meal(name: trimmed, items: items, isFavorite: isFavorite, category: category))
         }
+        // Explicit save (GoalUpsert's discipline) — see FoodFormView.
+        try? context.save()
         PhoneSyncService.shared.push(from: context)
         dismiss()
     }

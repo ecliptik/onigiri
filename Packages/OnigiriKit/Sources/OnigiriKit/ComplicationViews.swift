@@ -11,6 +11,12 @@ public struct BalanceAccessoryView: View {
     let state: DailyPlanLoader.State
     let showsRemaining: Bool
     let needsSetup: Bool
+    /// Fixed pixel sizes ignored Larger Text on the most glanceable,
+    /// legibility-critical surfaces; scaled metrics follow Dynamic Type
+    /// inside the families' tight frames.
+    @ScaledMetric(relativeTo: .title3) private var cornerBadgeSize = 20.0
+    @ScaledMetric(relativeTo: .caption2) private var gaugeEmojiSize = 12.0
+    @ScaledMetric(relativeTo: .caption2) private var gaugeValueSize = 12.0
 
     public init(state: DailyPlanLoader.State, showsRemaining: Bool, needsSetup: Bool) {
         self.state = state
@@ -63,12 +69,12 @@ public struct BalanceAccessoryView: View {
         #if os(watchOS)
         case .accessoryCorner:
             Text(SharedStore.rewardEmoji)
-                .font(.system(size: 20))
+                .font(.system(size: cornerBadgeSize))
                 .widgetLabel { Text("Set up Onigiri") }
         #endif
         default:
             Gauge(value: 0) {
-                Text(SharedStore.rewardEmoji).font(.system(size: 12))
+                Text(SharedStore.rewardEmoji).font(.system(size: gaugeEmojiSize))
             } currentValueLabel: {
                 Text("—")
             }
@@ -85,7 +91,7 @@ public struct BalanceAccessoryView: View {
         case .accessoryCorner:
             // The badge in the corner, the headline on the curve.
             Text(SharedStore.rewardEmoji)
-                .font(.system(size: 20))
+                .font(.system(size: cornerBadgeSize))
                 .widgetLabel {
                     headlineText
                         .foregroundStyle(headlineColor)
@@ -120,12 +126,12 @@ public struct BalanceAccessoryView: View {
             let over = state.dailyBudgetKcal.map { state.summary.intakeKcal > $0 } ?? false
             Gauge(value: eaten ?? state.gaugeProgress) {
                 Text(SharedStore.rewardEmoji)
-                    .font(.system(size: 12))
+                    .font(.system(size: gaugeEmojiSize))
             } currentValueLabel: {
                 Text(headline.kcal, format: headline.goodAboveZero
                     ? .number.precision(.fractionLength(0))
                     : .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .font(.system(size: gaugeValueSize, weight: .bold, design: .rounded))
                     .foregroundStyle(headlineColor)
                     .minimumScaleFactor(0.6)
             }
@@ -140,6 +146,8 @@ public struct WaterAccessoryView: View {
     let waterOz: Double
     let goalOz: Double
     let needsSetup: Bool
+    /// Dynamic Type for the corner icon (see BalanceAccessoryView).
+    @ScaledMetric(relativeTo: .title3) private var cornerIconSize = 20.0
 
     public init(waterOz: Double, goalOz: Double, needsSetup: Bool) {
         self.waterOz = waterOz
@@ -158,7 +166,7 @@ public struct WaterAccessoryView: View {
         #if os(watchOS)
         case .accessoryCorner:
             Image(systemName: "drop.fill")
-                .font(.system(size: 20))
+                .font(.system(size: cornerIconSize))
                 .foregroundStyle(.blue)
                 .widgetLabel {
                     needsSetup
@@ -220,6 +228,10 @@ public struct StreakAccessoryView: View {
     @Environment(\.widgetFamily) private var family
     let streak: Int
     let needsSetup: Bool
+    /// Dynamic Type for the fixed badge/value sizes (see BalanceAccessoryView).
+    @ScaledMetric(relativeTo: .title3) private var cornerBadgeSize = 20.0
+    @ScaledMetric(relativeTo: .title2) private var rectBadgeSize = 24.0
+    @ScaledMetric(relativeTo: .footnote) private var circularSize = 16.0
 
     public init(streak: Int, needsSetup: Bool) {
         self.streak = streak
@@ -237,14 +249,14 @@ public struct StreakAccessoryView: View {
         #if os(watchOS)
         case .accessoryCorner:
             Text(SharedStore.rewardEmoji)
-                .font(.system(size: 20))
+                .font(.system(size: cornerBadgeSize))
                 .widgetLabel {
                     Text(needsSetup ? "Set up Onigiri" : "\(streak)-day streak")
                 }
         case .accessoryRectangular:
             HStack(spacing: 8) {
                 Text(SharedStore.rewardEmoji)
-                    .font(.system(size: 24))
+                    .font(.system(size: rectBadgeSize))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(needsSetup ? "—" : "\(streak) \(streak == 1 ? "day" : "days")")
                         .font(.headline.weight(.bold))
@@ -259,9 +271,9 @@ public struct StreakAccessoryView: View {
         default:
             VStack(spacing: 0) {
                 Text(SharedStore.rewardEmoji)
-                    .font(.system(size: 16))
+                    .font(.system(size: circularSize))
                 Text(needsSetup ? "—" : "\(streak)")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .font(.system(size: circularSize, weight: .bold, design: .rounded))
             }
         }
     }

@@ -350,6 +350,8 @@ struct FoodsView: View {
                 Button("Delete", role: .destructive) {
                     pendingMealDeletes.forEach(context.delete)
                     pendingMealDeletes = []
+                    // Explicit save (GoalUpsert's discipline) — see FoodFormView.
+                    try? context.save()
                     PhoneSyncService.shared.push(from: context)
                 }
                 Button("Cancel", role: .cancel) {}
@@ -369,6 +371,8 @@ struct FoodsView: View {
                     // Drop the now food-less items from any meals that
                     // used the deleted foods.
                     LibraryMaintenance.repairDanglingFoodReferences(context: context)
+                    // Explicit save (GoalUpsert's discipline) — see FoodFormView.
+                    try? context.save()
                     PhoneSyncService.shared.push(from: context)
                 }
                 Button("Cancel", role: .cancel) {}

@@ -455,14 +455,14 @@ public final class HealthKitService {
             )
         ]
         func insert(_ identifier: HKQuantityTypeIdentifier, _ unit: HKUnit, _ value: Double?) {
-            guard let value, value > 0 else { return }
             let type = HKQuantityType(identifier)
-            // Only include types authorized to WRITE. HealthKit rejects the
-            // ENTIRE correlation if one sample's type isn't shareable, so a
-            // scanned food's rich nutrients (a type the user never granted)
-            // would silently fail the whole log. Skipped nutrients still
-            // ride in the food library's own copy.
-            guard store.authorizationStatus(for: type) == .sharingAuthorized else { return }
+            // Positive value AND write-authorized — the tested policy
+            // (one unauthorized sample fails the whole correlation;
+            // skipped nutrients still ride the food library's copy).
+            guard let value, CorrelationWritePolicy.includes(
+                value: value,
+                isWriteAuthorized: store.authorizationStatus(for: type) == .sharingAuthorized
+            ) else { return }
             objects.insert(HKQuantitySample(
                 type: type,
                 quantity: HKQuantity(unit: unit, doubleValue: value),

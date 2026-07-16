@@ -90,6 +90,9 @@ struct StreakWidgetView: View {
     let entry: StreakEntry
 
     private var emoji: String { SharedStore.rewardEmoji }
+    /// Fixed pixel sizes ignored Larger Text (Dynamic Type backfill).
+    @ScaledMetric(relativeTo: .largeTitle) private var badgeSize = 40.0
+    @ScaledMetric(relativeTo: .largeTitle) private var countSize = 32.0
 
     var body: some View {
         switch family {
@@ -100,7 +103,8 @@ struct StreakWidgetView: View {
         default:
             VStack(spacing: 6) {
                 Text(emoji)
-                    .font(.system(size: 40))
+                    .font(.system(size: badgeSize))
+                    .minimumScaleFactor(0.6)
                 if entry.needsSetup {
                     Text("Open Onigiri to set up")
                         .font(.caption2)
@@ -108,7 +112,9 @@ struct StreakWidgetView: View {
                         .multilineTextAlignment(.center)
                 } else {
                     Text("\(entry.streak)")
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .font(.system(size: countSize, weight: .bold, design: .rounded))
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(1)
                         .foregroundStyle(entry.streak > 0 ? Color.green : Color.secondary)
                         .contentTransition(.numericText())
                     Text(entry.streak == 1 ? "day streak" : "day streak")

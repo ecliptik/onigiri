@@ -181,14 +181,27 @@ struct TodayCardView: View {
             }
             .frame(width: ringSize, height: ringSize)
             .accessibilityElement(children: .combine)
-            .accessibilityValue("\((eaten * 100).formatted(.number.precision(.fractionLength(0)))) percent of today's budget eaten")
+            .accessibilityValue("\((eaten * 100).formatted(.number.precision(.fractionLength(0)))) percent of today's budget eaten\(remainingStatusValue.map { ", \($0)" } ?? "")")
         } else {
             headline
+                .accessibilityElement(children: .combine)
+                .accessibilityValue(remainingStatusValue ?? "")
         }
     }
 
-    private var ringSize: CGFloat { isLarge ? 168 : (isSmall ? 118 : 104) }
-    private var headlineSize: CGFloat { isLarge ? 44 : (isSmall ? 30 : 26) }
+    /// VoiceOver twin of the headline's amber "near budget" tint — the
+    /// warning is otherwise color-only (remainingStatusLabel discipline).
+    private var remainingStatusValue: String? {
+        guard SharedStore.showsRemainingKcal, let remaining = snapshot.remainingKcal else { return nil }
+        return Color.remainingStatusLabel(kcal: remaining)
+    }
+
+    /// One scaled metric so ring and headline track Larger Text
+    /// together (Dynamic Type backfill; family ratios hold, the
+    /// existing minimumScaleFactors absorb the extremes).
+    @ScaledMetric(relativeTo: .largeTitle) private var textScale = 1.0
+    private var ringSize: CGFloat { (isLarge ? 168 : (isSmall ? 118 : 104)) * min(textScale, 1.3) }
+    private var headlineSize: CGFloat { (isLarge ? 44 : (isSmall ? 30 : 26)) * textScale }
 
     /// The headline number in the user's chosen style.
     private var headline: some View {

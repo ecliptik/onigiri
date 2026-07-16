@@ -14,6 +14,10 @@ public struct LibraryExport: Codable, Sendable, Equatable {
         public var nutrients: NutrientValues?
         public var isFavorite: Bool?
         public var category: String?
+        /// Preserved so a restore keeps the Recent/ranked ordering —
+        /// dropping it silently reset recency on every round-trip.
+        /// Optional: old exports.
+        public var lastUsedAt: Date?
 
         public init(
             name: String,
@@ -23,7 +27,8 @@ public struct LibraryExport: Codable, Sendable, Equatable {
             barcode: String?,
             nutrients: NutrientValues? = nil,
             isFavorite: Bool? = nil,
-            category: String? = nil
+            category: String? = nil,
+            lastUsedAt: Date? = nil
         ) {
             self.name = name
             self.kcal = kcal
@@ -33,6 +38,7 @@ public struct LibraryExport: Codable, Sendable, Equatable {
             self.nutrients = nutrients
             self.isFavorite = isFavorite
             self.category = category
+            self.lastUsedAt = lastUsedAt
         }
     }
 
@@ -54,16 +60,19 @@ public struct LibraryExport: Codable, Sendable, Equatable {
         /// Preserved across export/import so widget configurations that
         /// reference the meal survive a restore. Optional: old exports.
         public var uuid: UUID?
+        /// Recency, like FoodItem's — optional: old exports.
+        public var lastUsedAt: Date?
 
         public init(
             name: String, items: [MealItemRef], isFavorite: Bool? = nil,
-            category: String? = nil, uuid: UUID? = nil
+            category: String? = nil, uuid: UUID? = nil, lastUsedAt: Date? = nil
         ) {
             self.name = name
             self.items = items
             self.isFavorite = isFavorite
             self.category = category
             self.uuid = uuid
+            self.lastUsedAt = lastUsedAt
         }
     }
 

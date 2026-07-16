@@ -120,6 +120,9 @@ struct WatchMetricsView: View {
         .padding(.horizontal, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 10))
+        // Without grouping, the value never reaches VoiceOver — it
+        // must sit on a combined element, not a plain HStack.
+        .accessibilityElement(children: .combine)
         .accessibilityValue(status ?? "")
     }
 

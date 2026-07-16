@@ -33,6 +33,16 @@ struct ContentView: View {
                 mainTabs
             }
         }
+        .overlay {
+            // The app-switcher snapshot otherwise shows the day's health
+            // numbers to anyone flipping through cards. Covered from
+            // .inactive on — the snapshot is taken before .background
+            // settles. (Also flashes during Control Center pulls; the
+            // standard trade for a health app.)
+            if scenePhase != .active {
+                PrivacyShield()
+            }
+        }
         .task {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--seed-sample-data") {
@@ -107,14 +117,23 @@ struct ContentView: View {
         // the widget was showing (backfill included). No day parameter
         // means today.
         .onOpenURL { url in
-            guard url.scheme == "onigiri", url.host() == "log" else { return }
-            selectedTab = .today
-            if let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-                .queryItems?.first(where: { $0.name == "day" })?.value,
-               let day = Self.deepLinkDay.date(from: raw) {
-                QuickActions.shared.dayRequest = day
+            guard url.scheme == "onigiri" else { return }
+            switch url.host() {
+            case "log":
+                selectedTab = .today
+                if let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                    .queryItems?.first(where: { $0.name == "day" })?.value,
+                   let day = Self.deepLinkDay.date(from: raw) {
+                    QuickActions.shared.dayRequest = day
+                }
+                QuickActions.shared.quickLogRequest = .all
+            case "calendar":
+                // The month-stats widget: land on the Calendar tab, not
+                // wherever the app happened to be.
+                selectedTab = .calendar
+            default:
+                break
             }
-            QuickActions.shared.quickLogRequest = .all
         }
     }
 
@@ -125,6 +144,8 @@ struct ContentView: View {
     }()
 
     private var mainTabs: some View {
+        // iPad: the top tab bar can become a sidebar at the user's
+        // choice (no effect on iPhone's bottom bar).
         TabView(selection: $selectedTab) {
             // Today sits first and is the app's home; water lives inside it
             // (hydration row + a Water group in the log).
@@ -151,6 +172,9 @@ struct ContentView: View {
                 Color.clear
             }
         }
+        // iPad: the tab bar can become a sidebar at the user's choice
+        // (top-bar toggle); no effect on iPhone's bottom bar.
+        .tabViewStyle(.sidebarAdaptable)
         .tint(.riceToast)
         .onChange(of: selectedTab) { old, new in
             guard new == .log else { return }
@@ -223,6 +247,19 @@ struct ContentView: View {
             // not the Foods-tab new-food form.
             selectedTab = .today
             QuickActions.shared.quickLogRequest = .scan
+        }
+    }
+}
+
+/// Full-screen cover for the app-switcher snapshot — the rice canvas
+/// and the mascot, none of the numbers.
+private struct PrivacyShield: View {
+    var body: some View {
+        ZStack {
+            Color.riceCanvas.ignoresSafeArea()
+            Text("🍙")
+                .font(.system(size: 64))
+                .accessibilityHidden(true)
         }
     }
 }

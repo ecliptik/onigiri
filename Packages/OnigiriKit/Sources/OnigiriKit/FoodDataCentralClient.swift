@@ -1,4 +1,8 @@
 import Foundation
+import os
+
+// Logger is thread-safe; opt out of any MainActor default.
+private nonisolated(unsafe) let fdcLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "fdc")
 
 /// A generic food from USDA FoodData Central. Unlike OFF's search index,
 /// FDC search responses embed the full per-100 g nutrient table — a row
@@ -258,6 +262,9 @@ public struct FoodDataCentralClient: Sendable {
         do {
             decoded = try JSONDecoder().decode(SearchResponse.self, from: data)
         } catch {
+            // The user-facing error stays generic, but a schema drift on
+            // USDA's side is invisible without the decode context.
+            fdcLog.error("search decode failed: \(error)")
             throw FoodDataCentralError.badResponse
         }
         return decoded.foods.compactMap { food in
@@ -284,6 +291,7 @@ public struct FoodDataCentralClient: Sendable {
         do {
             decoded = try JSONDecoder().decode(FoodDetail.self, from: data)
         } catch {
+            fdcLog.error("detail decode failed: \(error)")
             throw FoodDataCentralError.badResponse
         }
         let portions = (decoded.foodPortions ?? [])

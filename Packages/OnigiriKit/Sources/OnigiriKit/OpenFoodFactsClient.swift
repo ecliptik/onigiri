@@ -82,7 +82,17 @@ actor ProductCache {
 /// Prefers per-serving values; falls back to per-100 g. Converts salt to
 /// sodium (salt ≈ 2.5 × sodium) when only salt is listed.
 public struct OpenFoodFactsClient: Sendable {
-    public init() {}
+    /// The shared interactive session by default; tests inject a
+    /// URLProtocol-stubbed session to exercise the HTTP error mapping.
+    private let session: URLSession
+
+    public init() {
+        session = Self.session
+    }
+
+    init(session: URLSession) {
+        self.session = session
+    }
 
     private static let fields = "code,product_name,brands,serving_size,nutriments"
 
@@ -332,7 +342,7 @@ public struct OpenFoodFactsClient: Sendable {
     private func fetch(_ url: URL) async throws -> Data {
         var request = URLRequest(url: url)
         request.setValue("Onigiri/0.1 (personal calorie tracker)", forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await Self.session.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw OpenFoodFactsError.badResponse }
         guard http.statusCode != 404 else { throw OpenFoodFactsError.notFound }
         guard http.statusCode != 429 else { throw OpenFoodFactsError.throttled }

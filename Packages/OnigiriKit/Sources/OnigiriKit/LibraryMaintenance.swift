@@ -1,6 +1,11 @@
 import Foundation
 import SwiftData
 import CoreData
+import os
+
+// Logger is thread-safe; opt out of any MainActor default.
+private nonisolated(unsafe) let maintenanceLog =
+    Logger(subsystem: "com.ecliptik.Onigiri", category: "maintenance")
 
 /// One-time store repairs run at app launch.
 public enum LibraryMaintenance {
@@ -28,24 +33,63 @@ public enum LibraryMaintenance {
         container.loadPersistentStores { _, error in loadFailed = error != nil }
         guard !loadFailed else { return }
         defer {
+            // A store left mounted here would collide with SwiftData
+            // reopening the same file, whose failure path is fatalError —
+            // an unload failure deserves a trace, not silence.
             let coordinator = container.persistentStoreCoordinator
-            coordinator.persistentStores.forEach { try? coordinator.remove($0) }
+            for store in coordinator.persistentStores {
+                do { try coordinator.remove(store) } catch {
+                    maintenanceLog.error("repairStore: store unload failed: \(error)")
+                }
+            }
         }
 
         let context = container.viewContext
-        guard let items = try? context.fetch(NSFetchRequest<NSManagedObject>(entityName: "MealItem"))
-        else { return }
+        let fetchedItems: [NSManagedObject]
+        do {
+            fetchedItems = try context.fetch(NSFetchRequest<NSManagedObject>(entityName: "MealItem"))
+        } catch {
+            maintenanceLog.error("repairStore: MealItem fetch failed, skipping repair: \(error)")
+            return
+        }
         var repaired = false
-        for item in items {
+        for item in fetchedItems {
             let foodIDs = item.objectIDs(forRelationshipNamed: "food")
-            let dangling = foodIDs.contains { (try? context.existingObject(with: $0)) == nil }
+            let dangling = foodIDs.contains { rowIsMissing($0, in: context) }
             // No food at all is a phantom 0 kcal line; drop those too.
             guard dangling || foodIDs.isEmpty else { continue }
             if dangling { item.setValue(nil, forKey: "food") }
             context.delete(item)
             repaired = true
         }
-        if repaired { try? context.save() }
+        if repaired {
+            do { try context.save() } catch {
+                maintenanceLog.error("repairStore: save failed, repairs not persisted: \(error)")
+            }
+        }
+    }
+
+    /// True only when Core Data affirmatively reports the referenced row
+    /// is gone (`NSManagedObjectReferentialIntegrityError`). Any other
+    /// `existingObject(with:)` failure — locked file, I/O hiccup — must
+    /// NOT count as dangling: the repair deletes the item and persists
+    /// that delete, so misreading a transient error would turn a
+    /// recoverable failure into silent data loss.
+    private static func rowIsMissing(_ id: NSManagedObjectID, in context: NSManagedObjectContext) -> Bool {
+        do {
+            _ = try context.existingObject(with: id)
+            return false
+        } catch {
+            let nsError = error as NSError
+            if nsError.domain == NSCocoaErrorDomain,
+               nsError.code == NSManagedObjectReferentialIntegrityError {
+                return true
+            }
+            maintenanceLog.error(
+                "repairStore: existingObject failed transiently (\(nsError.domain) \(nsError.code)); leaving item untouched"
+            )
+            return false
+        }
     }
 
     /// Delete meal items whose food was removed out from under them.

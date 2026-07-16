@@ -1,6 +1,6 @@
 # Onigiri — agent notes
 
-Personal iOS + watchOS calorie/sodium/water tracker. Design + roadmap: `docs/PLAN.md`.
+Personal iOS + watchOS calorie/sodium/water tracker. Design + roadmap: `plans/PLAN.md`.
 
 ## Build
 

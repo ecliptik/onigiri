@@ -4,7 +4,7 @@ import HealthKit
 
 /// All HealthKit access for Onigiri. HealthKit is the log store: food energy,
 /// sodium, and water are written as samples; energy burn and weight are read.
-/// See docs/PLAN.md.
+/// See plans/PLAN.md.
 @MainActor
 public final class HealthKitService {
     public static var isAvailable: Bool { HKHealthStore.isHealthDataAvailable() }

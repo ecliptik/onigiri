@@ -71,7 +71,7 @@ The **Daily goal** card shows the same thing from the deficit side: "245 of 350 
 - **SwiftData** stores only the library: foods, meals, goals, settings. Synced to the watch via WatchConnectivity.
 - **XcodeGen** (`project.yml`) generates the Xcode project — no `.xcodeproj` merge conflicts.
 
-See [docs/PLAN.md](docs/PLAN.md) for the full design and roadmap.
+See [plans/PLAN.md](plans/PLAN.md) for the full design and roadmap.
 
 ## Development setup
 

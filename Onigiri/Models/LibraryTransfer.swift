@@ -18,13 +18,14 @@ enum LibraryTransfer {
                       servingDescription: $0.servingDescription, barcode: $0.barcode,
                       nutrients: $0.nutrients.isEmpty ? nil : $0.nutrients,
                       isFavorite: $0.isFavorite ? true : nil,
-                      category: $0.category)
+                      category: $0.category,
+                      lastUsedAt: $0.lastUsedAt)
             },
             meals: meals.map { meal in
                 .init(name: meal.name, items: meal.items.compactMap { item in
                     item.food.map { .init(foodName: $0.name, quantity: item.quantity) }
                 }, isFavorite: meal.isFavorite ? true : nil, category: meal.category,
-                uuid: meal.uuid)
+                uuid: meal.uuid, lastUsedAt: meal.lastUsedAt)
             },
             goal: goal.map {
                 .init(targetWeightLb: $0.targetWeightLb, targetDate: $0.targetDate,
@@ -57,6 +58,9 @@ enum LibraryTransfer {
                 isFavorite: item.isFavorite ?? false,
                 category: item.category
             )
+            // Restore recency so Recent/ranked ordering survives the
+            // round-trip (nil on old exports leaves createdAt ordering).
+            food.lastUsedAt = item.lastUsedAt
             context.insert(food)
             foodsByName[item.name.lowercased()] = food
             addedFoods += 1
@@ -75,6 +79,7 @@ enum LibraryTransfer {
             )
             // Keep the exported identity so configured meal widgets survive.
             if let uuid = mealDef.uuid { meal.uuid = uuid }
+            meal.lastUsedAt = mealDef.lastUsedAt
             context.insert(meal)
             addedMeals += 1
         }

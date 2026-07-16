@@ -196,8 +196,12 @@ struct TodayCardView: View {
         return Color.remainingStatusLabel(kcal: remaining)
     }
 
-    private var ringSize: CGFloat { isLarge ? 168 : (isSmall ? 118 : 104) }
-    private var headlineSize: CGFloat { isLarge ? 44 : (isSmall ? 30 : 26) }
+    /// One scaled metric so ring and headline track Larger Text
+    /// together (Dynamic Type backfill; family ratios hold, the
+    /// existing minimumScaleFactors absorb the extremes).
+    @ScaledMetric(relativeTo: .largeTitle) private var textScale = 1.0
+    private var ringSize: CGFloat { (isLarge ? 168 : (isSmall ? 118 : 104)) * min(textScale, 1.3) }
+    private var headlineSize: CGFloat { (isLarge ? 44 : (isSmall ? 30 : 26)) * textScale }
 
     /// The headline number in the user's chosen style.
     private var headline: some View {

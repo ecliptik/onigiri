@@ -53,7 +53,21 @@ struct FoodFormView: View {
     @State private var category: String?
     @State private var isFavorite = false
 
-    @State private var showScanner = false
+    /// The form's ONE presentation slot: chained .sheet modifiers on a
+    /// view compete (the CLAUDE.md landmine — FoodsView/QuickLogSheet
+    /// already got this consolidation); a single .sheet(item:) can't.
+    private enum ActiveSheet: Identifiable {
+        case scanner
+        case portion(PortionTarget)
+        var id: String {
+            switch self {
+            case .scanner: "scanner"
+            case .portion(let target): "portion-\(target.id)"
+            }
+        }
+    }
+
+    @State private var activeSheet: ActiveSheet?
     /// The in-form OpenFoodFacts search: the STANDARD system field
     /// (bottom-placed), results inline via the shared section — the
     /// separate Search Database sheet is retired.
@@ -66,7 +80,10 @@ struct FoodFormView: View {
     /// field does not exist on other devices).
     @State private var describeText = ""
     @State private var isEstimating = false
-    @State private var portionTarget: PortionTarget?
+    /// onDismiss fires after activeSheet is already nil — this marker
+    /// says the closed sheet was the portion sheet, so the "saved but
+    /// not logged" toast only follows an actual portion cancel.
+    @State private var portionSheetWasUp = false
     @State private var portionDidLog = false
     /// Cancel/drag with typed data confirms first — twelve typed
     /// nutrient fields used to vanish on a stray swipe.
@@ -162,7 +179,7 @@ struct FoodFormView: View {
                     // the shutter photographs the label (the third door
                     // — foods no database knows).
                     Button {
-                        showScanner = true
+                        activeSheet = .scanner
                     } label: {
                         Label("Scan Barcode or Nutrition Label", systemImage: "barcode.viewfinder")
                     }
@@ -355,7 +372,7 @@ struct FoodFormView: View {
                 // not inherit the select-all. The bottom search field is
                 // exempt too — selecting-all an in-progress query on
                 // refocus would surprise.
-                guard !showScanner, !dbSearchActive, portionTarget == nil,
+                guard activeSheet == nil, !dbSearchActive,
                       let field = note.object as? UITextField else { return }
                 DispatchQueue.main.async { field.selectAll(nil) }
             }
@@ -384,25 +401,21 @@ struct FoodFormView: View {
                 Button("Keep Editing", role: .cancel) {}
             }
             .interactiveDismissDisabled(isDirty)
-            .sheet(isPresented: $showScanner) {
-                ScanSheet(onCode: { code in
-                    Task { await lookup(code) }
-                }, onLabel: { parsed in
-                    applyLabel(parsed)
-                })
-            }
-            .sheet(item: $portionTarget, onDismiss: {
-                // Cancelled portion after Log: the save already happened —
-                // say so instead of silently keeping it.
-                guard !portionDidLog else { return }
-                ToastCenter.shared.show("Saved \(name.trimmingCharacters(in: .whitespaces)) to your library ✓ — not logged")
-                dismiss()
-            }) { target in
-                PortionSheet(target: target) { quantity, category, _ in
-                    portionDidLog = true
-                    log(target, quantity: quantity, category: category)
+            .sheet(item: $activeSheet, onDismiss: sheetDidDismiss) { sheet in
+                switch sheet {
+                case .scanner:
+                    ScanSheet(onCode: { code in
+                        Task { await lookup(code) }
+                    }, onLabel: { parsed in
+                        applyLabel(parsed)
+                    })
+                case .portion(let target):
+                    PortionSheet(target: target) { quantity, category, _ in
+                        portionDidLog = true
+                        log(target, quantity: quantity, category: category)
+                    }
+                    .presentationDetents([.medium, .large])
                 }
-                .presentationDetents([.medium, .large])
             }
             .onAppear {
                 if let food {
@@ -410,7 +423,7 @@ struct FoodFormView: View {
                 } else if let prefill {
                     apply(prefill)
                 } else if startScanning {
-                    showScanner = true
+                    activeSheet = .scanner
                 }
                 // After the initial load: a pristine form (or an
                 // untouched prefill) dismisses freely; anything typed
@@ -667,14 +680,27 @@ struct FoodFormView: View {
     }
 
     private func presentPortionSheet() {
-        portionTarget = PortionTarget(
+        portionSheetWasUp = true
+        activeSheet = .portion(PortionTarget(
             name: name.trimmingCharacters(in: .whitespaces),
             kcal: kcal ?? 0,
             sodiumMg: sodiumMg ?? 0,
             nutrients: formNutrients,
             serving: serving,
             defaultCategory: PortionTarget.category(from: category)
-        )
+        ))
+    }
+
+    private func sheetDidDismiss() {
+        // Only the portion sheet's close carries meaning; the scanner
+        // closing is routine.
+        guard portionSheetWasUp else { return }
+        portionSheetWasUp = false
+        // Cancelled portion after Log: the save already happened —
+        // say so instead of silently keeping it.
+        guard !portionDidLog else { return }
+        ToastCenter.shared.show("Saved \(name.trimmingCharacters(in: .whitespaces)) to your library ✓ — not logged")
+        dismiss()
     }
 
     private func log(_ target: PortionTarget, quantity: Double, category: FoodCategory) {

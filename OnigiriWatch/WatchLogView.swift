@@ -91,6 +91,19 @@ private struct WatchEntryEditSheet: View {
     }
 
     var body: some View {
+        // NavigationStack for an explicit Cancel — the bare sheet had no
+        // exit but the system swipe, and no title chrome.
+        NavigationStack {
+            editor
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                    }
+                }
+        }
+    }
+
+    private var editor: some View {
         ScrollView {
             VStack(spacing: 8) {
                 Text(entry.name)
@@ -153,6 +166,17 @@ private struct WatchEntryEditSheet: View {
                 } label: {
                     Text("Remove")
                         .frame(maxWidth: .infinity)
+                }
+
+                // A failed save/remove keeps the sheet up, but the
+                // model's flash renders on the list BEHIND it — mirror
+                // the error here so the failure is visible where the
+                // user is looking (success dismisses, no mirror needed).
+                if model.flashIsError, let flash = model.flash {
+                    Text(flash)
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .multilineTextAlignment(.center)
                 }
             }
             .controlSize(.small)

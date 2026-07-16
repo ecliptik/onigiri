@@ -19,18 +19,61 @@
 <meta name="twitter:image" content="https://ecliptik.github.io/onigiri/media/social-card.png">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍙</text></svg>">
 <style>
-  :root {
+  /* Light is the base — the app's light palette (rice canvas). The
+     resolved theme follows the system via the boot script; light is
+     the fallback when nothing can be determined. */
+  :root, :root[data-theme="light"] {
+    --bg: #fcf5eb;          /* riceCanvas */
+    --bg-raise: #f4e9d6;
+    --card: #ffffff;
+    --line: rgba(150, 104, 47, 0.18);
+    --text: #2b2416;
+    --muted: #6f6654;
+    --toast: #b8823f;       /* riceToast, light-mode depth */
+    --toast-deep: #96682f;
+    --nori: #334d36;        /* deep nori */
+    --paper: #f5d49e;
+    --radius: 20px;
+    --nav-bg: rgba(252, 245, 235, 0.85);
+    --glow-toast: rgba(184, 130, 63, 0.12);
+    --glow-nori: rgba(51, 77, 54, 0.08);
+    --ghost-bg: rgba(184, 130, 63, 0.06);
+    --device-shadow: 0 24px 70px rgba(96, 72, 38, .3), 0 0 100px rgba(184, 130, 63, .08);
+    --shot-shadow: 0 20px 60px rgba(96, 72, 38, .28);
+  }
+  :root[data-theme="dark"] {
     --bg: #131510;          /* warm near-black, a whisper of nori */
-    --bg-raise: #1b1e17;    /* raised sections */
-    --card: #20241b;        /* cards */
+    --bg-raise: #1b1e17;
+    --card: #20241b;
     --line: rgba(227, 179, 107, 0.14);
     --text: #f3ead9;        /* warm rice cream */
     --muted: #b5ac9a;
-    --toast: #e3b36b;       /* riceToast (dark variant) — the accent */
+    --toast: #e3b36b;       /* riceToast, dark-mode brightness */
     --toast-deep: #b8823f;
-    --nori: #8ca88c;        /* nori green — the second accent */
-    --paper: #f5d49e;       /* ricePaper — bright fills, dark text on top */
-    --radius: 20px;
+    --nori: #8ca88c;        /* lifted nori */
+    --paper: #f5d49e;
+    --nav-bg: rgba(19, 21, 16, 0.82);
+    --glow-toast: rgba(227, 179, 107, 0.13);
+    --glow-nori: rgba(140, 168, 140, 0.10);
+    --ghost-bg: rgba(227, 179, 107, 0.05);
+    --device-shadow: 0 24px 80px rgba(0, 0, 0, .55), 0 0 120px rgba(227, 179, 107, .06);
+    --shot-shadow: 0 20px 70px rgba(0, 0, 0, .5);
+  }
+  /* No-JS fallback: honor the system. With JS, the boot script always
+     sets an explicit data-theme, so this never fights the toggle. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131510; --bg-raise: #1b1e17; --card: #20241b;
+      --line: rgba(227, 179, 107, 0.14);
+      --text: #f3ead9; --muted: #b5ac9a;
+      --toast: #e3b36b; --toast-deep: #b8823f; --nori: #8ca88c;
+      --nav-bg: rgba(19, 21, 16, 0.82);
+      --glow-toast: rgba(227, 179, 107, 0.13);
+      --glow-nori: rgba(140, 168, 140, 0.10);
+      --ghost-bg: rgba(227, 179, 107, 0.05);
+      --device-shadow: 0 24px 80px rgba(0, 0, 0, .55), 0 0 120px rgba(227, 179, 107, .06);
+      --shot-shadow: 0 20px 70px rgba(0, 0, 0, .5);
+    }
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   /* overflow-x on BOTH html and body, and clip not hidden: iOS Safari
@@ -39,6 +82,7 @@
   body {
     background: var(--bg);
     color: var(--text);
+    transition: background .3s ease, color .3s ease;
     font: 17px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
@@ -53,7 +97,7 @@
     position: sticky; top: 0; z-index: 50;
     display: flex; align-items: center; gap: 24px;
     padding: 14px clamp(20px, 5vw, 56px);
-    background: rgba(19, 21, 16, 0.82);
+    background: var(--nav-bg);
     backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
     border-bottom: 1px solid transparent;
     transition: border-color .3s;
@@ -68,6 +112,12 @@
     padding: 8px 18px; border-radius: 999px;
   }
   nav .cta:hover { text-decoration: none; filter: brightness(1.06); }
+  .theme-toggle {
+    background: var(--ghost-bg); border: 1px solid var(--line); color: var(--text);
+    width: 38px; height: 38px; border-radius: 999px; font-size: 17px;
+    cursor: pointer; display: grid; place-items: center; line-height: 1;
+  }
+  .theme-toggle:hover { border-color: var(--toast-deep); }
   @media (max-width: 640px) { nav a.link { display: none; } }
 
   /* ---- hero ---- */
@@ -82,8 +132,8 @@
     content: ""; position: absolute; inset: -40% 0 auto;
     height: 130%;
     background:
-      radial-gradient(42% 45% at 50% 30%, rgba(227,179,107,.13), transparent 70%),
-      radial-gradient(30% 35% at 68% 20%, rgba(140,168,140,.10), transparent 70%);
+      radial-gradient(42% 45% at 50% 30%, var(--glow-toast), transparent 70%),
+      radial-gradient(30% 35% at 68% 20%, var(--glow-nori), transparent 70%);
     pointer-events: none;
   }
   .hero-emoji { font-size: clamp(56px, 9vw, 84px); line-height: 1; }
@@ -102,7 +152,7 @@
   }
   .btn.primary { background: var(--paper); color: #131510; }
   .btn.primary:hover { text-decoration: none; filter: brightness(1.06); }
-  .btn.ghost { border: 1px solid var(--line); color: var(--text); background: rgba(227,179,107,.05); }
+  .btn.ghost { border: 1px solid var(--line); color: var(--text); background: var(--ghost-bg); }
   .btn.ghost:hover { text-decoration: none; border-color: var(--toast-deep); }
   .hero-note { margin-top: 16px; color: var(--muted); font-size: 14px; }
   .hero-shot { margin: 56px auto -8px; width: min(320px, 78vw); position: relative; }
@@ -111,14 +161,14 @@
   .device {
     border-radius: 44px; padding: 12px; background: #090a07;
     border: 1px solid rgba(227,179,107,.22);
-    box-shadow: 0 24px 80px rgba(0,0,0,.55), 0 0 120px rgba(227,179,107,.06);
+    box-shadow: var(--device-shadow);
   }
   .device img, .device video { border-radius: 34px; display: block; width: 100%; }
   .device.pad { border-radius: 30px; padding: 12px; }
   .device.pad img { border-radius: 20px; }
   .device.watch { border-radius: 38px; padding: 10px; width: min(230px, 60vw); margin: 0 auto; }
   .device.watch img { border-radius: 30px; }
-  .plain-shot img { border-radius: 24px; border: 1px solid var(--line); box-shadow: 0 20px 70px rgba(0,0,0,.5); }
+  .plain-shot img { border-radius: 24px; border: 1px solid var(--line); box-shadow: var(--shot-shadow); }
 
   /* ---- sections ---- */
   section { padding: clamp(64px, 11vh, 130px) clamp(20px, 5vw, 56px); }
@@ -214,6 +264,18 @@
     .reveal { opacity: 1; transform: none; transition: none; }
   }
 </style>
+<script>
+  // Resolve the theme before first paint: stored choice > system > light.
+  (function () {
+    let theme = "light";
+    try {
+      const stored = localStorage.getItem("theme");
+      if (stored === "dark" || stored === "light") theme = stored;
+      else if (matchMedia("(prefers-color-scheme: dark)").matches) theme = "dark";
+    } catch (e) {}
+    document.documentElement.dataset.theme = theme;
+  })();
+</script>
 </head>
 <body>
 
@@ -224,6 +286,7 @@
   <a class="link" href="#privacy">Privacy</a>
   <a class="link" href="https://github.com/ecliptik/onigiri/wiki/User-Guide">Guide</a>
   <a class="link" href="https://github.com/ecliptik/onigiri/wiki">Wiki</a>
+  <button id="themeToggle" class="theme-toggle" aria-label="Switch between light and dark theme">🌙</button>
   <a class="cta" href="https://github.com/ecliptik/onigiri">GitHub</a>
 </nav>
 
@@ -239,7 +302,7 @@
   </div>
   <p class="hero-note reveal in d3"><a href="#source">Source-available</a> · iOS 18 / watchOS 10+ · Built 100% agentically with <a href="https://claude.com/claude-code">Claude Code</a></p>
   <div class="hero-shot reveal in d3">
-    <div class="device"><img src="showcase/light/today.png" alt="The Today screen: calorie balance headline, sodium and water, the daily goal gauge, energy meters, and the log" loading="eager"></div>
+    <div class="device"><img src="showcase/dark/today.png" data-app-light="showcase/light/today.png" data-app-dark="showcase/dark/today.png" alt="The Today screen: calorie balance headline, sodium and water, the daily goal gauge, energy meters, and the log" loading="eager"></div>
   </div>
 </header>
 
@@ -275,7 +338,7 @@
         <li><strong>Every entry editable</strong> — swipe to adjust or delete, one-tap undo.</li>
       </ul>
     </div>
-    <div class="media reveal d1"><div class="shot device"><video autoplay muted loop playsinline preload="metadata" poster="media/day-swipe-poster.jpg" aria-label="Swiping through three days on the Today screen and back to today"><source src="media/day-swipe.mp4" type="video/mp4"></video></div></div>
+    <div class="media reveal d1"><div class="shot device"><video autoplay muted loop playsinline preload="metadata" src="media/day-swipe-dark.mp4" poster="media/day-swipe-dark-poster.jpg" data-app-light-src="media/day-swipe.mp4" data-app-light-poster="media/day-swipe-poster.jpg" data-app-dark-src="media/day-swipe-dark.mp4" data-app-dark-poster="media/day-swipe-dark-poster.jpg" aria-label="Swiping through three days on the Today screen and back to today"></video></div></div>
   </div>
 
   <div class="row flip">
@@ -290,7 +353,7 @@
         <li><strong>Duplicates caught</strong> by barcode, so your library stays clean.</li>
       </ul>
     </div>
-    <div class="media reveal d1"><div class="shot device"><video autoplay muted loop playsinline preload="metadata" poster="media/add-food-poster.jpg" aria-label="Tapping the add button, then logging a favorite food in one tap"><source src="media/add-food.mp4" type="video/mp4"></video></div></div>
+    <div class="media reveal d1"><div class="shot device"><video autoplay muted loop playsinline preload="metadata" src="media/add-food-dark.mp4" poster="media/add-food-dark-poster.jpg" data-app-light-src="media/add-food.mp4" data-app-light-poster="media/add-food-poster.jpg" data-app-dark-src="media/add-food-dark.mp4" data-app-dark-poster="media/add-food-dark-poster.jpg" aria-label="Tapping the add button, then logging a favorite food in one tap"></video></div></div>
   </div>
 
   <div class="row">
@@ -305,7 +368,7 @@
         <li><strong>Aggressive plans get flagged</strong> — the fix is a later date, not eating less.</li>
       </ul>
     </div>
-    <div class="media reveal d1"><div class="shot device"><img src="showcase/light/goal.png" alt="The Goal tab with weight trend and projection" loading="lazy"></div></div>
+    <div class="media reveal d1"><div class="shot device"><img src="showcase/dark/goal.png" data-app-light="showcase/light/goal.png" data-app-dark="showcase/dark/goal.png" alt="The Goal tab with weight trend and projection" loading="lazy"></div></div>
   </div>
 
   <div class="row flip">
@@ -321,7 +384,7 @@
         <li><strong>Month stats</strong>: goal-met rate, total deficit, and what the scale did.</li>
       </ul>
     </div>
-    <div class="media reveal d1"><div class="shot device"><img src="showcase/light/calendar.png" alt="Calendar with earned onigiri badges and streak" loading="lazy"></div></div>
+    <div class="media reveal d1"><div class="shot device"><img src="showcase/dark/calendar.png" data-app-light="showcase/light/calendar.png" data-app-dark="showcase/dark/calendar.png" alt="Calendar with earned onigiri badges and streak" loading="lazy"></div></div>
   </div>
 </section>
 
@@ -351,7 +414,7 @@
     <div class="surface reveal">
       <h3>On your iPad</h3>
       <div class="media">
-        <div class="wide"><div class="device pad"><img src="showcase/light/ipad-landscape.png" alt="Today on iPad: sidebar navigation with the summary beside the log" loading="lazy"></div></div>
+        <div class="wide"><div class="device pad"><img src="showcase/dark/ipad-landscape.png" data-app-light="showcase/light/ipad-landscape.png" data-app-dark="showcase/dark/ipad-landscape.png" alt="Today on iPad: sidebar navigation with the summary beside the log" loading="lazy"></div></div>
       </div>
       <p class="caption">On iPad, the day's summary and its log sit side by side with a sidebar for navigation — and it all works in Split View, Slide Over, and Stage Manager.</p>
     </div>
@@ -417,9 +480,47 @@
   }, { threshold: 0.12, rootMargin: "0px 0px -40px" });
   document.querySelectorAll(".reveal:not(.in)").forEach(el => io.observe(el));
   // Reduced motion: no auto-playing videos — the posters stand in.
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduceMotion) {
     document.querySelectorAll("video[autoplay]").forEach(v => { v.removeAttribute("autoplay"); v.pause(); });
   }
+
+  // Theme: stored choice > system > light. The site inverts the app
+  // assets — dark site shows the light app, light site the dark app.
+  const themeQuery = matchMedia("(prefers-color-scheme: dark)");
+  const toggle = document.getElementById("themeToggle");
+  function storedTheme() {
+    try { const t = localStorage.getItem("theme"); if (t === "dark" || t === "light") return t; } catch (e) {}
+    return null;
+  }
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    toggle.textContent = theme === "dark" ? "☀️" : "🌙";
+    const appMode = theme === "dark" ? "light" : "dark";
+    document.querySelectorAll("img[data-app-light]").forEach(el => {
+      const src = el.getAttribute("data-app-" + appMode);
+      if (src && el.getAttribute("src") !== src) el.setAttribute("src", src);
+    });
+    document.querySelectorAll("video[data-app-light-src]").forEach(v => {
+      const src = v.getAttribute("data-app-" + appMode + "-src");
+      if (src && v.getAttribute("src") !== src) {
+        v.setAttribute("poster", v.getAttribute("data-app-" + appMode + "-poster"));
+        v.setAttribute("src", src);
+        v.load();
+        if (!reduceMotion) v.play().catch(() => {});
+      }
+    });
+  }
+  toggle.addEventListener("click", () => {
+    const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    try { localStorage.setItem("theme", next); } catch (e) {}
+    applyTheme(next);
+  });
+  // Follow live system changes unless the user chose explicitly.
+  themeQuery.addEventListener("change", e => {
+    if (!storedTheme()) applyTheme(e.matches ? "dark" : "light");
+  });
+  applyTheme(storedTheme() || (themeQuery.matches ? "dark" : "light"));
   // Nav hairline once the page moves.
   const nav = document.getElementById("nav");
   addEventListener("scroll", () => nav.classList.toggle("scrolled", scrollY > 8), { passive: true });

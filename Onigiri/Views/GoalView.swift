@@ -13,32 +13,15 @@ struct GoalView: View {
     @State private var targetDate = Calendar.current.date(byAdding: .day, value: 90, to: .now) ?? .now
     @State private var mode: String = GoalMode.lose
     @State private var manualWeightLb: Double?
-    @State private var healthWeightLb: Double?
-    @State private var averageBurnKcal: Double?
-    /// Today's actual burn, floor for the plan's expected burn (the
-    /// shared clamp — without it this preview lags Today on active days).
-    @State private var todayBurnKcal: Double = 0
-    @State private var weightHistory: [WeightTrend.Point] = []
-    @State private var dailyTotals: [DayEnergyTotals] = []
-    /// Cached 7-day smoothing of weightHistory (see .task).
-    @State private var smoothedHistory: [WeightTrend.Point] = []
-    /// The chart's derived numbers, cached like the smoothing: as
-    /// computed properties they re-derived (least-squares included) on
-    /// every body evaluation, and the tab-bar pin's scroll-state write
-    /// re-renders this screen mid-scroll — the Goal scroll "stick".
-    @State private var projectedDate: Date?
-    @State private var chartYDomain: ClosedRange<Double> = 0...1
-    @State private var predicted30Lb: Double?
-    @State private var actual30Lb: Double?
-    /// Staleness stamp for the .task reads (see .task).
-    @State private var lastLoaded: Date?
     @State private var loaded = false
     @State private var confirmingGoalRemoval = false
     @FocusState private var weightFieldFocused: Bool
 
-    private let health = HealthKitService()
+    /// HealthKit reads and derived chart stats live in the model (the
+    /// TodayModel shape) — the view keeps only form state.
+    @State private var model = GoalModel()
 
-    private var currentWeightLb: Double? { healthWeightLb ?? manualWeightLb }
+    private var currentWeightLb: Double? { model.healthWeightLb ?? manualWeightLb }
 
     private var isMaintenance: Bool { mode == GoalMode.maintain }
 
@@ -58,7 +41,7 @@ struct GoalView: View {
         if isMaintenance { return false }
         return goal.targetWeightLb != targetWeightLb
             || !Calendar.current.isDate(goal.targetDate, inSameDayAs: targetDate)
-            || (healthWeightLb == nil && goal.fallbackCurrentWeightLb != manualWeightLb)
+            || (model.healthWeightLb == nil && goal.fallbackCurrentWeightLb != manualWeightLb)
     }
 
     private var plan: CalorieBudget.Plan? {
@@ -75,8 +58,8 @@ struct GoalView: View {
             currentWeightLb: currentWeightLb,
             targetWeightLb: targetWeightLb,
             targetDate: targetDate,
-            averageDailyBurnKcal: averageBurnKcal,
-            todayActualBurnKcal: todayBurnKcal
+            averageDailyBurnKcal: model.averageBurnKcal,
+            todayActualBurnKcal: model.todayBurnKcal
         )
     }
 
@@ -105,7 +88,7 @@ struct GoalView: View {
                 trendSection
 
                 Section("Current weight") {
-                    if let healthWeightLb {
+                    if let healthWeightLb = model.healthWeightLb {
                         LabeledContent("From Apple Health") {
                             Text("\(healthWeightLb, format: .number.precision(.fractionLength(1))) lb")
                         }
@@ -161,18 +144,18 @@ struct GoalView: View {
                         LabeledContent("Average burn") {
                             // The fallback used to present as fact — the
                             // whole budget inherits this guess.
-                            Text(averageBurnKcal.map {
+                            Text(model.averageBurnKcal.map {
                                 "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
                             } ?? "≈ 2000 kcal/day (assumed)")
                         }
-                        if averageBurnKcal == nil {
+                        if model.averageBurnKcal == nil {
                             Text("No activity data in Health yet — the plan assumes 2000 kcal/day until burn history exists.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         // Is the math showing up on the scale? Trailing 30
                         // days of deficit vs the smoothed weigh-in change.
-                        if let predicted = predicted30Lb, let actual = actual30Lb {
+                        if let predicted = model.trend.predicted30Lb, let actual = model.trend.actual30Lb {
                             LabeledContent("Last 30 days") {
                                 VStack(alignment: .trailing, spacing: 2) {
                                     Text("≈ \(signedLb(predicted)) predicted")
@@ -241,31 +224,7 @@ struct GoalView: View {
             }
         }
         .task {
-            // TabView re-runs this on every visit; a quick tab bounce
-            // shouldn't replay four HealthKit reads over 90-day windows
-            // (TodayModel's staleness rule). Day-roll still refreshes.
-            if let last = lastLoaded,
-               Date.now.timeIntervalSince(last) < 30,
-               Calendar.current.isDate(last, inSameDayAs: .now) {
-            } else {
-                // Independent reads — concurrent, not serial (the trend
-                // chart used to populate a query-chain late).
-                async let weightRead = health.latestBodyMassLb()
-                async let burnRead = health.averageDailyBurnKcal()
-                async let historyRead = health.bodyMassHistory()
-                async let totalsRead = health.dailyEnergyTotals()
-                async let todayRead = health.todaySummary()
-                healthWeightLb = (try? await weightRead) ?? nil
-                averageBurnKcal = (try? await burnRead) ?? nil
-                weightHistory = (try? await historyRead) ?? []
-                dailyTotals = (try? await totalsRead) ?? []
-                todayBurnKcal = ((try? await todayRead) ?? .zero).totalBurnKcal
-                // Smooth once per load, not per keystroke: typing a target
-                // weight re-evaluates body per digit, and each evaluation
-                // re-averaged ~90 points and re-fit the slope.
-                smoothedHistory = WeightTrend.movingAverage(weightHistory, windowDays: 7)
-                lastLoaded = .now
-            }
+            await model.loadIfStale()
             if !loaded, let goal = goals.first {
                 targetWeightLb = goal.targetWeightLb
                 targetDate = goal.targetDate
@@ -279,50 +238,16 @@ struct GoalView: View {
         .onChange(of: mode) { deriveTrendStats() }
     }
 
-    // MARK: - Predicted vs actual (trailing 30 days)
-
-    /// Recompute the cached chart stats (see the @State block above).
-    /// Called when the HealthKit reads land and when the target or
-    /// mode edits change what the chart derives from.
+    /// The chart stats derive from the model's Health data plus the
+    /// form's live target/mode (kit math, unit-tested there).
     private func deriveTrendStats() {
-        let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: .now) ?? .now
-        // Nil until the window has logged days — no data, no claim.
-        let deficits = dailyTotals
-            .filter { $0.day >= thirtyDaysAgo }
-            .map(\.deficitKcal)
-        predicted30Lb = deficits.isEmpty
-            ? nil
-            : WeightTrend.Change.predictedLb(totalDeficitKcal: deficits.reduce(0, +))
-        actual30Lb = WeightTrend.Change.actualLb(history: weightHistory, from: thirtyDaysAgo, to: .now)
-
-        // Projected date of reaching the target at the recent trend,
-        // from the least-squares slope of the last three weeks of
-        // smoothed weigh-ins.
-        projectedDate = nil
-        if let target = targetWeightLb,
-           let current = smoothedHistory.last?.weightLb,
-           current > target,
-           let slope = WeightTrend.slopeLbPerDay(smoothedHistory.suffix(21).map { $0 }),
-           slope < -0.01 {
-            let days = (current - target) / -slope
-            if days < 365 * 3 {
-                projectedDate = Calendar.current.date(byAdding: .day, value: Int(days.rounded(.up)), to: .now)
-            }
-        }
-
-        let weights = weightHistory.map(\.weightLb)
-            + (isMaintenance ? [] : [targetWeightLb].compactMap(\.self))
-        if let lo = weights.min(), let hi = weights.max() {
-            chartYDomain = (lo - 2)...(hi + 2)
-        } else {
-            chartYDomain = 0...1
-        }
+        model.deriveTrendStats(targetWeightLb: targetWeightLb, isMaintenance: isMaintenance)
     }
 
     /// The chart's one-sentence VoiceOver reading.
     private var chartSummary: String {
         var parts: [String] = []
-        if let latest = smoothedHistory.last?.weightLb {
+        if let latest = model.smoothedHistory.last?.weightLb {
             parts.append("7-day average \(latest.formatted(.number.precision(.fractionLength(1)))) pounds")
         }
         if !isMaintenance, let target = targetWeightLb {
@@ -343,9 +268,9 @@ struct GoalView: View {
         // No header: it leads the screen now, and the chart speaks for
         // itself.
         Section {
-            if weightHistory.count >= 2 {
+            if model.weightHistory.count >= 2 {
                 Chart {
-                    ForEach(Array(weightHistory.enumerated()), id: \.offset) { _, point in
+                    ForEach(Array(model.weightHistory.enumerated()), id: \.offset) { _, point in
                         PointMark(
                             x: .value("Date", point.date),
                             y: .value("Weight", point.weightLb)
@@ -354,7 +279,7 @@ struct GoalView: View {
                         .opacity(0.35)
                         .symbolSize(20)
                     }
-                    ForEach(Array(smoothedHistory.enumerated()), id: \.offset) { _, point in
+                    ForEach(Array(model.smoothedHistory.enumerated()), id: \.offset) { _, point in
                         LineMark(
                             x: .value("Date", point.date),
                             y: .value("7-day average", point.weightLb)
@@ -373,7 +298,7 @@ struct GoalView: View {
                             }
                     }
                 }
-                .chartYScale(domain: chartYDomain)
+                .chartYScale(domain: model.trend.chartYDomain)
                 // One spoken sentence, not ~90 unlabeled point stops.
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Weight trend chart")
@@ -385,7 +310,7 @@ struct GoalView: View {
                     // No target line in maintenance — the chart is just
                     // the scale holding (or not).
                     EmptyView()
-                } else if let projectedDate {
+                } else if let projectedDate = model.trend.projectedDate {
                     Label {
                         Text("On this trend, you'll hit your target around \(projectedDate, format: .dateTime.month(.wide).day())")
                     } icon: {
@@ -416,7 +341,7 @@ struct GoalView: View {
         GoalUpsert.save(
             targetLb: target,
             targetDate: targetDate,
-            healthWeightLb: healthWeightLb,
+            healthWeightLb: model.healthWeightLb,
             manualWeightLb: manualWeightLb,
             mode: mode == GoalMode.lose ? nil : mode,
             goals: goals,

@@ -48,6 +48,9 @@ targets:
         # xcodegen defaults the generated plist to a literal "1.0" unless
         # told to reference the build setting.
         CFBundleShortVersionString: $(MARKETING_VERSION)
+        # HTTPS-only (system TLS); no proprietary encryption — skips the
+        # export-compliance prompt on every upload.
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         # Full multitasking on iPad (Split View/Slide Over/Stage
         # Manager) requires supporting all four orientations.
@@ -132,6 +135,7 @@ targets:
       properties:
         CFBundleDisplayName: Onigiri
         CFBundleShortVersionString: $(MARKETING_VERSION)
+        ITSAppUsesNonExemptEncryption: false
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.ecliptik.Onigiri
         WKRunsIndependentlyOfCompanionApp: true

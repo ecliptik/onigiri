@@ -1052,29 +1052,38 @@ private struct LogRowSwipeActions: ViewModifier {
     @State private var offset: CGFloat = 0
     /// Where the row currently rests: 0, or ±revealWidth when open.
     @State private var restOffset: CGFloat = 0
+    /// Set once, when the drag crosses the activation threshold: the axis
+    /// is LOCKED (a mid-swipe diagonal wobble no longer freezes the row the
+    /// way the old frame-by-frame width>height guard did) and the baseline
+    /// finger position is captured so the row tracks from 0 instead of
+    /// popping ~15pt to "catch up" to the threshold travel.
+    @State private var horizontalDrag: Bool?
+    @State private var dragStart: CGFloat = 0
 
     /// Floating circular buttons, like the system's iOS 26 swipe pills.
     private static let buttonSize: CGFloat = 44
     private static let revealWidth: CGFloat = 60
     private static let fullSwipe: CGFloat = 220
 
-    /// How far past the reveal the row may visually travel, however fast or
-    /// far the finger goes. Capping this bounds the settle's snap-back
-    /// distance, so a fast flick no longer snaps back abruptly (a slow
-    /// swipe barely overshot, which is why only fast swipes felt too quick
-    /// — the user, 2026-07-15).
-    private static let maxOvershoot: CGFloat = 14
+    /// How far past the reveal the row keeps stretching, asymptotically —
+    /// the visible offset approaches revealWidth + this and never hard-caps,
+    /// so the row follows the finger the whole way to the commit instead of
+    /// freezing partway (a hard cap read as "stiff/abrupt"; native
+    /// .swipeActions keeps stretching).
+    private static let stretchLimit: CGFloat = 90
 
     /// Rubber-band the row past the reveal so it doesn't slide 1:1 with the
-    /// finger — native .swipeActions resists once the button is exposed,
-    /// and without this the custom row felt "loose/too quick" (the user,
-    /// 2026-07-15). The reveal/full-swipe DECISIONS stay on true finger
-    /// travel (see onEnded); only the visible offset is damped and capped.
+    /// finger — native .swipeActions resists once the button is exposed.
+    /// Elastic, asymptotic: the drag grows the further you pull, easing
+    /// toward revealWidth + stretchLimit with no hard stop. The reveal/
+    /// full-swipe DECISIONS stay on true finger travel (see onEnded); only
+    /// the visible offset is damped.
     private static func rubberBand(_ raw: CGFloat) -> CGFloat {
         guard abs(raw) > revealWidth else { return raw }
         let sign: CGFloat = raw < 0 ? -1 : 1
-        let damped = revealWidth + (abs(raw) - revealWidth) * 0.4
-        return sign * min(damped, revealWidth + maxOvershoot)
+        let extra = abs(raw) - revealWidth
+        let damped = revealWidth + extra / (1 + extra / stretchLimit)
+        return sign * damped
     }
 
     /// Native-style zoom: the pill scales up from small as it's revealed
@@ -1139,17 +1148,34 @@ private struct LogRowSwipeActions: ViewModifier {
             .gesture(
                 DragGesture(minimumDistance: 15)
                     .onChanged { value in
-                        guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                        var raw = restOffset + value.translation.width
+                        // Lock the axis once, on first movement. A vertical
+                        // start is left to the scroll; a horizontal one owns
+                        // the rest of the gesture even if the finger drifts.
+                        if horizontalDrag == nil {
+                            horizontalDrag = abs(value.translation.width) > abs(value.translation.height)
+                            dragStart = value.translation.width
+                        }
+                        guard horizontalDrag == true else { return }
+                        // Track from where the drag engaged (subtract the
+                        // threshold travel) so the row follows the finger
+                        // smoothly instead of popping to catch up.
+                        var raw = restOffset + (value.translation.width - dragStart)
                         if onEdit == nil { raw = min(0, raw) }
                         offset = Self.rubberBand(raw)
                         if abs(offset) > 10 { swipe.active = true }
                     }
                     .onEnded { value in
-                        // Decisions on true finger travel, not the damped
-                        // offset — so rubber-banding changes only the feel,
-                        // not how far you must swipe to reveal or commit.
-                        var raw = restOffset + value.translation.width
+                        let wasHorizontal = horizontalDrag == true
+                        let start = dragStart
+                        horizontalDrag = nil
+                        guard wasHorizontal else {
+                            swipe.active = false
+                            return
+                        }
+                        // Decisions on true finger travel (from engagement),
+                        // not the damped offset — rubber-banding changes only
+                        // the feel, not how far you must swipe to act.
+                        var raw = restOffset + (value.translation.width - start)
                         if onEdit == nil { raw = min(0, raw) }
                         if raw < -Self.fullSwipe {
                             settle(0)
@@ -1200,11 +1226,11 @@ private struct LogRowSwipeActions: ViewModifier {
     }
 
     private func settle(_ value: CGFloat) {
-        // .smooth (no bounce), not .snappy: the row glides to rest instead
-        // of snapping back abruptly, matching the native swipe settle (the
-        // user, 2026-07-15). Only the swipe uses this — section-collapse
-        // animations keep .snappy.
-        withAnimation(.smooth(duration: 0.45)) { offset = value }
+        // A gentle spring, not a fixed-duration ease: the row settles with
+        // the same bit of life as the native .swipeActions release (barely
+        // damped, no visible bounce). Only the swipe uses this — section-
+        // collapse animations keep .snappy.
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { offset = value }
         restOffset = value
     }
 }

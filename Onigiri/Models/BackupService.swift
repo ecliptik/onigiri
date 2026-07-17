@@ -16,6 +16,17 @@ enum BackupService {
         ).first else { return nil }
         let directory = documents.appendingPathComponent("Backups", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // Elevate past the iOS default (completeUntilFirstUserAuthentication,
+        // which already encrypts everything at rest): the library + weight
+        // goal are personal, and all backup I/O is foreground/UI-driven, so
+        // .complete — inaccessible while the device is LOCKED — costs
+        // nothing here and closes the powered-on-but-locked window. New
+        // files in the directory inherit this; the write also sets it
+        // explicitly. NOT applied to the SwiftData store or App Group
+        // defaults: those are read in the background (watch sync,
+        // lock-screen widgets) and .complete would break them.
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.complete], ofItemAtPath: directory.path)
         return directory
     }
 
@@ -53,7 +64,10 @@ enum BackupService {
         // the 2026-07-16 lesson). Fixed-locale, filename-safe.
         let url = directory.appendingPathComponent("onigiri-backup-\(Self.stampFormatter.string(from: now)).json")
         do {
-            try data.write(to: url, options: .atomic)
+            // .complete: encrypted and unreadable while the device is
+            // locked (see backupsDirectory). Written only from the
+            // foreground, so the lock restriction never bites.
+            try data.write(to: url, options: [.atomic, .completeFileProtection])
         } catch {
             return nil
         }

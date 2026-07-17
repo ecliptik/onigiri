@@ -3,7 +3,9 @@ import SwiftData
 import UIKit
 import OnigiriKit
 
-enum AppTab: Hashable {
+/// String-backed so @SceneStorage can persist the selection across
+/// scene teardowns.
+enum AppTab: String, Hashable {
     case today, foods, goal, calendar
     /// The detached corner "+" (the system search-tab slot, Music-style).
     /// Never stays selected — ContentView bounces it and routes.
@@ -13,7 +15,10 @@ enum AppTab: Hashable {
 struct ContentView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.scenePhase) private var scenePhase
-    @State private var selectedTab: AppTab = .today
+    /// Restored across scene teardowns (iPad multitasking, memory
+    /// pressure) so the app reopens on the tab it was left on; a fresh
+    /// launch still lands on Today, the app's home.
+    @SceneStorage("selectedTab") private var selectedTab: AppTab = .today
     @State private var quickActions = QuickActions.shared
     @AppStorage(SharedStore.hasOnboardedKey, store: SharedStore.defaults) private var hasOnboarded = false
     /// Latched in the task below: once onboarding is showing, saving a
@@ -44,6 +49,11 @@ struct ContentView: View {
             }
         }
         .task {
+            // Scene restoration can hand back .log (the bounce-only "+"
+            // slot) if the snapshot landed mid-bounce; restoring INTO it
+            // renders Color.clear and the bounce onChange never fires
+            // for an initial value. Land on home instead.
+            if selectedTab == .log { selectedTab = .today }
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--seed-sample-data") {
                 DebugSeeder.seedLibraryIfEmpty(context: context)

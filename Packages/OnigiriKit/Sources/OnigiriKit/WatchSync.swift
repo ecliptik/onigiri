@@ -128,6 +128,26 @@ public enum WatchSync {
     static let goalKey = "sync.goal"
     static let trackedKey = "sync.trackedMetrics"
 
+    /// The one place the sync wire format is configured. Every encode and
+    /// decode in this file must use these — SyncedGoal.targetDate crosses
+    /// devices and app versions, so a single call site drifting to its own
+    /// strategy would silently corrupt every round-trip (the decode paths
+    /// are all `try?`). `.deferredToDate` is the historical default that
+    /// deployed watches already have on disk and on the wire; changing it
+    /// would orphan their stored goal, so it's pinned explicitly.
+    /// Computed, not stored: JSONEncoder/JSONDecoder aren't Sendable.
+    static var encoder: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .deferredToDate
+        return encoder
+    }
+
+    static var decoder: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .deferredToDate
+        return decoder
+    }
+
     /// The slot settings that ride the context, values stringified
     /// (targets included — store() re-parses the numeric ones).
     public static var trackedMetricKeys: [String] { [
@@ -170,16 +190,16 @@ public enum WatchSync {
             trackedKey: trackedMetricSettings,
             SharedStore.sodiumLimitKey: sodiumLimitMg,
         ]
-        if let data = try? JSONEncoder().encode(meals) {
+        if let data = try? encoder.encode(meals) {
             context[mealsKey] = data
         }
-        if let data = try? JSONEncoder().encode(recentFoods) {
+        if let data = try? encoder.encode(recentFoods) {
             context[recentFoodsKey] = data
         }
-        if let data = try? JSONEncoder().encode(favorites) {
+        if let data = try? encoder.encode(favorites) {
             context[favoritesKey] = data
         }
-        if let goal, let data = try? JSONEncoder().encode(goal) {
+        if let goal, let data = try? encoder.encode(goal) {
             context[goalKey] = data
         }
         return context
@@ -189,18 +209,18 @@ public enum WatchSync {
 
     public static func parse(_ context: [String: Any]) -> SyncPayload {
         let meals: [SyncedMeal]? = (context[mealsKey] as? Data)
-            .flatMap { try? JSONDecoder().decode([SyncedMeal].self, from: $0) }
+            .flatMap { try? decoder.decode([SyncedMeal].self, from: $0) }
         let goal: GoalUpdate
         if let data = context[goalKey] as? Data {
-            goal = (try? JSONDecoder().decode(SyncedGoal.self, from: data))
+            goal = (try? decoder.decode(SyncedGoal.self, from: data))
                 .map(GoalUpdate.set) ?? .keep
         } else {
             goal = .clear
         }
         let recentFoods: [SyncedMeal]? = (context[recentFoodsKey] as? Data)
-            .flatMap { try? JSONDecoder().decode([SyncedMeal].self, from: $0) }
+            .flatMap { try? decoder.decode([SyncedMeal].self, from: $0) }
         let favorites: [SyncedMeal]? = (context[favoritesKey] as? Data)
-            .flatMap { try? JSONDecoder().decode([SyncedMeal].self, from: $0) }
+            .flatMap { try? decoder.decode([SyncedMeal].self, from: $0) }
         return SyncPayload(
             meals: meals,
             recentFoods: recentFoods,
@@ -219,18 +239,18 @@ public enum WatchSync {
 
     public static func store(_ payload: SyncPayload) {
         let defaults = SharedStore.defaults
-        if let meals = payload.meals, let data = try? JSONEncoder().encode(meals) {
+        if let meals = payload.meals, let data = try? encoder.encode(meals) {
             defaults.set(data, forKey: mealsKey)
         }
-        if let recents = payload.recentFoods, let data = try? JSONEncoder().encode(recents) {
+        if let recents = payload.recentFoods, let data = try? encoder.encode(recents) {
             defaults.set(data, forKey: recentFoodsKey)
         }
-        if let favorites = payload.favorites, let data = try? JSONEncoder().encode(favorites) {
+        if let favorites = payload.favorites, let data = try? encoder.encode(favorites) {
             defaults.set(data, forKey: favoritesKey)
         }
         switch payload.goal {
         case .set(let goal):
-            if let data = try? JSONEncoder().encode(goal) {
+            if let data = try? encoder.encode(goal) {
                 defaults.set(data, forKey: goalKey)
             }
         case .clear:
@@ -272,21 +292,21 @@ public enum WatchSync {
 
     public static func loadMeals() -> [SyncedMeal] {
         guard let data = SharedStore.defaults.data(forKey: mealsKey) else { return [] }
-        return (try? JSONDecoder().decode([SyncedMeal].self, from: data)) ?? []
+        return (try? decoder.decode([SyncedMeal].self, from: data)) ?? []
     }
 
     public static func loadRecentFoods() -> [SyncedMeal] {
         guard let data = SharedStore.defaults.data(forKey: recentFoodsKey) else { return [] }
-        return (try? JSONDecoder().decode([SyncedMeal].self, from: data)) ?? []
+        return (try? decoder.decode([SyncedMeal].self, from: data)) ?? []
     }
 
     public static func loadFavorites() -> [SyncedMeal] {
         guard let data = SharedStore.defaults.data(forKey: favoritesKey) else { return [] }
-        return (try? JSONDecoder().decode([SyncedMeal].self, from: data)) ?? []
+        return (try? decoder.decode([SyncedMeal].self, from: data)) ?? []
     }
 
     public static func loadGoal() -> SyncedGoal? {
         guard let data = SharedStore.defaults.data(forKey: goalKey) else { return nil }
-        return try? JSONDecoder().decode(SyncedGoal.self, from: data)
+        return try? decoder.decode(SyncedGoal.self, from: data)
     }
 }

@@ -61,6 +61,14 @@ final class OnigiriUITests: XCTestCase {
         switchTab(in: app, to: "Foods")
         switchTab(in: app, to: "Today")
 
+        // Fail fast on stale sim state before the flow gets going: every
+        // --seed-sample-data launch ADDS HealthKit samples, so the
+        // hardcoded totals this test asserts (24→36 oz water, 154 g
+        // protein, the 3-day streak) hold only on a freshly-erased
+        // simulator pair. Without this guard a stale pair surfaces as a
+        // cryptic timeout deep in the flow.
+        assertFreshlySeededState(in: app)
+
         // Seeded food correlations should appear in the Today log. Meal
         // sections start collapsed, so expand them to see the entry rows.
         XCTAssertTrue(
@@ -650,6 +658,36 @@ final class OnigiriUITests: XCTestCase {
             tapIfExists(app.buttons["Done"])
         }
         shot("today-final")
+    }
+
+    /// Stale-sim tripwire for the seeded flow: the hydration row is the
+    /// cleanest canary because every --seed-sample-data launch adds
+    /// exactly 24 oz of water, so anything but "24 / …" up front means
+    /// the paired sims carry samples from an earlier run and every
+    /// hardcoded total downstream is off. Fails with the fix (erase both
+    /// sims — they share Health data) instead of a cryptic timeout later.
+    @MainActor
+    private func assertFreshlySeededState(in app: XCUIApplication) {
+        let hydration = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS 'oz water'")
+        ).firstMatch
+        // No hydration row at all is a different failure — leave it to
+        // the flow's own assertions, which describe what's missing.
+        guard hydration.waitForExistence(timeout: 20) else { return }
+        if !hydration.label.hasPrefix("24 /") {
+            // Abort outright — every assertion past this point would just
+            // time out against the stale totals.
+            continueAfterFailure = false
+            XCTFail(
+                """
+                Stale simulator Health data: the hydration row reads \
+                "\(hydration.label)" but a fresh seed yields "24 / 64 oz water". \
+                --seed-sample-data ADDS samples on every launch — erase BOTH \
+                paired simulators (xcrun simctl erase <phone-udid> <watch-udid>; \
+                they share Health data) and rerun. See CLAUDE.md.
+                """
+            )
+        }
     }
 
     /// Today's meal-slot sections start collapsed; their header buttons say

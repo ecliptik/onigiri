@@ -36,6 +36,25 @@ cd Packages/OnigiriKit && swift test     # pure-logic tests; ALSO needs the
   # DEVELOPER_DIR prefix or @Model/#Preview macro plugins aren't found.
 ```
 
+- `OnigiriTests` (app-hosted unit tests) is the Foundation Models eval
+  suite for `FoodIntelligence` — golden sets with plausibility gates for
+  describe-it, meal names, and label refinement. Opt-in (minutes of
+  inference) and self-skipping: it needs `TEST_RUNNER_ONIGIRI_AI_EVALS=1`
+  AND an available model (an iOS 26+ simulator works: verified 2026-07-16
+  on the 26.5 sim WITH the host Mac's Apple Intelligence off, even though
+  macOS-side FoundationModels reported appleIntelligenceNotEnabled — trust
+  the suite's own skip/run behavior, and never trust a green run without
+  checking for skips). Re-run after ANY prompt
+  change in FoodIntelligence.swift and after OS updates (the model moves
+  under the app). Thresholds live in `Gate` — set before tuning; change
+  them only deliberately, in a commit that says why.
+
+```sh
+TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
+  -scheme Onigiri -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+  -derivedDataPath build test -only-testing:OnigiriTests
+```
+
 - Commits are GPG-signed: run `git commit` with the sandbox disabled (gpg needs
   `~/.gnupg`). If it fails with "Operation cancelled", the passphrase cache
   expired and pinentry can't prompt from the agent shell — ask the user to run

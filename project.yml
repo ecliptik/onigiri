@@ -25,7 +25,7 @@ settings:
     SWIFT_APPROACHABLE_CONCURRENCY: YES
     CODE_SIGN_STYLE: Automatic
     CURRENT_PROJECT_VERSION: 2
-    MARKETING_VERSION: "2.3.0"
+    MARKETING_VERSION: "2.3.1"
 
 targets:
   Onigiri:
@@ -188,17 +188,38 @@ targets:
     dependencies:
       - target: Onigiri
 
+  # App-hosted unit tests — today the Foundation Models eval suite
+  # (FoodIntelligence lives in the app target, which the kit's pure
+  # swift-test suite can't reach). The evals are opt-in via
+  # TEST_RUNNER_ONIGIRI_AI_EVALS=1 and skip without it, so this target
+  # costs a normal test run nothing.
+  OnigiriTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [OnigiriTests]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        # Same as OnigiriUITests: a MainActor default isolates the whole
+        # XCTestCase subclass and collides with its nonisolated ObjC
+        # inits. Tests opt into @MainActor explicitly.
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+    dependencies:
+      - target: Onigiri
+
 schemes:
   Onigiri:
     build:
       targets:
         Onigiri: all
         OnigiriUITests: [test]
+        OnigiriTests: [test]
     run:
       config: Debug
     test:
       targets:
         - OnigiriUITests
+        - OnigiriTests
   OnigiriWatch:
     build:
       targets:

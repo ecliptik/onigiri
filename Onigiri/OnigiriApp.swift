@@ -54,6 +54,15 @@ struct OnigiriApp: App {
                     WidgetReloader.flushNow()
                 }
             }
+            // Reminders bake their numbers in at planning time, so a log
+            // arriving from OUTSIDE the app UI (watch, widget button,
+            // Control Center, Siri, another Health app) must replan or
+            // the pre-scheduled bodies go stale — the 11 AM water
+            // check-in read "0 of 72 oz" after a morning of watch-logged
+            // water (2026-07-16). AWAITED, not fired-and-forgotten: the
+            // wake suspends after the observer completes, and a detached
+            // replan would be stranded mid-flight.
+            await ReminderScheduler.shared.replanNow(afterMutation: true)
         }
         _logObserver = State(initialValue: observer)
     }

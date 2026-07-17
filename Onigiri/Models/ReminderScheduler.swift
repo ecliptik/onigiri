@@ -45,7 +45,9 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
         Task { await replanNow(afterMutation: afterMutation) }
     }
 
-    private func replanNow(afterMutation: Bool) async {
+    /// Internal, awaitable: the HealthKit observer's background wake must
+    /// finish the replan BEFORE the observer completion suspends the app.
+    func replanNow(afterMutation: Bool) async {
         // Loading the plan stamps today's deficit-target snapshot (the
         // calendar judges history by it). Foreground replans always load —
         // a weigh-in may have synced in and moved today's target, and the

@@ -75,6 +75,24 @@ struct OnigiriShortcuts: AppShortcutsProvider {
             shortTitle: "Sodium Today",
             systemImageName: "aqi.medium"
         )
+        // Describe-to-log: AppShortcutsBuilder only accepts #available
+        // conditions (runtime gates like FoodIntelligence.isAvailable
+        // don't compile), so the phrase exists on every iOS 26 device
+        // and the INTENT carries the gate — on a non-AI device it fails
+        // with the friendly "needs Apple Intelligence" error instead of
+        // hiding. (The freeform description can't ride IN the phrase;
+        // Siri asks "What did you eat?" — one extra exchange.)
+        if #available(iOS 26.0, *) {
+            AppShortcut(
+                intent: DescribeFoodIntent(),
+                phrases: [
+                    "Describe a food in \(.applicationName)",
+                    "Describe what I ate in \(.applicationName)",
+                ],
+                shortTitle: "Describe & Log",
+                systemImageName: "sparkles"
+            )
+        }
     }
 
     /// Nori green, like the icon.

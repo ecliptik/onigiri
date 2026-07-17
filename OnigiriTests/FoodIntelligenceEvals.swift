@@ -85,6 +85,11 @@ final class FoodIntelligenceEvals: XCTestCase {
         .init(description: "a 12 oz can of regular cola", kcal: 90...200, sodiumMg: 0...120),
         .init(description: "half cup cooked white rice and a fried egg", kcal: 150...450, sodiumMg: 30...800),
         .init(description: "a bowl of miso soup", kcal: 20...180, sodiumMg: 300...1800),
+        // Spoken grammar (the Siri describe-to-log path): first-person,
+        // conversational — phrasing users SAY differs from what they type.
+        .init(description: "I had two slices of pepperoni pizza", kcal: 350...900, sodiumMg: 400...2000),
+        .init(description: "I ate a bowl of oatmeal with honey", kcal: 120...500, sodiumMg: 0...400),
+        .init(description: "I drank a large iced latte with whole milk", kcal: 80...400, sodiumMg: 30...350),
     ]
 
     /// Known-failures register: inputs the OS guardrails refuse today

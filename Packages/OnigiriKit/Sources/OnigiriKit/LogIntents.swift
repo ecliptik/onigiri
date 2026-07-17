@@ -13,23 +13,42 @@ public struct OnigiriKitIntents: AppIntentsPackage {
     public init() {}
 }
 
-/// One tap: log a standard serving of water to Apple Health.
+/// One tap: log a standard serving of water to Apple Health — or, from
+/// Shortcuts/Siri, a specific number of ounces ("at 10 PM log 20 oz").
+/// The parameter is optional so every existing surface (widget button,
+/// Control Center, the plain Siri phrase) still one-shots the default
+/// serving with no questions asked.
 public struct LogWaterIntent: AppIntent {
     public static let title: LocalizedStringResource = "Log Water"
-    public static let description = IntentDescription("Logs one serving of water to Apple Health.")
+    public static let description = IntentDescription("Logs a serving of water to Apple Health.")
+
+    @Parameter(title: "Ounces") public var ounces: Double?
+
+    public static var parameterSummary: some ParameterSummary {
+        Summary("Log Water") {
+            \.$ounces
+        }
+    }
 
     public init() {}
+    public init(ounces: Double?) {
+        self.ounces = ounces
+    }
 
     @MainActor
-    public func perform() async throws -> some IntentResult {
-        try await HealthKitService().logWater(oz: SharedStore.waterServingOz)
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        // Clamp typed/spoken amounts to sanity — 0/negative fall back to
+        // the serving, and nobody drinks a gallon in one log.
+        let oz = ounces.flatMap { $0 > 0 ? min($0, 128) : nil } ?? SharedStore.waterServingOz
+        try await HealthKitService().logWater(oz: oz)
         // Immediate and scoped: the intent process may die before a
         // debounced flush, and a water log can't move the weight trend
         // or streak widgets.
         WidgetReloader.reloadNow(kinds: [
             WidgetKinds.waterAccessory, WidgetKinds.todayCard,
         ])
-        return .result()
+        return .result(dialog: IntentDialog(
+            stringLiteral: "Logged \(oz.formatted(.number.precision(.fractionLength(0)))) ounces of water."))
     }
 }
 

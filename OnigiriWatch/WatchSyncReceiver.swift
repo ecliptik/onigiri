@@ -67,6 +67,9 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         if Self.complicationFingerprint() != before {
             WidgetReloader.requestReload(kinds: WidgetKinds.watchAll)
         }
+        // Siri's parameterized phrases speak the mirror just written —
+        // same refresh the phone does in PhoneSyncService.
+        OnigiriWatchShortcuts.updateAppShortcutParameters()
     }
 
     /// Everything the complications render out of the synced context: the

@@ -229,17 +229,14 @@ struct TodayView: View {
             .onChange(of: quickActions.dayRequest) { _, _ in
                 consumeQuickLogRequest()
             }
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 30).onEnded { value in
-                    guard !rowSwipe.active else { return }
-                    guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                    if value.translation.width < -60 {
-                        Task { await model.goToNextDay() }
-                    } else if value.translation.width > 60 {
-                        Task { await model.goToPreviousDay() }
-                    }
-                }
-            )
+            // Day-paging is the nav-bar chevrons, by design (the user,
+            // 2026-07-16: more discoverable, no false movement). The old
+            // left/right SWIPE (a .simultaneousGesture DragGesture over
+            // the whole scroll) engaged during vertical scrolls too and
+            // perturbed the scroll phase the iOS 26 tab bar reads —
+            // stranding the bar minimized after a gesture-less section
+            // expand/collapse (confirmed on device by removing it).
+            // Don't reintroduce a scroll-spanning swipe here.
         }
         .task { await model.start() }
         .onChange(of: toastCenter.mutationVersion) { _, _ in

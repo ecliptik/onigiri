@@ -206,15 +206,16 @@ struct ContentView: View {
                 }
             }
         }
-        // Liquid Glass: the tab bar shrinks out of the way while scrolling
-        // content, re-expanding on scroll-up. Constant .onScrollDown, not
-        // flipped to .never at the top: the flip committed "left the top"
-        // only at scroll-idle, so the FIRST scroll from the top never
-        // minimized — worst on Foods/Goal, where you scroll once and stop,
-        // so it read as "never minimizes" (the user, 2026-07-16). Trade-off:
-        // after a gesture-less collapse of Today's log while scrolled, the
-        // bar can sit minimized until the next scroll. iOS 18 bars never
-        // minimize; the modifier is a no-op there.
+        // Liquid Glass: the tab bar shrinks while scrolling content,
+        // re-expanding on scroll-up. Constant .onScrollDown — NOT flipped
+        // to .never at the top: that flip breaks the first scroll-down
+        // minimize (it can't retroactively minimize a scroll already
+        // underway) and goes sticky on the List/Form tabs (tried twice,
+        // reverted both — 2026-07-16). The stuck-minimized-after-a-
+        // gesture-less-section-expand bug that motivated the flip turned
+        // out to be Today's day-paging swipe perturbing the scroll phase;
+        // removing that swipe fixed it without touching this. iOS 18 bars
+        // never minimize; the modifier is a no-op there.
         .modifier(TabBarMinimizePin())
         // Hold the corner + to log a water serving without the sheet —
         // the tap keeps opening the add flow. Checked at fire time so

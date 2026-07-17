@@ -160,12 +160,13 @@ question deferred again.
 
 ## Backlog (unscheduled)
 
-- Today tab bar stuck minimized (the user, 2026-07-16): expand Water →
-  scroll down (bar minimizes) → scroll back to TOP → bar never
-  re-expands; expected full bar at top. Edge of the 2.1.3 trade-off
-  (constant .onScrollDown, TabBarPin deleted); suspect Today's custom
-  ScrollView/day-paging gesture stack eats the scroll-up signal.
-  Device-only repro class — iterate on-device.
+- Today's swipe day-paging was REMOVED for good 2026-07-16 (the user:
+  chevrons are more discoverable and don't trigger false movement).
+  It was a .simultaneousGesture DragGesture over the scroll that
+  perturbed the scroll phase the iOS 26 tab bar reads, stranding the
+  bar minimized (root-caused on device by removing it → bug fixed).
+  Nav-bar ‹ › chevrons are the day-paging affordance. Don't reintroduce
+  a scroll-spanning swipe gesture here.
 
 - Backup name collision — FIXED same night (timestamped filenames,
   empty-library auto-backups skipped, prune by modification date).

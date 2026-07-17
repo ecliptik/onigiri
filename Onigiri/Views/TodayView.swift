@@ -153,7 +153,10 @@ struct TodayView: View {
             }
             .navigationDestination(for: Route.self) { route in
                 switch route {
-                case .nutrition: DayNutritionView(model: model)
+                case .nutrition: DayNutritionView(
+                    model: model,
+                    dailyBudget: model.isToday ? goals.first.flatMap { plan(for: $0) }?.dailyBudget : nil
+                )
                 }
             }
             // No onDismiss refresh: every mutation a sheet can make lands

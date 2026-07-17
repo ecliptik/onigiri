@@ -8,6 +8,11 @@ import OnigiriKit
 /// in the breakdown.
 struct DayNutritionView: View {
     let model: TodayModel
+    /// Calories available to eat today to stay on the goal
+    /// (`CalorieBudget.Plan.dailyBudget`). nil hides the row — the caller
+    /// only supplies it for today with a goal set, since the budget math is
+    /// anchored to today and would mislead on a past day.
+    var dailyBudget: Double? = nil
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
@@ -62,6 +67,15 @@ struct DayNutritionView: View {
             iconRow("Calories", icon: { FoodIconView(raw: foodIcon) }) {
                 Text("\(model.summary.intakeKcal, format: .number.precision(.fractionLength(0))) kcal")
                     .monospacedDigit()
+            }
+            // The day's allowance to stay on the goal, paired with the
+            // intake above. Derived like Net, so it wears no icon. Only
+            // present for today with a goal (the caller gates it).
+            if let dailyBudget {
+                LabeledContent("Calorie budget") {
+                    Text("\(dailyBudget, format: .number.precision(.fractionLength(0))) kcal")
+                        .monospacedDigit()
+                }
             }
             iconRow("Active burn", icon: { Image(systemName: "flame.fill").foregroundStyle(.red) }) {
                 Text("\(model.summary.activeBurnKcal, format: .number.precision(.fractionLength(0))) kcal")

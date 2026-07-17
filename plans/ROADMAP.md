@@ -122,16 +122,25 @@ question deferred again.
   settings" is a pointer caption, not a tap target). Keep the day
   card's edit/cross-tab cue in the accessibility hint.
 
-## 2.4 — Identify Food (planned 2026-07-16 — see PLAN-identify-food.md)
+## 2.4 — Identify Food + Siri foundation (RELEASED 2026-07-16 as v2.4.0)
 
-- [ ] Photo of actual food (salad, plate, bowl) → reviewable food with
+- [x] Photo of actual food (salad, plate, bowl) → reviewable food with
   components as evidence, prefilled like a label scan. iOS 26 relay
   (kit `FoodPhotoClassifier` Vision classify → `FoodIntelligence`
   text decomposition), shaped so iOS 27 multimodal drops into the
   same `identifyFood` seam. Third door via the existing ScanSheet
   cascade — shutter still, label parse empty → identify (no mode to
-  pick, camera only in v1). Evals extend OnigiriTests; scan-row copy
-  change needs sign-off.
+  pick, camera only in v1). Evals in OnigiriTests (7/7); scan-row
+  copy signed off ("Scan Barcode, Label, or Food", AI-gated).
+- [x] Siri logging foundation (water / saved meals / favorite+recent
+  foods by name) — the rest of Siri is 2.5 below.
+- [x] Stale-reminder fix: the HealthKit observer now replans
+  reminders, so out-of-app logs (watch, widget, Control Center,
+  Siri) update pre-scheduled notification bodies ("0 of 72 oz" bug).
+- [x] Docs: wiki guide (scan cascade + Siri section), marketing page,
+  README; eval suite + audit round 2 also in this release.
+- [ ] Still open from PLAN-identify-food: on-device pantry QA and the
+  --food-id-sample UI-test fixture (needs a real food photo).
 
 ## 2.5 — Siri (planned 2026-07-16 — see PLAN-siri.md)
 

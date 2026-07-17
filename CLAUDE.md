@@ -2,6 +2,22 @@
 
 Personal iOS + watchOS calorie/sodium/water tracker. Design + roadmap: `plans/PLAN.md`.
 
+## Repo, docs, license
+
+- ORIGIN is GitHub (github.com/ecliptik/onigiri); Forgejo rides as a second
+  push URL on origin, so one `git push` updates both. Fetch comes from GitHub.
+- `docs/` IS the GitHub Pages site (marketing index.html + privacy.md +
+  showcase/media assets) — anything committed there is published on push.
+  Internal design docs live in `plans/`. The user guide lives ONLY in the
+  GitHub wiki (onigiri.wiki.git); the privacy policy lives in both (site
+  canonical). The site's app screenshots/clips exist in BOTH appearances
+  (showcase/light + showcase/dark, media/*.mp4 + *-dark.mp4) and swap with
+  the site theme — recapture both when screens change.
+- License: PolyForm Noncommercial 1.0.0 since the commit after the v2.2.0
+  tag (≤ v2.2.0 remains MIT). Say "source-available", not "open source".
+  LICENSE is verbatim PolyForm text — never edit it. External PRs are
+  declined by policy (CONTRIBUTING.md) to keep commercial rights clean.
+
 ## Build
 
 - `xcode-select` may point at CommandLineTools; prefix Xcode commands with

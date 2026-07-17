@@ -133,6 +133,20 @@ question deferred again.
   pick, camera only in v1). Evals extend OnigiriTests; scan-row copy
   change needs sign-off.
 
+## 2.5 — Siri (planned 2026-07-16 — see PLAN-siri.md)
+
+- [x] Foundation shipped same day (c678c3a): water/meal/food App
+  Shortcuts with parameterized phrases, EntityStringQuery spoken-name
+  matching, vocabulary refresh on mirror rewrites.
+- [ ] Ask-back queries ("calories left / water / sodium today") —
+  one intent, metric AppEnum, live HealthKit reads, snippet card.
+- [ ] Watch-side registration (phone-free raise-to-speak logging).
+- [ ] Water ounces parameter (Shortcuts automation; ServingSize enum
+  only if one-shot spoken sizes prove wanted).
+- [ ] Describe-to-log via the on-device model, ALWAYS confirmed before
+  the HealthKit write; spoken-grammar rows join the eval suite.
+- [ ] negativePhrases pass ("delete/undo my log" must not log).
+
 ## Backlog (unscheduled)
 
 - OFF search-a-licious `nutrition-facts-completed` filter (slipped

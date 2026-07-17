@@ -69,6 +69,60 @@ public enum StatusPhrasing {
         }
     }
 
+    /// Any tracked-or-askable nutrient ("How much protein have I had?").
+    /// `target`/`mode` come from the Today slot config when the nutrient
+    /// occupies a slot; nil target = plain total, no judgment.
+    public static func nutrientStatus(
+        nutrient: TrackedNutrient,
+        value: Double,
+        target: Double?,
+        mode: TrackedMetricMode?
+    ) -> Status {
+        let name = nutrient.displayName.lowercased()
+        let unit = spokenUnit(nutrient.unitSymbol, amount: value)
+        guard let target, target > 0 else {
+            return Status(
+                headline: "\(whole(value)) \(nutrient.unitSymbol)",
+                caption: name,
+                spoken: "You've had \(whole(value)) \(unit) of \(name) today."
+            )
+        }
+        let headline = "\(whole(value)) / \(whole(target)) \(nutrient.unitSymbol)"
+        switch mode ?? nutrient.defaultMode {
+        case .limit where value > target:
+            return Status(
+                headline: headline,
+                caption: "\(name) — over limit",
+                spoken: "You're over your \(name) limit — \(whole(value)) of \(whole(target)) \(unit) today."
+            )
+        case .goal where value >= target:
+            return Status(
+                headline: headline,
+                caption: name,
+                spoken: "\(name.capitalized) goal met — \(whole(value)) of \(whole(target)) \(unit) today."
+            )
+        default:
+            return Status(
+                headline: headline,
+                caption: name,
+                spoken: "You're at \(whole(value)) of \(whole(target)) \(unit) of \(name) today."
+            )
+        }
+    }
+
+    /// "grams", "milligrams", "ounces" — numbers are spoken, units
+    /// should be too.
+    private static func spokenUnit(_ symbol: String, amount: Double) -> String {
+        let singular = amount == 1
+        return switch symbol {
+        case "g": singular ? "gram" : "grams"
+        case "mg": singular ? "milligram" : "milligrams"
+        case "oz": singular ? "ounce" : "ounces"
+        case "µg", "mcg": singular ? "microgram" : "micrograms"
+        default: symbol
+        }
+    }
+
     private static func whole(_ value: Double) -> String {
         value.formatted(.number.precision(.fractionLength(0)))
     }

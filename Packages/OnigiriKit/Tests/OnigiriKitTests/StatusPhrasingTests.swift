@@ -62,6 +62,37 @@ struct StatusPhrasingTests {
         #expect(met.spoken == "Water goal met — 80 of 72 ounces today.")
     }
 
+    @Test func nutrientWithSlotLimitSpeaksTheJudgment() {
+        let over = StatusPhrasing.nutrientStatus(
+            nutrient: .saturatedFat, value: 25, target: 20, mode: .limit)
+        #expect(over.headline == "25 / 20 g")
+        #expect(over.caption == "saturated fat — over limit")
+        #expect(over.spoken == "You're over your saturated fat limit — 25 of 20 grams today.")
+
+        let under = StatusPhrasing.nutrientStatus(
+            nutrient: .sugar, value: 18, target: 36, mode: .limit)
+        #expect(under.spoken == "You're at 18 of 36 grams of sugar today.")
+    }
+
+    @Test func nutrientWithSlotGoalCelebratesWhenMet() {
+        let met = StatusPhrasing.nutrientStatus(
+            nutrient: .protein, value: 130, target: 120, mode: .goal)
+        #expect(met.spoken == "Protein goal met — 130 of 120 grams today.")
+
+        let behind = StatusPhrasing.nutrientStatus(
+            nutrient: .protein, value: 32, target: 120, mode: .goal)
+        #expect(behind.headline == "32 / 120 g")
+        #expect(behind.spoken == "You're at 32 of 120 grams of protein today.")
+    }
+
+    @Test func untrackedNutrientReportsPlainTotal() {
+        let plain = StatusPhrasing.nutrientStatus(
+            nutrient: .caffeine, value: 240, target: nil, mode: nil)
+        #expect(plain.headline == "240 mg")
+        #expect(plain.caption == "caffeine")
+        #expect(plain.spoken == "You've had 240 milligrams of caffeine today.")
+    }
+
     @Test func sodiumUnderAndOverLimit() {
         let under = StatusPhrasing.phrase(
             metric: .sodium, plan: state(sodiumMg: 1_450),

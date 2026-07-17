@@ -14,19 +14,55 @@ enum StatusMetric: String, AppEnum {
     case caloriesLeft
     case water
     case sodium
+    // Every macro is askable regardless of which two the Today screen
+    // tracks — slots change, Siri shouldn't forget how to answer. When
+    // the nutrient DOES occupy a slot, the answer speaks its target.
+    case protein
+    case carbs
+    case fat
+    case saturatedFat
+    case fiber
+    case sugar
+    case cholesterol
+    case caffeine
 
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "Today Metric"
     static let caseDisplayRepresentations: [StatusMetric: DisplayRepresentation] = [
         .caloriesLeft: "calories left",
         .water: "water",
         .sodium: "sodium",
+        .protein: "protein",
+        .carbs: "carbs",
+        .fat: "fat",
+        .saturatedFat: "saturated fat",
+        .fiber: "fiber",
+        .sugar: "sugar",
+        .cholesterol: "cholesterol",
+        .caffeine: "caffeine",
     ]
 
-    var phrasingMetric: StatusPhrasing.Metric {
+    /// The three originals route through the plan summary; nil means
+    /// "read this nutrient's day total live from HealthKit".
+    var phrasingMetric: StatusPhrasing.Metric? {
         switch self {
         case .caloriesLeft: .caloriesLeft
         case .water: .water
         case .sodium: .sodium
+        default: nil
+        }
+    }
+
+    var nutrient: TrackedNutrient? {
+        switch self {
+        case .caloriesLeft, .water, .sodium: nil
+        case .protein: .protein
+        case .carbs: .carbs
+        case .fat: .fat
+        case .saturatedFat: .saturatedFat
+        case .fiber: .fiber
+        case .sugar: .sugar
+        case .cholesterol: .cholesterol
+        case .caffeine: .caffeine
         }
     }
 }
@@ -53,16 +89,42 @@ struct CheckTodayIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog & ShowsSnippetView {
         // Live reads, not the widget mirror — a stale ask-back is worse
         // than a slow one (the reminder-staleness lesson, same day).
-        let plan = await DailyPlanLoader.load(goal: WatchSync.loadGoal())
-        let status = StatusPhrasing.phrase(
-            metric: metric.phrasingMetric,
-            plan: plan,
-            waterGoalOz: SharedStore.waterGoalOz,
-            sodiumLimitMg: SharedStore.sodiumLimitMg
-        )
+        let status: StatusPhrasing.Status
+        if let phrasingMetric = metric.phrasingMetric {
+            let plan = await DailyPlanLoader.load(goal: WatchSync.loadGoal())
+            status = StatusPhrasing.phrase(
+                metric: phrasingMetric,
+                plan: plan,
+                waterGoalOz: SharedStore.waterGoalOz,
+                sodiumLimitMg: SharedStore.sodiumLimitMg
+            )
+        } else if let nutrient = metric.nutrient {
+            let value = (try? await HealthKitService().dayTotal(of: nutrient, for: .now)) ?? 0
+            // Target and goal/limit judgment come from the Today slot
+            // config when this nutrient occupies a slot; otherwise the
+            // answer is a plain total.
+            let slot = [1, 2].first { SharedStore.trackedNutrient(slot: $0) == nutrient }
+            status = StatusPhrasing.nutrientStatus(
+                nutrient: nutrient,
+                value: value,
+                target: slot.map { SharedStore.trackedTarget(slot: $0, nutrient: nutrient) },
+                mode: slot.map { SharedStore.trackedMode(slot: $0, nutrient: nutrient) }
+            )
+        } else {
+            // Unreachable by construction — every case maps to one arm.
+            throw CheckTodayError.unavailable
+        }
         return .result(dialog: IntentDialog(stringLiteral: status.spoken)) {
             TodayStatusSnippet(status: status)
         }
+    }
+}
+
+private enum CheckTodayError: LocalizedError {
+    case unavailable
+
+    var errorDescription: String? {
+        "Couldn't read today's data from Apple Health."
     }
 }
 

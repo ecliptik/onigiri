@@ -54,6 +54,19 @@ struct OnigiriWatchShortcuts: AppShortcutsProvider {
             shortTitle: "Water Today",
             systemImageName: "drop"
         )
+        // Sodium and every macro, by name — the parameterized phrase
+        // covers them all (this is a sodium tracker; the wrist should
+        // answer "how much sodium have I had").
+        AppShortcut(
+            intent: CheckTodayIntent(),
+            phrases: [
+                "How much \(\.$metric) have I had in \(.applicationName)",
+                "Check my \(\.$metric) in \(.applicationName)",
+                "How much \(\.$metric) today in \(.applicationName)",
+            ],
+            shortTitle: "Check Today",
+            systemImageName: "chart.bar.xaxis"
+        )
     }
 
     /// Nori green, like the icon (and the phone's tiles).

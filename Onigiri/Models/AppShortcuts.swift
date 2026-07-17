@@ -69,6 +69,19 @@ struct OnigiriShortcuts: AppShortcutsProvider {
             shortTitle: "Sodium Today",
             systemImageName: "aqi.medium"
         )
+        // Every macro askable by name — "How much protein have I had in
+        // Onigiri?" — with the enum substituting each case into the
+        // phrase. Slot-tracked nutrients answer against their target.
+        AppShortcut(
+            intent: CheckTodayIntent(),
+            phrases: [
+                "How much \(\.$metric) have I had in \(.applicationName)",
+                "Check my \(\.$metric) in \(.applicationName)",
+                "How much \(\.$metric) today in \(.applicationName)",
+            ],
+            shortTitle: "Check Today",
+            systemImageName: "chart.bar.xaxis"
+        )
         // Describe-to-log: AppShortcutsBuilder only accepts #available
         // conditions (runtime gates like FoodIntelligence.isAvailable
         // don't compile), so the phrase exists on every iOS 26 device

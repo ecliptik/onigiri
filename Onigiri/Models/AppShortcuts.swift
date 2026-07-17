@@ -44,6 +44,37 @@ struct OnigiriShortcuts: AppShortcutsProvider {
             shortTitle: "Log Food",
             systemImageName: "carrot"
         )
+        // Ask-back queries (PLAN-siri 2.5): preset-metric shortcuts so
+        // the natural question completes in one exchange — no
+        // clarification step.
+        AppShortcut(
+            intent: CheckTodayIntent(metric: .caloriesLeft),
+            phrases: [
+                "How many calories do I have left in \(.applicationName)",
+                "How many calories are left in \(.applicationName)",
+                "Check my calories in \(.applicationName)",
+            ],
+            shortTitle: "Calories Left",
+            systemImageName: "gauge.with.needle"
+        )
+        AppShortcut(
+            intent: CheckTodayIntent(metric: .water),
+            phrases: [
+                "How much water have I had in \(.applicationName)",
+                "Check my water in \(.applicationName)",
+            ],
+            shortTitle: "Water Today",
+            systemImageName: "drop"
+        )
+        AppShortcut(
+            intent: CheckTodayIntent(metric: .sodium),
+            phrases: [
+                "How much sodium have I had in \(.applicationName)",
+                "Check my sodium in \(.applicationName)",
+            ],
+            shortTitle: "Sodium Today",
+            systemImageName: "aqi.medium"
+        )
     }
 
     /// Nori green, like the icon.

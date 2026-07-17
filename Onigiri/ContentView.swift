@@ -12,37 +12,6 @@ enum AppTab: String, Hashable {
     case log
 }
 
-/// Whether the visible tab's scroll content is at its top — drives the
-/// tab bar's minimize behavior from ContentView. A singleton because the
-/// signal crosses from each screen's scroll view up to the one TabView.
-@MainActor @Observable final class TabBarChrome {
-    static let shared = TabBarChrome()
-    private init() {}
-
-    private(set) var activeScreenAtTop = true
-
-    /// Guarded write: @Observable fires on every set even when equal, and
-    /// a redundant true→true during a scroll would re-render the TabView
-    /// for nothing (the invalidation-storm class). Only real flips write.
-    func setAtTop(_ value: Bool) {
-        if value != activeScreenAtTop { activeScreenAtTop = value }
-    }
-}
-
-extension View {
-    /// A main tab's scroll container reports its at-top state up to the
-    /// shared chrome. onScrollGeometryChange fires the action only when
-    /// the boolean transform CHANGES, so this is boundary-triggered, not
-    /// per-frame. Screens start at the top; reset on appear so returning
-    /// to a scrolled-then-left tab doesn't inherit a stale value.
-    func reportsTabBarScrollTop() -> some View {
-        onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y <= 1 } action: { _, atTop in
-            TabBarChrome.shared.setAtTop(atTop)
-        }
-        .onAppear { TabBarChrome.shared.setAtTop(true) }
-    }
-}
-
 struct ContentView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.scenePhase) private var scenePhase
@@ -238,19 +207,15 @@ struct ContentView: View {
             }
         }
         // Liquid Glass: the tab bar shrinks out of the way while scrolling
-        // content, re-expanding on scroll-up. At the very top it's PINNED
-        // full (.never); scrolled, it's .onScrollDown. The active screen
-        // feeds `atTop` through TabBarChrome via onScrollGeometryChange,
-        // which fires ONLY on the boundary crossing — so leaving the top
-        // flips to .onScrollDown immediately (the first scroll-down still
-        // minimizes) and returning to the top flips to .never immediately
-        // (forcing the bar back to full). This is what fixes the stuck-
-        // minimized bar after a gesture-less section expand/collapse (the
-        // user, 2026-07-16): the earlier .never-at-top attempt gated the
-        // "left the top" transition on scroll-IDLE, so the first scroll
-        // lagged — a continuous geometry read has no such lag. iOS 18 bars
-        // never minimize; the modifier is a no-op there.
-        .modifier(TabBarMinimizePin(atTop: TabBarChrome.shared.activeScreenAtTop))
+        // content, re-expanding on scroll-up. Constant .onScrollDown, not
+        // flipped to .never at the top: the flip committed "left the top"
+        // only at scroll-idle, so the FIRST scroll from the top never
+        // minimized — worst on Foods/Goal, where you scroll once and stop,
+        // so it read as "never minimizes" (the user, 2026-07-16). Trade-off:
+        // after a gesture-less collapse of Today's log while scrolled, the
+        // bar can sit minimized until the next scroll. iOS 18 bars never
+        // minimize; the modifier is a no-op there.
+        .modifier(TabBarMinimizePin())
         // Hold the corner + to log a water serving without the sheet —
         // the tap keeps opening the add flow. Checked at fire time so
         // the Settings toggle applies without a relaunch.
@@ -262,10 +227,9 @@ struct ContentView: View {
     }
 
     private struct TabBarMinimizePin: ViewModifier {
-        let atTop: Bool
         func body(content: Content) -> some View {
             if #available(iOS 26.0, *) {
-                content.tabBarMinimizeBehavior(atTop ? .never : .onScrollDown)
+                content.tabBarMinimizeBehavior(.onScrollDown)
             } else {
                 content
             }

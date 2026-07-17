@@ -247,7 +247,6 @@ struct FoodsView: View {
             }
             .compactSections()
             .hardTopScrollEdge()
-            .reportsTabBarScrollTop()
             .readableContentWidth(groupedBackground: true)
             .navigationTitle("Foods")
             .fileImporter(isPresented: $showLibraryImporter, allowedContentTypes: [.json]) { result in

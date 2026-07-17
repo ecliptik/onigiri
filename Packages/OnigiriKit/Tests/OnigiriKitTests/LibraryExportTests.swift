@@ -8,14 +8,19 @@ struct LibraryExportTests {
             exportedAt: Date(timeIntervalSince1970: 1_800_000_000),
             foods: [
                 .init(name: "Chicken breast", kcal: 280, sodiumMg: 540, servingDescription: "8 oz", barcode: nil,
-                      lastUsedAt: Date(timeIntervalSince1970: 1_799_000_000)),
-                .init(name: "Rice bowl", kcal: 320, sodiumMg: 10, servingDescription: "1 bowl", barcode: "12345678"),
+                      lastUsedAt: Date(timeIntervalSince1970: 1_799_000_000),
+                      createdAt: Date(timeIntervalSince1970: 1_798_000_000)),
+                // No lastUsedAt: recency lives entirely in createdAt, the
+                // common case that broke Recent sort after a restore.
+                .init(name: "Rice bowl", kcal: 320, sodiumMg: 10, servingDescription: "1 bowl", barcode: "12345678",
+                      createdAt: Date(timeIntervalSince1970: 1_798_500_000)),
             ],
             meals: [
                 .init(name: "Chicken & rice", items: [
                     .init(foodName: "Chicken breast", quantity: 1),
                     .init(foodName: "Rice bowl", quantity: 2),
-                ], lastUsedAt: Date(timeIntervalSince1970: 1_799_500_000))
+                ], lastUsedAt: Date(timeIntervalSince1970: 1_799_500_000),
+                   createdAt: Date(timeIntervalSince1970: 1_798_900_000))
             ],
             goal: .init(
                 targetWeightLb: 190,

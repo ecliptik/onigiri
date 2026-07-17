@@ -18,6 +18,12 @@ public struct LibraryExport: Codable, Sendable, Equatable {
         /// dropping it silently reset recency on every round-trip.
         /// Optional: old exports.
         public var lastUsedAt: Date?
+        /// The other half of recency: `recencyDate = lastUsedAt ?? createdAt`.
+        /// Most foods (scanned/created and logged in one shot) never bump
+        /// lastUsedAt, so their recency lives entirely in createdAt —
+        /// dropping it collapsed every such food to the restore timestamp
+        /// and broke Recent sort after a backup. Optional: old exports.
+        public var createdAt: Date?
 
         public init(
             name: String,
@@ -28,7 +34,8 @@ public struct LibraryExport: Codable, Sendable, Equatable {
             nutrients: NutrientValues? = nil,
             isFavorite: Bool? = nil,
             category: String? = nil,
-            lastUsedAt: Date? = nil
+            lastUsedAt: Date? = nil,
+            createdAt: Date? = nil
         ) {
             self.name = name
             self.kcal = kcal
@@ -39,6 +46,7 @@ public struct LibraryExport: Codable, Sendable, Equatable {
             self.isFavorite = isFavorite
             self.category = category
             self.lastUsedAt = lastUsedAt
+            self.createdAt = createdAt
         }
     }
 
@@ -62,10 +70,13 @@ public struct LibraryExport: Codable, Sendable, Equatable {
         public var uuid: UUID?
         /// Recency, like FoodItem's — optional: old exports.
         public var lastUsedAt: Date?
+        /// Recency fallback, like FoodItem's — optional: old exports.
+        public var createdAt: Date?
 
         public init(
             name: String, items: [MealItemRef], isFavorite: Bool? = nil,
-            category: String? = nil, uuid: UUID? = nil, lastUsedAt: Date? = nil
+            category: String? = nil, uuid: UUID? = nil, lastUsedAt: Date? = nil,
+            createdAt: Date? = nil
         ) {
             self.name = name
             self.items = items
@@ -73,6 +84,7 @@ public struct LibraryExport: Codable, Sendable, Equatable {
             self.category = category
             self.uuid = uuid
             self.lastUsedAt = lastUsedAt
+            self.createdAt = createdAt
         }
     }
 

@@ -19,13 +19,15 @@ enum LibraryTransfer {
                       nutrients: $0.nutrients.isEmpty ? nil : $0.nutrients,
                       isFavorite: $0.isFavorite ? true : nil,
                       category: $0.category,
-                      lastUsedAt: $0.lastUsedAt)
+                      lastUsedAt: $0.lastUsedAt,
+                      createdAt: $0.createdAt)
             },
             meals: meals.map { meal in
                 .init(name: meal.name, items: meal.items.compactMap { item in
                     item.food.map { .init(foodName: $0.name, quantity: item.quantity) }
                 }, isFavorite: meal.isFavorite ? true : nil, category: meal.category,
-                uuid: meal.uuid, lastUsedAt: meal.lastUsedAt)
+                uuid: meal.uuid, lastUsedAt: meal.lastUsedAt,
+                createdAt: meal.createdAt)
             },
             goal: goal.map {
                 .init(targetWeightLb: $0.targetWeightLb, targetDate: $0.targetDate,
@@ -59,8 +61,13 @@ enum LibraryTransfer {
                 category: item.category
             )
             // Restore recency so Recent/ranked ordering survives the
-            // round-trip (nil on old exports leaves createdAt ordering).
+            // round-trip. Both halves matter: most foods never bump
+            // lastUsedAt, so createdAt is their only recency signal —
+            // leaving it at the restore timestamp collapsed them into a
+            // tie and broke Recent sort. nil on old exports keeps the
+            // fresh createdAt (best available for legacy backups).
             food.lastUsedAt = item.lastUsedAt
+            if let createdAt = item.createdAt { food.createdAt = createdAt }
             context.insert(food)
             foodsByName[item.name.lowercased()] = food
             addedFoods += 1
@@ -80,6 +87,7 @@ enum LibraryTransfer {
             // Keep the exported identity so configured meal widgets survive.
             if let uuid = mealDef.uuid { meal.uuid = uuid }
             meal.lastUsedAt = mealDef.lastUsedAt
+            if let createdAt = mealDef.createdAt { meal.createdAt = createdAt }
             context.insert(meal)
             addedMeals += 1
         }

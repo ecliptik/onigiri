@@ -17,7 +17,7 @@ Runs on iPhone, iPad, and Apple Watch (iOS 18 / watchOS 10 or newer).
 - **Calorie & nutrition tracking** — your day at a glance: what you ate minus what you burned (Apple Health active + resting energy), with the calories you have left for the day.
 - **Weight goal** — set a target weight and date. Onigiri works out the daily calorie budget to get there and projects your finish date from your real weight trend (smart scale → Apple Health).
 - **Barcode, label & food scanning** — scan a product barcode or snap a photo of the nutrition-facts label, and calories and nutrients fill themselves in. On Apple Intelligence devices, photograph the food itself: Onigiri names the dish, lists its typical components, and estimates calories and sodium for your review — all on-device.
-- **Siri logging** — "Log water in Onigiri," "Log chicken and rice in Onigiri": water, saved meals, and favorite or recent foods log by voice, and the same shortcuts work from Spotlight and the Action button.
+- **Siri** — "Log water in Onigiri," "Log chicken and rice in Onigiri," "How many calories do I have left in Onigiri?": log water, saved meals, and favorite foods by voice, ask about your day, and (with Apple Intelligence) describe a food and confirm the estimate hands-free. The same shortcuts work from Spotlight, the Action button, and the watch.
 - **Fast logging** — log foods and water in a tap or two. Every entry is editable, with swipe to edit or delete and one-tap undo.
 - **Custom meals** — bundle the foods you eat together into a meal, then log the whole thing in one tap.
 - **Water tracking** — set your serving size and daily goal; log from the app, a widget, the watch, or a long-press on the add button.

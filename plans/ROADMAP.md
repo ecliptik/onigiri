@@ -160,6 +160,18 @@ question deferred again.
 
 ## Backlog (unscheduled)
 
+- Today tab bar stuck minimized (the user, 2026-07-16): expand Water →
+  scroll down (bar minimizes) → scroll back to TOP → bar never
+  re-expands; expected full bar at top. Edge of the 2.1.3 trade-off
+  (constant .onScrollDown, TabBarPin deleted); suspect Today's custom
+  ScrollView/day-paging gesture stack eats the scroll-up signal.
+  Device-only repro class — iterate on-device.
+
+- Backup name collision — FIXED same night (timestamped filenames,
+  empty-library auto-backups skipped, prune by modification date).
+  Still open from the 2026-07-16 restore saga: onboarding should gain
+  a "Restore from backup" door — the user instinctively looked for one.
+
 - OFF search-a-licious `nutrition-facts-completed` filter (slipped
   from 2.1, 2026-07-14): the legacy leg already filters unfilled
   entries; the primary leg still weeds client-side. Add the equivalent

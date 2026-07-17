@@ -35,11 +35,23 @@ enum BackupService {
            now.timeIntervalSince(last) < 24 * 3600 {
             return nil
         }
+        // Nothing to protect ⇒ nothing to write. A fresh install's
+        // first-launch auto-backup used to snapshot the EMPTY library —
+        // and, with date-only filenames, overwrite a real same-day
+        // backup that was about to be restored (2026-07-16). Not
+        // stamping lastBackupKey here means the first real content
+        // still gets backed up promptly.
+        let hasContent = ((try? context.fetchCount(FetchDescriptor<Food>())) ?? 0) > 0
+            || ((try? context.fetchCount(FetchDescriptor<Meal>())) ?? 0) > 0
+            || ((try? context.fetchCount(FetchDescriptor<GoalSettings>())) ?? 0) > 0
+        guard hasContent else { return nil }
         guard let directory = backupsDirectory,
               let data = try? LibraryTransfer.export(from: context) else { return nil }
 
-        let stamp = now.formatted(.iso8601.year().month().day())
-        let url = directory.appendingPathComponent("onigiri-backup-\(stamp).json")
+        // Date AND time: two backups can never claim the same name, so
+        // a write can never destroy an earlier file (the second half of
+        // the 2026-07-16 lesson). Fixed-locale, filename-safe.
+        let url = directory.appendingPathComponent("onigiri-backup-\(Self.stampFormatter.string(from: now)).json")
         do {
             try data.write(to: url, options: .atomic)
         } catch {
@@ -50,9 +62,15 @@ enum BackupService {
         return url
     }
 
-    /// The newest backup on disk, by modification date (the day-stamped
-    /// name collapses same-day backups onto one file, so the name sort
-    /// prune uses can't break ties).
+    private static let stampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd-HHmmss"
+        return formatter
+    }()
+
+    /// The newest backup on disk, by modification date (covers legacy
+    /// day-stamped names and the timestamped ones alike).
     static func latestBackup() -> URL? {
         guard let directory = backupsDirectory else { return nil }
         let files = (try? FileManager.default.contentsOfDirectory(
@@ -67,14 +85,20 @@ enum BackupService {
             .max { modified($0) < modified($1) }
     }
 
-    /// Keep only the newest `keepCount` backups.
+    /// Keep only the newest `keepCount` backups — by modification date,
+    /// which orders legacy day-stamped and timestamped names correctly
+    /// in one corpus (lexicographic name sort doesn't).
     private static func prune(in directory: URL) {
         let files = (try? FileManager.default.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: [.contentModificationDateKey]
         )) ?? []
+        func modified(_ url: URL) -> Date {
+            (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
+                .contentModificationDate ?? .distantPast
+        }
         let backups = files
             .filter { $0.lastPathComponent.hasPrefix("onigiri-backup-") }
-            .sorted { $0.lastPathComponent > $1.lastPathComponent }
+            .sorted { modified($0) > modified($1) }
         for stale in backups.dropFirst(keepCount) {
             try? FileManager.default.removeItem(at: stale)
         }

@@ -47,6 +47,7 @@ final class FoodIntelligenceEvals: XCTestCase {
         static let nameFormat = 0.8
         static let mealNameFormat = 1.0
         static let labelFill = 0.8
+        static let identifyComponents = 0.8
     }
 
     @MainActor
@@ -303,6 +304,103 @@ final class FoodIntelligenceEvals: XCTestCase {
             XCTAssertEqual(fat, 14.5 * 0.55, accuracy: 1, "per-100g fat must scale to the serving")
         }
         XCTAssertNil(merged.sodiumMg, "salt-only label must not fill sodium")
+    }
+
+    // MARK: Identify Food (classifier labels → components → one food)
+
+    private struct IdentifySample {
+        let labels: [String]
+        let kcal: ClosedRange<Double>
+        let sodiumMg: ClosedRange<Double>
+    }
+
+    /// The subject is the text-relay half (identifyFood(from:)) — the
+    /// Vision half is deterministic and kit-tested. Labels mimic what
+    /// ClassifyImageRequest actually emits: lowercase, generic, with
+    /// context noise like "plate" and "bowl" the model must see past.
+    private static let identifyGolden: [IdentifySample] = [
+        .init(labels: ["salad", "vegetable", "plate", "lettuce"], kcal: 50...600, sodiumMg: 0...900),
+        .init(labels: ["pizza", "food"], kcal: 200...1200, sodiumMg: 300...2500),
+        .init(labels: ["soup", "bowl", "noodles"], kcal: 100...800, sodiumMg: 300...3000),
+        .init(labels: ["sushi", "rice", "fish"], kcal: 150...900, sodiumMg: 100...2000),
+        .init(labels: ["hamburger", "french fries", "plate"], kcal: 500...1600, sodiumMg: 400...2500),
+    ]
+
+    /// Not-food shortlists must come back nil — a food invented from a
+    /// photo of a laptop is the feature's most embarrassing failure.
+    private static let identifyNotFood: [[String]] = [
+        ["laptop", "keyboard", "desk"],
+        ["dog", "grass", "outdoor"],
+        ["document", "text", "paper"],
+    ]
+
+    @MainActor
+    func testIdentifyFoodGoldenSet() async throws {
+        try requireEvalRun()
+        var produced = 0, kcalOK = 0, sodiumOK = 0, componentsOK = 0
+        var report: [String] = []
+
+        for sample in Self.identifyGolden {
+            let guesses = sample.labels.enumerated().map {
+                FoodGuess(label: $1, confidence: 1.0 - Double($0) * 0.1)
+            }
+            guard let food = await FoodIntelligence.identifyFood(from: guesses) else {
+                report.append("REFUSED  \(sample.labels.joined(separator: ", "))")
+                continue
+            }
+            produced += 1
+            let kcalHit = sample.kcal.contains(food.kcal)
+            let sodiumHit = sample.sodiumMg.contains(food.sodiumMg)
+            // 1-6 typical components, every one named and portioned —
+            // the components ARE the user-facing evidence.
+            let componentsHit = (1...6).contains(food.components.count)
+                && food.components.allSatisfy { !$0.name.isEmpty && !$0.portion.isEmpty }
+            if kcalHit { kcalOK += 1 }
+            if sodiumHit { sodiumOK += 1 }
+            if componentsHit { componentsOK += 1 }
+            report.append(
+                "\(kcalHit && sodiumHit && componentsHit ? "ok  " : "MISS") "
+                + "[\(sample.labels.joined(separator: ", "))] → \"\(food.name)\": "
+                + food.components.map { "\($0.name) (\($0.portion), \($0.kcal) kcal, \($0.sodiumMg) mg)" }
+                    .joined(separator: " + ")
+                + " = \(food.kcal) kcal (want \(sample.kcal)), \(food.sodiumMg) mg Na (want \(sample.sodiumMg))")
+        }
+
+        attachAndPrint(report, name: "identifyFood-eval")
+        let n = Double(Self.identifyGolden.count)
+        XCTAssertGreaterThanOrEqual(Double(produced) / n, Gate.produced, "produced (refusals are failures)")
+        guard produced > 0 else {
+            XCTFail("no sample produced values — nothing was measured")
+            return
+        }
+        let a = Double(produced)
+        XCTAssertGreaterThanOrEqual(Double(kcalOK) / a, Gate.kcalInRange, "kcal plausibility")
+        XCTAssertGreaterThanOrEqual(Double(sodiumOK) / a, Gate.sodiumInRange, "sodium plausibility")
+        XCTAssertGreaterThanOrEqual(Double(componentsOK) / a, Gate.identifyComponents, "component evidence")
+    }
+
+    @MainActor
+    func testIdentifyFoodRejectsNotFood() async throws {
+        try requireEvalRun()
+        var report: [String] = []
+        var invented = 0
+
+        for labels in Self.identifyNotFood {
+            let guesses = labels.enumerated().map {
+                FoodGuess(label: $1, confidence: 1.0 - Double($0) * 0.1)
+            }
+            if let food = await FoodIntelligence.identifyFood(from: guesses) {
+                invented += 1
+                report.append("INVENTED [\(labels.joined(separator: ", "))] → \"\(food.name)\", \(food.kcal) kcal")
+            } else {
+                report.append("ok   [\(labels.joined(separator: ", "))] → nil")
+            }
+        }
+
+        attachAndPrint(report, name: "identifyFood-notfood-eval")
+        // Guardrail at 100%: inventing food from a not-food photo is the
+        // failure mode this feature must never ship.
+        XCTAssertEqual(invented, 0, "not-food label sets must return nil")
     }
 
     // MARK: Plumbing

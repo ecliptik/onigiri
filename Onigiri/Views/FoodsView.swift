@@ -415,6 +415,11 @@ struct FoodsView: View {
                 }, onLabel: { parsed in
                     let prefill = ProductPrefill(product: parsed.scannedProduct())
                     Task { activeSheet = .form(prefill) }
+                }, onFood: { product in
+                    // An identified food photo prefills the form exactly
+                    // like a label — name and totals instead of a panel.
+                    let prefill = ProductPrefill(product: product)
+                    Task { activeSheet = .form(prefill) }
                 })
             }
         }
@@ -705,14 +710,18 @@ struct PortionTarget: Identifiable {
 }
 
 /// ONE scan row, one camera behind it (the user's copy) — barcode fires
-/// live, the shutter photographs the label. Leading icon drawn with
+/// live, the shutter photographs the label or, with Apple Intelligence
+/// around, the food itself (the identify cascade; the label only
+/// promises the third door when it's open). Leading icon drawn with
 /// LogButton's exact circle treatment (same font, padding, fill, rim)
 /// so the row carries the same visual weight as the + capsules beside
 /// it (the user). Shared by the Foods tab and the Log sheet.
 struct ScanRowLabel: View {
     var body: some View {
         Label {
-            Text("Scan Barcode or Nutrition Label")
+            Text(FoodIntelligence.isAvailable
+                ? "Scan Barcode, Label, or Food"
+                : "Scan Barcode or Nutrition Label")
         } icon: {
             Image(systemName: "barcode.viewfinder")
                 .font(.subheadline.weight(.bold))

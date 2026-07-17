@@ -177,11 +177,15 @@ struct FoodFormView: View {
                 Section {
                     // ONE camera behind one row: barcode fires live,
                     // the shutter photographs the label (the third door
-                    // — foods no database knows).
+                    // — foods no database knows) or, when Apple
+                    // Intelligence is around, the food itself.
                     Button {
                         activeSheet = .scanner
                     } label: {
-                        Label("Scan Barcode or Nutrition Label", systemImage: "barcode.viewfinder")
+                        Label(FoodIntelligence.isAvailable
+                            ? "Scan Barcode, Label, or Food"
+                            : "Scan Barcode or Nutrition Label",
+                            systemImage: "barcode.viewfinder")
                     }
                     .disabled(isLookingUp)
                     if isLookingUp {
@@ -408,6 +412,12 @@ struct FoodFormView: View {
                         Task { await lookup(code) }
                     }, onLabel: { parsed in
                         applyLabel(parsed)
+                    }, onFood: { product in
+                        // Identified from a photo of the food itself:
+                        // estimates, not printed values — say so, in the
+                        // same slot the other lookup notes use.
+                        apply(product)
+                        lookupMessage = "Estimated from your photo — review and adjust."
                     })
                 case .portion(let target):
                     PortionSheet(target: target) { quantity, category, _ in

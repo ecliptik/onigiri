@@ -438,6 +438,12 @@ struct QuickLogSheet: View {
                     }, onLabel: { parsed in
                         let prefill = ProductPrefill(product: parsed.scannedProduct())
                         Task { activeSheet = .form(prefill) }
+                    }, onFood: { product in
+                        // An identified food photo takes the same route:
+                        // the prefilled form, whose Log action returns
+                        // here with logDate intact.
+                        let prefill = ProductPrefill(product: product)
+                        Task { activeSheet = .form(prefill) }
                     })
                 case .form(let prefill):
                     // New foods go through the full form — reviewable, complete,

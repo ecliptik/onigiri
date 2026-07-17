@@ -30,6 +30,16 @@ func detailsLink(in app: XCUIApplication) -> XCUIElement {
     ).firstMatch
 }
 
+/// The scan row's label is AI-gated ("Scan Barcode, Label, or Food"
+/// when Apple Intelligence is available — which it IS on iOS 26 sims —
+/// "Scan Barcode or Nutrition Label" otherwise). Match both.
+@MainActor
+func scanRow(in app: XCUIApplication) -> XCUIElement {
+    app.buttons.matching(
+        NSPredicate(format: "label BEGINSWITH 'Scan Barcode'")
+    ).firstMatch
+}
+
 /// The Calendar tab's MONTH summary card, which pushes the month detail.
 /// Since 2.1 the day card ALSO shows "Details ›" (grammar unified), so a
 /// bare detailsLink is ambiguous on this tab — target the month card by
@@ -989,7 +999,7 @@ final class OnigiriUITests: XCTestCase {
         // product and opens the prefilled food form directly — no trip
         // through the Add chooser. (The form keeps its own scan row for
         // attaching a barcode mid-edit; this exercises the screen's.)
-        let scan = app.buttons["Scan Barcode or Nutrition Label"].firstMatch
+        let scan = scanRow(in: app)
         XCTAssertTrue(scan.waitForExistence(timeout: 5), "Scan Barcode row on Foods")
         scan.tap()
 
@@ -1032,7 +1042,7 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(addFood.waitForExistence(timeout: 5), "Add Food chooser option")
         addFood.tap()
 
-        let scanLabel = app.buttons["Scan Barcode or Nutrition Label"].firstMatch
+        let scanLabel = scanRow(in: app)
         XCTAssertTrue(scanLabel.waitForExistence(timeout: 5), "Scan Label row in the food form")
         attachShot(named: "label-scan-form-row")
         scanLabel.tap()
@@ -1086,7 +1096,7 @@ final class OnigiriUITests: XCTestCase {
             wait(for: [formGone], timeout: 5)
         }
         closeFoodForm()
-        let foodsScanLabel = app.buttons["Scan Barcode or Nutrition Label"].firstMatch
+        let foodsScanLabel = scanRow(in: app)
         XCTAssertTrue(foodsScanLabel.waitForExistence(timeout: 5), "Scan Label row on Foods")
         attachShot(named: "label-scan-foods-rows")
         foodsScanLabel.tap()
@@ -1104,7 +1114,7 @@ final class OnigiriUITests: XCTestCase {
         closeFoodForm()
         switchTab(in: app, to: "Today")
         switchTab(in: app, to: "Add")
-        let logScanLabel = app.buttons["Scan Barcode or Nutrition Label"].firstMatch
+        let logScanLabel = scanRow(in: app)
         XCTAssertTrue(logScanLabel.waitForExistence(timeout: 5), "Scan Label row on the Log sheet")
         attachShot(named: "label-scan-log-rows")
         logScanLabel.tap()

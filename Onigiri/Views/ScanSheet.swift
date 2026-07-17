@@ -11,17 +11,25 @@ private let scanLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "scan"
 /// ONE camera for the whole package (the user: one scan button): the live
 /// scanner fires on a barcode exactly as before, and a shutter button
 /// photographs the Nutrition Facts panel for foods no database knows —
-/// no mode to pick. A photo-library pick covers labels photographed
-/// earlier; the no-camera fallback (simulator) keeps manual barcode entry
-/// and the photo paths.
+/// no mode to pick. The same still cascades (PLAN-identify-food): a
+/// photo that yields no nutrition panel falls through to on-device food
+/// identification when Apple Intelligence is around, so photographing
+/// the food itself is the third door with zero new controls. A
+/// photo-library pick covers labels photographed earlier; the no-camera
+/// fallback (simulator) keeps manual barcode entry and the photo paths.
 struct ScanSheet: View {
     let onCode: (String) -> Void
     let onLabel: (ParsedLabel) -> Void
+    /// An identified food photo, prefill-shaped like the label path.
+    let onFood: (ScannedProduct) -> Void
     @Environment(\.dismiss) private var dismiss
 
     @State private var manualCode = ""
     @State private var photoItem: PhotosPickerItem?
     @State private var isReading = false
+    /// What the progress capsule says — the cascade's second leg takes
+    /// long enough that "Reading label…" would read as a hang.
+    @State private var readingStatus = ""
     @State private var failureMessage: String?
     /// Reaches the live scanner for capturePhoto() — the representable
     /// parks its controller here.
@@ -77,7 +85,7 @@ struct ScanSheet: View {
                 if isReading {
                     HStack(spacing: 8) {
                         ProgressView()
-                        Text("Reading label…")
+                        Text(readingStatus)
                     }
                     .padding(10)
                     .background(.regularMaterial, in: .capsule)
@@ -89,7 +97,11 @@ struct ScanSheet: View {
                         .padding(10)
                         .background(.regularMaterial, in: .rect(cornerRadius: 12))
                 }
-                Text("Point at a barcode or take a photo of the nutrition facts label.")
+                // The hint only promises the food-photo door when the
+                // model that opens it is actually available.
+                Text(FoodIntelligence.isAvailable
+                    ? "Point at a barcode, or photograph the nutrition label or the food itself."
+                    : "Point at a barcode or take a photo of the nutrition facts label.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding(8)
@@ -115,7 +127,9 @@ struct ScanSheet: View {
                                 .frame(width: 54, height: 54)
                         }
                     }
-                    .accessibilityLabel("Photograph the nutrition label")
+                    .accessibilityLabel(FoodIntelligence.isAvailable
+                        ? "Photograph the nutrition label or your food"
+                        : "Photograph the nutrition label")
                     .disabled(isReading)
                     Spacer()
                     // Balances the picker so the shutter stays centered.
@@ -173,7 +187,7 @@ struct ScanSheet: View {
                 if isReading {
                     HStack(spacing: 8) {
                         ProgressView()
-                        Text("Reading label…")
+                        Text(readingStatus)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -200,31 +214,48 @@ struct ScanSheet: View {
 
     private func read(_ image: UIImage) async {
         isReading = true
+        readingStatus = "Reading label…"
         failureMessage = nil
         defer { isReading = false }
         guard let cgImage = image.cgImage else {
             failureMessage = "Couldn't read that photo — try another."
             return
         }
+        let orientation = CGImagePropertyOrientation(image.imageOrientation)
         do {
-            let result = try await LabelScan.scan(
-                cgImage,
-                orientation: CGImagePropertyOrientation(image.imageOrientation))
+            let result = try await LabelScan.scan(cgImage, orientation: orientation)
             // iOS 26 + Apple Intelligence: the on-device model fills
             // whatever the deterministic parse left blank — invisible,
             // and every model failure keeps the deterministic result.
             let parsed = await FoodIntelligence.refine(result.parsed, transcript: result.transcript)
-            if parsed.isEmpty {
-                scanLog.notice("Label parse empty from \(result.transcript.count) observations")
-                failureMessage = "Couldn't read a nutrition panel there — try a closer, straighter shot with the whole panel in frame."
-            } else {
+            if !parsed.isEmpty {
                 scanLog.notice("Label parsed: kcal \(parsed.kcal.map(String.init(describing:)) ?? "nil"), \(result.transcript.count) observations")
                 onLabel(parsed)
                 dismiss()
+                return
             }
+            scanLog.notice("Label parse empty from \(result.transcript.count) observations")
         } catch {
             scanLog.error("Label OCR failed: \(String(describing: error))")
             failureMessage = "Couldn't read that photo — try another."
+            return
+        }
+        // The cascade (PLAN-identify-food): no nutrition panel in the
+        // still, so maybe it's a photo of the food itself. Classifier
+        // names the dish, the model decomposes it into a reviewable
+        // food; any failure lands on the same retry message as before.
+        if FoodIntelligence.isAvailable {
+            readingStatus = "Identifying food…"
+            if let food = await FoodIntelligence.identifyFood(photo: cgImage, orientation: orientation) {
+                scanLog.notice("Photo identified: \(food.name), \(food.components.count) components, \(food.kcal) kcal")
+                onFood(food.scannedProduct)
+                dismiss()
+                return
+            }
+            scanLog.notice("Photo identify came up empty")
+            failureMessage = "Couldn't read a nutrition panel or recognize a food there — try a closer shot."
+        } else {
+            failureMessage = "Couldn't read a nutrition panel there — try a closer, straighter shot with the whole panel in frame."
         }
     }
 }

@@ -112,10 +112,28 @@ move. The Vision classifier stays useful as the pre-filter/fallback.
 
 ## Order of work
 
-1. Kit classifier + fixtures + tests.
-2. `FoodIntelligence.identifyFood` + evals (prompt tuning happens
-   against the eval suite, one variable per round).
-3. ScanSheet cascade + form prefill + copy (copy needs sign-off).
-4. UI-test hook + QA pass on device (pantry + real meals).
-5. Later, with Xcode 27: swap the seam body for multimodal, re-run the
-   same evals (the model changed under the suite — re-baseline).
+1. [x] Kit classifier + tests (2026-07-16; fixture photos deferred to
+   the UI hook — the pure filter is tested, the Vision half rides the
+   app-level sample-photo path like LabelScan).
+2. [x] `FoodIntelligence.identifyFood` + evals (2026-07-16, three
+   rounds). Eval-earned hardening, in order: components `.count(0...6)`
+   not `1...6` (a mandatory component forced confabulation on not-food
+   labels, then isFood flipped true); prompt rules — edible parts only,
+   every food label counts, typical serving includes dressing; and the
+   CONTAINMENT GUARD — the food's name/components must share a word
+   with the classifier labels, because "document, text, paper" invented
+   a salad through every prompt-side defense. Known gap row: multi-food
+   labels (burger + fries) under-count — the model decomposes only the
+   lead dish; kept failing-allowed under the 0.8 kcal gate.
+3. [x] ScanSheet cascade + form prefill (2026-07-16): onFood delivers
+   ScannedProduct to the same form route at all three call sites;
+   "Identifying food…" progress leg; hint/a11y copy gated on
+   FoodIntelligence.isAvailable. COPY AWAITING SIGN-OFF: the scan row
+   label is untouched; hint, shutter a11y label, retry message, and the
+   "Estimated from your photo" form note are proposals.
+4. [ ] UI-test hook + QA pass on device (pantry + real meals). The
+   --food-id-sample fixture wants a REAL food photo captured during QA,
+   not a rendered stand-in — classifier behavior on synthetic images
+   proves nothing.
+5. [ ] Later, with Xcode 27: swap the seam body for multimodal, re-run
+   the same evals (the model changed under the suite — re-baseline).

@@ -258,11 +258,10 @@ public enum SharedStore {
         customEmoji(raw) ?? nutrient?.defaultEmoji ?? "🙂"
     }
 
-    /// What the big Today/watch number shows: "remaining" (kcal left to
-    /// eat toward the deficit goal — the DEFAULT, so unset reads as
-    /// remaining) or "balance" (± intake − burn, opt-in).
-    public static var showsRemainingKcal: Bool {
-        defaults.string(forKey: balanceStyleKey) != "balance"
+    /// What the big Today/watch/widget number shows — see `HeadlineMode`.
+    /// Unset/unknown reads as `.remaining` (the historical default).
+    public static var headlineMode: HeadlineMode {
+        HeadlineMode(rawValue: defaults.string(forKey: balanceStyleKey) ?? "") ?? .remaining
     }
 
     /// Daily sodium limit in mg (FDA guideline 2,300 by default).

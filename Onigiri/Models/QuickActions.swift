@@ -43,6 +43,11 @@ final class QuickActions {
     /// One-shot request for FoodsView to open the new-food form (the
     /// corner + while on the Library tab), same consumable pattern.
     var addFoodRequest: Bool?
+
+    /// One-shot request to switch to the Goal tab (tapping Today's Daily
+    /// Goal card). Consumable Optional, not a Bool: a stuck `true` never
+    /// re-fires onChange.
+    var goalRequest: Bool?
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {

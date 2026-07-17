@@ -40,19 +40,11 @@ struct WatchEntry: TimelineEntry {
     let date: Date
     let state: DailyPlanLoader.State
     let waterGoalOz: Double
-    var showsRemaining = false
+    var mode: HeadlineMode = .remaining
     /// Health access never granted — a confident green "0 kcal" before
     /// setup was indistinguishable from a genuinely balanced day.
     var needsSetup = false
     var relevance: TimelineEntryRelevance?
-
-    /// The headline number in the user's chosen style: (value, positive-is-good).
-    var headline: (kcal: Double, goodAboveZero: Bool) {
-        if showsRemaining, let remaining = state.remainingKcal {
-            return (remaining, true)
-        }
-        return (state.summary.balanceKcal, false)
-    }
 
     static let placeholder = WatchEntry(
         date: .now,
@@ -80,7 +72,7 @@ struct WatchEntry: TimelineEntry {
                 dailyBudgetKcal: state.dailyBudgetKcal
             ),
             waterGoalOz: waterGoalOz,
-            showsRemaining: showsRemaining,
+            mode: mode,
             needsSetup: needsSetup
         )
     }
@@ -133,7 +125,7 @@ struct WatchProvider: TimelineProvider {
             date: .now,
             state: state,
             waterGoalOz: SharedStore.waterGoalOz,
-            showsRemaining: SharedStore.showsRemainingKcal,
+            mode: SharedStore.headlineMode,
             needsSetup: needsSetup
         )
     }
@@ -163,7 +155,7 @@ struct BalanceComplicationView: View {
         // exact same thing.
         BalanceAccessoryView(
             state: entry.state,
-            showsRemaining: entry.showsRemaining,
+            mode: entry.mode,
             needsSetup: entry.needsSetup
         )
     }
@@ -217,7 +209,7 @@ struct SummaryEntry: TimelineEntry {
     let date: Date
     let state: DailyPlanLoader.State
     let slots: [SummarySlot]
-    var showsRemaining = false
+    var mode: HeadlineMode = .remaining
     var needsSetup = false
     var relevance: TimelineEntryRelevance?
 
@@ -247,7 +239,7 @@ struct SummaryEntry: TimelineEntry {
                 dailyBudgetKcal: state.dailyBudgetKcal
             ),
             slots: slots.map(\.zeroed),
-            showsRemaining: showsRemaining,
+            mode: mode,
             needsSetup: needsSetup
         )
     }
@@ -317,7 +309,7 @@ struct SummaryProvider: TimelineProvider {
             date: .now,
             state: state,
             slots: slots,
-            showsRemaining: SharedStore.showsRemainingKcal,
+            mode: SharedStore.headlineMode,
             needsSetup: needsSetup
         )
     }
@@ -360,16 +352,19 @@ struct SummaryComplicationView: View {
     private var headline: some View {
         if entry.needsSetup {
             Text("Open Onigiri to set up")
-        } else if entry.showsRemaining, let remaining = entry.state.remainingKcal {
-            let headline = CalorieBudget.remainingHeadline(remaining)
-            Text("\(headline.value, format: .number.precision(.fractionLength(0))) \(headline.caption)")
-                .foregroundStyle(Color.remainingStatus(kcal: remaining))
-                // The amber near-budget tint needs a non-color twin.
-                .accessibilityValue(Color.remainingStatusLabel(kcal: remaining) ?? "")
         } else {
-            let balance = entry.state.summary.balanceKcal
-            Text("\(balance, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))) kcal")
-                .foregroundStyle(balance <= 0 ? Color.green : Color.orange)
+            let readout = CalorieBudget.headlineReadout(
+                mode: entry.mode, summary: entry.state.summary,
+                dailyBudgetKcal: entry.state.dailyBudgetKcal
+            )
+            let valueFormat: FloatingPointFormatStyle<Double> = readout.signed
+                ? .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))
+                : .number.precision(.fractionLength(0))
+            Text("\(readout.value, format: valueFormat) \(readout.caption)")
+                .foregroundStyle(readout.tint)
+                // The amber near-budget (or deficit/surplus) status needs
+                // a non-color twin.
+                .accessibilityValue(readout.statusLabel ?? "")
         }
     }
 

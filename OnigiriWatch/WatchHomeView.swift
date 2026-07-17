@@ -102,33 +102,32 @@ struct WatchHomeView: View {
     /// keeps huge sizes on one line.
     @ScaledMetric(relativeTo: .largeTitle) private var headlineSize = 32.0
 
-    /// Mirrors the phone's Today headline setting: ± balance, or kcal left
-    /// toward the deficit goal when the user picked the countdown.
+    /// Mirrors the phone's Today headline setting through the same shared
+    /// readout: kcal left / balance / eaten / budget.
     @ViewBuilder
     private var headlineNumber: some View {
-        if balanceStyle == "remaining", let remaining = model.state.remainingKcal {
-            let headline = CalorieBudget.remainingHeadline(remaining)
-            VStack(spacing: 0) {
-                Text(headline.value, format: .number.precision(.fractionLength(0)))
-                    .font(.system(size: headlineSize, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color.remainingStatus(kcal: remaining))
-                    .minimumScaleFactor(0.6)
-                    .lineLimit(1)
-                Text(headline.caption)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            // Carry the near/over budget status the amber tint alone
-            // can't (remainingStatusLabel discipline).
-            .accessibilityElement(children: .combine)
-            .accessibilityValue(Color.remainingStatusLabel(kcal: remaining) ?? "")
-        } else {
-            Text(model.state.summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
+        let readout = CalorieBudget.headlineReadout(
+            mode: HeadlineMode(rawValue: balanceStyle) ?? .remaining,
+            summary: model.state.summary,
+            dailyBudgetKcal: model.state.dailyBudgetKcal
+        )
+        let valueFormat: FloatingPointFormatStyle<Double> = readout.signed
+            ? .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))
+            : .number.precision(.fractionLength(0))
+        VStack(spacing: 0) {
+            Text(readout.value, format: valueFormat)
                 .font(.system(size: headlineSize, weight: .bold, design: .rounded))
-                .foregroundStyle(model.state.summary.balanceKcal <= 0 ? Color.green : Color.orange)
+                .foregroundStyle(readout.tint)
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
+            Text(readout.caption)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
+        // Carry the near/over budget (or deficit/surplus) status the tint
+        // alone can't (remainingStatusLabel discipline).
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(readout.statusLabel ?? "")
     }
 }
 

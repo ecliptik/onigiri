@@ -181,19 +181,22 @@ struct TodayCardView: View {
             }
             .frame(width: ringSize, height: ringSize)
             .accessibilityElement(children: .combine)
-            .accessibilityValue("\((eaten * 100).formatted(.number.precision(.fractionLength(0)))) percent of today's budget eaten\(remainingStatusValue.map { ", \($0)" } ?? "")")
+            .accessibilityValue("\((eaten * 100).formatted(.number.precision(.fractionLength(0)))) percent of today's budget eaten\(headlineReadout.statusLabel.map { ", \($0)" } ?? "")")
         } else {
             headline
                 .accessibilityElement(children: .combine)
-                .accessibilityValue(remainingStatusValue ?? "")
+                .accessibilityValue(headlineReadout.statusLabel ?? "")
         }
     }
 
-    /// VoiceOver twin of the headline's amber "near budget" tint — the
-    /// warning is otherwise color-only (remainingStatusLabel discipline).
-    private var remainingStatusValue: String? {
-        guard SharedStore.showsRemainingKcal, let remaining = snapshot.remainingKcal else { return nil }
-        return Color.remainingStatusLabel(kcal: remaining)
+    /// The headline in the user's chosen "Calorie display" mode (all four),
+    /// through the one shared readout the app and watch use.
+    private var headlineReadout: CalorieBudget.HeadlineReadout {
+        CalorieBudget.headlineReadout(
+            mode: SharedStore.headlineMode,
+            summary: summary,
+            dailyBudgetKcal: snapshot.planState.dailyBudgetKcal
+        )
     }
 
     /// One scaled metric so ring and headline track Larger Text
@@ -205,31 +208,21 @@ struct TodayCardView: View {
 
     /// The headline number in the user's chosen style.
     private var headline: some View {
-        VStack(spacing: 2) {
-            if SharedStore.showsRemainingKcal, let remaining = snapshot.remainingKcal {
-                let headline = CalorieBudget.remainingHeadline(remaining)
-                Text(headline.value, format: .number.precision(.fractionLength(0)))
-                    .font(.system(size: headlineSize, weight: .bold, design: .rounded))
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                    .foregroundStyle(Color.remainingStatus(kcal: remaining))
-                Text(headline.caption)
-                    .font(isLarge ? .caption : .caption2)
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text(summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
-                    .font(.system(size: headlineSize, weight: .bold, design: .rounded))
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                    .foregroundStyle(summary.balanceKcal <= 0 ? Color.green : Color.orange)
-                Text("kcal balance")
-                    .font(isLarge ? .caption : .caption2)
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                    .foregroundStyle(.secondary)
-            }
+        let readout = headlineReadout
+        let valueFormat: FloatingPointFormatStyle<Double> = readout.signed
+            ? .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))
+            : .number.precision(.fractionLength(0))
+        return VStack(spacing: 2) {
+            Text(readout.value, format: valueFormat)
+                .font(.system(size: headlineSize, weight: .bold, design: .rounded))
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+                .foregroundStyle(readout.tint)
+            Text(readout.caption)
+                .font(isLarge ? .caption : .caption2)
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+                .foregroundStyle(.secondary)
         }
     }
 

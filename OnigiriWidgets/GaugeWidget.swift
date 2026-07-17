@@ -72,7 +72,7 @@ struct GaugeWidgetView: View {
             // Lock Screen families render the shared complication view.
             BalanceAccessoryView(
                 state: entry.snapshot.planState,
-                showsRemaining: SharedStore.showsRemainingKcal,
+                mode: SharedStore.headlineMode,
                 needsSetup: entry.snapshot.needsSetup
             )
         } else if entry.snapshot.needsSetup {
@@ -92,36 +92,29 @@ struct GaugeWidgetView: View {
     }
 
     private var gauge: some View {
-        VStack(spacing: 4) {
+        // Honor the same "Calorie display" setting (all four modes) as
+        // the app and watch, through the one shared readout.
+        let readout = CalorieBudget.headlineReadout(
+            mode: SharedStore.headlineMode,
+            summary: entry.snapshot.summary,
+            dailyBudgetKcal: entry.snapshot.planState.dailyBudgetKcal
+        )
+        let valueFormat: FloatingPointFormatStyle<Double> = readout.signed
+            ? .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))
+            : .number.precision(.fractionLength(0))
+        return VStack(spacing: 4) {
             OnigiriGauge(progress: entry.snapshot.gaugeProgress)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // Honor the same "Calorie display" setting as the app/watch.
-            if SharedStore.showsRemainingKcal, let remaining = entry.snapshot.remainingKcal {
-                let headline = CalorieBudget.remainingHeadline(remaining)
-                Text(headline.value, format: .number.precision(.fractionLength(0)))
-                    .font(.system(.title3, design: .rounded).weight(.bold))
-                    .foregroundStyle(Color.remainingStatus(kcal: remaining))
-                Text(headline.caption)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text(entry.snapshot.summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
-                    .font(.system(.title3, design: .rounded).weight(.bold))
-                    .foregroundStyle(entry.snapshot.summary.balanceKcal <= 0 ? Color.green : Color.orange)
-                Text("kcal balance")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
+            Text(readout.value, format: valueFormat)
+                .font(.system(.title3, design: .rounded).weight(.bold))
+                .foregroundStyle(readout.tint)
+            Text(readout.caption)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
-        // Carry the near/over budget status the amber tint alone can't
-        // (remainingStatusLabel discipline; empty while comfortably under).
+        // Carry the near/over budget (or deficit/surplus) status the tint
+        // alone can't (empty while comfortably under).
         .accessibilityElement(children: .combine)
-        .accessibilityValue(remainingStatusValue ?? "")
-    }
-
-    /// VoiceOver twin of the headline's amber "near budget" tint.
-    private var remainingStatusValue: String? {
-        guard SharedStore.showsRemainingKcal, let remaining = entry.snapshot.remainingKcal else { return nil }
-        return Color.remainingStatusLabel(kcal: remaining)
+        .accessibilityValue(readout.statusLabel ?? "")
     }
 }

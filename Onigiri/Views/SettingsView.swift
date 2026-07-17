@@ -642,9 +642,13 @@ struct SettingsView: View {
                 customIconRows(current: rewardIcon)
             }
             .pickerStyle(.navigationLink)
+            // Also cycled by tapping the Today headline — same setting,
+            // so the picker and the tap stay in agreement.
             Picker("Calorie display", selection: $balanceStyle) {
                 Text("kcal left").tag("remaining")
                 Text("kcal balance").tag("balance")
+                Text("kcal eaten").tag("eaten")
+                Text("kcal budget").tag("budget")
             }
             // "Compact" trades the Intake/Active/Resting cards for
             // Burned/Eaten beside the headline — more room for the log.

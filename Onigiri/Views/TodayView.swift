@@ -335,22 +335,24 @@ struct TodayView: View {
         .accessibilityIdentifier("dayTitleButton")
     }
 
-    /// Budget remaining for the day, when the user prefers the countdown
-    /// headline and a plan exists; nil falls back to the ± balance.
-    private var remainingHeadlineKcal: Double? {
-        guard balanceStyle == "remaining",
-              let goal = goals.first, let plan = plan(for: goal) else { return nil }
-        return plan.dailyBudget - model.summary.intakeKcal
+    /// What the big number shows, and its budget — the two inputs the
+    /// shared readout needs. `dailyBudgetKcal` is nil without a usable
+    /// goal, which collapses the tap cycle to balance ↔ eaten.
+    private var headlineMode: HeadlineMode { HeadlineMode(rawValue: balanceStyle) ?? .remaining }
+
+    private var dailyBudgetKcal: Double? {
+        goals.first.flatMap { plan(for: $0) }?.dailyBudget
     }
 
     /// Progress-gauges mode: the headline wears a ring showing how much
     /// of the day's calorie budget is eaten (needs a plan; without one
-    /// the plain headline renders).
+    /// the plain headline renders). The ring is mode-independent — it
+    /// tracks budget eaten no matter which number the tap is showing.
     @ViewBuilder
     private var gaugedHeadline: some View {
-        if let goal = goals.first, let plan = plan(for: goal), plan.dailyBudget > 0 {
-            let eaten = min(1, max(0, model.summary.intakeKcal / plan.dailyBudget))
-            let over = model.summary.intakeKcal > plan.dailyBudget
+        if let budget = dailyBudgetKcal, budget > 0 {
+            let eaten = min(1, max(0, model.summary.intakeKcal / budget))
+            let over = model.summary.intakeKcal > budget
             ZStack {
                 Circle()
                     .stroke(.quaternary, lineWidth: 6)
@@ -361,23 +363,16 @@ struct TodayView: View {
                         style: StrokeStyle(lineWidth: 6, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
+                // The circles carry no accessibility of their own, so the
+                // tappable headline button below stays reachable and
+                // actionable inside the ring.
                 balanceHeadline
                     .padding(24)
             }
             .frame(width: min(ringDiameter, 260), height: min(ringDiameter, 260))
-            .accessibilityElement(children: .combine)
-            .accessibilityValue("\((eaten * 100).formatted(.number.precision(.fractionLength(0)))) percent of today's budget eaten\(remainingStatusSuffix)")
         } else {
             balanceHeadline
         }
-    }
-
-    /// VoiceOver twin of the headline's amber "near budget" tint — the
-    /// warning is otherwise color-only (remainingStatusLabel discipline).
-    private var remainingStatusSuffix: String {
-        remainingHeadlineKcal
-            .flatMap { Color.remainingStatusLabel(kcal: $0) }
-            .map { ", \($0)" } ?? ""
     }
 
     /// Everything above the log in the phone column: headline (ringed
@@ -445,65 +440,77 @@ struct TodayView: View {
         }
     }
 
+    /// The big number, tappable to cycle what it shows (kcal left →
+    /// balance → eaten → budget, skipping the two that need a goal when
+    /// none is set). A plain Button, so it yields to the scroll pan and
+    /// never false-fires mid-fling — unlike a raw gesture. The choice
+    /// persists on `balanceStyle` and drives the watch and widgets too.
     private var balanceHeadline: some View {
-        VStack(spacing: 4) {
-            if let remaining = remainingHeadlineKcal {
-                let headline = CalorieBudget.remainingHeadline(remaining)
-                Text(headline.value, format: .number.precision(.fractionLength(0)))
+        let readout = CalorieBudget.headlineReadout(
+            mode: headlineMode, summary: model.summary, dailyBudgetKcal: dailyBudgetKcal
+        )
+        let valueFormat: FloatingPointFormatStyle<Double> = readout.signed
+            ? .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))
+            : .number.precision(.fractionLength(0))
+        return Button {
+            balanceStyle = headlineMode.next(hasBudget: dailyBudgetKcal != nil).rawValue
+        } label: {
+            VStack(spacing: 4) {
+                Text(readout.value, format: valueFormat)
                     .font(.system(size: headlineSize, weight: .bold, design: .rounded))
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
-                    .foregroundStyle(Color.remainingStatus(kcal: remaining))
+                    .foregroundStyle(readout.tint)
                     .contentTransition(.numericText())
-                Text(headline.caption)
+                Text(readout.caption)
                     .font(.subheadline)
                     // Scale down inside the ring at accessibility sizes,
                     // like the number above — truncated to "kcal bala…".
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                     .foregroundStyle(.secondary)
-            } else {
-                Text(model.summary.balanceKcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
-                    .font(.system(size: headlineSize, weight: .bold, design: .rounded))
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                    .foregroundStyle(model.summary.balanceKcal <= 0 ? Color.green : Color.orange)
-                    .contentTransition(.numericText())
-                Text("kcal balance")
-                    .font(.subheadline)
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                    .foregroundStyle(.secondary)
             }
+            .padding(.top, 16)
+            .contentShape(.rect)
         }
-        .padding(.top, 16)
+        .buttonStyle(.plain)
         // Read number + caption as one element, carrying the near/over
-        // budget status the amber tint alone can't (the ring variant
-        // overrides this with its own combined value + same suffix).
-        .accessibilityElement(children: .combine)
-        .accessibilityValue(remainingHeadlineKcal.flatMap { Color.remainingStatusLabel(kcal: $0) } ?? "")
+        // budget (or deficit/surplus) status the tint alone can't.
+        .accessibilityLabel("\(readout.value.formatted(valueFormat)) \(readout.caption)")
+        .accessibilityValue(readout.statusLabel ?? "")
+        .accessibilityHint("Changes what this number shows")
     }
 
     @ViewBuilder
     private var goalCard: some View {
-        if let goal = goals.first, let plan = plan(for: goal) {
-            DailyGoalCard(
-                bankedKcal: max(0, -model.summary.balanceKcal),
-                intakeKcal: model.summary.intakeKcal,
-                plan: plan,
-                showsRemaining: model.isToday,
-                weeklyTrendLb: model.weeklyTrendLb
-            )
-            .equatable()
-        } else {
-            Text(goals.isEmpty
-                 ? "Set a weight goal in the Goal tab to track your daily deficit here."
-                 : "Add a weigh-in (or set your current weight in the Goal tab) to track your daily deficit.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+        // The whole card is a door to the Goal tab — a plain Button, so it
+        // scrolls without false-firing. The no-goal copy already points at
+        // the Goal tab, so it opens it too.
+        Button {
+            QuickActions.shared.goalRequest = true
+        } label: {
+            if let goal = goals.first, let plan = plan(for: goal) {
+                DailyGoalCard(
+                    bankedKcal: max(0, -model.summary.balanceKcal),
+                    intakeKcal: model.summary.intakeKcal,
+                    plan: plan,
+                    showsRemaining: model.isToday,
+                    weeklyTrendLb: model.weeklyTrendLb
+                )
+                .equatable()
+            } else {
+                Text(goals.isEmpty
+                     ? "Set a weight goal in the Goal tab to track your daily deficit here."
+                     : "Add a weigh-in (or set your current weight in the Goal tab) to track your daily deficit.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
         }
+        .buttonStyle(.plain)
+        .contentShape(.rect)
+        .accessibilityHint("Opens the Goal screen")
     }
 
     private func plan(for goal: GoalSettings) -> CalorieBudget.Plan? {

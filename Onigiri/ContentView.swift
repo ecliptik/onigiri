@@ -123,6 +123,12 @@ struct ContentView: View {
             // Calendar's "View day": land on Today, which consumes the date.
             if day != nil { selectedTab = .today }
         }
+        .onChange(of: quickActions.goalRequest) { _, request in
+            // Today's Daily Goal card: open the Goal tab, then consume.
+            guard request != nil else { return }
+            quickActions.goalRequest = nil
+            selectedTab = .goal
+        }
         // The Today-card widget's + button: the Log sheet for the day
         // the widget was showing (backfill included). No day parameter
         // means today.

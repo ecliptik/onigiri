@@ -63,18 +63,30 @@ struct DayNutritionView: View {
 
     private var summarySection: some View {
         Section(dayLabel) {
-            // The same icons these numbers wear on Today.
-            iconRow("Calories", icon: { FoodIconView(raw: foodIcon) }) {
+            // The day's allowance to stay on the goal, up top. Budget and
+            // remaining are present only for today with a goal (the caller
+            // gates dailyBudget).
+            if let dailyBudget {
+                iconRow("Calorie budget", icon: { Image(systemName: "target").foregroundStyle(Color.riceToast) }) {
+                    Text("\(dailyBudget, format: .number.precision(.fractionLength(0))) kcal")
+                        .monospacedDigit()
+                }
+            }
+            // The same icon this number wears on Today.
+            iconRow("Calories logged", icon: { FoodIconView(raw: foodIcon) }) {
                 Text("\(model.summary.intakeKcal, format: .number.precision(.fractionLength(0))) kcal")
                     .monospacedDigit()
             }
-            // The day's allowance to stay on the goal, paired with the
-            // intake above. Derived like Net, so it wears no icon. Only
-            // present for today with a goal (the caller gates it).
+            // Budget minus what's logged — the Today headline's "kcal
+            // left", right under the two numbers it's from, tinted
+            // green/amber/orange as it nears and passes the budget.
             if let dailyBudget {
-                LabeledContent("Calorie budget") {
-                    Text("\(dailyBudget, format: .number.precision(.fractionLength(0))) kcal")
+                let remaining = dailyBudget - model.summary.intakeKcal
+                iconRow("Calories remaining", icon: { Image(systemName: "chart.pie.fill").foregroundStyle(Color.remainingStatus(kcal: remaining)) }) {
+                    Text("\(remaining, format: .number.precision(.fractionLength(0))) kcal")
+                        .foregroundStyle(Color.remainingStatus(kcal: remaining))
                         .monospacedDigit()
+                        .accessibilityValue(Color.remainingStatusLabel(kcal: remaining) ?? "")
                 }
             }
             iconRow("Active burn", icon: { Image(systemName: "flame.fill").foregroundStyle(.red) }) {
@@ -88,8 +100,8 @@ struct DayNutritionView: View {
             // Same vocabulary as the calendar day card: positive is a
             // deficit (good), negative a surplus. "Net", not "Deficit" —
             // a row labeled Deficit reading "surplus" flipped signs on
-            // the reader. No icon on Today either — a derived number.
-            LabeledContent("Net") {
+            // the reader. The ± glyph says "signed balance".
+            iconRow("Net", icon: { Image(systemName: "plusminus").foregroundStyle(-model.summary.balanceKcal >= 0 ? Color.green : Color.orange) }) {
                 let deficit = -model.summary.balanceKcal
                 Text(deficit >= 0
                     ? "\(deficit, format: .number.precision(.fractionLength(0))) kcal deficit"

@@ -9,7 +9,7 @@ import WidgetKit
 public struct BalanceAccessoryView: View {
     @Environment(\.widgetFamily) private var family
     let state: DailyPlanLoader.State
-    let showsRemaining: Bool
+    let mode: HeadlineMode
     let needsSetup: Bool
     /// Fixed pixel sizes ignored Larger Text on the most glanceable,
     /// legibility-critical surfaces; scaled metrics follow Dynamic Type
@@ -18,31 +18,31 @@ public struct BalanceAccessoryView: View {
     @ScaledMetric(relativeTo: .caption2) private var gaugeEmojiSize = 12.0
     @ScaledMetric(relativeTo: .caption2) private var gaugeValueSize = 12.0
 
-    public init(state: DailyPlanLoader.State, showsRemaining: Bool, needsSetup: Bool) {
+    public init(state: DailyPlanLoader.State, mode: HeadlineMode, needsSetup: Bool) {
         self.state = state
-        self.showsRemaining = showsRemaining
+        self.mode = mode
         self.needsSetup = needsSetup
     }
 
-    /// The headline number in the user's chosen style: (value, positive-is-good).
-    private var headline: (kcal: Double, goodAboveZero: Bool) {
-        if showsRemaining, let remaining = state.remainingKcal {
-            return (remaining, true)
-        }
-        return (state.summary.balanceKcal, false)
+    /// The headline in the user's chosen style, through the same shared
+    /// readout the phone and watch use.
+    private var readout: CalorieBudget.HeadlineReadout {
+        CalorieBudget.headlineReadout(
+            mode: mode, summary: state.summary, dailyBudgetKcal: state.dailyBudgetKcal
+        )
+    }
+
+    private var valueFormat: FloatingPointFormatStyle<Double> {
+        readout.signed
+            ? .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))
+            : .number.precision(.fractionLength(0))
     }
 
     private var headlineText: Text {
-        let (kcal, goodAboveZero) = headline
-        return goodAboveZero
-            ? Text("\(kcal, format: .number.precision(.fractionLength(0))) kcal left")
-            : Text("\(kcal, format: .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))) kcal")
+        Text("\(readout.value, format: valueFormat) \(readout.caption)")
     }
 
-    private var headlineColor: Color {
-        let (kcal, goodAboveZero) = headline
-        return (goodAboveZero ? kcal >= 0 : kcal <= 0) ? .green : .orange
-    }
+    private var headlineColor: Color { readout.tint }
 
     public var body: some View {
         if needsSetup {
@@ -128,9 +128,7 @@ public struct BalanceAccessoryView: View {
                 Text(SharedStore.rewardEmoji)
                     .font(.system(size: gaugeEmojiSize))
             } currentValueLabel: {
-                Text(headline.kcal, format: headline.goodAboveZero
-                    ? .number.precision(.fractionLength(0))
-                    : .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))
+                Text(readout.value, format: valueFormat)
                     .font(.system(size: gaugeValueSize, weight: .bold, design: .rounded))
                     .foregroundStyle(headlineColor)
                     .minimumScaleFactor(0.6)

@@ -175,6 +175,11 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         if mirrorFingerprint != lastMirroredFingerprint {
             lastMirroredFingerprint = mirrorFingerprint
             WatchSync.store(mirrorPayload)
+            // Siri's parameterized phrases ("Log <meal> in Onigiri")
+            // speak the mirror just written — refresh their vocabulary
+            // so a renamed or new meal/food is sayable without waiting
+            // for the system's periodic sweep.
+            OnigiriShortcuts.updateAppShortcutParameters()
             // Widgets render from the mirror just written — every goal,
             // settings, and library change lands here, so this is the one
             // place a reload keeps them from going up to ~30 min stale.

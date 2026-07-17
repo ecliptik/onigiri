@@ -10,7 +10,11 @@ struct OnigiriAppPackage: AppIntentsPackage {
     }
 }
 
-/// Zero-setup Siri/Spotlight phrases over the existing intents.
+/// Zero-setup Siri/Spotlight phrases over the existing intents. The
+/// parameterized phrases speak library names ("Log chicken and rice in
+/// Onigiri") — their vocabulary comes from the entity queries'
+/// suggestedEntities, refreshed via updateAppShortcutParameters()
+/// whenever PhoneSyncService rewrites the mirror.
 struct OnigiriShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
@@ -22,5 +26,26 @@ struct OnigiriShortcuts: AppShortcutsProvider {
             shortTitle: "Log Water",
             systemImageName: "drop.fill"
         )
+        AppShortcut(
+            intent: LogMealIntent(),
+            phrases: [
+                "Log \(\.$meal) in \(.applicationName)",
+                "Log a meal in \(.applicationName)",
+            ],
+            shortTitle: "Log Meal",
+            systemImageName: "fork.knife"
+        )
+        AppShortcut(
+            intent: LogFoodIntent(),
+            phrases: [
+                "Log \(\.$food) in \(.applicationName)",
+                "Log a food in \(.applicationName)",
+            ],
+            shortTitle: "Log Food",
+            systemImageName: "carrot"
+        )
     }
+
+    /// Nori green, like the icon.
+    static let shortcutTileColor: ShortcutTileColor = .lime
 }

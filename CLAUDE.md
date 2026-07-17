@@ -136,6 +136,17 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
 ## Conventions
 
 - Shared models/logic go in `Packages/OnigiriKit`, pure and unit-tested where possible.
+  EXCEPTION — AppIntents: intent/entity/AppEnum types live in `SharedIntents/`,
+  compiled INTO each target that exposes them (app, widget extension, watch app
+  — see project.yml), NEVER in the kit. On-device linkd rejects SPM-delivered
+  App Shortcuts metadata (`aggregateMetadataIsEmpty`, FB13281659) and the app
+  silently never registers with Siri/Shortcuts; the 2.1 move into the kit broke
+  registration invisibly for months (2026-07-16 evening). Pure logic the
+  intents call (e.g. `StatusPhrasing`) stays in the kit with its tests. If
+  intents ever fail with Shortcuts "internal error" while the app builds
+  clean, check `log collect` for linkd `Failed to instantiate type … by name`
+  (stale mangled name ⇒ delete app + reinstall re-registers; pull a backup
+  out via devicectl FIRST — Documents/Backups dies with the container).
 - HealthKit is the log store (food/sodium/water samples); SwiftData holds only the
   library (foods, meals, goals). Do not add a second source of truth for logs.
   The meal slot (Breakfast/…) rides in correlation metadata `OnigiriMealCategory`;

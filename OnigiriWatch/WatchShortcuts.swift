@@ -1,14 +1,8 @@
 import AppIntents
 import OnigiriKit
 
-/// Register the kit's intents for the watch process — raise-to-speak
-/// logging and ask-back without the phone anywhere nearby (the watch
-/// app is independent; its HealthKit and mirror are its own).
-struct OnigiriWatchPackage: AppIntentsPackage {
-    static var includedPackages: [any AppIntentsPackage.Type] {
-        [OnigiriKitIntents.self]
-    }
-}
+// The intents compile into this target from SharedIntents/ (linkd
+// rejects SPM-package App Shortcuts — see LogWaterIntent.swift).
 
 /// The phone's Siri surface, minus describe-to-log (no Foundation
 /// Models on watchOS). Same phrases — muscle memory shouldn't care

@@ -31,7 +31,11 @@ targets:
   Onigiri:
     type: application
     platform: iOS
-    sources: [Onigiri]
+    # SharedIntents compiles into each target that exposes intents —
+    # NEVER move intents into the kit: linkd rejects SPM-delivered App
+    # Shortcuts metadata (aggregateMetadataIsEmpty) and the app silently
+    # never registers with Siri/Shortcuts (FB13281659, 2026-07-16).
+    sources: [Onigiri, SharedIntents]
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -45,6 +49,14 @@ targets:
       path: Onigiri/Info.plist
       properties:
         CFBundleDisplayName: Onigiri
+        # Siri's recognizer mangles the app name ("only gary", live test
+        # 2026-07-16) — pronunciation hints and plausible mishearings
+        # teach it. Apple caps alternatives at 3 per app.
+        INAlternativeAppNames:
+          - INAlternativeAppName: Onigiri
+            INAlternativeAppNamePronunciationHint: oh nee gee ree
+          - INAlternativeAppName: Onigeeri
+          - INAlternativeAppName: Nigiri
         # xcodegen defaults the generated plist to a literal "1.0" unless
         # told to reference the build setting.
         CFBundleShortVersionString: $(MARKETING_VERSION)
@@ -102,7 +114,10 @@ targets:
   OnigiriWidgets:
     type: app-extension
     platform: iOS
-    sources: [OnigiriWidgets]
+    # Just the water intent — the Control Center button runs it in this
+    # process. Meal/food/status intents stay app-only (no widget uses
+    # them; a second copy would double them in Shortcuts).
+    sources: [OnigiriWidgets, SharedIntents/LogWaterIntent.swift]
     dependencies:
       - package: OnigiriKit
     settings:
@@ -127,7 +142,9 @@ targets:
   OnigiriWatch:
     type: application
     platform: watchOS
-    sources: [OnigiriWatch]
+    # Water/meal/food/status intents for watch Siri — same per-target
+    # rule as the phone (see the Onigiri target's note).
+    sources: [OnigiriWatch, SharedIntents]
     dependencies:
       - package: OnigiriKit
       - target: OnigiriWatchWidgets

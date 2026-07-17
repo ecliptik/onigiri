@@ -1,14 +1,8 @@
 import AppIntents
 import OnigiriKit
 
-/// The log intents live in OnigiriKit — register the kit's intents
-/// package for the app's process (the widget extension registers it
-/// separately for its own).
-struct OnigiriAppPackage: AppIntentsPackage {
-    static var includedPackages: [any AppIntentsPackage.Type] {
-        [OnigiriKitIntents.self]
-    }
-}
+// The intents themselves compile into this target from SharedIntents/
+// (linkd rejects SPM-package App Shortcuts — see LogWaterIntent.swift).
 
 /// Zero-setup Siri/Spotlight phrases over the existing intents. The
 /// parameterized phrases speak library names ("Log chicken and rice in

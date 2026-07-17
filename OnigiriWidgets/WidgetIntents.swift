@@ -3,14 +3,9 @@ import SwiftUI
 import WidgetKit
 import OnigiriKit
 
-/// The log intents live in OnigiriKit (one definition for widget
-/// buttons, Control Center, and Siri) — this registers the kit's
-/// intents package for the widget extension's process.
-struct OnigiriWidgetsPackage: AppIntentsPackage {
-    static var includedPackages: [any AppIntentsPackage.Type] {
-        [OnigiriKitIntents.self]
-    }
-}
+// LogWaterIntent compiles into this target from SharedIntents/ (linkd
+// rejects SPM-package App Shortcuts metadata — the extension gets its
+// own copy, exactly the pre-2.1 layout that worked).
 
 /// Control Center / Action button: one press logs a serving of water.
 struct LogWaterControl: ControlWidget {

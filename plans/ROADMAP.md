@@ -122,6 +122,17 @@ question deferred again.
   settings" is a pointer caption, not a tap target). Keep the day
   card's edit/cross-tab cue in the accessibility hint.
 
+## 2.4 — Identify Food (planned 2026-07-16 — see PLAN-identify-food.md)
+
+- [ ] Photo of actual food (salad, plate, bowl) → reviewable food with
+  components as evidence, prefilled like a label scan. iOS 26 relay
+  (kit `FoodPhotoClassifier` Vision classify → `FoodIntelligence`
+  text decomposition), shaped so iOS 27 multimodal drops into the
+  same `identifyFood` seam. Third door via the existing ScanSheet
+  cascade — shutter still, label parse empty → identify (no mode to
+  pick, camera only in v1). Evals extend OnigiriTests; scan-row copy
+  change needs sign-off.
+
 ## Backlog (unscheduled)
 
 - OFF search-a-licious `nutrition-facts-completed` filter (slipped

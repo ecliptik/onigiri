@@ -69,9 +69,11 @@ struct WatchSyncTests {
         #expect(payload.waterIcon == "sfDrop")
     }
 
-    @Test func balanceStyleDefaultsToBalance() {
+    @Test func balanceStyleDefaultsToRemaining() {
+        // "kcal left" is the default headline (2026-07-16); "balance" is
+        // the opt-in signed view.
         let context = WatchSync.makeContext(meals: [], goal: nil, waterServingOz: 12, waterGoalOz: 64)
-        #expect(WatchSync.parse(context).balanceStyle == "balance")
+        #expect(WatchSync.parse(context).balanceStyle == "remaining")
     }
 
     @Test func absentGoalMeansClear() {

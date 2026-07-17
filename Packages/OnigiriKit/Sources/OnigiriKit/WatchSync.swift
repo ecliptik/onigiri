@@ -173,7 +173,7 @@ public enum WatchSync {
         goal: SyncedGoal?,
         waterServingOz: Double,
         waterGoalOz: Double,
-        balanceStyle: String = "balance",
+        balanceStyle: String = "remaining",
         foodIcon: String = "sfFork",
         waterIcon: String = "sfDrop",
         rewardIcon: String = "onigiri",

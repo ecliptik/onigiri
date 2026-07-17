@@ -12,7 +12,7 @@ struct SettingsView: View {
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
-    @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
+    @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "remaining"
     @AppStorage(SharedStore.waterServingKey, store: SharedStore.defaults) private var waterServingOz = 12.0
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.progressGaugesKey, store: SharedStore.defaults) private var progressGauges = false
@@ -643,8 +643,8 @@ struct SettingsView: View {
             }
             .pickerStyle(.navigationLink)
             Picker("Calorie display", selection: $balanceStyle) {
-                Text("kcal balance").tag("balance")
                 Text("kcal left").tag("remaining")
+                Text("kcal balance").tag("balance")
             }
             // "Compact" trades the Intake/Active/Resting cards for
             // Burned/Eaten beside the headline — more room for the log.

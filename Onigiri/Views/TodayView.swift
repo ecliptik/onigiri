@@ -16,7 +16,7 @@ struct TodayView: View {
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
-    @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "balance"
+    @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "remaining"
     @AppStorage(SharedStore.progressGaugesKey, store: SharedStore.defaults) private var progressGauges = false
     // The two tracked-metric slots; @AppStorage so a Settings change
     // re-renders the row (SharedStore reads alone wouldn't).

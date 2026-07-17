@@ -77,14 +77,30 @@ updateAppShortcutParameters() call where the watch stores a payload.
    CheckTodayIntent + StatusMetric AppEnum, live DailyPlanLoader reads,
    StatusPhrasing pure helper (5 kit tests pin the grammar and the
    over/under boundaries), three preset-metric shortcuts.
-2. [ ] Watch registration (small, high leverage on the tappiest device).
-3. [ ] Water ounces parameter (+ ServingSize enum only if one-shot
-   spoken sizes prove wanted).
-4. [ ] Describe-to-log with confirmation; extend the eval suite's
-   describeFood golden set to cover phrases users would SAY (spoken
-   grammar differs from typed).
+2. [x] Watch registration (2026-07-16, 5ccade5): OnigiriWatchPackage +
+   OnigiriWatchShortcuts (phone's phrases minus describe; ask-back
+   included), vocabulary refresh in WatchSyncReceiver.apply.
+3. [x] Water ounces parameter (5ccade5): optional, nil = default
+   serving on every surface, 1...128 clamp, speaks what it logged.
+   ServingSize enum still deferred.
+4. [x] Describe-to-log (5ccade5): DescribeFoodIntent (app target),
+   Siri asks "What did you eat?", estimate read back, ALWAYS-confirm
+   before the write, nil category (time-inferred slot). LESSON:
+   AppShortcutsBuilder only takes #available conditions — the intent
+   carries the runtime AI gate and errors kindly on non-AI devices.
+   Three first-person rows joined the describeFood golden set (13
+   rows; pizza kcal undercount = documented model gap, gates hold).
 5. [ ] negativePhrases pass ("delete my log", "undo my water") so
    near-miss phrases don't false-trigger logging.
+
+REGISTRATION LORE (2026-07-16, live Siri test failed first try): the
+metadata (nlu.lzfse, phrases) was correctly in the bundle — but App
+Shortcuts ingest at APP LAUNCH, and deploy-phone.sh installs without
+launching. Open the app once after a deploy before judging Siri; then
+Shortcuts-app tiles are the ground truth, Settings → Apps → Onigiri →
+Siri toggles and a reboot are the escalation ladder. "Onigiri" is a
+dictionary word to the recognizer — the first successful invocation
+(or tapping the Shortcuts tile once) teaches the binding.
 
 ## Risks / notes
 

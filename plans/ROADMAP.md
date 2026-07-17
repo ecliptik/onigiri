@@ -150,11 +150,12 @@ question deferred again.
 - [x] Ask-back queries ("calories left / water / sodium today") —
   one intent, metric AppEnum, live HealthKit reads, snippet card
   (fb44824).
-- [ ] Watch-side registration (phone-free raise-to-speak logging).
-- [ ] Water ounces parameter (Shortcuts automation; ServingSize enum
-  only if one-shot spoken sizes prove wanted).
-- [ ] Describe-to-log via the on-device model, ALWAYS confirmed before
-  the HealthKit write; spoken-grammar rows join the eval suite.
+- [x] Watch-side registration (phone-free raise-to-speak logging)
+  (5ccade5).
+- [x] Water ounces parameter (optional, clamped, speaks the result)
+  (5ccade5).
+- [x] Describe-to-log via the on-device model, ALWAYS confirmed before
+  the HealthKit write; spoken-grammar rows in the eval suite (5ccade5).
 - [ ] negativePhrases pass ("delete/undo my log" must not log).
 
 ## Backlog (unscheduled)

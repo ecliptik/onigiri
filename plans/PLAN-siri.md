@@ -73,7 +73,10 @@ updateAppShortcutParameters() call where the watch stores a payload.
 
 ## Order of work
 
-1. [ ] Ask-back query intent + snippet + phrases (biggest daily value).
+1. [x] Ask-back query intent + snippet + phrases (2026-07-16, fb44824):
+   CheckTodayIntent + StatusMetric AppEnum, live DailyPlanLoader reads,
+   StatusPhrasing pure helper (5 kit tests pin the grammar and the
+   over/under boundaries), three preset-metric shortcuts.
 2. [ ] Watch registration (small, high leverage on the tappiest device).
 3. [ ] Water ounces parameter (+ ServingSize enum only if one-shot
    spoken sizes prove wanted).

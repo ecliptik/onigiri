@@ -147,8 +147,9 @@ question deferred again.
 - [x] Foundation shipped same day (c678c3a): water/meal/food App
   Shortcuts with parameterized phrases, EntityStringQuery spoken-name
   matching, vocabulary refresh on mirror rewrites.
-- [ ] Ask-back queries ("calories left / water / sodium today") —
-  one intent, metric AppEnum, live HealthKit reads, snippet card.
+- [x] Ask-back queries ("calories left / water / sodium today") —
+  one intent, metric AppEnum, live HealthKit reads, snippet card
+  (fb44824).
 - [ ] Watch-side registration (phone-free raise-to-speak logging).
 - [ ] Water ounces parameter (Shortcuts automation; ServingSize enum
   only if one-shot spoken sizes prove wanted).

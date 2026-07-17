@@ -195,6 +195,7 @@ struct GoalView: View {
                 Text("The deficit target and daily budget go away. Your logs aren't touched.")
             }
             .compactSections()
+            .reportsTabBarScrollTop()
             .readableContentWidth(groupedBackground: true)
             .navigationTitle("Goal")
             .scrollDismissesKeyboard(.interactively)

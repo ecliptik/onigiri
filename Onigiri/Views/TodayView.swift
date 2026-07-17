@@ -114,6 +114,9 @@ struct TodayView: View {
                 }
                 .padding(.bottom, 24)
             }
+            // Pins the tab bar full at the top, minimizes it while
+            // scrolled (fixes the stuck-minimized-after-expand bug).
+            .reportsTabBarScrollTop()
             // Grouped surface idiom, app-wide (the user, 2026-07-13):
             // gray page + secondarySystemGroupedBackground cards, so
             // every card in the app matches the List screens' cells in

@@ -21,7 +21,7 @@ struct WatchHomeView: View {
             // crown could briefly scroll it into view). Compact spacing
             // and small controls keep everything on one screen anyway.
             ScrollView {
-                VStack(spacing: 6) {
+                VStack(spacing: 4) {
                     headlineNumber
 
                     // Micheal's scheme: meal = rice-paper cream with
@@ -99,8 +99,10 @@ struct WatchHomeView: View {
 
     /// Fixed 32pt ignored the watch text-size setting (the phone's
     /// headline got the same fix in 1.7); minimumScaleFactor below
-    /// keeps huge sizes on one line.
-    @ScaledMetric(relativeTo: .largeTitle) private var headlineSize = 32.0
+    /// keeps huge sizes on one line. Trimmed 32→28 so the two log
+    /// buttons clear the TabView's page dots — at 32 the filled-in
+    /// headline pushed "Log water" down onto them (the user).
+    @ScaledMetric(relativeTo: .largeTitle) private var headlineSize = 28.0
 
     /// Mirrors the phone's Today headline setting through the same shared
     /// readout: kcal left / balance / eaten / budget.

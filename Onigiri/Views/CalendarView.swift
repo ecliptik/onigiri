@@ -65,15 +65,18 @@ struct CalendarView: View {
             // the same browsing pattern as Today.
             .navigationTitle(displayedMonth.formatted(.dateTime.month(.wide).year()))
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                // Both month chevrons on the trailing edge, matching Today's
+                // day chevrons: the leading ~20pt is iOS's back-swipe zone,
+                // which intermittently stole taps from a control placed there
+                // (see TodayView, v2.5.10). The month title holds the leading
+                // side; nothing tappable sits in the edge gesture's path.
+                ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
                         shiftMonth(-1)
                     } label: {
                         Image(systemName: "chevron.left")
                     }
                     .accessibilityLabel("Previous month")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         shiftMonth(1)
                     } label: {

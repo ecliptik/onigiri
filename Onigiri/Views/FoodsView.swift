@@ -281,7 +281,12 @@ struct FoodsView: View {
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                // Filter + sort on the trailing edge, matching Today and
+                // Calendar: the leading ~20pt is iOS's back-swipe zone, which
+                // intermittently steals taps from a control placed there
+                // (v2.5.10). The title holds the left; nothing tappable sits
+                // in the edge gesture's path.
+                ToolbarItemGroup(placement: .topBarTrailing) {
                     Menu {
                         Picker("Category", selection: $categoryFilter) {
                             Text("All").tag(FoodCategory?.none)
@@ -298,8 +303,6 @@ struct FoodsView: View {
                             .contentTransition(.symbolEffect(.replace))
                     }
                     .accessibilityLabel("Filter by category")
-                }
-                ToolbarItem(placement: .topBarLeading) {
                     Menu {
                         Picker("Sort", selection: $sortRaw) {
                             ForEach(LibrarySort.allCases, id: \.rawValue) { option in

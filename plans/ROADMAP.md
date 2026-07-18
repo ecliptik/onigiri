@@ -139,8 +139,10 @@ question deferred again.
   Siri) update pre-scheduled notification bodies ("0 of 72 oz" bug).
 - [x] Docs: wiki guide (scan cascade + Siri section), marketing page,
   README; eval suite + audit round 2 also in this release.
-- [ ] Still open from PLAN-identify-food: on-device pantry QA and the
-  --food-id-sample UI-test fixture (needs a real food photo).
+- [x] On-device Identify-Food QA — validated 2026-07-17 (the user ran it
+  on real food: "not great, but worked well enough").
+- [ ] Still open from PLAN-identify-food: the --food-id-sample UI-test
+  fixture (needs a real food photo).
 
 ## 2.5 — Siri (planned 2026-07-16 — see PLAN-siri.md)
 
@@ -159,6 +161,13 @@ question deferred again.
 - [ ] negativePhrases pass ("delete/undo my log" must not log).
 
 ## Backlog (unscheduled)
+
+- NOT DOING: native-List rebuild of Today (for real .swipeActions on log
+  rows + fixing the "first vertical swipe on a row does nothing" stick).
+  Considered and DECLINED 2026-07-17 — v2.5.5 smoothed the custom swipe
+  (track-from-0, axis lock, elastic stretch, spring settle) and the user
+  confirmed it feels right, not worth re-architecting the whole screen.
+  Log-row swipe stays the custom DragGesture in LogRowSwipeActions.
 
 - Today's swipe day-paging was REMOVED for good 2026-07-16 (the user:
   chevrons are more discoverable and don't trigger false movement).

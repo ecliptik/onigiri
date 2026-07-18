@@ -1059,6 +1059,19 @@ private struct LogRowSwipeActions: ViewModifier {
     private static let revealWidth: CGFloat = 60
     private static let fullSwipe: CGFloat = 220
 
+    /// Static friction so the row doesn't slide on a light graze: it stays
+    /// put until the finger passes the breakaway, then tracks from there.
+    /// The row tracked 1:1 from the first pixel, so a slight sideways drag
+    /// already peeled it open toward delete (the user). Applied to BOTH the
+    /// visible offset and the reveal/commit decisions, so the extra travel
+    /// is real resistance, not just cosmetic lag.
+    private static let breakaway: CGFloat = 22
+    private static func resist(_ translation: CGFloat) -> CGFloat {
+        let mag = abs(translation)
+        guard mag > breakaway else { return 0 }
+        return (mag - breakaway) * (translation < 0 ? -1 : 1)
+    }
+
     /// How far past the reveal the row keeps stretching, asymptotically —
     /// the visible offset approaches revealWidth + this and never hard-caps,
     /// so the row follows the finger the whole way to the commit instead of
@@ -1145,18 +1158,21 @@ private struct LogRowSwipeActions: ViewModifier {
             .gesture(HorizontalSwipeGesture(
                 onChanged: { translationX in
                     // UIKit translation is 0 at .began, so the row tracks
-                    // straight from its rest offset — no threshold catch-up
-                    // pop, no axis baseline to subtract.
-                    var raw = restOffset + translationX
+                    // straight from its rest offset (no catch-up pop) — minus
+                    // the breakaway, which holds it still until the swipe is
+                    // deliberate.
+                    var raw = restOffset + Self.resist(translationX)
                     if onEdit == nil { raw = min(0, raw) }
                     offset = Self.rubberBand(raw)
                     if abs(offset) > 10 { swipe.active = true }
                 },
                 onEnded: { translationX in
-                    // Decisions on true finger travel, not the damped offset —
-                    // rubber-banding changes only the feel, not how far you
-                    // must swipe to act.
-                    var raw = restOffset + translationX
+                    // Decide on the SAME resisted travel the row showed, so
+                    // reveal/commit line up with what the finger did: with the
+                    // breakaway, reveal needs ~breakaway+36pt and a full-swipe
+                    // delete needs a clearly deliberate long drag (rubber-
+                    // banding still only damps the visible offset, not this).
+                    var raw = restOffset + Self.resist(translationX)
                     if onEdit == nil { raw = min(0, raw) }
                     if raw < -Self.fullSwipe {
                         settle(0)
@@ -1280,9 +1296,17 @@ private final class HorizontalPanGestureRecognizer: UIPanGestureRecognizer {
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
         super.touchesMoved(touches, with: event)
         guard state == .possible else { return }
-        let translation = translation(in: view)
-        guard abs(translation.x) + abs(translation.y) > 8 else { return }
-        if abs(translation.y) > abs(translation.x) {
+        let t = translation(in: view)
+        let dx = abs(t.x), dy = abs(t.y)
+        guard dx + dy > 8 else { return }
+        // Claim the swipe only when the drag is DECISIVELY horizontal — dx
+        // must lead dy by a clear margin. The first cut failed only when
+        // dy > dx, so anything within 45° of horizontal tripped the swipe;
+        // a scroll or slightly-slanted drag could trip swipe-to-delete
+        // (accidental-delete risk). Requiring dx > dy·1.5 (≈ within 34° of
+        // horizontal) hands ambiguous / near-diagonal drags to the
+        // ScrollView instead. Tunable — raise the factor if still too eager.
+        if dx < dy * 1.5 {
             state = .failed
         }
     }

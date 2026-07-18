@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import SwiftData
 import WidgetKit
 import OnigiriKit
@@ -1052,13 +1053,6 @@ private struct LogRowSwipeActions: ViewModifier {
     @State private var offset: CGFloat = 0
     /// Where the row currently rests: 0, or ±revealWidth when open.
     @State private var restOffset: CGFloat = 0
-    /// Set once, when the drag crosses the activation threshold: the axis
-    /// is LOCKED (a mid-swipe diagonal wobble no longer freezes the row the
-    /// way the old frame-by-frame width>height guard did) and the baseline
-    /// finger position is captured so the row tracks from 0 instead of
-    /// popping ~15pt to "catch up" to the threshold travel.
-    @State private var horizontalDrag: Bool?
-    @State private var dragStart: CGFloat = 0
 
     /// Floating circular buttons, like the system's iOS 26 swipe pills.
     private static let buttonSize: CGFloat = 44
@@ -1135,65 +1129,51 @@ private struct LogRowSwipeActions: ViewModifier {
                     onTap?()
                 }
             }
-            // NOTE (2026-07-15): a plain .gesture here COMPETES with the
-            // ScrollView's pan — a vertical swipe that starts on a row is
-            // claimed by this recognizer (it fires at 15pt, then its
-            // onChanged bails for vertical drags), so the scroll doesn't
-            // engage until the second swipe. That is the confirmed cause of
-            // the "first swipe up on a row does nothing" stick. A prior
-            // .simultaneousGesture attempt let the scroll through but made
-            // the sideways swipe feel too fast and only helped partially,
-            // so it was reverted — the proper fix (a gesture that yields to
-            // vertical without over-eager horizontal) is still open.
-            .gesture(
-                DragGesture(minimumDistance: 15)
-                    .onChanged { value in
-                        // Lock the axis once, on first movement. A vertical
-                        // start is left to the scroll; a horizontal one owns
-                        // the rest of the gesture even if the finger drifts.
-                        if horizontalDrag == nil {
-                            horizontalDrag = abs(value.translation.width) > abs(value.translation.height)
-                            dragStart = value.translation.width
-                        }
-                        guard horizontalDrag == true else { return }
-                        // Track from where the drag engaged (subtract the
-                        // threshold travel) so the row follows the finger
-                        // smoothly instead of popping to catch up.
-                        var raw = restOffset + (value.translation.width - dragStart)
-                        if onEdit == nil { raw = min(0, raw) }
-                        offset = Self.rubberBand(raw)
-                        if abs(offset) > 10 { swipe.active = true }
+            // The swipe is a UIKit pan recognizer bridged in
+            // (HorizontalSwipeGesture), NOT a SwiftUI DragGesture, because it
+            // MUST be able to hand a vertical drag back to the enclosing
+            // ScrollView. A SwiftUI .gesture is mutually exclusive with the
+            // scroll's pan; a .simultaneousGesture co-receives but still
+            // can't yield — either way a DragGesture captures the touch at
+            // its minimumDistance and holds it, so a vertical scroll that
+            // STARTS on a row was intermittently dead (the row ate the pan;
+            // biasing the axis only changed what we did after capture, not
+            // whether we captured). The bridged recognizer instead FAILS
+            // itself the instant a drag reads more vertical than horizontal,
+            // so the scroll gets a clean pan; only a decisively horizontal
+            // drag begins the swipe.
+            .gesture(HorizontalSwipeGesture(
+                onChanged: { translationX in
+                    // UIKit translation is 0 at .began, so the row tracks
+                    // straight from its rest offset — no threshold catch-up
+                    // pop, no axis baseline to subtract.
+                    var raw = restOffset + translationX
+                    if onEdit == nil { raw = min(0, raw) }
+                    offset = Self.rubberBand(raw)
+                    if abs(offset) > 10 { swipe.active = true }
+                },
+                onEnded: { translationX in
+                    // Decisions on true finger travel, not the damped offset —
+                    // rubber-banding changes only the feel, not how far you
+                    // must swipe to act.
+                    var raw = restOffset + translationX
+                    if onEdit == nil { raw = min(0, raw) }
+                    if raw < -Self.fullSwipe {
+                        settle(0)
+                        onDelete()
+                    } else if raw > Self.fullSwipe, let onEdit {
+                        settle(0)
+                        onEdit()
+                    } else if raw < -Self.revealWidth * 0.6 {
+                        settle(-Self.revealWidth)
+                    } else if raw > Self.revealWidth * 0.6, onEdit != nil {
+                        settle(Self.revealWidth)
+                    } else {
+                        settle(0)
                     }
-                    .onEnded { value in
-                        let wasHorizontal = horizontalDrag == true
-                        let start = dragStart
-                        horizontalDrag = nil
-                        guard wasHorizontal else {
-                            swipe.active = false
-                            return
-                        }
-                        // Decisions on true finger travel (from engagement),
-                        // not the damped offset — rubber-banding changes only
-                        // the feel, not how far you must swipe to act.
-                        var raw = restOffset + (value.translation.width - start)
-                        if onEdit == nil { raw = min(0, raw) }
-                        if raw < -Self.fullSwipe {
-                            settle(0)
-                            onDelete()
-                        } else if raw > Self.fullSwipe, let onEdit {
-                            settle(0)
-                            onEdit()
-                        } else if raw < -Self.revealWidth * 0.6 {
-                            settle(-Self.revealWidth)
-                        } else if raw > Self.revealWidth * 0.6, onEdit != nil {
-                            settle(Self.revealWidth)
-                        } else {
-                            settle(0)
-                        }
-                        // After the outer day-swipe's onEnded has run.
-                        DispatchQueue.main.async { swipe.active = false }
-                    }
-            )
+                    swipe.active = false
+                }
+            ))
     }
 
     private func actionButton(
@@ -1232,6 +1212,79 @@ private struct LogRowSwipeActions: ViewModifier {
         // collapse animations keep .snappy.
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { offset = value }
         restOffset = value
+    }
+}
+
+/// A horizontal-only pan bridged from UIKit so it can YIELD a vertical drag
+/// to the enclosing ScrollView — the one thing a SwiftUI DragGesture can't
+/// do (it captures the touch at its minimumDistance and never hands it back,
+/// which left vertical scrolls that began on a log row intermittently dead).
+/// The recognizer fails itself the moment a drag reads more vertical than
+/// horizontal (see HorizontalPanGestureRecognizer), so the scroll claims the
+/// pan cleanly; a clearly horizontal drag begins the row swipe and, because
+/// the delegate allows simultaneous recognition, is never pre-empted by the
+/// scroll's own pan.
+private struct HorizontalSwipeGesture: UIGestureRecognizerRepresentable {
+    /// Horizontal translation (SwiftUI-space) as the drag moves.
+    let onChanged: (CGFloat) -> Void
+    /// Final horizontal translation when the drag ends, cancels, or fails.
+    let onEnded: (CGFloat) -> Void
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIGestureRecognizer(context: Context) -> HorizontalPanGestureRecognizer {
+        let recognizer = HorizontalPanGestureRecognizer()
+        recognizer.delegate = context.coordinator
+        return recognizer
+    }
+
+    func handleUIGestureRecognizerAction(
+        _ recognizer: HorizontalPanGestureRecognizer, context: Context
+    ) {
+        // localTranslation is in the attached view's SwiftUI space, so it
+        // stays stable as we move the row via .offset — reading
+        // translation(in: view) here would feed the offset back into itself.
+        let translationX = context.converter.localTranslation?.x ?? 0
+        switch recognizer.state {
+        case .began, .changed:
+            onChanged(translationX)
+        case .ended, .cancelled, .failed:
+            onEnded(translationX)
+        default:
+            break
+        }
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        // Recognize alongside the scroll's pan (and the row's tap): the
+        // recognizer's own vertical-fail is what keeps vertical drags with
+        // the scroll, so simultaneous recognition only ensures a horizontal
+        // swipe isn't blocked by the scroll winning arbitration first.
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
+        ) -> Bool {
+            true
+        }
+    }
+}
+
+/// A pan that bows out of any drag it reads as vertical: past a small dead
+/// zone, if the touch has travelled further vertically than horizontally it
+/// fails, so the enclosing ScrollView claims the pan. A clearly horizontal
+/// drag is left to begin as a normal pan (the row swipe). The dead zone
+/// keeps first-pixel jitter from deciding the axis.
+private final class HorizontalPanGestureRecognizer: UIPanGestureRecognizer {
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesMoved(touches, with: event)
+        guard state == .possible else { return }
+        let translation = translation(in: view)
+        guard abs(translation.x) + abs(translation.y) > 8 else { return }
+        if abs(translation.y) > abs(translation.x) {
+            state = .failed
+        }
     }
 }
 

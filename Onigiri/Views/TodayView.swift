@@ -128,21 +128,21 @@ struct TodayView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                // Nothing lives on the leading edge: the left ~20pt is iOS's
+                // back-swipe zone, and a control there (the old previous-day
+                // chevron) had its taps intermittently stolen by that gesture
+                // — the button highlighted but the action never fired ("takes
+                // 3 taps", the user). Today is this stack's root, so back-swipe
+                // does nothing here anyway. All controls sit on the trailing
+                // edge, which has no such gesture; Settings keeps its top-right
+                // corner and the day chevrons pair up just to its left.
+                ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
                         Task { await model.goToPreviousDay() }
                     } label: {
                         Image(systemName: "chevron.left")
                     }
                     .accessibilityLabel("Previous day")
-                }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button {
-                        activeSheet = .settings
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .accessibilityLabel("Settings")
                     Button {
                         Task { await model.goToNextDay() }
                     } label: {
@@ -150,6 +150,12 @@ struct TodayView: View {
                     }
                     .disabled(model.isToday)
                     .accessibilityLabel("Next day")
+                    Button {
+                        activeSheet = .settings
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("Settings")
                 }
             }
             .navigationDestination(for: Route.self) { route in

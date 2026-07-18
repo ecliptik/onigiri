@@ -1632,7 +1632,12 @@ final class OnigiriUITests: XCTestCase {
         grantHealthAccess(in: app, timeout: 10)
         // The iPad sim adds a Health sync prompt after the grants.
         dismissHealthSyncPrompt(in: app)
-        for tab in ["Today", "Foods", "Goal", "Calendar"] {
+        // The app launches on Today — capture it directly, before the tab
+        // loop. Tapping the sidebar "Today" via switchTab is flaky on the
+        // iPad capture, and Today is the shot this recapture needs; grabbing
+        // it up front makes the capture independent of that tap.
+        attachShot(named: "tab-today", settle: 3)
+        for tab in ["Foods", "Goal", "Calendar"] {
             switchTab(in: app, to: tab)
             attachShot(named: "tab-\(tab.lowercased())", settle: 2)
         }

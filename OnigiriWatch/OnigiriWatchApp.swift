@@ -21,19 +21,28 @@ struct OnigiriWatchApp: App {
         let model = WatchModel()
         model.sync.activate()
         let observer = HealthKitService()
-        observer.startObservingLogChanges {
+        observer.startObservingLogChanges { [model] in
             // Debounced funnel: one meal writes a burst of samples (and
             // phone logs sync in as bursts too) — coalesce them into a
             // single complication reload. Runs before the observer
             // completes, so a background wake can't suspend under it.
-            await MainActor.run {
+            let isActive = await MainActor.run {
                 WidgetReloader.requestReload(kinds: WidgetKinds.watchAll)
+                let active = WKApplication.shared().applicationState == .active
                 // A background wake suspends after completion — flush
                 // the debounce before the window closes.
-                if WKApplication.shared().applicationState != .active {
-                    WidgetReloader.flushNow()
-                }
+                if !active { WidgetReloader.flushNow() }
+                return active
             }
+            // Foreground: the changed samples just landed in OUR HealthKit
+            // store — this is the phone's log/edit/undo arriving via
+            // HealthKit's own device sync. Pull them into the open headline
+            // now instead of stranding it until the next wrist-raise or
+            // page swipe (the observer otherwise only refreshes the
+            // complications, never the app's total). maxAge 0 forces a
+            // fresh read but still joins an in-flight refresh, so a burst
+            // of sample writes coalesces into one query set.
+            if isActive { await model.refreshIfStale(maxAge: 0) }
         }
         _model = State(initialValue: model)
         _logObserver = State(initialValue: observer)

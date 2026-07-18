@@ -83,7 +83,13 @@ struct WatchHomeView: View {
                 .controlSize(.small)
                 .padding(.horizontal, 4)
             }
-            .navigationTitle("🍙 Onigiri")
+            // No app-name title: the headline is the top content and owns
+            // the strip. "🍙 Onigiri" as an inline title crowded the big
+            // number from above — the mirror of the v2.5.6 bottom-dots fix.
+            // The app's identity is obvious once it's open, and watchOS
+            // still shows the clock up top; an empty inline title (as the
+            // phone's TodayView uses) keeps the bar minimal without the label.
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showMeals) {
                 MealPickerView(model: model)

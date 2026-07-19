@@ -91,6 +91,11 @@ struct TodayView: View {
 
     var body: some View {
         NavigationStack(path: $navPath) {
+            // The reader serves the Log master toggle: expanding scrolls
+            // the log to the top of the viewport, collapsing returns to
+            // the day headline (both anchors always exist — they're the
+            // non-lazy tops of their stacks, so scrollTo is deterministic).
+            ScrollViewReader { scrollProxy in
             ScrollView {
                 VStack(spacing: Layout.screenSpacing) {
                     // The day title is the date-jump door (one tap to the
@@ -99,18 +104,19 @@ struct TodayView: View {
                     // a link around the whole headline swallowed half of
                     // the day-paging swipes.
                     dayTitleButton
+                        .id(ScrollTarget.dayTop)
                     if hSizeClass == .regular {
                         // iPad/regular width: the summary beside the log,
                         // not a phone column stretched across the canvas.
                         HStack(alignment: .top, spacing: Layout.screenSpacing) {
                             VStack(spacing: Layout.screenSpacing) { summaryStack }
                                 .frame(maxWidth: .infinity)
-                            VStack(spacing: Layout.screenSpacing) { logStack }
+                            VStack(spacing: Layout.screenSpacing) { logStack(scrollProxy) }
                                 .frame(maxWidth: .infinity)
                         }
                     } else {
                         summaryStack
-                        logStack
+                        logStack(scrollProxy)
                     }
                 }
                 .padding(.bottom, 24)
@@ -247,6 +253,7 @@ struct TodayView: View {
             // stranding the bar minimized after a gesture-less section
             // expand/collapse (confirmed on device by removing it).
             // Don't reintroduce a scroll-spanning swipe here.
+            }
         }
         .task { await model.start() }
         .onChange(of: toastCenter.mutationVersion) { _, _ in
@@ -423,10 +430,17 @@ struct TodayView: View {
         }
     }
 
+    /// Scroll anchors for the Log master toggle. Both are the non-lazy
+    /// tops of their stacks, so they always exist and scrollTo can't
+    /// miss (a lazy target below the fold wouldn't be in the tree yet).
+    private enum ScrollTarget: Hashable {
+        case dayTop, logHeader
+    }
+
     /// The log and its trouble states — the second pane on regular width.
     @ViewBuilder
-    private var logStack: some View {
-        loggedSection
+    private func logStack(_ proxy: ScrollViewProxy) -> some View {
+        loggedSection(proxy)
 
         if let message = model.errorMessage {
             Text(message)
@@ -676,8 +690,14 @@ struct TodayView: View {
         }
     }
 
-    private var loggedSection: some View {
-        LazyVStack(alignment: .leading, spacing: 10) {
+    private func loggedSection(_ proxy: ScrollViewProxy) -> some View {
+        // A plain VStack ON PURPOSE (was Lazy): during the master-toggle
+        // glide, lazily-created rows materialized mid-scroll at full size
+        // with no animation — visible "pop-in" on bigger days (the user).
+        // Non-lazy, every row exists before the scroll passes over it and
+        // the whole unfold animates. Scroll perf is carried by the
+        // per-section Equatable views below, not by laziness.
+        VStack(alignment: .leading, spacing: 10) {
             // ALL logging lives behind the corner + pill now — water is
             // the sheet's pinned top row (Micheal's final water home;
             // widget/watch/app icon keep the 1-tap paths).
@@ -686,15 +706,45 @@ struct TodayView: View {
                 // collapse everything; all closed → open everything
                 // (categories and water alike).
                 Button {
-                    withAnimation(.snappy) {
-                        let anyExpanded = collapsedSections.count < FoodCategory.allCases.count
-                            || !waterCollapsed
+                    let anyExpanded = collapsedSections.count < FoodCategory.allCases.count
+                        || !waterCollapsed
+                    // .smooth, not the log's usual .snappy: this toggle
+                    // pairs with a viewport glide below, and spring
+                    // bounce on either half reads as stutter ("a little
+                    // jerky", the user — device-tested).
+                    withAnimation(.smooth) {
                         if anyExpanded {
                             collapsedSections = Set(FoodCategory.allCases)
                             waterCollapsed = true
                         } else {
                             collapsedSections = []
                             waterCollapsed = false
+                        }
+                    }
+                    // Follow the toggle with the viewport (the user:
+                    // expanding used to leave the log below the fold,
+                    // collapsing left the screen scrolled past it):
+                    // expand pins the log to the top, collapse returns
+                    // to the day headline. Compact only — on regular
+                    // width the log pane already sits beside the summary.
+                    // The ~100 ms wait is load-bearing AND tuned: scrollTo
+                    // in the same turn resolves before the render commit
+                    // and clamps against the pre-toggle content height
+                    // (lands nowhere, sim-verified twice) — but layout
+                    // COMMITS on the next frame even while the animation
+                    // plays, so just past the commit the target is exact
+                    // and the glide overlaps the still-running expansion:
+                    // one continuous motion, not expand-stop-scroll (350 ms
+                    // felt like two beats on device).
+                    if hSizeClass != .regular {
+                        Task {
+                            try? await Task.sleep(for: .milliseconds(100))
+                            withAnimation(.smooth) {
+                                proxy.scrollTo(
+                                    anyExpanded ? ScrollTarget.dayTop : ScrollTarget.logHeader,
+                                    anchor: .top
+                                )
+                            }
                         }
                     }
                 } label: {
@@ -708,6 +758,7 @@ struct TodayView: View {
                 Spacer()
             }
             .padding(.horizontal)
+            .id(ScrollTarget.logHeader)
 
             if model.foodLog.isEmpty {
                 Text(model.isToday ? "Nothing logged yet." : "Nothing was logged this day.")

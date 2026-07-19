@@ -30,6 +30,10 @@ struct ContentView: View {
     /// than on FoodsView so it survives the +'s search-tab bounce (see the
     /// .onChange below). Add Meal needs at least one saved food to build from.
     @State private var showAddChooser = false
+    /// Set by the "+" tap interceptor when it routes; the bounce fallback
+    /// skips routing inside this window so a tap that somehow ALSO selected
+    /// the tab can't open the add flow twice.
+    @State private var lastInterceptedAdd: Date?
     @Query private var foods: [Food]
 
     var body: some View {
@@ -184,14 +188,16 @@ struct ContentView: View {
             }
             // The Music-style detached corner circle (the search-tab
             // slot is the only public API that renders there). It acts
-            // as a button: the onChange below bounces the selection and
-            // opens the right add flow for the tab the user was on.
-            // "Add", not "Log" — the portion sheet's confirm is "Log"
-            // and two same-named buttons make tests (and VoiceOver)
-            // ambiguous. NOTE: this "+"-is-a-tab design has an unsolved
-            // flash on tap (SwiftUI briefly renders the tapped tab); the
-            // real fix is a non-tab "+". See
-            // plans/2026-07-18-plus-flash-and-v2.5.12-handoff.md.
+            // as a button: AddPillGestures intercepts the tap at the
+            // window level and routes via openAddFlow() WITHOUT letting
+            // the selection change — selecting this tab cross-fades the
+            // whole screen to its empty content (the "+" flash; frame
+            // capture 2026-07-18). The onChange bounce below stays as
+            // the fallback for non-touch activation (VoiceOver,
+            // keyboard). "Add", not "Log" — the portion sheet's confirm
+            // is "Log" and two same-named buttons make tests (and
+            // VoiceOver) ambiguous. See
+            // plans/2026-07-18-plus-flash-fix-plan.md.
             Tab("Add", systemImage: "plus", value: .log, role: .search) {
                 Color.clear
             }
@@ -201,24 +207,22 @@ struct ContentView: View {
         .tabViewStyle(.sidebarAdaptable)
         .tint(.riceToast)
         .onChange(of: selectedTab) { old, new in
+            // Fallback only: touches are intercepted by AddPillGestures
+            // before the tab can select, so this fires for non-touch
+            // activation (VoiceOver, keyboard) or a touch the hit test
+            // missed. Deferred one turn: bouncing synchronously
+            // mid-transition aborts the search-role slot's own activation
+            // halfway and leaves the ORIGIN tab's search drawer wedged —
+            // dead taps on Foods' search after using the pill (the user;
+            // pinned by testFoodsSearchAfterSave).
             guard new == .log else { return }
-            // Deferred one turn: bouncing synchronously mid-transition
-            // aborts the search-role slot's own activation halfway and
-            // leaves the ORIGIN tab's search drawer wedged — dead taps
-            // on Foods' search after using the pill (the user; pinned
-            // by testFoodsSearchAfterSave).
             Task {
                 selectedTab = old == .log ? .today : old
-                if old == .foods {
-                    // Foods: the add-to-Food-Library chooser (bottom sheet,
-                    // hosted on ContentView so the bounce doesn't dismiss it).
-                    showAddChooser = true
-                } else {
-                    // Everywhere else: the Log sheet (search-first,
-                    // scanner and favorites inside).
-                    selectedTab = .today
-                    QuickActions.shared.quickLogRequest = .all
-                }
+                // If the interceptor just routed this same gesture, don't
+                // open the add flow a second time — bounce only.
+                if let tapped = lastInterceptedAdd,
+                   Date.now.timeIntervalSince(tapped) < 0.3 { return }
+                openAddFlow(from: old == .log ? .today : old)
             }
         }
         // A bottom sheet (like Today's Log window) for the Food Library
@@ -239,13 +243,21 @@ struct ContentView: View {
         // removing that swipe fixed it without touching this. iOS 18 bars
         // never minimize; the modifier is a no-op there.
         .modifier(TabBarMinimizePin())
-        // Hold the corner + to log a water serving without the sheet —
-        // the tap keeps opening the add flow. Checked at fire time so
+        // The corner +'s real activation path: tap intercepted at the
+        // window level (the tab never selects — no cross-fade flash) and
+        // routed for the tab the user is on; hold logs a water serving
+        // without the sheet. holdToLogWater is checked at fire time so
         // the Settings toggle applies without a relaunch.
-        .background(AddPillLongPress {
-            guard SharedStore.holdToLogWater else { return }
-            Task { await LogActions.logWater(oz: SharedStore.waterServingOz) }
-        })
+        .background(AddPillGestures(
+            onTap: {
+                lastInterceptedAdd = .now
+                openAddFlow(from: selectedTab)
+            },
+            onLongPress: {
+                guard SharedStore.holdToLogWater else { return }
+                Task { await LogActions.logWater(oz: SharedStore.waterServingOz) }
+            }
+        ))
         .toastHost()
     }
 
@@ -256,6 +268,21 @@ struct ContentView: View {
             } else {
                 content
             }
+        }
+    }
+
+    /// Routes the corner "+" to the right add flow for the tab the user
+    /// was on: Foods → the add-to-Food-Library chooser (bottom sheet,
+    /// hosted here so no bounce can dismiss it); everywhere else → Today +
+    /// the Log sheet (search-first, scanner and favorites inside). Called
+    /// by the tap interceptor (selection untouched) and the bounce
+    /// fallback (selection already reverted).
+    private func openAddFlow(from tab: AppTab) {
+        if tab == .foods {
+            showAddChooser = true
+        } else {
+            selectedTab = .today
+            QuickActions.shared.quickLogRequest = .all
         }
     }
 

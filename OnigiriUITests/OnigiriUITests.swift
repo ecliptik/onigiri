@@ -244,10 +244,17 @@ final class OnigiriUITests: XCTestCase {
         // must stand down, so the title stays "Today".
         switchTab(in: app, to: "Today")
         expandMealSections(in: app)
+        // The water group sits at the bottom of the expanded log, and the
+        // log's rows are LAZY — a row below the fold doesn't exist in the
+        // tree until scrolled near. Scroll toward it BEFORE asserting
+        // existence (asserting first failed deterministically on an erased
+        // sim, reproduced on stock v2.5.12 — 2026-07-19).
         let waterRow = app.staticTexts["12 oz"].firstMatch
+        for _ in 0..<4 where !waterRow.exists {
+            app.swipeUp()
+        }
         XCTAssertTrue(waterRow.waitForExistence(timeout: 10),
                       "Water rows should be visible once expanded")
-        // The water group sits at the bottom of the expanded log.
         for _ in 0..<3 where !waterRow.isHittable {
             app.swipeUp()
         }

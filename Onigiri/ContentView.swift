@@ -331,6 +331,10 @@ private struct AddToLibrarySheet: View {
                 Label("Add Food", systemImage: "carrot")
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 4)
+                    // Dark-on-fill like every other prominent button
+                    // (onboarding, Done, Import): the default white label
+                    // on riceToast is ~1.9:1 in dark mode.
+                    .foregroundStyle(Color.onRicePaper)
             }
             .buttonStyle(.borderedProminent)
             if canAddMeal {
@@ -340,6 +344,7 @@ private struct AddToLibrarySheet: View {
                     Label("Add Meal", systemImage: "fork.knife")
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 4)
+                        .foregroundStyle(Color.onRicePaper)
                 }
                 .buttonStyle(.borderedProminent)
             }

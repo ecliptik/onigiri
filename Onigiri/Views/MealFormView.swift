@@ -176,7 +176,7 @@ struct MealFormView: View {
                         // `No foods match “”.` rendered for an emptied
                         // library.
                         Text(foodFilter.trimmingCharacters(in: .whitespaces).isEmpty
-                            ? "No saved foods yet — add foods on the Library tab first."
+                            ? "No saved foods yet — add foods to your Food Library first."
                             : "No foods match “\(foodFilter.trimmingCharacters(in: .whitespaces))”.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)

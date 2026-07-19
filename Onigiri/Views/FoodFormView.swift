@@ -137,7 +137,7 @@ struct FoodFormView: View {
     /// The scanner and online search exist to FILL a blank form. A form
     /// opened FROM a search result (or editing a saved food) offering
     /// another search was a loop — they render only for a blank new
-    /// food, the Library-screen add path.
+    /// food, the Foods-screen add path.
     private var isBlankNewFood: Bool {
         food == nil && prefill == nil && createdFood == nil
     }
@@ -384,7 +384,7 @@ struct FoodFormView: View {
             // same view compete, like the .sheet landmine.
             .background {
                 Color.clear.alert(
-                    "“\(duplicateMatch?.name ?? "")” is already in your library",
+                    "“\(duplicateMatch?.name ?? "")” is already in your Food Library",
                     isPresented: .init(
                         get: { duplicateMatch != nil },
                         set: { if !$0 { duplicateMatch = nil } }

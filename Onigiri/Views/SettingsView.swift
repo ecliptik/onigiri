@@ -57,7 +57,7 @@ struct SettingsView: View {
 
         var title: String {
             switch self {
-            case .library: "Reset food library?"
+            case .library: "Reset Food Library?"
             case .goals: "Reset goals?"
             case .settings: "Reset settings?"
             case .all: "Reset all?"
@@ -67,19 +67,19 @@ struct SettingsView: View {
         var message: String {
             switch self {
             case .library:
-                "Deletes every food and meal on this phone and the watch. Logged history in Apple Health is untouched, but the library can't be brought back — Export Library first if unsure."
+                "Deletes every food and meal on this phone and the watch. Logged history in Apple Health is untouched, but the Food Library can't be brought back — Export Food Library first if unsure."
             case .goals:
                 "Removes the weight goal and its daily deficit history. Weight and logged history in Apple Health are untouched. This can't be undone."
             case .settings:
-                "Returns every setting to its default, including tracked metrics, icons, reminders, and the online database API key. The food library and goals stay."
+                "Returns every setting to its default, including tracked metrics, icons, reminders, and the online database API key. The Food Library and goals stay."
             case .all:
-                "Resets Onigiri back to stock: food library, goals, and every setting. Apple Health data is untouched. This can't be undone."
+                "Resets Onigiri back to stock: Food Library, goals, and every setting. Apple Health data is untouched. This can't be undone."
             }
         }
 
         var toast: String {
             switch self {
-            case .library: "Library reset"
+            case .library: "Food Library reset"
             case .goals: "Goals reset"
             case .settings: "Settings reset"
             case .all: "Onigiri reset to stock"
@@ -314,7 +314,7 @@ struct SettingsView: View {
             // Outcomes toast, like the same operations do from Foods
             // and the Log sheet — this screen used a third style
             // (sticky inline text).
-            Button("Export Library…", systemImage: "square.and.arrow.up") {
+            Button("Export Food Library…", systemImage: "square.and.arrow.up") {
                 // Failure must say so — a button that silently does
                 // nothing reads as a dead button.
                 do {
@@ -325,7 +325,7 @@ struct SettingsView: View {
                     ToastCenter.shared.show("Export failed: \(error.localizedDescription)")
                 }
             }
-            Button("Import Library…", systemImage: "square.and.arrow.down") {
+            Button("Import Food Library…", systemImage: "square.and.arrow.down") {
                 showImporter = true
             }
             Button("Back Up Now", systemImage: "externaldrive") {
@@ -1002,7 +1002,7 @@ struct SettingsView: View {
             ) { result in
                 switch result {
                 case .success:
-                    ToastCenter.shared.show("Library exported ✓")
+                    ToastCenter.shared.show("Food Library exported ✓")
                 case .failure(let error):
                     ToastCenter.shared.show("Export failed: \(error.localizedDescription)")
                 }

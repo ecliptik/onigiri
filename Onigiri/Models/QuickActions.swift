@@ -40,9 +40,14 @@ final class QuickActions {
     /// (Calendar's "View day"), same consumable-Optional pattern.
     var dayRequest: Date?
 
-    /// One-shot request for FoodsView to open the new-food form (the
-    /// corner + while on the Library tab), same consumable pattern.
-    var addFoodRequest: Bool?
+    /// One-shot request for FoodsView to open the add-to-library form:
+    /// `.food` → new food, `.meal` → new meal. The chooser that sets this
+    /// lives in ContentView (presented synchronously as the + is tapped, so
+    /// its backdrop covers the search-tab bounce and it survives it — hosting
+    /// it on FoodsView flashed, then got dismissed by the tab change).
+    /// Consumable Optional, same pattern: a stuck flag never re-fires onChange.
+    enum AddFoodKind { case food, meal }
+    var addFoodKind: AddFoodKind?
 
     /// One-shot request to switch to the Goal tab (tapping Today's Daily
     /// Goal card). Consumable Optional, not a Bool: a stuck `true` never

@@ -356,8 +356,10 @@ struct QuickLogSheet: View {
                     Button("Done") { dismiss() }
                         .fontWeight(.semibold)
                 }
-                ToolbarItem(placement: .topBarLeading) {
-                    // The Foods screen's sort circle, third surface.
+                ToolbarItem(placement: .topBarTrailing) {
+                    // The Foods screen's sort circle, third surface — kept on
+                    // the trailing edge to match Foods/Today/Calendar (and
+                    // clear of the leading back-swipe zone).
                     Menu {
                         Picker("Sort", selection: $sortRaw) {
                             ForEach(LibrarySort.allCases, id: \.rawValue) { option in
@@ -473,14 +475,14 @@ struct QuickLogSheet: View {
                 ContentUnavailableView {
                     Label("No saved foods yet", systemImage: "fork.knife")
                 } description: {
-                    Text("Scan a barcode or search online — logged foods are saved to your library.\n\nOr bring your library from another device: export it there (Settings → Export Library) and import the file here.")
+                    Text("Scan a barcode or search online — logged foods are saved to your Food Library.\n\nOr bring your Food Library from another device: export it there (Settings → Export Food Library) and import the file here.")
                 } actions: {
                     // Text-only: with a systemImage, iOS 26 collapses
                     // the label to a bare icon here.
                     Button {
                         showLibraryImporter = true
                     } label: {
-                        Text("Import Library…")
+                        Text("Import Food Library…")
                             // Dark-on-cream: the inherited riceToast tint
                             // put a white label at ~1.9:1 in dark mode.
                             .foregroundStyle(Color.onRicePaper)
@@ -507,7 +509,7 @@ struct QuickLogSheet: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else if kind == .meals {
-                Text("No saved meals yet — build one on the Library tab.")
+                Text("No saved meals yet — build one in your Food Library.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {

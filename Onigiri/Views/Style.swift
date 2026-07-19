@@ -6,7 +6,8 @@ import OnigiriKit
 /// Foods leads with the favorites blend, the builder with Recent).
 /// Raw values are stored preferences: never rename them.
 enum LibrarySort: String, CaseIterable {
-    case ranked, recent, name
+    // Declaration order IS the menu order: Recent, Favorites, Name.
+    case recent, ranked, name
 
     var label: String {
         switch self {

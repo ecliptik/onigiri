@@ -46,6 +46,25 @@ final class WatchModel {
         started = true
         sync.activate()
         guard HealthKitService.isAvailable else { return }
+        #if DEBUG
+        // Screenshot/QA aid: seed this watch's OWN HealthKit with a
+        // realistic day so the home headline shows plausible totals on the
+        // sim. Uses plain logFood/logWater on the REGULAR write auth (which
+        // auto-grants on the sim, no sheet) — NOT seedSampleData(), whose
+        // requestDebugSeedAuthorization pops a Health sheet the watch sim
+        // can't be tapped to grant. Paired-sim sharing gives the watch burn
+        // but not the phone's food, so without this the headline reads
+        // intake=0.
+        if ProcessInfo.processInfo.arguments.contains("--seed-sample-data") {
+            try? await health.requestAuthorization()
+            _ = try? await health.logFood(name: "Avocado toast", kcal: 420, sodiumMg: 620, category: .breakfast)
+            _ = try? await health.logFood(name: "Chicken bowl", kcal: 610, sodiumMg: 880, category: .lunch)
+            _ = try? await health.logFood(name: "Trail mix", kcal: 205, sodiumMg: 120, category: .snack)
+            _ = try? await health.logWater(oz: 24)
+            await refresh()
+            return
+        }
+        #endif
         if (try? await health.shouldRequestAuthorization()) == true {
             try? await health.requestAuthorization()
         }

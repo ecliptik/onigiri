@@ -78,7 +78,6 @@ struct FoodsView: View {
     // default picked a day earlier).
     @State private var scope: Scope = .favorites
     @State private var activeSheet: ActiveSheet?
-    @State private var showAddChooser = false
     @State private var quickActions = QuickActions.shared
     @State private var isLogging = false
     @State private var isLookingUpBarcode = false
@@ -90,7 +89,7 @@ struct FoodsView: View {
     @State private var showLibraryImporter = false
     /// The list order, remembered (the user liked the meal builder's
     /// sort menu). Default = the favorites blend.
-    @AppStorage("foodsLibrarySort") private var sortRaw = LibrarySort.ranked.rawValue
+    @AppStorage("foodsLibrarySort") private var sortRaw = LibrarySort.recent.rawValue
     // The secondary row metric follows the first tracked slot (the
     // user: sodium was hardcoded; now it customizes with Settings).
     @AppStorage(SharedStore.trackedMetric1Key, store: SharedStore.defaults) private var trackedMetric1 = "sodium"
@@ -100,7 +99,7 @@ struct FoodsView: View {
         .firstFoodMetric(slot1: trackedMetric1, slot2: trackedMetric2)
     }
 
-    private var librarySort: LibrarySort { LibrarySort(rawValue: sortRaw) ?? .ranked }
+    private var librarySort: LibrarySort { LibrarySort(rawValue: sortRaw) ?? .recent }
 
     /// Favorites first, then by recency (last logged, falling back to
     /// when it was added — the user: recent beats slot affinity), then
@@ -310,7 +309,7 @@ struct FoodsView: View {
                             }
                         }
                     } label: {
-                        Image(systemName: librarySort == .ranked
+                        Image(systemName: librarySort == .recent
                               ? "arrow.up.arrow.down.circle"
                               : "arrow.up.arrow.down.circle.fill")
                             .contentTransition(.symbolEffect(.replace))
@@ -322,24 +321,14 @@ struct FoodsView: View {
             // consolidated into it): a Food-or-Meal chooser. Consumable
             // Optional, checked on change and appear (the Bool-flag
             // version of this pattern goes dead).
-            .onChange(of: quickActions.addFoodRequest) { _, _ in
-                consumeAddFoodRequest()
+            // The add chooser now lives in ContentView (so it survives the
+            // +'s search-tab bounce); it routes the pick here as addFoodKind.
+            // Consumable Optional, checked on change AND appear — a stuck
+            // flag never re-fires onChange.
+            .onChange(of: quickActions.addFoodKind) { _, _ in
+                consumeAddFoodKind()
             }
-            .onAppear { consumeAddFoodRequest() }
-            // A centered ALERT, the app's standard dialog — the
-            // confirmationDialog rendered as an anchored bubble up by
-            // the tab bar (the iOS 26 quote-popover look the user keeps
-            // vetoing). Background layer: two alerts already chain on
-            // this view.
-            .background {
-                Color.clear.alert("Add to your library", isPresented: $showAddChooser) {
-                    Button("Add Food") { activeSheet = .newFood }
-                    if !foods.isEmpty {
-                        Button("Add Meal") { activeSheet = .newMeal }
-                    }
-                    Button("Cancel", role: .cancel) {}
-                }
-            }
+            .onAppear { consumeAddFoodKind() }
             // Alerts, not confirmationDialogs: iOS 26 anchors dialogs to
             // the source row as a popover bubble; a destructive confirm
             // should be the standard centered alert.
@@ -568,14 +557,14 @@ struct FoodsView: View {
                 ContentUnavailableView {
                     Label("No saved foods yet", systemImage: "fork.knife")
                 } description: {
-                    Text("Add a food once — calories and nutrients off the label, then log it with a tap.\n\nAlready tracking on another device? Export its library (Settings → Export Library), save the file, and import it here.")
+                    Text("Add a food once — calories and nutrients off the label, then log it with a tap.\n\nAlready tracking on another device? Export its Food Library (Settings → Export Food Library), save the file, and import it here.")
                 } actions: {
                     // Text-only: with a systemImage, iOS 26 collapses
                     // the label to a bare icon here (as in toolbars).
                     Button {
                         showLibraryImporter = true
                     } label: {
-                        Text("Import Library…")
+                        Text("Import Food Library…")
                             // Dark-on-cream: the inherited riceToast tint
                             // put a white label at ~1.9:1 in dark mode.
                             .foregroundStyle(Color.onRicePaper)
@@ -614,10 +603,10 @@ struct FoodsView: View {
         }
     }
 
-    private func consumeAddFoodRequest() {
-        guard quickActions.addFoodRequest != nil else { return }
-        quickActions.addFoodRequest = nil
-        showAddChooser = true
+    private func consumeAddFoodKind() {
+        guard let kind = quickActions.addFoodKind else { return }
+        quickActions.addFoodKind = nil
+        activeSheet = kind == .food ? .newFood : .newMeal
     }
 
     /// Scan → library check → fetch the product if it's new. Routing

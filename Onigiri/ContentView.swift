@@ -26,6 +26,11 @@ struct ContentView: View {
     /// hasOnboarded) — gating live on goals.isEmpty cut the flow short
     /// the moment the goal page saved.
     @State private var showingOnboarding = false
+    /// The add-to-library chooser (Add Food / Add Meal), hosted HERE rather
+    /// than on FoodsView so it survives the +'s search-tab bounce (see the
+    /// .onChange below). Add Meal needs at least one saved food to build from.
+    @State private var showAddChooser = false
+    @Query private var foods: [Food]
 
     var body: some View {
         // The Group keeps the launch tasks alive in BOTH branches —
@@ -183,7 +188,10 @@ struct ContentView: View {
             // opens the right add flow for the tab the user was on.
             // "Add", not "Log" — the portion sheet's confirm is "Log"
             // and two same-named buttons make tests (and VoiceOver)
-            // ambiguous.
+            // ambiguous. NOTE: this "+"-is-a-tab design has an unsolved
+            // flash on tap (SwiftUI briefly renders the tapped tab); the
+            // real fix is a non-tab "+". See
+            // plans/2026-07-18-plus-flash-and-v2.5.12-handoff.md.
             Tab("Add", systemImage: "plus", value: .log, role: .search) {
                 Color.clear
             }
@@ -202,14 +210,22 @@ struct ContentView: View {
             Task {
                 selectedTab = old == .log ? .today : old
                 if old == .foods {
-                    // The Library's +: straight to the new-food form.
-                    QuickActions.shared.addFoodRequest = true
+                    // Foods: the add-to-Food-Library chooser (bottom sheet,
+                    // hosted on ContentView so the bounce doesn't dismiss it).
+                    showAddChooser = true
                 } else {
                     // Everywhere else: the Log sheet (search-first,
                     // scanner and favorites inside).
                     selectedTab = .today
                     QuickActions.shared.quickLogRequest = .all
                 }
+            }
+        }
+        // A bottom sheet (like Today's Log window) for the Food Library
+        // chooser, matching the logging UX (the user).
+        .sheet(isPresented: $showAddChooser) {
+            AddToLibrarySheet(canAddMeal: !foods.isEmpty) { kind in
+                quickActions.addFoodKind = kind
             }
         }
         // Liquid Glass: the tab bar shrinks while scrolling content,
@@ -265,6 +281,57 @@ struct ContentView: View {
             selectedTab = .today
             QuickActions.shared.quickLogRequest = .scan
         }
+    }
+}
+
+/// The "+"-on-Foods chooser: a compact bottom sheet (Add Food / Add Meal),
+/// presented from ContentView so it slides up over — and hides — the
+/// search-tab bounce (a centered alert's dim let the morph flash through).
+/// The pick routes to FoodsView via QuickActions.addFoodKind.
+private struct AddToLibrarySheet: View {
+    let canAddMeal: Bool
+    let onPick: (QuickActions.AddFoodKind) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("Add to your Food Library")
+                .font(.headline)
+                .padding(.top, 28)
+            Button {
+                onPick(.food); dismiss()
+            } label: {
+                Label("Add Food", systemImage: "carrot")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
+            }
+            .buttonStyle(.borderedProminent)
+            if canAddMeal {
+                Button {
+                    onPick(.meal); dismiss()
+                } label: {
+                    Label("Add Meal", systemImage: "fork.knife")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            Button {
+                dismiss()
+            } label: {
+                Text("Cancel")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
+            }
+            .buttonStyle(.bordered)
+            Spacer(minLength: 0)
+        }
+        // App accent, not the system blue Cancel — every button reads as
+        // one riceToast family (Add Food filled, the rest outlined).
+        .tint(.riceToast)
+        .padding(.horizontal, 24)
+        .presentationDetents([.height(canAddMeal ? 324 : 256)])
+        .presentationDragIndicator(.visible)
     }
 }
 

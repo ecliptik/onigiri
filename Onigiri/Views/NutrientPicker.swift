@@ -39,12 +39,25 @@ struct NutrientPickerView: View {
             group("Macronutrients", TrackedNutrient.macros)
             group("Minerals", Micronutrient.minerals.map(TrackedNutrient.micro))
             group("Vitamins", Micronutrient.vitamins.map(TrackedNutrient.micro))
+            // Every section hides itself independently, so a typo'd
+            // search otherwise rendered a completely BLANK list
+            // (2026-07-20 audit).
+            if !searchText.isEmpty, !anyMatches {
+                ContentUnavailableView.search(text: searchText)
+            }
         }
         .compactSections()
         .readableContentWidth(groupedBackground: true)
         .navigationTitle("Tracked Metric")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search nutrients")
+    }
+
+    private var anyMatches: Bool {
+        let all = TrackedNutrient.general + TrackedNutrient.macros
+            + Micronutrient.minerals.map(TrackedNutrient.micro)
+            + Micronutrient.vitamins.map(TrackedNutrient.micro)
+        return all.contains { $0.displayName.localizedCaseInsensitiveContains(searchText) }
     }
 
     @ViewBuilder

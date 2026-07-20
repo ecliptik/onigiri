@@ -126,7 +126,13 @@ extension FoodIntelligence {
             from: await completeRemote(system: Prompts.mealNameInstructions, user: user)
         ) else { return nil }
         let name = suggestion.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return name.isEmpty ? nil : name
+        // Code-level twin of the on-device @Guide's "at most four
+        // words" — a misbehaving remote server shouldn't dump a
+        // paragraph into the name field (numeric fields already get
+        // this parity treatment in describeFoodRemote).
+        guard !name.isEmpty, name.count <= 60,
+              name.split(separator: " ").count <= 6 else { return nil }
+        return name
     }
 
     // MARK: Identify Food
@@ -210,11 +216,17 @@ extension FoodIntelligence {
 
     /// Downscale + JPEG for upload economy (a label-free food shot
     /// doesn't need more than ~768 px for identification).
-    static func jpegForUpload(
+    /// @concurrent: this is real CPU work (decode + resample + JPEG
+    /// encode of a camera still) and its caller is MainActor-isolated —
+    /// under approachable concurrency a plain nonisolated async func
+    /// would STILL run its synchronous body on the caller's actor,
+    /// freezing the "Identifying food…" spinner (2026-07-20 audit).
+    @concurrent
+    nonisolated static func jpegForUpload(
         _ image: CGImage,
         orientation: CGImagePropertyOrientation?,
         maxEdge: CGFloat = 768
-    ) -> Data? {
+    ) async -> Data? {
         let w = CGFloat(image.width), h = CGFloat(image.height)
         guard w > 0, h > 0 else { return nil }
         let scale = min(1, maxEdge / max(w, h))

@@ -25,6 +25,12 @@ struct AIEstimateSection: View {
     /// The query the current phase belongs to — a changed query
     /// invalidates a stale estimate back to the idle row.
     @State private var phaseQuery = ""
+    /// The in-flight inference, stored so an edited query or a vanished
+    /// section CANCELS it: an orphaned completion repainted a stale
+    /// result over the reset row, and for BYO-AI providers the request
+    /// keeps spending the user's tokens after they've moved on
+    /// (2026-07-20 audit).
+    @State private var estimateTask: Task<Void, Never>?
 
     @AppStorage(AIProviderSettings.enabledKey, store: SharedStore.defaults) private var aiEnabled = false
     @AppStorage(AIProviderSettings.hintDismissedKey, store: SharedStore.defaults) private var hintDismissed = false
@@ -101,9 +107,11 @@ struct AIEstimateSection: View {
             }
             .onChange(of: query) { _, updated in
                 if updated.trimmingCharacters(in: .whitespaces) != phaseQuery {
+                    estimateTask?.cancel()
                     phase = .idle
                 }
             }
+            .onDisappear { estimateTask?.cancel() }
         }
     }
 
@@ -145,8 +153,13 @@ struct AIEstimateSection: View {
     private func estimate(_ trimmed: String) {
         phaseQuery = trimmed
         phase = .estimating
-        Task {
-            if let food = await FoodIntelligence.describeFood(trimmed) {
+        estimateTask?.cancel()
+        estimateTask = Task {
+            let food = await FoodIntelligence.describeFood(trimmed)
+            // A cancelled or superseded completion must not repaint the
+            // row — the query it answered is no longer on screen.
+            guard !Task.isCancelled, trimmed == phaseQuery else { return }
+            if let food {
                 phase = .result(food)
             } else {
                 phase = .failed

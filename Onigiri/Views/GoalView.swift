@@ -357,6 +357,9 @@ struct GoalView: View {
 
     private func removeGoal() {
         goals.forEach(context.delete)
+        // Explicit save (GoalUpsert's discipline): a crash inside
+        // autosave's window resurrected the removed goal.
+        try? context.save()
         targetWeightLb = nil
         mode = GoalMode.lose
         weightFieldFocused = false

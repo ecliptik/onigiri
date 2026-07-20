@@ -437,13 +437,13 @@ struct FoodsView: View {
             // Meals stay one-tap: their category rides along;
             // long-press still offers portions.
             LogButton(name: meal.name) {
-                meal.lastUsedAt = .now
+                markUsed(meal)
                 log(name: meal.name, kcal: meal.totalKcal,
                     sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
                     category: PortionTarget.category(from: meal.category),
                     aiGenerated: meal.aiGenerated)
             } onLongPress: {
-                meal.lastUsedAt = .now
+                markUsed(meal)
                 activeSheet = .portion(PortionTarget(
                     name: meal.name, kcal: meal.totalKcal,
                     sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
@@ -471,6 +471,7 @@ struct FoodsView: View {
             .tint(.riceToast)
             Button {
                 meal.isFavorite.toggle()
+                try? context.save()
                 // A light tap: the neighboring delete confirms loudly,
                 // this was silent.
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -511,10 +512,10 @@ struct FoodsView: View {
                 aiGenerated: food.aiGenerated
             )
             LogButton(name: food.name, longPressName: "Log default portion") {
-                food.lastUsedAt = .now
+                markUsed(food)
                 activeSheet = .portion(makePortionTarget(for: food))
             } onLongPress: {
-                food.lastUsedAt = .now
+                markUsed(food)
                 log(name: food.name, kcal: food.kcal,
                     sodiumMg: food.sodiumMg, nutrients: food.nutrients,
                     category: PortionTarget.category(from: food.category),
@@ -537,6 +538,7 @@ struct FoodsView: View {
             .tint(.riceToast)
             Button {
                 food.isFavorite.toggle()
+                try? context.save()
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 PhoneSyncService.shared.push(from: context)
             } label: {
@@ -586,13 +588,30 @@ struct FoodsView: View {
                         .font(.headline)
                     Text(SharedStore.onlineLookups
                         ? "Try different words, or search online below."
-                        : "Try different words.")
+                        : "Try different words, or add it as a new food.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
+                // The privacy-default install (lookups off) must not
+                // dead-end here: the online section below — and its Add
+                // Food row — never renders in that state, and this was
+                // the wall in the core "log something new" journey
+                // (2026-07-20 audit HIGH).
+                if !SharedStore.onlineLookups {
+                    Button {
+                        activeSheet = .form(ProductPrefill(product: ScannedProduct(
+                            barcode: "",
+                            name: searchText.trimmingCharacters(in: .whitespaces),
+                            kcal: nil, sodiumMg: nil,
+                            servingDescription: "", nutrients: NutrientValues()
+                        )))
+                    } label: {
+                        Label("Add Food", systemImage: "plus")
+                    }
+                }
             } else if scope == .meals && meals.isEmpty {
                 Text("No saved meals yet — tap + to build one from saved foods.")
                     .font(.subheadline)
@@ -630,7 +649,7 @@ struct FoodsView: View {
             code,
             savedTarget: { code in
                 guard let existing = foods.first(where: { $0.barcode == code }) else { return nil }
-                existing.lastUsedAt = .now
+                markUsed(existing)
                 return makePortionTarget(for: existing)
             },
             isLookingUp: $isLookingUpBarcode,
@@ -660,6 +679,20 @@ struct FoodsView: View {
         }.map(\.name))
         guard !affectedMeals.isEmpty else { return "This can't be undone." }
         return "It will also be removed from \(affectedMeals.sorted().joined(separator: ", ")). This can't be undone."
+    }
+
+    /// Recency bump + explicit save: log taps are the app's most
+    /// frequent SwiftData write, and autosave's crash window silently
+    /// reverted Recent sort (2026-07-20 audit — the delete alerts got
+    /// this discipline in v2.2.0, these sites never did).
+    private func markUsed(_ food: Food) {
+        food.lastUsedAt = .now
+        try? context.save()
+    }
+
+    private func markUsed(_ meal: Meal) {
+        meal.lastUsedAt = .now
+        try? context.save()
     }
 
     private func makePortionTarget(for food: Food) -> PortionTarget {

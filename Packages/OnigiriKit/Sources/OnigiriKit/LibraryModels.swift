@@ -130,7 +130,7 @@ public final class Meal {
     /// Stable external identifier, used by widget configuration entities.
     public var uuid: UUID
     public var name: String
-    @Relationship(deleteRule: .cascade, inverse: \MealItem.meal) public var items: [MealItem]
+    @Relationship(deleteRule: .cascade, inverse: \MealItem.meal) public var items: [MealItem] = []
     public var createdAt: Date
     public var isFavorite: Bool = false
     public var category: String?
@@ -534,11 +534,36 @@ public enum SharedStore {
     /// SwiftData container in the App Group so widgets can read the library.
     /// Falls back to the default location if the entitlement is missing.
     public static func modelContainer() throws -> ModelContainer {
-        let schema = Schema([Food.self, Meal.self, GoalSettings.self])
+        let schema = Schema(versionedSchema: OnigiriSchemaV1.self)
         if let url = storeURL {
             let config = ModelConfiguration(url: url)
-            return try ModelContainer(for: schema, configurations: [config])
+            return try ModelContainer(
+                for: schema, migrationPlan: OnigiriMigrationPlan.self, configurations: [config])
         }
-        return try ModelContainer(for: schema, configurations: [ModelConfiguration()])
+        return try ModelContainer(
+            for: schema, migrationPlan: OnigiriMigrationPlan.self,
+            configurations: [ModelConfiguration()])
     }
+}
+
+/// The schema, versioned the moment App Store distribution came into
+/// view (2026-07-20 audit): once stores live on strangers' devices
+/// their historical diversity is permanent, and every store shipped so
+/// far is describable as this one shape (all changes to date were
+/// additive-with-default, aiGenerated included). Any future
+/// NON-additive change gets a SchemaV2 + a real MigrationStage here —
+/// never an in-place edit of V1.
+/// NOTE: VersionedSchema.models gets NO transitive relationship
+/// discovery — every model must be listed, MealItem included (the
+/// plain Schema([...]) used to omit it and lean on discovery).
+public enum OnigiriSchemaV1: VersionedSchema {
+    public static let versionIdentifier = Schema.Version(1, 0, 0)
+    public static var models: [any PersistentModel.Type] {
+        [Food.self, MealItem.self, Meal.self, GoalSettings.self]
+    }
+}
+
+public enum OnigiriMigrationPlan: SchemaMigrationPlan {
+    public static var schemas: [any VersionedSchema.Type] { [OnigiriSchemaV1.self] }
+    public static var stages: [MigrationStage] { [] }
 }

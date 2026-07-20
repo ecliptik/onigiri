@@ -51,6 +51,13 @@ enum FoodIntelligence {
     /// guardrail, refusal, language, assets, concurrency) returns the
     /// parse untouched.
     static func refine(_ parsed: ParsedLabel, transcript: [LabelObservation]) async -> ParsedLabel {
+        // The master switch gates THIS path too (2026-07-20 audit
+        // CRITICAL): without it, every label scan ran inference with AI
+        // off — and with a stale remote provider selected, silently sent
+        // the OCR transcript to that provider's API. AIProviderSettings'
+        // own doc names label refinement among the switch-hidden
+        // affordances; identifyFood(photo:) already had this guard.
+        guard isAvailable else { return parsed }
         if AIProviderSettings.selected != .onDevice {
             return await refineRemote(parsed, transcript: transcript)
         }
@@ -182,7 +189,7 @@ enum FoodIntelligence {
         // classifier labels as a second signal); everything else — the
         // on-device relay and text-only remotes — decomposes the labels.
         if AIProviderSettings.selected != .onDevice, remoteVisionCapable,
-           let jpeg = jpegForUpload(photo, orientation: orientation) {
+           let jpeg = await jpegForUpload(photo, orientation: orientation) {
             return await identifyFoodRemote(photoJPEG: jpeg, guesses: guesses)
         }
         return await identifyFood(from: guesses)
@@ -515,6 +522,12 @@ enum FoodIntelligence {
         let session = LanguageModelSession(
             instructions: Prompts.refineInstructions(basis: labelBasis(parsed)))
         do {
+            // NO greedy sampling here, unlike describeFood26/
+            // identifyFood26 — evaluated and REJECTED 2026-07-20:
+            // greedy turned the known INTERMITTENT 0.0-instead-of-null
+            // flake into a DETERMINISTIC failure on the never-invent
+            // fixture (protein/carbs invented as 0.0 every run). Don't
+            // re-propose without prompt work plus a recalibration run.
             let reading = try await session.respond(
                 to: Prompts.refineUser(text),
                 generating: LabelReading.self

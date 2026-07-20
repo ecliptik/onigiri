@@ -518,13 +518,27 @@ struct QuickLogSheet: View {
                         .font(.headline)
                     Text(SharedStore.onlineLookups
                         ? "Try different words, or search online below."
-                        : "Try different words.")
+                        : "Try different words, or add it as a new food.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
+                // The privacy-default install (lookups off) must not
+                // dead-end here — same fix as Foods (2026-07-20 audit).
+                if !SharedStore.onlineLookups {
+                    Button {
+                        activeSheet = .form(ProductPrefill(product: ScannedProduct(
+                            barcode: "",
+                            name: searchText.trimmingCharacters(in: .whitespaces),
+                            kcal: nil, sodiumMg: nil,
+                            servingDescription: "", nutrients: NutrientValues()
+                        )))
+                    } label: {
+                        Label("Add Food", systemImage: "plus")
+                    }
+                }
             } else if kind == .favorites {
                 Text("No favorites yet — swipe right on a food or meal to star it.")
                     .font(.subheadline)
@@ -609,15 +623,14 @@ struct QuickLogSheet: View {
                 } else {
                     // The portion sheet's log path loses the model ref —
                     // bump recency at pick time.
-                    item.food?.lastUsedAt = .now
+                    markUsed(item)
                     activeSheet = .portion(makePortionTarget(for: item))
                 }
             } onLongPress: {
                 // Each type's long press is the other's tap: meals get
                 // the portion sheet, foods skip it and log the default
                 // portion (matching the Foods screen).
-                item.food?.lastUsedAt = .now
-                item.meal?.lastUsedAt = .now
+                markUsed(item)
                 if item.isMeal {
                     activeSheet = .portion(makePortionTarget(for: item))
                 } else {
@@ -627,8 +640,7 @@ struct QuickLogSheet: View {
         }
         .contentShape(.rect)
         .onTapGesture {
-            item.food?.lastUsedAt = .now
-            item.meal?.lastUsedAt = .now
+            markUsed(item)
             activeSheet = .portion(makePortionTarget(for: item))
         }
         .swipeActions(edge: .leading) {
@@ -654,6 +666,16 @@ struct QuickLogSheet: View {
                 activeSheet = .editFood(food)
             }
         }
+    }
+
+    /// Recency bump + explicit save: log taps are the app's most
+    /// frequent SwiftData write, and autosave's crash window silently
+    /// reverted Recent sort (2026-07-20 audit — the delete alerts got
+    /// this discipline in v2.2.0, these sites never did).
+    private func markUsed(_ item: Item) {
+        item.food?.lastUsedAt = .now
+        item.meal?.lastUsedAt = .now
+        try? context.save()
     }
 
     private func makePortionTarget(for item: Item) -> PortionTarget {
@@ -684,8 +706,7 @@ struct QuickLogSheet: View {
     private func log(_ item: Item, quantity: Double, category: FoodCategory) {
         guard !isLogging else { return }
         // Recency drives the sort under favorites.
-        item.food?.lastUsedAt = .now
-        item.meal?.lastUsedAt = .now
+        markUsed(item)
         isLogging = true
         Task {
             _ = await LogActions.logFood(

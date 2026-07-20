@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import VisionKit
+import AVFoundation
 import OnigiriKit
 import os
 
@@ -23,10 +24,20 @@ struct ScanSheet: View {
     /// An identified food photo, prefill-shaped like the label path.
     let onFood: (ScannedProduct) -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var manualCode = ""
     @State private var photoItem: PhotosPickerItem?
     @State private var isReading = false
+    /// The one in-flight OCR/identify pipeline. Stored so Cancel (and
+    /// backgrounding) actually STOPS it — an orphaned cascade used to
+    /// fire onLabel/onFood into the parent after dismissal, silently
+    /// re-presenting sheets or overwriting form fields (2026-07-20
+    /// audit HIGH).
+    @State private var readTask: Task<Void, Never>?
+    /// Camera permission explicitly denied/restricted — distinct from
+    /// "no camera hardware", which shares the same fallback layout.
+    @State private var cameraAuthDenied = false
     /// What the progress capsule says — the cascade's second leg takes
     /// long enough that "Reading label…" would read as a hang.
     @State private var readingStatus = ""
@@ -53,13 +64,17 @@ struct ScanSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .keyboardShortcut(.cancelAction)
+                    Button("Cancel") {
+                        readTask?.cancel()
+                        dismiss()
+                    }
+                    .keyboardShortcut(.cancelAction)
                 }
             }
             .onChange(of: photoItem) { _, item in
                 guard let item else { return }
-                Task {
+                readTask?.cancel()
+                readTask = Task {
                     defer { photoItem = nil }
                     guard let data = try? await item.loadTransferable(type: Data.self),
                           let image = UIImage(data: data) else {
@@ -69,6 +84,21 @@ struct ScanSheet: View {
                     await read(image)
                 }
             }
+            .onAppear { refreshCameraAuth() }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    // Coming back from Settings after granting camera
+                    // access: re-evaluate, so the sheet recovers without
+                    // a relaunch.
+                    refreshCameraAuth()
+                } else {
+                    // A cascade mid-flight when the app suspends either
+                    // burns background time or dies unrecoverably —
+                    // cancel and reset instead.
+                    readTask?.cancel()
+                    isReading = false
+                }
+            }
             .interactiveDismissDisabled(isReading)
         }
     }
@@ -76,7 +106,13 @@ struct ScanSheet: View {
     // MARK: Camera layout
 
     private var cameraLayout: some View {
-        ScannerRepresentable(proxy: scannerProxy) { code in
+        // isCapturing gates live barcode delivery: a label photo almost
+        // always still has the package barcode in frame, and an
+        // undeferred barcode hit would race the OCR/identify cascade
+        // for the same single-slot sheet state in every host
+        // (2026-07-20 audit HIGH).
+        ScannerRepresentable(proxy: scannerProxy, isCapturing: { isReading }) { code in
+            readTask?.cancel()
             onCode(code)
             dismiss()
         }
@@ -118,8 +154,15 @@ struct ScanSheet: View {
                     .accessibilityLabel("Choose a label photo")
                     Spacer()
                     // The shutter: a still of the label for the OCR path.
+                    // isReading flips SYNCHRONOUSLY here — set inside the
+                    // task (after the capture await) a fast double-tap
+                    // started two concurrent pipelines.
                     Button {
-                        Task { await captureLabel() }
+                        guard !isReading else { return }
+                        isReading = true
+                        readingStatus = "Reading label…"
+                        failureMessage = nil
+                        readTask = Task { await captureLabel() }
                     } label: {
                         ZStack {
                             Circle().strokeBorder(.white, lineWidth: 4)
@@ -144,12 +187,16 @@ struct ScanSheet: View {
     }
 
     private func captureLabel() async {
+        // The shutter set isReading before this task started; every
+        // early exit must clear it (read() re-sets and clears its own).
+        defer { isReading = false }
         guard let scanner = scannerProxy.controller else {
             failureMessage = "The camera isn't ready — try again."
             return
         }
         do {
             let photo = try await scanner.capturePhoto()
+            guard !Task.isCancelled else { return }
             await read(photo)
         } catch {
             scanLog.error("Label capture failed: \(String(describing: error))")
@@ -162,9 +209,25 @@ struct ScanSheet: View {
     private var fallbackLayout: some View {
         Form {
             Section {
-                Text("Camera scanning isn't available — enter the barcode digits manually, or read a nutrition label from a photo.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                // Denied is FIXABLE — say so and open the door; the
+                // generic copy made a revoked permission read as
+                // missing hardware with no way back.
+                if cameraAuthDenied {
+                    Text("Camera access is turned off, so scanning can't run. You can still enter the barcode digits manually or read a label from a photo.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    } label: {
+                        Label("Turn On Camera Access", systemImage: "gear")
+                    }
+                } else {
+                    Text("Camera scanning isn't available — enter the barcode digits manually, or read a nutrition label from a photo.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 TextField("Barcode", text: $manualCode)
                     .keyboardType(.numberPad)
                 Button("Look Up") {
@@ -208,7 +271,13 @@ struct ScanSheet: View {
             failureMessage = "Sample photo missing from the bundle."
             return
         }
-        Task { await read(image) }
+        readTask?.cancel()
+        readTask = Task { await read(image) }
+    }
+
+    private func refreshCameraAuth() {
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        cameraAuthDenied = status == .denied || status == .restricted
     }
 
     // MARK: Label pipeline
@@ -218,6 +287,12 @@ struct ScanSheet: View {
         readingStatus = "Reading label…"
         failureMessage = nil
         defer { isReading = false }
+        // Vision needs legible text, not sensor resolution: a 48 MP
+        // library pick decoded at full size spikes memory across the
+        // whole cascade (stacked against the model's own footprint —
+        // jetsam territory on older devices). The redraw also bakes
+        // orientation upright, so Vision gets .up pixels.
+        let image = image.downsampled(maxEdge: 3000)
         guard let cgImage = image.cgImage else {
             failureMessage = "Couldn't read that photo — try another."
             return
@@ -225,10 +300,14 @@ struct ScanSheet: View {
         let orientation = CGImagePropertyOrientation(image.imageOrientation)
         do {
             let result = try await LabelScan.scan(cgImage, orientation: orientation)
+            // A cancelled cascade must never deliver: the host would
+            // re-present a sheet the user already backed out of.
+            guard !Task.isCancelled else { return }
             // iOS 26 + Apple Intelligence: the on-device model fills
             // whatever the deterministic parse left blank — invisible,
             // and every model failure keeps the deterministic result.
             let parsed = await FoodIntelligence.refine(result.parsed, transcript: result.transcript)
+            guard !Task.isCancelled else { return }
             if !parsed.isEmpty {
                 scanLog.notice("Label parsed: kcal \(parsed.kcal.map(String.init(describing:)) ?? "nil"), \(result.transcript.count) observations")
                 onLabel(parsed)
@@ -247,7 +326,9 @@ struct ScanSheet: View {
         // food; any failure lands on the same retry message as before.
         if FoodIntelligence.isAvailable {
             readingStatus = "Identifying food…"
-            if let food = await FoodIntelligence.identifyFood(photo: cgImage, orientation: orientation) {
+            let food = await FoodIntelligence.identifyFood(photo: cgImage, orientation: orientation)
+            guard !Task.isCancelled else { return }
+            if let food {
                 scanLog.notice("Photo identified: \(food.name), \(food.components.count) components, \(food.kcal) kcal")
                 onFood(food.scannedProduct)
                 dismiss()
@@ -269,6 +350,9 @@ final class ScannerProxy {
 
 private struct ScannerRepresentable: UIViewControllerRepresentable {
     let proxy: ScannerProxy
+    /// True while the shutter cascade runs — live barcode hits are
+    /// ignored so the two paths can't race each other's sheet slot.
+    let isCapturing: () -> Bool
     let onCode: (String) -> Void
 
     func makeUIViewController(context: Context) -> DataScannerViewController {
@@ -284,10 +368,17 @@ private struct ScannerRepresentable: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ scanner: DataScannerViewController, context: Context) {
+        context.coordinator.isCapturing = isCapturing
         // Dismissal after a successful scan re-runs updates — don't
         // restart the camera for the teardown animation.
         guard !context.coordinator.delivered else { return }
         try? scanner.startScanning()
+    }
+
+    static func dismantleUIViewController(_ scanner: DataScannerViewController, coordinator: Coordinator) {
+        // Deterministic camera-off on EVERY dismissal path (Cancel,
+        // swipe, label/food success) — not just the barcode-hit one.
+        scanner.stopScanning()
     }
 
     func makeCoordinator() -> Coordinator {
@@ -296,6 +387,7 @@ private struct ScannerRepresentable: UIViewControllerRepresentable {
 
     final class Coordinator: NSObject, DataScannerViewControllerDelegate {
         let onCode: (String) -> Void
+        var isCapturing: () -> Bool = { false }
         private(set) var delivered = false
 
         init(onCode: @escaping (String) -> Void) {
@@ -307,7 +399,7 @@ private struct ScannerRepresentable: UIViewControllerRepresentable {
             didAdd addedItems: [RecognizedItem],
             allItems: [RecognizedItem]
         ) {
-            guard !delivered else { return }
+            guard !delivered, !isCapturing() else { return }
             for item in addedItems {
                 if case .barcode(let barcode) = item, let code = barcode.payloadStringValue {
                     delivered = true
@@ -316,6 +408,23 @@ private struct ScannerRepresentable: UIViewControllerRepresentable {
                     return
                 }
             }
+        }
+    }
+}
+
+private extension UIImage {
+    /// Cap the long edge before Vision: OCR wants legible text, not
+    /// sensor resolution. Draws through a renderer, which also bakes
+    /// the orientation upright.
+    func downsampled(maxEdge: CGFloat) -> UIImage {
+        let longest = max(size.width, size.height)
+        guard longest > maxEdge, longest > 0 else { return self }
+        let scale = maxEdge / longest
+        let target = CGSize(width: size.width * scale, height: size.height * scale)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: target, format: format).image { _ in
+            draw(in: CGRect(origin: .zero, size: target))
         }
     }
 }

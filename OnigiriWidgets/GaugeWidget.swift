@@ -8,6 +8,11 @@ struct GaugeWidget: Widget {
         StaticConfiguration(kind: "OnigiriGauge", provider: GaugeProvider()) { entry in
             GaugeWidgetView(entry: entry)
                 .containerBackground(Color.riceCanvas, for: .widget)
+                // Land on Today like TodayCardWidget — without this the
+                // tap dropped users on whatever tab was last active
+                // (2026-07-20 audit; flagged 07-16, fixed for
+                // MonthStats then, missed here).
+                .widgetURL(URL(string: "onigiri://log"))
         }
         .configurationDisplayName("Onigiri Gauge")
         .description("Daily goal progress at a glance.")

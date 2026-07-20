@@ -2,8 +2,8 @@ import XCTest
 import OnigiriKit
 @testable import Onigiri
 
-/// Golden-set regression evals for the three FoodIntelligence affordances
-/// (describe-it, meal names, label refinement). The on-device model
+/// Golden-set regression evals for the four FoodIntelligence affordances
+/// (describe-it, meal names, label refinement, identify-food). The on-device model
 /// changes underneath the app on every OS update with no code change on
 /// our side — this suite is what notices.
 ///
@@ -60,6 +60,16 @@ final class FoodIntelligenceEvals: XCTestCase {
         // app's process, so flip the master switch for the eval run —
         // an opted-in eval must never silently skip on the default.
         SharedStore.defaults.set(true, forKey: AIProviderSettings.enabledKey)
+        // Pin the engine under test: every Gate/knownRefusals threshold
+        // in this file is calibrated against the ON-DEVICE model, and
+        // the provider picker persists in the real App Group defaults —
+        // a sim last used for BYO-AI QA would otherwise silently eval
+        // the wrong engine (and spend real API budget doing it).
+        SharedStore.defaults.set(AIProvider.onDevice.rawValue, forKey: AIProviderSettings.providerKey)
+        XCTAssertEqual(
+            AIProviderSettings.selected, .onDevice,
+            "eval run must exercise the on-device model — provider pin failed"
+        )
         try XCTSkipUnless(
             FoodIntelligence.isAvailable,
             "Foundation Models unavailable (Apple Intelligence off or unsupported here) — skipping; an absent model must never report a quality result"

@@ -13,6 +13,8 @@ struct WaterWidget: Widget {
                 needsSetup: entry.snapshot.needsSetup
             )
             .containerBackground(Color.riceCanvas, for: .widget)
+            // Land on Today like TodayCardWidget (2026-07-20 audit).
+            .widgetURL(URL(string: "onigiri://log"))
         }
         .configurationDisplayName("Water")
         .description("Today's water toward your goal.")
@@ -78,6 +80,8 @@ struct StreakWidget: Widget {
         StaticConfiguration(kind: "OnigiriStreak", provider: StreakProvider()) { entry in
             StreakWidgetView(entry: entry)
                 .containerBackground(Color.riceCanvas, for: .widget)
+                // Land on Today like TodayCardWidget (2026-07-20 audit).
+                .widgetURL(URL(string: "onigiri://log"))
         }
         .configurationDisplayName("Streak")
         .description("Your current run of goal-met days.")

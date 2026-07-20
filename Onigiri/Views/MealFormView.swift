@@ -34,6 +34,9 @@ struct MealFormView: View {
     @State private var confirmDiscard = false
     @State private var initialSnapshot: FieldsSnapshot?
     @State private var isSuggestingName = false
+    /// Stored so dismissing the sheet cancels an in-flight suggestion
+    /// (BYO-AI providers bill the request either way otherwise).
+    @State private var suggestTask: Task<Void, Never>?
     /// The AI's accepted name suggestion — the meal is marked ✨ only
     /// when the SAVED name is the suggestion, untouched.
     @State private var suggestedName: String?
@@ -219,6 +222,7 @@ struct MealFormView: View {
             // System search, matching Foods and the Log sheet (bottom
             // placement on iOS 26).
             .searchable(text: $foodFilter, prompt: "Search foods")
+            .onDisappear { suggestTask?.cancel() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -291,20 +295,28 @@ struct MealFormView: View {
         }
     }
 
-    /// Fills the name field with the model's suggestion; any failure
-    /// just leaves the field as it was.
+    /// Fills the name field with the model's suggestion — unless the
+    /// user typed their own while inference ran (theirs wins), and
+    /// never silently: a declined model gets a toast, not a dead
+    /// button (2026-07-20 audit).
     private func suggestName() {
         let members = foods
             .filter { (quantities[$0.persistentModelID] ?? 0) > 0 }
             .map(\.name)
         guard !members.isEmpty, !isSuggestingName else { return }
         isSuggestingName = true
-        Task {
+        let nameWhenAsked = name
+        suggestTask = Task {
             defer { isSuggestingName = false }
-            if let suggestion = await FoodIntelligence.suggestMealName(for: members) {
-                name = suggestion
-                suggestedName = suggestion
+            let suggestion = await FoodIntelligence.suggestMealName(for: members)
+            guard !Task.isCancelled else { return }
+            guard let suggestion else {
+                ToastCenter.shared.show("Couldn't suggest a name — try again.")
+                return
             }
+            guard name == nameWhenAsked else { return }
+            name = suggestion
+            suggestedName = suggestion
         }
     }
 

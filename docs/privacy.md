@@ -49,10 +49,12 @@ queries it receives.
 
 ## AI features (optional)
 
-Onigiri's AI features — describe-it estimates, meal-name suggestions,
-nutrition-label reading, and Identify Food — run **on-device** by
-default through Apple Intelligence on devices that support it. On the
-default setting, nothing about them leaves your iPhone.
+Onigiri's AI features — food estimates, meal-name suggestions,
+nutrition-label reading, and Identify Food — are **off by default**.
+Nothing AI-related runs until you turn the switch on in Settings → AI.
+When you do, they run **on-device** through Apple Intelligence on
+devices that support it — on that setting, nothing about them leaves
+your iPhone.
 
 Two of these features are hybrids with an on-device first stage that
 runs no matter which provider you pick: nutrition labels are read by

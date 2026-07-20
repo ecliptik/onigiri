@@ -5,7 +5,7 @@ permalink: /privacy/
 
 # Onigiri Privacy Policy
 
-_Last updated: July 19, 2026_
+_Last updated: July 20, 2026_
 
 Onigiri is a calorie, nutrition, and water tracker for iPhone, iPad,
 and Apple Watch. It is built so that your data stays yours.
@@ -53,6 +53,14 @@ Onigiri's AI features — describe-it estimates, meal-name suggestions,
 nutrition-label reading, and Identify Food — run **on-device** by
 default through Apple Intelligence on devices that support it. On the
 default setting, nothing about them leaves your iPhone.
+
+Two of these features are hybrids with an on-device first stage that
+runs no matter which provider you pick: nutrition labels are read by
+Apple's on-device text recognition first, and the AI only fills in
+values the local reader missed; food photos are screened by Apple's
+on-device image classifier before anything is identified. Barcode
+scans never use AI at all. With the default Apple Intelligence engine,
+every stage stays on the phone.
 
 In Settings you can instead bring your own AI provider. When you do,
 those features send only the text you typed, the label transcript

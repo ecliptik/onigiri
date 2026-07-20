@@ -77,6 +77,11 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   (it bounces available↔connecting↔connected) and build+install in that
   window. A patience loop succeeds where one-shot attempts time out
   (2026-07-11: ~an hour of identical failures, then connected on poll 7).
+  ATTEMPT THE INSTALL every round, don't just watch the state: a loop
+  that only polled `list devices` sat at "available (paired)" for 20
+  rounds, while a loop that ran `devicectl device install app` each
+  round succeeded on attempt 2 after one 3002 (2026-07-20) — the
+  install attempt itself is the contact that wakes the channel.
 - **Watch discovery requires Mac BLUETOOTH ON.** Two days of debugging
   (reboots, re-pairing, trust resets, cache wipes, VPN toggles) and the watch
   never appeared in Xcode/devicectl until the Mac's Bluetooth was enabled —

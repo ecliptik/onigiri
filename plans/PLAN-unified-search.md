@@ -1,5 +1,11 @@
 # PLAN — One search field, AI row on top (2026-07-19)
 
+> **SHIPPED** as v2.7.0 (2026-07-20); v2.7.1 added the ✨ AI-provenance
+> mark on saved foods/meals/logs. Post-ship copy deltas: the idle row
+> is a single line — the quoted-query caption from amendment 1 was
+> dropped as redundant (the query is visible in the search field), and
+> the demo query is "pork and beans".
+
 > **Amendments (2026-07-20, the user, after on-device use):**
 > 1. The idle row reads "✨ **Estimate with <provider name>**" + the
 >    quoted query as caption — a bare "Estimate" didn't read as AI,

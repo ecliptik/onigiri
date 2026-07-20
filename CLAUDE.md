@@ -123,6 +123,11 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   DWC-gated UI on a device (done 2026-07-20). Synthesized taps also can't
   invoke a SwiftUI .accessibilityAction (only real VoiceOver's AXActivate
   can), so those need on-device VoiceOver too.
+- Verifying scenePhase-transient UI (the PrivacyShield): single screenshots
+  never catch it — record video through the background/foreground cycle and
+  extract distinct frames (`ffmpeg -vsync vfr`). A constant-fps dump pads
+  duplicates and LIES about what was on screen (looked like the sheet stayed
+  visible; the VFR re-extraction showed the shield frame). 2026-07-20.
 
 ## SwiftData landmines (each cost a debugging session)
 

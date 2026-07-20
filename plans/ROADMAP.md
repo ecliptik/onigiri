@@ -190,6 +190,16 @@ question deferred again.
   a live probe of the exact syntax during a STABLE window, since a
   wrong filter fails as a silent 200-with-zero-hits that never trips
   the legacy fallback. Breadcrumb in `OpenFoodFactsClient.searchALicious`.
+- Security round SHIPPED 2026-07-20: window-level PrivacyShield (the
+  v2.2.0 in-tree overlay never covered SHEETS in the app-switcher
+  snapshot — sim-proven fixed), watch dock-snapshot shield, API-key
+  re-mask on backgrounding. Considered and DECLINED (don't re-propose):
+  certificate pinning for the AI/FDC endpoints (cert-rotation breakage
+  outweighs the gain here); FDC api_key-in-URL stays accepted (USDA's
+  contract — just never log request URLs in FoodDataCentralClient).
+  The manifest's C617.1 FileTimestamp reason is CORRECT (own-container
+  metadata; 3B52.1 is the picker-granted one — an audit had them
+  swapped).
 - Accessibility round SHIPPED 2026-07-20 (a409c5a on main, both
   devices): Differentiate Without Color glyph twins (kit statusSymbol
   seam), Reduce Motion gating, hit-area-only 44 pt targets, VoiceOver

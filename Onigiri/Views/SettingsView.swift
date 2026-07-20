@@ -8,6 +8,10 @@ import OnigiriKit
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    /// Re-masks any revealed API key on backgrounding — defense in
+    /// depth beside the window-level PrivacyShield: a revealed key must
+    /// never ride into the app-switcher snapshot (2026-07-20 audit).
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
@@ -1317,6 +1321,14 @@ struct SettingsView: View {
         // Transfer/backup outcomes toast; a sheet needs its own host
         // (the root's renders behind presented sheets).
         .toastHost()
+        // Re-mask revealed keys before the app-switcher snapshot —
+        // defense in depth beside the window-level PrivacyShield.
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active {
+                showFDCKey = false
+                showAIKey = false
+            }
+        }
     }
 }
 

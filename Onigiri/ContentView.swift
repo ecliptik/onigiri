@@ -47,15 +47,17 @@ struct ContentView: View {
                 mainTabs
             }
         }
-        .overlay {
+        .onChange(of: scenePhase, initial: true) { _, phase in
             // The app-switcher snapshot otherwise shows the day's health
             // numbers to anyone flipping through cards. Covered from
             // .inactive on — the snapshot is taken before .background
             // settles. (Also flashes during Control Center pulls; the
-            // standard trade for a health app.)
-            if scenePhase != .active {
-                PrivacyShield()
-            }
+            // standard trade for a health app.) WINDOW level, not an
+            // .overlay on this view tree: sheets present in UIKit layers
+            // ABOVE ContentView, so the old in-tree overlay left every
+            // sheet — the log, the forms, Settings with a revealed key —
+            // uncovered in the snapshot (2026-07-20 security audit).
+            PrivacyShieldWindow.setCovered(phase != .active)
         }
         .task {
             // Scene restoration can hand back .log (the bounce-only "+"
@@ -398,6 +400,34 @@ private struct PrivacyShield: View {
                 .font(.system(size: 64))
                 .accessibilityHidden(true)
         }
+    }
+}
+
+/// The shield's own UIWindow, floated above .alert so it composites
+/// over every presentation layer — sheets included — in the snapshot.
+/// Torn down (not just hidden) on return so it can't linger over a
+/// live scene.
+@MainActor
+private enum PrivacyShieldWindow {
+    private static var window: UIWindow?
+
+    static func setCovered(_ covered: Bool) {
+        guard covered else {
+            window?.isHidden = true
+            window = nil
+            return
+        }
+        guard window == nil,
+              let scene = UIApplication.shared.connectedScenes
+                  .compactMap({ $0 as? UIWindowScene })
+                  .first(where: { $0.activationState != .unattached })
+        else { return }
+        let cover = UIWindow(windowScene: scene)
+        cover.windowLevel = .alert + 1
+        cover.isUserInteractionEnabled = false
+        cover.rootViewController = UIHostingController(rootView: PrivacyShield())
+        cover.isHidden = false
+        window = cover
     }
 }
 

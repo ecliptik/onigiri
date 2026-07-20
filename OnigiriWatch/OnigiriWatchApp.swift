@@ -71,6 +71,16 @@ struct OnigiriWatchApp: App {
                     WidgetReloader.flushNow()
                 }
             }
+            // The dock snapshot otherwise shows the calorie headline —
+            // the phone's PrivacyShield, watch-sized. A root overlay is
+            // the best watchOS offers (no window layer to hook), so
+            // sheet content stays uncovered; acceptable for dock cards
+            // (2026-07-20 security audit).
+            .overlay {
+                if scenePhase != .active {
+                    WatchPrivacyShield()
+                }
+            }
         }
         // The phone pushes library/goal changes as applicationContext;
         // without this handler a suspended watch app never receives them
@@ -78,6 +88,19 @@ struct OnigiriWatchApp: App {
         // manually opened.
         .backgroundTask(.watchConnectivity) {
             await model.sync.receiveQueuedContext()
+        }
+    }
+}
+
+/// Dock-snapshot cover — the mascot on the watch's black, none of the
+/// numbers (the phone shield's sibling).
+private struct WatchPrivacyShield: View {
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            Text("🍙")
+                .font(.system(size: 40))
+                .accessibilityHidden(true)
         }
     }
 }

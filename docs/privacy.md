@@ -85,7 +85,8 @@ backups or library exports, and are sent only to their own provider.
 These requests carry no Health data and no identity. Each provider's
 own privacy policy governs what it does with the content it receives.
 AI providers are off unless you configure one — deleting the provider's
-key or switching back to On-Device stops all AI traffic immediately.
+key or switching back to Apple Intelligence stops all AI traffic
+immediately.
 
 ## What Onigiri stores on your device
 

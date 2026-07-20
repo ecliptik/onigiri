@@ -51,7 +51,7 @@ public struct GoalTrendStats: Equatable, Sendable {
         let predicted = deficits.isEmpty
             ? nil
             : WeightTrend.Change.predictedLb(totalDeficitKcal: deficits.reduce(0, +))
-        let actual = WeightTrend.Change.actualLb(history: weightHistory, from: thirtyDaysAgo, to: now)
+        let actual = WeightTrend.Change.actualLb(smoothed: smoothedHistory, from: thirtyDaysAgo, to: now)
 
         var projected: Date?
         if let target = targetWeightLb,

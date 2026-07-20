@@ -67,7 +67,14 @@ public enum OpenFoodFactsError: Error, LocalizedError {
 actor ProductCache {
     static let shared = ProductCache()
     private var products: [String: ScannedProduct] = [:]
+    /// FIFO eviction queue (oldest-INSERTED, deliberately not LRU —
+    /// hits don't reorder). `head` marks the live front: advancing it
+    /// is O(1) where `removeFirst()` memmoved the whole tail (the
+    /// 2026-07-16 audit's O(n) eviction), and the dead prefix is
+    /// compacted in one bulk removal once it reaches `limit`, so the
+    /// array is bounded at 2×limit and eviction is amortized O(1).
     private var order: [String] = []
+    private var head = 0
     private let limit = 200
 
     func product(for barcode: String) -> ScannedProduct? {
@@ -78,8 +85,13 @@ actor ProductCache {
         if products.updateValue(product, forKey: barcode) == nil {
             order.append(barcode)
         }
-        while order.count > limit {
-            products.removeValue(forKey: order.removeFirst())
+        while order.count - head > limit {
+            products.removeValue(forKey: order[head])
+            head += 1
+        }
+        if head >= limit {
+            order.removeFirst(head)
+            head = 0
         }
     }
 }

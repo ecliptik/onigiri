@@ -147,8 +147,12 @@ public enum LabelParser {
         return s
     }
 
+    // Locale is Sendable (unlike Regex below) so it can be a stored
+    // static — building one per fold() call was pure waste.
+    private static let foldingLocale = Locale(identifier: "en_US")
+
     private static func fold(_ text: String) -> String {
-        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US"))
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: foldingLocale)
             .lowercased()
     }
 
@@ -198,8 +202,12 @@ public enum LabelParser {
         var cells: [LabelObservation]
         var midY: Double
         var height: Double
-        var text: String { cells.map(\.text).joined(separator: " ") }
-        var folded: String { LabelParser.fold(text) }
+        /// Stored, finalized once at the end of clusterRows (cells stop
+        /// changing there): the parse passes re-read these 3+ times per
+        /// row, and the computed versions re-joined and re-folded on
+        /// every access.
+        var text = ""
+        var folded = ""
     }
 
     private static func clusterRows(_ observations: [LabelObservation]) -> [Row] {
@@ -218,6 +226,8 @@ public enum LabelParser {
         }
         for i in rows.indices {
             rows[i].cells.sort { $0.x < $1.x }
+            rows[i].text = rows[i].cells.map(\.text).joined(separator: " ")
+            rows[i].folded = fold(rows[i].text)
         }
         return rows
     }

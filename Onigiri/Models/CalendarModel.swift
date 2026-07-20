@@ -131,9 +131,33 @@ final class CalendarModel {
         monthFoodEntries = stats?.foodEntryCount
     }
 
-    /// Predicted lb change for the month (its net deficit ÷ 3,500).
-    func predictedLb(inMonthOf month: Date) -> Double? {
-        totalDeficit(inMonthOf: month).map(WeightTrend.Change.predictedLb)
+    /// The month-detail aggregates, computed in ONE pass over the
+    /// month's tracked days — the four stand-alone methods this
+    /// replaces each re-filtered totalsByDay per call, and the detail
+    /// screen reads all of them per render (2026-07-16 audit).
+    struct MonthStats {
+        var daysTracked = 0
+        var totalCalories = 0.0
+        var totalBurned = 0.0
+        /// Net deficit summed across TRACKED days (nil when none) —
+        /// untracked days would skew it with phantom full-burn
+        /// deficits. Surplus days subtract.
+        var totalDeficit: Double?
+        /// Predicted lb change for the month (its net deficit ÷ 3,500).
+        var predictedLb: Double? { totalDeficit.map(WeightTrend.Change.predictedLb) }
+    }
+
+    func monthStats(inMonthOf month: Date) -> MonthStats {
+        var stats = MonthStats()
+        var deficit = 0.0
+        for day in trackedDays(inMonthOf: month) {
+            stats.daysTracked += 1
+            stats.totalCalories += day.intakeKcal
+            stats.totalBurned += day.burnKcal
+            deficit += day.deficitKcal
+        }
+        if stats.daysTracked > 0 { stats.totalDeficit = deficit }
+        return stats
     }
 
     /// What the scale actually did across the month (nil when it lacks
@@ -156,30 +180,6 @@ final class CalendarModel {
             .filter { calendar.isDate($0.key, equalTo: month, toGranularity: .month) }
             .map(\.value)
             .filter { StreakCalendar.isTracked($0, untrackedBelowKcal: SharedStore.untrackedBelowKcal) }
-    }
-
-    /// Net deficit summed across the month's TRACKED days (nil when none) —
-    /// untracked days would skew it with phantom full-burn deficits.
-    /// Surplus days subtract.
-    func totalDeficit(inMonthOf month: Date) -> Double? {
-        let deficits = trackedDays(inMonthOf: month).map(\.deficitKcal)
-        guard !deficits.isEmpty else { return nil }
-        return deficits.reduce(0, +)
-    }
-
-    func daysTracked(inMonthOf month: Date) -> Int {
-        trackedDays(inMonthOf: month).count
-    }
-
-    func totalCalories(inMonthOf month: Date) -> Double {
-        trackedDays(inMonthOf: month).map(\.intakeKcal).reduce(0, +)
-    }
-
-    /// Total burn across tracked days — with total calories and total
-    /// deficit it makes the month's arithmetic visible (the user):
-    /// burned − calories = deficit.
-    func totalBurned(inMonthOf month: Date) -> Double {
-        trackedDays(inMonthOf: month).map(\.burnKcal).reduce(0, +)
     }
 
     func earnedCount(inMonthOf month: Date) -> Int {

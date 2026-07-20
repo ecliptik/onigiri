@@ -66,9 +66,20 @@ public enum WeightTrend {
             from start: Date,
             to end: Date
         ) -> Double? {
-            let smoothed = movingAverage(history, windowDays: 7)
-                .filter { $0.date >= start && $0.date <= end }
-            guard let first = smoothed.first, let last = smoothed.last,
+            actualLb(smoothed: movingAverage(history, windowDays: 7), from: start, to: end)
+        }
+
+        /// The same read over ALREADY-smoothed points — for callers that
+        /// hold the 7-day moving average (GoalTrendStats receives it from
+        /// GoalModel); re-smoothing the raw history here was a redundant
+        /// O(n) pass on every goal-form keystroke.
+        public static func actualLb(
+            smoothed: [Point],
+            from start: Date,
+            to end: Date
+        ) -> Double? {
+            let windowed = smoothed.filter { $0.date >= start && $0.date <= end }
+            guard let first = windowed.first, let last = windowed.last,
                   first.date < last.date else { return nil }
             return last.weightLb - first.weightLb
         }

@@ -440,13 +440,18 @@ struct MonthDetailView: View {
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
 
     var body: some View {
+        // Bound once per evaluation (the house pattern): the stats are
+        // one pass over the month, and each row below used to re-derive
+        // its number — twice where the tint reads it too.
+        let stats = model.monthStats(inMonthOf: month)
+        let actual = model.actualLb(inMonthOf: month)
         List {
             Section("This month") {
                 LabeledContent("Days goal met") {
                     Text("\(SharedStore.rewardEmoji(for: rewardIcon)) \(model.earnedCount(inMonthOf: month))")
                 }
                 LabeledContent("Days tracked") {
-                    Text("\(model.daysTracked(inMonthOf: month))")
+                    Text("\(stats.daysTracked)")
                         .monospacedDigit()
                 }
                 LabeledContent("Foods logged") {
@@ -467,11 +472,11 @@ struct MonthDetailView: View {
                 // The energy rows read as one sum (the user):
                 // burned − calories = deficit.
                 LabeledContent("Total calories") {
-                    Text("\(model.totalCalories(inMonthOf: month), format: .number.precision(.fractionLength(0))) kcal")
+                    Text("\(stats.totalCalories, format: .number.precision(.fractionLength(0))) kcal")
                         .monospacedDigit()
                 }
                 LabeledContent("Total burned") {
-                    Text("\(model.totalBurned(inMonthOf: month), format: .number.precision(.fractionLength(0))) kcal")
+                    Text("\(stats.totalBurned, format: .number.precision(.fractionLength(0))) kcal")
                         .monospacedDigit()
                         .foregroundStyle(.red)
                 }
@@ -479,19 +484,19 @@ struct MonthDetailView: View {
                 // reads negative — and green, the day cards' outcome
                 // colors.
                 LabeledContent("Total deficit") {
-                    Text(model.totalDeficit(inMonthOf: month).map { signedKcal(-$0) } ?? "—")
+                    Text(stats.totalDeficit.map { signedKcal(-$0) } ?? "—")
                         .monospacedDigit()
-                        .foregroundStyle(outcomeColor(model.totalDeficit(inMonthOf: month).map { -$0 }))
+                        .foregroundStyle(outcomeColor(stats.totalDeficit.map { -$0 }))
                 }
                 LabeledContent("Predicted") {
-                    Text(model.predictedLb(inMonthOf: month).map { "≈ \(signedLb($0))" } ?? "—")
+                    Text(stats.predictedLb.map { "≈ \(signedLb($0))" } ?? "—")
                         .monospacedDigit()
-                        .foregroundStyle(outcomeColor(model.predictedLb(inMonthOf: month)))
+                        .foregroundStyle(outcomeColor(stats.predictedLb))
                 }
                 LabeledContent("Scale change") {
-                    Text(model.actualLb(inMonthOf: month).map(signedLb) ?? "—")
+                    Text(actual.map(signedLb) ?? "—")
                         .monospacedDigit()
-                        .foregroundStyle(outcomeColor(model.actualLb(inMonthOf: month)))
+                        .foregroundStyle(outcomeColor(actual))
                 }
             }
             Section("Streaks") {

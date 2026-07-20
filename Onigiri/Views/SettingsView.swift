@@ -48,6 +48,23 @@ struct SettingsView: View {
         case failure(String)
     }
 
+    // Bring-your-own-AI (PLAN-byo-ai). Selection + models + server
+    // address are defaults; secrets go straight to the Keychain like
+    // the FDC key.
+    @AppStorage(AIProviderSettings.providerKey, store: SharedStore.defaults) private var aiProvider = AIProvider.onDevice.rawValue
+    @AppStorage(AIProviderSettings.anthropicModelKey, store: SharedStore.defaults) private var aiAnthropicModel = ""
+    @AppStorage(AIProviderSettings.openAIModelKey, store: SharedStore.defaults) private var aiOpenAIModel = ""
+    @AppStorage(AIProviderSettings.localModelKey, store: SharedStore.defaults) private var aiLocalModel = ""
+    @AppStorage(AIProviderSettings.localBaseURLKey, store: SharedStore.defaults) private var aiLocalBaseURL = ""
+    @AppStorage(AIProviderSettings.localVisionKey, store: SharedStore.defaults) private var aiLocalVision = false
+    /// The SELECTED provider's secret, drafted like the FDC key —
+    /// reloaded when the picker moves (each provider keeps its own
+    /// Keychain slot, so switching never clobbers another's key).
+    @State private var aiKeyDraft = ""
+    @State private var showAIKey = false
+    /// Test-connection verdict; editing anything voids it.
+    @State private var aiTest = FDCKeyTest.idle
+
     /// Which reset is awaiting its confirmation alert.
     @State private var pendingReset: PendingReset?
 
@@ -71,7 +88,7 @@ struct SettingsView: View {
             case .goals:
                 "Removes the weight goal and its daily deficit history. Weight and logged history in Apple Health are untouched. This can't be undone."
             case .settings:
-                "Returns every setting to its default, including tracked metrics, icons, reminders, and the online database API key. The Food Library and goals stay."
+                "Returns every setting to its default, including tracked metrics, icons, reminders, the online database API key, and the AI provider setup. The Food Library and goals stay."
             case .all:
                 "Resets Onigiri back to stock: Food Library, goals, and every setting. Apple Health data is untouched. This can't be undone."
             }
@@ -307,6 +324,198 @@ struct SettingsView: View {
         }
     }
 
+    /// Which Keychain slot the key field edits for the selected
+    /// provider; nil for On-Device (no field shows).
+    private var aiSecretAccount: String? {
+        switch AIProviderSettings.selected {
+        case .onDevice: nil
+        case .anthropic: AIProviderSettings.anthropicKeyAccount
+        case .openAI: AIProviderSettings.openAIKeyAccount
+        case .local: AIProviderSettings.localTokenAccount
+        }
+    }
+
+    private var aiStoredSecret: String {
+        switch AIProviderSettings.selected {
+        case .onDevice: ""
+        case .anthropic: AIProviderSettings.anthropicAPIKey
+        case .openAI: AIProviderSettings.openAIAPIKey
+        case .local: AIProviderSettings.localAIToken
+        }
+    }
+
+    /// Masked-by-default secret field, the FDC key's grammar: plain
+    /// TextField behind an eye toggle, edits a draft, saves as typed
+    /// (no shape gate — provider key formats vary and change).
+    private func aiKeyField(_ title: String) -> some View {
+        HStack {
+            Group {
+                if showAIKey {
+                    TextField(title, text: $aiKeyDraft)
+                } else {
+                    SecureField(title, text: $aiKeyDraft)
+                }
+            }
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+            .keyboardType(.asciiCapable)
+            .font(.callout.monospaced())
+            .onChange(of: aiKeyDraft) { _, raw in
+                if let account = aiSecretAccount {
+                    AIProviderSettings.saveSecret(raw, account: account)
+                }
+                aiTest = .idle
+            }
+            Button {
+                showAIKey.toggle()
+            } label: {
+                Image(systemName: showAIKey ? "eye.slash" : "eye")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .accessibilityLabel(showAIKey ? "Hide key" : "Show key")
+        }
+    }
+
+    private func aiModelField(_ binding: Binding<String>, prompt: String) -> some View {
+        LabeledContent("Model") {
+            TextField("Model", text: binding, prompt: Text(prompt))
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .font(.callout.monospaced())
+                .multilineTextAlignment(.trailing)
+        }
+    }
+
+    /// One cheapest-possible round trip through the configured provider
+    /// — answers "does this key/server actually work?" at entry time,
+    /// so the first failed estimate isn't the messenger.
+    private func testAIConnection() {
+        aiTest = .testing
+        let provider = AIProviderSettings.selected
+        let system = #"Reply with ONLY the JSON object {"ok":true}."#
+        Task {
+            var verdict: FDCKeyTest
+            do {
+                switch provider {
+                case .onDevice:
+                    return
+                case .anthropic:
+                    _ = try await AnthropicClient.completeJSON(
+                        apiKey: AIProviderSettings.anthropicAPIKey,
+                        model: AIProviderSettings.anthropicModel,
+                        system: system, user: "ping", maxTokens: 24)
+                case .openAI:
+                    _ = try await OpenAICompatibleClient.completeJSON(
+                        baseURL: OpenAICompatibleClient.openAIBaseURL,
+                        apiKey: AIProviderSettings.openAIAPIKey,
+                        model: AIProviderSettings.openAIModel,
+                        system: system, user: "ping", maxTokens: 24)
+                case .local:
+                    guard let base = AIProviderSettings.localBaseURL else {
+                        throw AIChatError.badURL
+                    }
+                    _ = try await OpenAICompatibleClient.completeJSON(
+                        baseURL: base,
+                        apiKey: AIProviderSettings.localAIToken,
+                        model: AIProviderSettings.localModel,
+                        system: system, user: "ping", maxTokens: 24)
+                }
+                verdict = .success
+            } catch let error as AIChatError {
+                verdict = .failure(error.errorDescription ?? "Connection failed")
+            } catch {
+                verdict = .failure("Couldn't reach the server")
+            }
+            if AIProviderSettings.selected == provider { aiTest = verdict }
+        }
+    }
+
+    /// Which engine answers the AI features (PLAN-byo-ai): On-Device
+    /// (Apple Intelligence, the default) or the user's own Anthropic /
+    /// OpenAI / local OpenAI-compatible server. Every AI affordance in
+    /// the app follows FoodIntelligence.isAvailable, so configuring a
+    /// provider here lights them up — including on devices without
+    /// Apple Intelligence.
+    private var aiProviderSection: some View {
+        Section {
+            Picker("Engine", selection: $aiProvider) {
+                ForEach(AIProvider.allCases, id: \.rawValue) { provider in
+                    Text(provider.displayName).tag(provider.rawValue)
+                }
+            }
+            .onChange(of: aiProvider) { _, _ in
+                aiKeyDraft = aiStoredSecret
+                aiTest = .idle
+            }
+            .onAppear { aiKeyDraft = aiStoredSecret }
+            switch AIProviderSettings.selected {
+            case .onDevice:
+                if !FoodIntelligence.onDeviceAvailable {
+                    Text("Apple Intelligence isn't available on this device, so AI features stay hidden. Pick a provider above to bring your own.")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
+            case .anthropic:
+                aiKeyField("API key")
+                aiModelField($aiAnthropicModel, prompt: AIProviderSettings.defaultAnthropicModel)
+            case .openAI:
+                aiKeyField("API key")
+                aiModelField($aiOpenAIModel, prompt: AIProviderSettings.defaultOpenAIModel)
+            case .local:
+                LabeledContent("Server") {
+                    TextField("Server", text: $aiLocalBaseURL, prompt: Text("http://192.168.1.20:11434/v1"))
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                        .font(.callout.monospaced())
+                        .multilineTextAlignment(.trailing)
+                        .onChange(of: aiLocalBaseURL) { _, _ in aiTest = .idle }
+                }
+                aiModelField($aiLocalModel, prompt: "gemma3")
+                aiKeyField("Token (optional)")
+                // The photo path needs the user's word — servers don't
+                // advertise vision. Off = Identify Food sends classifier
+                // labels as text instead of the photo.
+                Toggle("Model accepts photos", isOn: $aiLocalVision)
+            }
+            if AIProviderSettings.selected != .onDevice {
+                HStack {
+                    Button("Test connection") { testAIConnection() }
+                        .disabled(!AIProviderSettings.selectedRemoteIsConfigured || aiTest == .testing)
+                    Spacer()
+                    switch aiTest {
+                    case .idle:
+                        EmptyView()
+                    case .testing:
+                        ProgressView()
+                    case .success:
+                        Label("Success", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    case .failure(let reason):
+                        Text(reason)
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                            .multilineTextAlignment(.trailing)
+                    }
+                }
+            }
+        } header: {
+            Text("AI")
+        } footer: {
+            switch AIProviderSettings.selected {
+            case .onDevice:
+                Text("Describe-it, meal names, label reading, and Identify Food run on this iPhone. Nothing leaves the device.")
+            case .anthropic:
+                Text("AI features send the food text or photo to Anthropic under your key. The key lives in this phone's keychain — never in backups or exports.")
+            case .openAI:
+                Text("AI features send the food text or photo to OpenAI under your key. The key lives in this phone's keychain — never in backups or exports.")
+            case .local:
+                Text("AI features talk only to your own server. The address and token stay on this phone.")
+            }
+        }
+    }
+
     // Its own property: inlining this pushed the Form past what the
     // type-checker will solve in reasonable time.
     private var dataSection: some View {
@@ -394,7 +603,34 @@ struct SettingsView: View {
         SharedStore.untrackedBelowKey, SharedStore.energyStatsStyleKey,
         SharedStore.textSearchSourceKey,
         SharedStore.holdToLogWaterKey,
+        AIProviderSettings.providerKey, AIProviderSettings.anthropicModelKey,
+        AIProviderSettings.openAIModelKey, AIProviderSettings.localModelKey,
+        AIProviderSettings.localBaseURLKey, AIProviderSettings.localVisionKey,
     ]
+
+    /// The AI secrets as Settings found them (the Keychain sits outside
+    /// the defaults snapshot) — Cancel and resets restore/clear by hand,
+    /// mirroring the FDC key.
+    @State private var aiSecretsAtOpen: [String: String] = [
+        AIProviderSettings.anthropicKeyAccount: AIProviderSettings.anthropicAPIKey,
+        AIProviderSettings.openAIKeyAccount: AIProviderSettings.openAIAPIKey,
+        AIProviderSettings.localTokenAccount: AIProviderSettings.localAIToken,
+    ]
+
+    private static let aiSecretAccounts = [
+        AIProviderSettings.anthropicKeyAccount,
+        AIProviderSettings.openAIKeyAccount,
+        AIProviderSettings.localTokenAccount,
+    ]
+
+    private func clearAISecrets() {
+        for account in Self.aiSecretAccounts {
+            AIProviderSettings.saveSecret("", account: account)
+        }
+        aiSecretsAtOpen = Self.aiSecretAccounts.reduce(into: [:]) { $0[$1] = "" }
+        aiKeyDraft = ""
+        aiTest = .idle
+    }
 
     /// The preference values as the sheet found them (missing key =
     /// was unset). Cancel writes these back.
@@ -425,6 +661,12 @@ struct SettingsView: View {
         // from the restored values.
         fdcAPIKeyDraft = SharedStore.fdcAPIKey
         fdcKeyTest = .idle
+        // Same for the AI secrets (one Keychain slot per provider).
+        for (account, value) in aiSecretsAtOpen {
+            AIProviderSettings.saveSecret(value, account: account)
+        }
+        aiKeyDraft = aiStoredSecret
+        aiTest = .idle
         ReminderScheduler.shared.replan()
         PhoneSyncService.shared.push(from: context)
     }
@@ -443,10 +685,12 @@ struct SettingsView: View {
             // means the caches, the watch mirror, and the onboarding
             // flag go too (onboarding replays on next launch).
             SharedStore.defaults.removePersistentDomain(forName: SharedStore.appGroupID)
-            // The domain wipe doesn't reach the Keychain — clear the key too.
+            // The domain wipe doesn't reach the Keychain — clear the
+            // FDC key and the AI provider secrets too.
             SharedStore.saveFDCAPIKey("")
             fdcAPIKeyDraft = ""
             fdcKeyTest = .idle
+            clearAISecrets()
         }
         // Reminders replan off the (possibly cleared) toggles; the push
         // rebuilds the watch mirror and reloads widgets.
@@ -484,11 +728,13 @@ struct SettingsView: View {
         for key in Self.preferenceKeys {
             SharedStore.defaults.removeObject(forKey: key)
         }
-        // The FDC key is in the Keychain, not the defaults list.
+        // The FDC key and AI secrets are in the Keychain, not the
+        // defaults list.
         SharedStore.saveFDCAPIKey("")
         // The key field's draft mirrors storage by hand.
         fdcAPIKeyDraft = ""
         fdcKeyTest = .idle
+        clearAISecrets()
     }
 
     private static let foodIconOptions: [(tag: String, name: String)] = [
@@ -923,6 +1169,8 @@ struct SettingsView: View {
                 remindersSection
 
                 onlineDatabaseSection
+
+                aiProviderSection
 
                 dataSection
 

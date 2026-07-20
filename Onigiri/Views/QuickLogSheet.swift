@@ -345,13 +345,17 @@ struct QuickLogSheet: View {
                 }
             }
             .toolbar {
-                // "Done", not "Cancel": logging commits immediately (with
-                // its own Undo), so dismissal cancels nothing — and the
-                // sheet stays open for multi-item lunches. Confirm SLOT
-                // (top trailing, emphasized) like Settings' Done — it sat
-                // in the cancel slot, the app's one leading Done.
-                // (The scanner moved from the toolbar into the list's
-                // Scan Barcode row, matching Foods.)
+                // Cancel + Done, like every other sheet in the app (the
+                // user, 2026-07-19 — this was the ONE sheet without a
+                // leading Cancel). Logging commits immediately (with its
+                // own Undo), so both buttons just dismiss: Cancel is the
+                // muscle-memory bail-out that can't accidentally log
+                // anything; Done stays the affirmative finish for
+                // multi-item lunches, in the confirm slot (top trailing,
+                // emphasized) like Settings' Done.
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                         .fontWeight(.semibold)

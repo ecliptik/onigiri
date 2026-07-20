@@ -25,7 +25,7 @@ settings:
     SWIFT_APPROACHABLE_CONCURRENCY: YES
     CODE_SIGN_STYLE: Automatic
     CURRENT_PROJECT_VERSION: 2
-    MARKETING_VERSION: "2.5.15"
+    MARKETING_VERSION: "2.6.0"
 
 targets:
   Onigiri:
@@ -82,6 +82,13 @@ targets:
         NSHealthShareUsageDescription: Onigiri reads your energy burn, weight, and nutrition history to show your daily calorie balance and goal progress.
         NSHealthUpdateUsageDescription: Onigiri saves the food, sodium, and water you log to Apple Health.
         NSCameraUsageDescription: Onigiri uses the camera to scan food barcodes and photograph nutrition labels.
+        # Bring-your-own-AI's "Local server" option (PLAN-byo-ai): a home
+        # Ollama/LM Studio usually speaks plain http on the LAN, which ATS
+        # blocks by default; local networking also triggers iOS's local-
+        # network permission prompt. Cloud endpoints stay HTTPS-only.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: Onigiri connects to your own local AI server, if you configure one in Settings, to estimate nutrition.
         # The Today-card widget's + button deep-links into the Log sheet
         # (onigiri://log?day=YYYY-MM-DD).
         CFBundleURLTypes:

@@ -5,7 +5,7 @@ permalink: /privacy/
 
 # Onigiri Privacy Policy
 
-_Last updated: July 16, 2026_
+_Last updated: July 19, 2026_
 
 Onigiri is a calorie, nutrition, and water tracker for iPhone, iPad,
 and Apple Watch. It is built so that your data stays yours.
@@ -15,7 +15,9 @@ and Apple Watch. It is built so that your data stays yours.
 - Your logs live in **Apple Health** on your device. We never see them.
 - Onigiri has **no accounts, no analytics, no ads, and no servers**.
 - The only data that ever leaves your device is the **search text or
-  barcode** you look up against public food databases.
+  barcode** you look up against public food databases — and, only if
+  you configure one, the food text or photo you send to an **AI
+  provider of your choice**.
 
 ## Health data
 
@@ -44,6 +46,33 @@ These requests include no Health data, no identity, and no identifiers
 beyond your device's network address, which every internet request
 carries. Each service's own privacy policy governs what it does with
 queries it receives.
+
+## AI features (optional)
+
+Onigiri's AI features — describe-it estimates, meal-name suggestions,
+nutrition-label reading, and Identify Food — run **on-device** by
+default through Apple Intelligence on devices that support it. On the
+default setting, nothing about them leaves your iPhone.
+
+In Settings you can instead bring your own AI provider. When you do,
+those features send only the text you typed, the label transcript
+being read, or the photo being identified to the provider **you**
+configured, under your own API key:
+
+- **[Anthropic](https://www.anthropic.com/legal/privacy)** — your
+  Anthropic API key, sent only to Anthropic.
+- **[OpenAI](https://openai.com/policies/row-privacy-policy/)** — your
+  OpenAI API key, sent only to OpenAI.
+- **A local server you run** (Ollama, LM Studio, or any
+  OpenAI-compatible endpoint) — requests go only to the address you
+  configure, typically on your own network, and to nowhere else.
+
+API keys are stored in the device Keychain, are never included in
+backups or library exports, and are sent only to their own provider.
+These requests carry no Health data and no identity. Each provider's
+own privacy policy governs what it does with the content it receives.
+AI providers are off unless you configure one — deleting the provider's
+key or switching back to On-Device stops all AI traffic immediately.
 
 ## What Onigiri stores on your device
 

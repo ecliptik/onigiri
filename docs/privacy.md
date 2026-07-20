@@ -14,10 +14,10 @@ and Apple Watch. It is built so that your data stays yours.
 
 - Your logs live in **Apple Health** on your device. We never see them.
 - Onigiri has **no accounts, no analytics, no ads, and no servers**.
-- The only data that ever leaves your device is the **search text or
-  barcode** you look up against public food databases — and, only if
-  you configure one, the food text or photo you send to an **AI
-  provider of your choice**.
+- **Nothing leaves your device by default.** Online food lookups (the
+  search text or barcode sent to public food databases) and the AI
+  features are both **off until you turn them on** — offered once
+  during onboarding, changeable anytime in Settings.
 
 ## Health data
 
@@ -32,8 +32,11 @@ access at any time in the Health app (Profile → Apps → Onigiri).
 
 ## Food database lookups
 
-When you search for a food or scan a barcode, Onigiri sends only the
-search text or barcode to one of two public services, per your Settings:
+Online lookups are **off by default** — with them off, food search
+uses only your saved library and the scanner reads nutrition labels
+on-device. When you turn them on (onboarding or Settings → Online
+Database), searching or scanning a barcode sends only the search text
+or barcode to one of two public services, per your Settings:
 
 - **[Open Food Facts](https://world.openfoodfacts.org)** — barcode
   scans and text search. Data licensed under the Open Database License

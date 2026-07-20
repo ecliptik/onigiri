@@ -98,8 +98,13 @@ struct WatchProvider: TimelineProvider {
             let now = Date()
             var entry = await load()
             entry.relevance = ComplicationRelevance.mealWindow(at: now)
-            // Push-based reloads keep widgets fresh; this poll is only a fallback.
-            let refresh = now.addingTimeInterval(WidgetRefreshPolicy.pollFallback)
+            // Push-based reloads keep widgets fresh; this poll is only a
+            // fallback — except right after a phone log, when the stamp
+            // arrives ahead of the sample (WC beats Health sync) and a
+            // short follow-up poll catches the totals the reload missed.
+            let refresh = now.addingTimeInterval(
+                WidgetRefreshPolicy.nextPoll(now: now, lastLogAt: WatchSync.lastPhoneLogAt())
+            )
             let midnight = Calendar.current.date(
                 byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now)
             )
@@ -263,8 +268,13 @@ struct SummaryProvider: TimelineProvider {
             let now = Date()
             var entry = await load()
             entry.relevance = ComplicationRelevance.mealWindow(at: now)
-            // Push-based reloads keep widgets fresh; this poll is only a fallback.
-            let refresh = now.addingTimeInterval(WidgetRefreshPolicy.pollFallback)
+            // Push-based reloads keep widgets fresh; this poll is only a
+            // fallback — except right after a phone log, when the stamp
+            // arrives ahead of the sample (WC beats Health sync) and a
+            // short follow-up poll catches the totals the reload missed.
+            let refresh = now.addingTimeInterval(
+                WidgetRefreshPolicy.nextPoll(now: now, lastLogAt: WatchSync.lastPhoneLogAt())
+            )
             let midnight = Calendar.current.date(
                 byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now)
             )
@@ -413,7 +423,9 @@ struct StreakComplicationProvider: TimelineProvider {
             // The streak only moves when a day completes — pre-render
             // the post-midnight number (today judged complete) so
             // yesterday's count never shows into the new day.
-            let refresh = Date().addingTimeInterval(WidgetRefreshPolicy.pollFallback)
+            let refresh = Date().addingTimeInterval(
+                WidgetRefreshPolicy.nextPoll(now: .now, lastLogAt: WatchSync.lastPhoneLogAt())
+            )
             let midnight = Calendar.current.date(
                 byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: .now)
             )

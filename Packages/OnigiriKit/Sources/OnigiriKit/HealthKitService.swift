@@ -221,17 +221,53 @@ public final class HealthKitService {
     }
 
     /// Most recent weight sample (smart scale writes these), in pounds.
+    /// Write-through cached in the App Group (day-stamped) so the watch
+    /// context push — a synchronous path — can read it without a query.
     public func latestBodyMassLb() async throws -> Double? {
         let descriptor = HKSampleQueryDescriptor(
             predicates: [.quantitySample(type: HKQuantityType(.bodyMass))],
             sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)],
             limit: 1
         )
+        let result: Double?
         do {
-            return try await descriptor.result(for: store).first?.quantity.doubleValue(for: .pound())
+            result = try await descriptor.result(for: store).first?.quantity.doubleValue(for: .pound())
         } catch let error as HKError where error.code == .errorAuthorizationNotDetermined {
             return nil
         }
+        if let result {
+            SharedStore.defaults.set(
+                ["value": result, "day": DeficitTargetHistory.dayKey(for: .now)] as [String: Any],
+                forKey: Self.weightCacheKey
+            )
+        } else {
+            // All weigh-ins deleted: a lingering cache would push a
+            // phantom weight to the watch until the day window aged out.
+            SharedStore.defaults.removeObject(forKey: Self.weightCacheKey)
+        }
+        return result
+    }
+
+    private static let weightCacheKey = "latestBodyMassLb"
+
+    static func burnCacheKey(days: Int) -> String { "averageDailyBurnKcal.\(days)" }
+
+    /// The last computed trailing burn average with the day it was
+    /// computed — no store access, no TTL judgment (the watch applies its
+    /// own freshness window to the day stamp).
+    public static func cachedAverageDailyBurnKcal(days: Int = 14) -> (kcal: Double, day: String)? {
+        guard let cached = SharedStore.defaults.dictionary(forKey: burnCacheKey(days: days)),
+              let value = cached["value"] as? Double,
+              let day = cached["day"] as? String else { return nil }
+        return (value, day)
+    }
+
+    /// The last weight read's write-through, same shape as the burn cache.
+    public static func cachedLatestBodyMassLb() -> (lb: Double, day: String)? {
+        guard let cached = SharedStore.defaults.dictionary(forKey: weightCacheKey),
+              let value = cached["value"] as? Double,
+              let day = cached["day"] as? String else { return nil }
+        return (value, day)
     }
 
     /// Mean of (active + resting) burn over the last `days` full days,
@@ -247,7 +283,7 @@ public final class HealthKitService {
     /// Health access mid-day must take effect.
     public func averageDailyBurnKcal(days: Int = 14, now: Date = .now) async throws -> Double? {
         let calendar = Calendar.current
-        let cacheKey = "averageDailyBurnKcal.\(days)"
+        let cacheKey = Self.burnCacheKey(days: days)
         let dayKey = DeficitTargetHistory.dayKey(for: now, calendar: calendar)
         if let cached = SharedStore.defaults.dictionary(forKey: cacheKey),
            cached["day"] as? String == dayKey,

@@ -48,10 +48,18 @@ struct OnigiriApp: App {
             await MainActor.run {
                 ToastCenter.shared.noteHealthWrite()
                 WidgetReloader.requestReload(kinds: WidgetKinds.phoneLogAffected)
+                // Stamp the log and push the context: the stamp's change
+                // is what wakes the watch and reloads its complications —
+                // HealthKit syncs the sample itself, but its watchOS
+                // background delivery is hourly at best, and the watch
+                // deliberately ignores library-only context churn.
+                WatchSync.stampPhoneLog()
+                PhoneSyncService.shared.push(from: Self.container.mainContext)
                 // A background wake suspends after completion — flush the
-                // debounce before the window closes.
+                // debounces before the window closes.
                 if UIApplication.shared.applicationState != .active {
                     WidgetReloader.flushNow()
+                    PhoneSyncService.shared.flushNow()
                 }
             }
             // Reminders bake their numbers in at planning time, so a log

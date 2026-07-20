@@ -96,6 +96,49 @@ struct WatchSyncTests {
         #expect(payload.goal == .keep)
     }
 
+    // The phone's plan inputs (day-stamped burn/weight) and log stamp
+    // ride the context so the watch's budget matches the phone's and a
+    // phone log wakes the complications.
+    @Test func planInputsAndLogStampRoundTrip() {
+        let context = WatchSync.makeContext(
+            meals: [], goal: nil, waterServingOz: 12, waterGoalOz: 64,
+            planBurnKcal: 2750, planBurnDay: "2026-07-20",
+            planWeightLb: 185.4, planWeightDay: "2026-07-20",
+            lastLogAt: 1_784_500_000
+        )
+        let payload = WatchSync.parse(context)
+        #expect(payload.planBurnKcal == 2750)
+        #expect(payload.planBurnDay == "2026-07-20")
+        #expect(payload.planWeightLb == 185.4)
+        #expect(payload.planWeightDay == "2026-07-20")
+        #expect(payload.lastLogAt == 1_784_500_000)
+    }
+
+    // An older phone's context has none of the plan-input keys — nil all
+    // the way through (store() then keeps whatever the watch last had).
+    @Test func missingPlanInputsStayNil() {
+        let context = WatchSync.makeContext(meals: [], goal: nil, waterServingOz: 12, waterGoalOz: 64)
+        let payload = WatchSync.parse(context)
+        #expect(payload.planBurnKcal == nil)
+        #expect(payload.planBurnDay == nil)
+        #expect(payload.planWeightLb == nil)
+        #expect(payload.planWeightDay == nil)
+        #expect(payload.lastLogAt == nil)
+    }
+
+    // A value without its day stamp must not enter the context — the
+    // watch could never judge its freshness.
+    @Test func planValueWithoutItsDayIsDropped() {
+        let context = WatchSync.makeContext(
+            meals: [], goal: nil, waterServingOz: 12, waterGoalOz: 64,
+            planBurnKcal: 2750, planBurnDay: nil,
+            planWeightLb: nil, planWeightDay: "2026-07-20"
+        )
+        let payload = WatchSync.parse(context)
+        #expect(payload.planBurnKcal == nil)
+        #expect(payload.planWeightDay == nil)
+    }
+
     @Test func mealsWithoutCategoryStillDecode() throws {
         // A payload from an older phone that predates category/nutrients.
         let legacy = #"[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Toast","kcal":210,"sodiumMg":190}]"#

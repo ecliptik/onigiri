@@ -88,6 +88,22 @@ public enum DailyPlanLoader {
             dailyBudgetKcal: plan.dailyBudget
         )
     }
+
+    /// One plan input resolved between the phone's synced copy and the
+    /// local Health read. The synced value wins while its day stamp is
+    /// today or yesterday: the phone's store holds full history, while
+    /// watchOS purges old samples — a watch-local 14-day average runs
+    /// over a shorter window and the two devices' budgets drift apart.
+    nonisolated static func planInput(
+        synced: (value: Double, day: String)?,
+        local: Double?,
+        calendar: Calendar = .current,
+        now: Date = .now
+    ) -> Double? {
+        guard let synced, WatchSync.isRecentDay(synced.day, calendar: calendar, now: now)
+        else { return local }
+        return synced.value
+    }
 }
 
 #if canImport(HealthKit)
@@ -143,7 +159,7 @@ public extension DailyPlanLoader {
             return makeState(
                 goal: goal,
                 summary: (try? await summaryRead) ?? .zero,
-                averageBurnKcal: (try? await burnRead) ?? nil,
+                averageBurnKcal: resolvedBurn((try? await burnRead) ?? nil),
                 healthWeightLb: nil
             )
         }
@@ -151,9 +167,31 @@ public extension DailyPlanLoader {
         return makeState(
             goal: goal,
             summary: (try? await summaryRead) ?? .zero,
-            averageBurnKcal: (try? await burnRead) ?? nil,
-            healthWeightLb: (try? await weightRead) ?? nil
+            averageBurnKcal: resolvedBurn((try? await burnRead) ?? nil),
+            healthWeightLb: resolvedWeight((try? await weightRead) ?? nil)
         )
+    }
+
+    /// On the watch, prefer the phone's synced plan inputs while fresh
+    /// (see `planInput`); everywhere else the local store IS the phone's.
+    private static func resolvedBurn(_ local: Double?) -> Double? {
+        #if os(watchOS)
+        return planInput(
+            synced: WatchSync.syncedPlanBurn().map { ($0.kcal, $0.day) }, local: local
+        )
+        #else
+        return local
+        #endif
+    }
+
+    private static func resolvedWeight(_ local: Double?) -> Double? {
+        #if os(watchOS)
+        return planInput(
+            synced: WatchSync.syncedPlanWeight().map { ($0.lb, $0.day) }, local: local
+        )
+        #else
+        return local
+        #endif
     }
 }
 #endif

@@ -1,5 +1,28 @@
-#if canImport(WidgetKit) && canImport(HealthKit)
 import Foundation
+
+/// Shared timeline policy: the observer-driven funnel is what keeps
+/// widgets fresh; providers poll only as a fallback. Outside the
+/// WidgetKit guard so the pure test host reaches `nextPoll`.
+public enum WidgetRefreshPolicy {
+    public static let pollFallback: TimeInterval = 60 * 60
+    /// A phone log just synced its stamp over WatchConnectivity, but the
+    /// sample itself rides HealthKit's slower device sync — the reload
+    /// the stamp triggered may have read pre-log totals. Poll again soon
+    /// while inside the window; the second read catches the sample.
+    public static let postLogPoll: TimeInterval = 8 * 60
+    public static let postLogWindow: TimeInterval = 20 * 60
+
+    /// The watch providers' next poll interval: short after a fresh phone
+    /// log stamp, the hourly fallback otherwise. `abs` so a device-clock
+    /// skew can't turn a just-written stamp into "stale".
+    public static func nextPoll(now: Date = .now, lastLogAt: Date?) -> TimeInterval {
+        guard let lastLogAt, abs(now.timeIntervalSince(lastLogAt)) < postLogWindow
+        else { return pollFallback }
+        return postLogPoll
+    }
+}
+
+#if canImport(WidgetKit) && canImport(HealthKit)
 import WidgetKit
 
 /// Every widget kind in both bundles, so reloads can be scoped to the
@@ -22,12 +45,6 @@ public enum WidgetKinds {
     public static let phoneLogAffected = [gauge, waterAccessory, streak, monthStats, todayCard]
     /// Watch complications a log can change (all of them).
     public static let watchAll = [balance, water, streak, summary]
-}
-
-/// Shared timeline policy: the observer-driven funnel is what keeps
-/// widgets fresh; providers poll only as a fallback, at this interval.
-public enum WidgetRefreshPolicy {
-    public static let pollFallback: TimeInterval = 60 * 60
 }
 
 /// The single funnel for widget reloads. A log used to fire

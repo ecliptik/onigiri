@@ -176,6 +176,7 @@
   /* ---- sections ---- */
   section { padding: clamp(64px, 11vh, 130px) clamp(20px, 5vw, 56px); }
   section.raise { background: var(--bg-raise); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  section[id] { scroll-margin-top: 64px; } /* land anchors below the sticky nav */
   .wrap { max-width: 1080px; margin: 0 auto; }
   .kicker {
     color: var(--nori); font-weight: 700; font-size: 14px; letter-spacing: .12em;
@@ -308,24 +309,6 @@
     <div class="device"><img src="showcase/dark/today.png" data-app-light="showcase/light/today.png" data-app-dark="showcase/dark/today.png" alt="The Today screen: calorie balance headline, sodium and water, the daily goal gauge, energy meters, and the log" loading="eager"></div>
   </div>
 </header>
-
-<section class="raise" id="privacy">
-  <div class="privacy-panel">
-    <div class="kicker reveal">Private by design</div>
-    <h2 class="reveal">No account. No ads.<br>No subscriptions.</h2>
-    <p class="lead reveal d1">Your logs live in Apple Health on your device, under Apple's protections.
-    The only thing that ever leaves is the search text or barcode you look up against
-    public food databases. Delete the app and your data is still yours in Apple Health.</p>
-    <div class="badges reveal d2">
-      <span class="badge">No analytics</span>
-      <span class="badge">No servers</span>
-      <span class="badge">No tracking</span>
-      <span class="badge">Data Not Collected</span>
-      <span class="badge">Works offline</span>
-    </div>
-    <p style="margin-top:30px" class="reveal d3"><a href="privacy/">Read the full privacy policy →</a></p>
-  </div>
-</section>
 
 <section id="features">
   <div class="row">
@@ -462,6 +445,37 @@
       so the ring reads <strong>150 kcal left</strong>: room for 150 more and you still land the
       deficit by bedtime.
     </div>
+  </div>
+</section>
+
+<section class="raise" id="privacy">
+  <div class="privacy-panel">
+    <div class="kicker reveal">Private by design</div>
+    <h2 class="reveal">No account. No ads.<br>No subscriptions.</h2>
+    <p class="lead reveal d1">Your logs live in Apple Health on your device, under Apple's
+    protections. By default, no data is sent to third parties — everything remains on
+    your device. Delete the app and your data is still yours in Apple Health.</p>
+    <ul class="feature-list reveal d2" style="text-align:left; max-width:680px; margin:28px auto 0;">
+      <li><strong>Off by default</strong> — online food lookups and every AI feature ship
+        turned off; nothing network-touching runs until you turn it on, offered once at
+        onboarding and changeable anytime in Settings.</li>
+      <li><strong>Your data lives in Apple Health</strong> — logs are HealthKit samples on
+        your device, not rows in someone else's cloud.</li>
+      <li><strong>AI can stay on-device</strong> — with Apple Intelligence, estimates,
+        label reading, and photo identification all run on the iPhone itself. Prefer your
+        own provider? Requests go only to the service you configure, under your own key.</li>
+      <li><strong>Lookups only when you ask</strong> — with online lookups on, the only
+        thing sent is the search text or barcode you look up against public food
+        databases.</li>
+    </ul>
+    <div class="badges reveal d2">
+      <span class="badge">No analytics</span>
+      <span class="badge">No servers</span>
+      <span class="badge">No tracking</span>
+      <span class="badge">Data Not Collected</span>
+      <span class="badge">Works offline</span>
+    </div>
+    <p style="margin-top:30px" class="reveal d3"><a href="privacy/">Read the full privacy policy →</a></p>
   </div>
 </section>
 

@@ -177,7 +177,6 @@ struct QuickLogSheet: View {
                 || (item.category?.localizedCaseInsensitiveContains(searchText) ?? false)
         }
         return matched.sorted { lhs, rhs in
-            if librarySort == .ranked, lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
             if librarySort != .name, lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
             return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
@@ -201,25 +200,26 @@ struct QuickLogSheet: View {
                 // Meals scope — scanning adds a FOOD; meals are built
                 // from foods already added (the user).
                 if searchText.isEmpty, kind != .meals {
-                    // The shared entry doors (scan + describe), same as
-                    // Foods and the food form (PLAN-entry-doors).
+                    // The shared scan door, same as Foods and the food
+                    // form (PLAN-entry-doors / PLAN-unified-search).
                     EntryDoorsSection(
                         scanBusy: isLookingUpBarcode,
-                        onScan: { activeSheet = .scanner },
-                        onEstimate: { estimate in
-                            // Describe → portion sheet → ONE-OFF log (the
-                            // user's pick): no library write — Recents
-                            // resurface it "as last logged", the library
-                            // stays curated. The portion confirm lands in
-                            // log() like every online-result pick.
-                            activeSheet = .portion(PortionTarget(
-                                name: estimate.name,
-                                kcal: estimate.kcal,
-                                sodiumMg: estimate.sodiumMg,
-                                nutrients: NutrientValues(),
-                                serving: estimate.serving))
-                        }
+                        onScan: { activeSheet = .scanner }
                     )
+                }
+                // Search leads with the tap-to-estimate row (AI →
+                // library → online, the user's order). An estimate opens
+                // the FULL food form, editable down to every value —
+                // the same route unknown barcodes and labels take from
+                // here (the portion shortcut made estimates the odd one
+                // out; superseded 2026-07-20, the user). Its Log action
+                // writes to the browsed day and returns here.
+                if !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                    AIEstimateSection(query: searchText) { product in
+                        activeSheet = .form(ProductPrefill(
+                            product: product,
+                            provenance: AIProviderSettings.selected.estimateCaption))
+                    }
                 }
                 // Water leads the sheet, above Recent in every scope
                 // (Micheal moved it off Today's header — one + button,
@@ -303,7 +303,8 @@ struct QuickLogSheet: View {
 
                 // Saved items rank first; the online database follows so a
                 // one-off food can be logged without saving it.
-                if !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                if SharedStore.onlineLookups,
+                   !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
                     OnlineResultsSection(query: searchText, search: onlineSearch, onPick: { product in
                         route(product)
                     }, onAddManually: { name in
@@ -458,8 +459,11 @@ struct QuickLogSheet: View {
                 case .form(let prefill):
                     // New foods go through the full form — reviewable, complete,
                     // and saved to the library. Its Log action returns here
-                    // (the sheet stays open for the next item).
-                    FoodFormView(food: nil, prefill: prefill.product, logDate: logDate)
+                    // (the sheet stays open for the next item). AI-estimate
+                    // prefills carry their provenance caption in.
+                    FoodFormView(
+                        food: nil, prefill: prefill.product,
+                        prefillMessage: prefill.provenance, logDate: logDate)
                 case .editFood(let food):
                     FoodFormView(food: food)
                 case .editMeal(let meal):
@@ -505,7 +509,9 @@ struct QuickLogSheet: View {
                 VStack(spacing: 4) {
                     Text("No matches")
                         .font(.headline)
-                    Text("Try different words, or search online below.")
+                    Text(SharedStore.onlineLookups
+                        ? "Try different words, or search online below."
+                        : "Try different words.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -555,6 +561,12 @@ struct QuickLogSheet: View {
     /// sheet slot re-presents on the item change, so a known barcode can
     /// hand the dismissing scanner off to the portion sheet directly.
     private func lookUpBarcode(_ code: String) {
+        // Online lookups off = the scanner reads labels only; say why
+        // the barcode did nothing instead of failing silently.
+        guard SharedStore.onlineLookups else {
+            ToastCenter.shared.show("Online lookups are off — enable in Settings to look up barcodes")
+            return
+        }
         BarcodeRouter.lookUp(
             code,
             savedTarget: { libraryTarget(forBarcode: $0) },

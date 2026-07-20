@@ -1,17 +1,19 @@
 import SwiftUI
 import OnigiriKit
 
-/// The library-list sort, shared by the Foods screen and the meal
-/// builder (both persist a pick via @AppStorage; defaults differ —
-/// Foods leads with the favorites blend, the builder with Recent).
+/// The library-list sort, shared by the Foods screen, the Log sheet,
+/// and the meal builder (each persists a pick via @AppStorage).
 /// Raw values are stored preferences: never rename them.
+/// The "Favorites" sort (rawValue "ranked") was REMOVED 2026-07-19 —
+/// the Favorites SCOPE owns the starred shortlist, and two adjacent
+/// "Favorites" concepts read as one (the user). A stored "ranked"
+/// falls back to .recent through the usual `?? .recent` at read sites.
 enum LibrarySort: String, CaseIterable {
-    // Declaration order IS the menu order: Recent, Favorites, Name.
-    case recent, ranked, name
+    // Declaration order IS the menu order: Recent, Name.
+    case recent, name
 
     var label: String {
         switch self {
-        case .ranked: "Favorites"
         case .recent: "Recent"
         case .name: "Name"
         }

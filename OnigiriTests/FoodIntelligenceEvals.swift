@@ -56,6 +56,10 @@ final class FoodIntelligenceEvals: XCTestCase {
             ProcessInfo.processInfo.environment["ONIGIRI_AI_EVALS"] == "1",
             "AI evals are opt-in: pass TEST_RUNNER_ONIGIRI_AI_EVALS=1 (minutes of model inference)"
         )
+        // AI ships OFF by default (2026-07-20); the suite runs in the
+        // app's process, so flip the master switch for the eval run —
+        // an opted-in eval must never silently skip on the default.
+        SharedStore.defaults.set(true, forKey: AIProviderSettings.enabledKey)
         try XCTSkipUnless(
             FoodIntelligence.isAvailable,
             "Foundation Models unavailable (Apple Intelligence off or unsupported here) — skipping; an absent model must never report a quality result"
@@ -136,6 +140,16 @@ final class FoodIntelligenceEvals: XCTestCase {
                 + "\(food.kcal) kcal (want \(sample.kcal)), "
                 + "\(food.sodiumMg) mg Na (want \(sample.sodiumMg)), "
                 + "serving \"\(food.serving)\"")
+            // MACRO BASELINE (PLAN-unified-search): logged, not yet
+            // gated — Gates get set from this data in their own commit
+            // (the calibrate-then-gate rule). Blank = model omitted.
+            let macros = food.nutrients
+            report.append(
+                "     macros: fat \(macros.fatG.map { "\($0)g" } ?? "—"), "
+                + "carbs \(macros.carbsG.map { "\($0)g" } ?? "—"), "
+                + "protein \(macros.proteinG.map { "\($0)g" } ?? "—"), "
+                + "fiber \(macros.fiberG.map { "\($0)g" } ?? "—"), "
+                + "sugar \(macros.sugarG.map { "\($0)g" } ?? "—")")
         }
 
         attachAndPrint(report, name: "describeFood-eval")

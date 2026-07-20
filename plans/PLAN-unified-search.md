@@ -1,5 +1,14 @@
 # PLAN — One search field, AI row on top (2026-07-19)
 
+> **Amendments (2026-07-20, the user, after on-device use):**
+> 1. The idle row reads "✨ **Estimate with <provider name>**" + the
+>    quoted query as caption — a bare "Estimate" didn't read as AI,
+>    and the provider name doubles as disclosure for remote engines.
+> 2. Picking an estimate on the LOG SHEET opens the **full food form**
+>    (every value editable), superseding the portion-sheet one-off:
+>    the portion sheet allowed serving/meal only, and the form is the
+>    same route unknown barcodes/labels already take from the sheet.
+
 Supersedes the describe DOOR from PLAN-entry-doors on every surface:
 "Describe food" and Search collapse into ONE field. Decided with the
 user 2026-07-19:

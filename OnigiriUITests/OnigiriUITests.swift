@@ -2008,6 +2008,14 @@ final class OnigiriUITests: XCTestCase {
         attachShot(named: "onboarding-water")
         app.buttons["Continue"].firstMatch.tap()
 
+        // The privacy-choices page (2026-07-20): both switches ship
+        // OFF and the walkthrough leaves them that way — the default
+        // story is the tested story.
+        XCTAssertTrue(app.staticTexts["Private by default"].waitForExistence(timeout: 5),
+                      "Privacy page")
+        attachShot(named: "onboarding-privacy")
+        app.buttons["Continue"].firstMatch.tap()
+
         let start = app.buttons["Start Logging"]
         XCTAssertTrue(start.waitForExistence(timeout: 5), "Done page")
         attachShot(named: "onboarding-done")

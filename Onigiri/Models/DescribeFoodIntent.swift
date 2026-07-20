@@ -40,7 +40,10 @@ struct DescribeFoodIntent: AppIntent {
             name: food.name,
             kcal: food.kcal,
             sodiumMg: food.sodiumMg,
-            nutrients: NutrientValues(),
+            // Estimated macros ride along now (PLAN-unified-search) —
+            // same review contract: the spoken confirmation covers
+            // kcal/sodium, the rest lands like any label's numbers.
+            nutrients: food.nutrients,
             category: nil
         )
         WidgetReloader.reloadNow(kinds: [

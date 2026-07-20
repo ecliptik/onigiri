@@ -70,11 +70,6 @@ struct MealFormView: View {
         // break alphabetically, which the stable base order provides).
         let sorted: [Food]
         switch librarySort {
-        case .ranked:
-            sorted = pool.sorted {
-                if $0.isFavorite != $1.isFavorite { return $0.isFavorite }
-                return $0.recencyDate > $1.recencyDate
-            }
         case .recent:
             sorted = pool.sorted { $0.recencyDate > $1.recencyDate }
         case .name:

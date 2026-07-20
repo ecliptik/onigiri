@@ -7,6 +7,11 @@ import OnigiriKit
 /// can be exercised without typing. Paired with HealthKitService.seedSampleData.
 enum DebugSeeder {
     static func seedLibraryIfEmpty(context: ModelContext) {
+        // The UI tests exercise the ONLINE experience (search sections,
+        // barcode routes, add-from-empty-search) — the off-by-default
+        // privacy stance would skip all of it, so seeded runs opt in.
+        // AI stays off here: AI-dependent tests opt in themselves.
+        SharedStore.defaults.set(true, forKey: SharedStore.onlineLookupsKey)
         let foodCount = (try? context.fetchCount(FetchDescriptor<Food>())) ?? 0
         if foodCount == 0 {
             let chicken = Food(name: "Chicken breast", kcal: 280, sodiumMg: 540, servingDescription: "8 oz",

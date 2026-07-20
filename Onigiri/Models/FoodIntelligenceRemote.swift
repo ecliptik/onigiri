@@ -72,6 +72,13 @@ extension FoodIntelligence {
         let kcal: Double
         let sodiumMg: Double
         let serving: String
+        // Optional: a model that omits a macro degrades to a blank
+        // form field, never a failed estimate.
+        let fatG: Double?
+        let carbsG: Double?
+        let proteinG: Double?
+        let fiberG: Double?
+        let sugarG: Double?
     }
 
     static func describeFoodRemote(_ description: String) async -> DescribedFood? {
@@ -81,7 +88,9 @@ extension FoodIntelligence {
              Respond with ONLY a JSON object, no prose: {"name": string \
             (at most five words, title style), "kcal": number, \
             "sodiumMg": number, "serving": string (the portion restated \
-            briefly, e.g. "1 bowl")}.
+            briefly, e.g. "1 bowl"), "fatG": number, "carbsG": number, \
+            "proteinG": number, "fiberG": number, "sugarG": number — \
+            grams for the described portion}.
             """
         guard let estimate = decode(
             RemoteFoodEstimate.self,
@@ -94,7 +103,11 @@ extension FoodIntelligence {
             name: name,
             kcal: estimate.kcal,
             sodiumMg: estimate.sodiumMg,
-            serving: estimate.serving.trimmingCharacters(in: .whitespacesAndNewlines))
+            serving: estimate.serving.trimmingCharacters(in: .whitespacesAndNewlines),
+            nutrients: macroNutrients(
+                fatG: estimate.fatG, carbsG: estimate.carbsG,
+                proteinG: estimate.proteinG, fiberG: estimate.fiberG,
+                sugarG: estimate.sugarG))
     }
 
     // MARK: Meal names

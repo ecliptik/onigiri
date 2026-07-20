@@ -180,8 +180,7 @@ struct FoodFormView: View {
                     EntryDoorsSection(
                         scanBusy: isLookingUp,
                         scanCaption: lookupMessage,
-                        onScan: { activeSheet = .scanner },
-                        onEstimate: { applyEstimate($0) }
+                        onScan: { activeSheet = .scanner }
                     )
                 } else if let lookupMessage {
                     // Prefilled opens hide the doors (the form isn't
@@ -196,9 +195,21 @@ struct FoodFormView: View {
                     }
                 }
 
+                // The tap-to-estimate row leads the inline results
+                // (AI → online here; the form has no library rows).
+                // Picking applies the estimate to the fields below,
+                // with the provider caption in the scan-door slot.
+                if isBlankNewFood, !dbQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                    AIEstimateSection(query: dbQuery) { product in
+                        apply(product)
+                        lookupMessage = AIProviderSettings.selected.estimateCaption
+                        endDatabaseSearch()
+                    }
+                }
                 // Inline OpenFoodFacts results (the shared section) —
                 // picking one prefills the fields below.
-                if isBlankNewFood, !dbQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                if isBlankNewFood, SharedStore.onlineLookups,
+                   !dbQuery.trimmingCharacters(in: .whitespaces).isEmpty {
                     OnlineResultsSection(query: dbQuery, search: onlineSearch, onPick: { product in
                         apply(product)
                         endDatabaseSearch()
@@ -552,6 +563,10 @@ struct FoodFormView: View {
     }
 
     private func lookup(_ code: String) async {
+        guard SharedStore.onlineLookups else {
+            lookupMessage = "Online lookups are off — enable in Settings to look up barcodes."
+            return
+        }
         isLookingUp = true
         lookupMessage = nil
         defer { isLookingUp = false }
@@ -563,22 +578,6 @@ struct FoodFormView: View {
             // the persistent "no calorie data" hint tied to the fields.
             ToastCenter.shared.show(error.localizedDescription)
         }
-    }
-
-    /// "Describe food" (the shared door) → the same prefill funnel.
-    /// The component captions its own door; clearing the scan-door
-    /// message here is what keeps the caption to ONE line (it used to
-    /// show under the scan row AND a static footer — the double).
-    private func applyEstimate(_ estimate: FoodIntelligence.DescribedFood) {
-        apply(ScannedProduct(
-            barcode: "",
-            name: estimate.name,
-            kcal: estimate.kcal,
-            sodiumMg: estimate.sodiumMg,
-            servingDescription: estimate.serving,
-            nutrients: NutrientValues()
-        ))
-        lookupMessage = nil
     }
 
     /// A scanned label prefills through the same funnel as a barcode —

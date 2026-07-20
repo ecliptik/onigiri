@@ -39,28 +39,18 @@ public enum AIProvider: String, CaseIterable, Sendable {
         }
     }
 
-    /// The provenance noun for estimate captions — matches the picker
-    /// name, and a remote provider's name tells the user where the
-    /// text went (the privacy policy discloses per provider).
-    public var estimateNoun: String {
-        switch self {
-        case .onDevice: "Apple Intelligence"
-        case .anthropic: "Anthropic"
-        case .openAI: "OpenAI"
-        case .local: "Local AI"
-        }
-    }
-
-    /// The ONE caption an AI-filled form shows, under the door that
-    /// produced it (PLAN-entry-doors — every "On-device estimate"
-    /// string routes through here so copy can't drift).
+    /// The ONE caption an AI-filled form shows (the user's copy,
+    /// 2026-07-20): "AI" leads so the provenance is unmistakable, the
+    /// provider name says where the text went (the privacy policy
+    /// discloses per provider). Every estimate string routes through
+    /// here so copy can't drift.
     public var estimateCaption: String {
-        "\(estimateNoun) estimate — review before saving."
+        "AI estimate from \(displayName) — review before saving."
     }
 
     /// The photo-identification variant.
     public var photoEstimateCaption: String {
-        "\(estimateNoun) estimate from your photo — review and adjust."
+        "AI photo estimate from \(displayName) — review and adjust."
     }
 }
 
@@ -71,17 +61,20 @@ public enum AIProvider: String, CaseIterable, Sendable {
 public enum AIProviderSettings {
     // MARK: Selection + non-secret config (defaults)
 
-    /// The master switch — AI is entirely optional (the user). OFF
-    /// hides every AI affordance app-wide (describe, label reading,
-    /// Identify Food, the Siri describe intent) regardless of the
-    /// selected provider. Opt-out like holdToLogWater: absent = ON, so
-    /// existing installs keep their features.
+    /// The master switch — AI is entirely optional and OFF BY DEFAULT
+    /// (the user, 2026-07-20: the privacy story leads; marketing says
+    /// "off by default" and the app makes it true). OFF hides every AI
+    /// affordance app-wide (estimates, label refinement, Identify
+    /// Food, the Siri describe intent) regardless of the selected
+    /// provider. Absent = OFF; the search hint row points fresh
+    /// installs at the switch.
     public static let enabledKey = "aiEnabled"
     public static var enabled: Bool {
-        SharedStore.defaults.object(forKey: enabledKey) == nil
-            ? true
-            : SharedStore.defaults.bool(forKey: enabledKey)
+        SharedStore.defaults.bool(forKey: enabledKey)
     }
+
+    /// The one-time "AI is available" hint's dismissal flag.
+    public static let hintDismissedKey = "aiHintDismissed"
 
     public static let providerKey = "aiProvider"
     public static let anthropicModelKey = "aiAnthropicModel"

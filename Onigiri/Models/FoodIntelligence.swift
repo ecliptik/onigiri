@@ -73,6 +73,29 @@ enum FoodIntelligence {
         let kcal: Double
         let sodiumMg: Double
         let serving: String
+        /// The label reader's five macros (PLAN-unified-search) —
+        /// estimates, same review contract as kcal. Micros stay out:
+        /// that's where models produce confident garbage.
+        let nutrients: NutrientValues
+    }
+
+    /// Clamped macro assembly, shared by both engines so bounds can't
+    /// drift (mirrors the FM @Guide ranges).
+    static func macroNutrients(
+        fatG: Double?, carbsG: Double?, proteinG: Double?,
+        fiberG: Double?, sugarG: Double?
+    ) -> NutrientValues {
+        func clamped(_ value: Double?, max bound: Double) -> Double? {
+            guard let value, value >= 0 else { return nil }
+            return min(value, bound)
+        }
+        var nutrients = NutrientValues()
+        nutrients.fatG = clamped(fatG, max: 500)
+        nutrients.carbsG = clamped(carbsG, max: 1000)
+        nutrients.proteinG = clamped(proteinG, max: 500)
+        nutrients.fiberG = clamped(fiberG, max: 300)
+        nutrients.sugarG = clamped(sugarG, max: 1000)
+        return nutrients
     }
 
     static func describeFood(_ description: String) async -> DescribedFood? {
@@ -307,6 +330,16 @@ enum FoodIntelligence {
         var sodiumMg: Double
         @Guide(description: "The portion, restated briefly, e.g. '1 bowl' or '1/2 cup'")
         var serving: String
+        @Guide(description: "Estimated total fat in grams for the portion", .range(0...500))
+        var fatG: Double
+        @Guide(description: "Estimated total carbohydrate in grams for the portion", .range(0...1000))
+        var carbsG: Double
+        @Guide(description: "Estimated protein in grams for the portion", .range(0...500))
+        var proteinG: Double
+        @Guide(description: "Estimated dietary fiber in grams for the portion", .range(0...300))
+        var fiberG: Double
+        @Guide(description: "Estimated total sugars in grams for the portion", .range(0...1000))
+        var sugarG: Double
     }
 
     @available(iOS 26.0, *)
@@ -338,7 +371,11 @@ enum FoodIntelligence {
                 name: name,
                 kcal: estimate.kcal,
                 sodiumMg: estimate.sodiumMg,
-                serving: estimate.serving.trimmingCharacters(in: .whitespacesAndNewlines))
+                serving: estimate.serving.trimmingCharacters(in: .whitespacesAndNewlines),
+                nutrients: macroNutrients(
+                    fatG: estimate.fatG, carbsG: estimate.carbsG,
+                    proteinG: estimate.proteinG, fiberG: estimate.fiberG,
+                    sugarG: estimate.sugarG))
         } catch {
             log.notice("describe-food fell back: \(String(describing: error))")
             return nil

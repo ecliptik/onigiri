@@ -88,7 +88,8 @@ struct FoodsView: View {
     @State private var onlineSearch = OnlineFoodSearch()
     @State private var showLibraryImporter = false
     /// The list order, remembered (the user liked the meal builder's
-    /// sort menu). Default = the favorites blend.
+    /// sort menu). Default = Recent; the Favorites SCOPE owns the
+    /// starred shortlist (its sort twin was removed 2026-07-19).
     @AppStorage("foodsLibrarySort") private var sortRaw = LibrarySort.recent.rawValue
     // The secondary row metric follows the first tracked slot (the
     // user: sodium was hardcoded; now it customizes with Settings).
@@ -101,18 +102,14 @@ struct FoodsView: View {
 
     private var librarySort: LibrarySort { LibrarySort(rawValue: sortRaw) ?? .recent }
 
-    /// Favorites first, then by recency (last logged, falling back to
-    /// when it was added — the user: recent beats slot affinity), then
-    /// name for stability. The sort menu can flatten this to plain
-    /// recency or alphabetical.
+    /// Recency first (last logged, falling back to when it was added —
+    /// the user: recent beats slot affinity), then name for stability;
+    /// the sort menu can flatten to alphabetical.
     private func ranked(
         _ lhs: (isFavorite: Bool, recency: Date, name: String),
         _ rhs: (isFavorite: Bool, recency: Date, name: String)
     ) -> Bool {
         switch librarySort {
-        case .ranked:
-            if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
-            if lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
         case .recent:
             if lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
         case .name:
@@ -180,26 +177,23 @@ struct FoodsView: View {
                 // scanning adds a FOOD; meals are built from foods
                 // already added (the user).
                 if searchText.isEmpty, scope != .meals {
-                    // The shared entry doors (scan + describe), same as
-                    // the Log sheet and the food form (PLAN-entry-doors).
+                    // The shared scan door, same as the Log sheet and
+                    // the food form (PLAN-entry-doors / unified-search).
                     EntryDoorsSection(
                         scanBusy: isLookingUpBarcode,
-                        onScan: { activeSheet = .scanner },
-                        onEstimate: { estimate in
-                            // Foods is the library screen: describing here
-                            // ADDS — the prefilled form opens for review,
-                            // carrying the estimate's provenance caption.
-                            activeSheet = .form(ProductPrefill(
-                                product: ScannedProduct(
-                                    barcode: "",
-                                    name: estimate.name,
-                                    kcal: estimate.kcal,
-                                    sodiumMg: estimate.sodiumMg,
-                                    servingDescription: estimate.serving,
-                                    nutrients: NutrientValues()),
-                                provenance: AIProviderSettings.selected.estimateCaption))
-                        }
+                        onScan: { activeSheet = .scanner }
                     )
+                }
+                // Search leads with the tap-to-estimate row (AI →
+                // library → online). Foods is the library screen, so an
+                // estimate ADDS: the prefilled form opens for review,
+                // provenance riding along.
+                if !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                    AIEstimateSection(query: searchText) { product in
+                        activeSheet = .form(ProductPrefill(
+                            product: product,
+                            provenance: AIProviderSettings.selected.estimateCaption))
+                    }
                 }
 
                 switch scope {
@@ -232,7 +226,8 @@ struct FoodsView: View {
 
                 // Saved items always rank first; the online database is one
                 // more section below — a quick log/add without the food form.
-                if !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                if SharedStore.onlineLookups,
+                   !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
                     OnlineResultsSection(query: searchText, search: onlineSearch, onPick: { product in
                         // Known barcodes log fast; new foods go through the
                         // full prefilled form (Save / Save & Log).
@@ -584,7 +579,9 @@ struct FoodsView: View {
                 VStack(spacing: 4) {
                     Text("No matches")
                         .font(.headline)
-                    Text("Try different words, or search online below.")
+                    Text(SharedStore.onlineLookups
+                        ? "Try different words, or search online below."
+                        : "Try different words.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -620,6 +617,10 @@ struct FoodsView: View {
     /// single sheet slot re-presents on the item change, so the handoff
     /// from the dismissing scanner can't be eaten.
     private func lookUpBarcode(_ code: String) {
+        guard SharedStore.onlineLookups else {
+            ToastCenter.shared.show("Online lookups are off — enable in Settings to look up barcodes")
+            return
+        }
         BarcodeRouter.lookUp(
             code,
             savedTarget: { code in

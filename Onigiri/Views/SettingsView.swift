@@ -30,6 +30,7 @@ struct SettingsView: View {
     @AppStorage(SharedStore.remindWaterKey, store: SharedStore.defaults) private var remindWater = false
     @AppStorage(SharedStore.remindStreakKey, store: SharedStore.defaults) private var remindStreak = false
     @AppStorage(SharedStore.holdToLogWaterKey, store: SharedStore.defaults) private var holdToLogWater = true
+    @AppStorage(SharedStore.onlineLookupsKey, store: SharedStore.defaults) private var onlineLookups = false
     @AppStorage(SharedStore.textSearchSourceKey, store: SharedStore.defaults) private var textSearchSource = SharedStore.textSearchSourceOFF
     /// What the key field shows; only plausible keys flow to storage
     /// (the Keychain now — see SharedStore.saveFDCAPIKey).
@@ -51,7 +52,7 @@ struct SettingsView: View {
     // Bring-your-own-AI (PLAN-byo-ai). Selection + models + server
     // address are defaults; secrets go straight to the Keychain like
     // the FDC key.
-    @AppStorage(AIProviderSettings.enabledKey, store: SharedStore.defaults) private var aiEnabled = true
+    @AppStorage(AIProviderSettings.enabledKey, store: SharedStore.defaults) private var aiEnabled = false
     @AppStorage(AIProviderSettings.providerKey, store: SharedStore.defaults) private var aiProvider = AIProvider.onDevice.rawValue
     @AppStorage(AIProviderSettings.anthropicModelKey, store: SharedStore.defaults) private var aiAnthropicModel = ""
     @AppStorage(AIProviderSettings.openAIModelKey, store: SharedStore.defaults) private var aiOpenAIModel = ""
@@ -242,6 +243,11 @@ struct SettingsView: View {
     /// key (device-local, never synced — see PLAN-1.7).
     private var onlineDatabaseSection: some View {
         Section {
+            // Off by default, like AI (the user, 2026-07-20): nothing
+            // leaves the device until it's switched on. OFF = search is
+            // library-only and the scanner reads labels only.
+            Toggle("Online lookups", isOn: $onlineLookups)
+            if onlineLookups {
             Picker("Source", selection: $textSearchSource) {
                 Text("OpenFoodFacts").tag(SharedStore.textSearchSourceOFF)
                 Text("USDA FoodData Central").tag(SharedStore.textSearchSourceFDC)
@@ -318,10 +324,15 @@ struct SettingsView: View {
                     }
                 }
             }
+            }
         } header: {
             Text("Online Database")
         } footer: {
-            Text("[OpenFoodFacts](https://world.openfoodfacts.org) is always used for barcode scanning")
+            if onlineLookups {
+                Text("[OpenFoodFacts](https://world.openfoodfacts.org) is always used for barcode scanning")
+            } else {
+                Text("Online lookups are off — searches use your Food Library only, and the scanner reads nutrition labels on-device. Everything remains local to your device.")
+            }
         }
     }
 
@@ -457,7 +468,7 @@ struct SettingsView: View {
             switch AIProviderSettings.selected {
             case .onDevice:
                 if !FoodIntelligence.onDeviceAvailable {
-                    Text("Apple Intelligence isn't available on this iPhone, so AI features stay hidden. Pick a provider above to bring your own.")
+                    Text("Apple Intelligence isn't available on this iPhone — AI features are unavailable. Pick a provider above to bring your own.")
                         .font(.footnote)
                         .foregroundStyle(.orange)
                 }
@@ -510,12 +521,17 @@ struct SettingsView: View {
             Text("AI")
         } footer: {
             // ONE tight line per state — the provider descriptions are
-            // the user's copy (kit providerDescription; privacy detail
-            // lives in the privacy policy, not here).
-            if !aiEnabled {
-                Text("All AI features are off — Describe food, label reading, and Identify Food are hidden.")
-            } else {
-                Text(AIProviderSettings.selected.providerDescription)
+            // the user's copy (kit providerDescription) — plus the two
+            // doors to the long-form story (the user, 2026-07-20).
+            VStack(alignment: .leading, spacing: 6) {
+                if !aiEnabled {
+                    Text("All AI features are off — estimates, label reading, and Identify Food are hidden.")
+                } else {
+                    Text(AIProviderSettings.selected.providerDescription)
+                }
+                // Deep links to each doc's AI section specifically
+                // (the user) — the general doors live in the colophon.
+                Text("[User Guide](https://github.com/ecliptik/onigiri/wiki/User-Guide#ai-features) · [Privacy Policy](https://ecliptik.github.io/onigiri/privacy/#ai-features-optional)")
             }
         }
     }
@@ -576,6 +592,10 @@ struct SettingsView: View {
                 // mirror's face) and hosts the docs site.
                 Link("https://github.com/ecliptik/onigiri",
                      destination: URL(string: "https://github.com/ecliptik/onigiri")!)
+                // The long-form docs, one tap from where questions
+                // arise (the user, 2026-07-20).
+                Text("[User Guide](https://github.com/ecliptik/onigiri/wiki/User-Guide) · [Privacy Policy](https://ecliptik.github.io/onigiri/privacy/)")
+                    .padding(.top, 6)
                 // ODbL requires attribution for Open Food Facts data;
                 // FDC is public domain but deserves the credit.
                 Text("Food data from [Open Food Facts](https://world.openfoodfacts.org) (ODbL) and [USDA FoodData Central](https://fdc.nal.usda.gov).")
@@ -605,9 +625,9 @@ struct SettingsView: View {
         SharedStore.trackedMetric2Key, SharedStore.trackedMetric2ModeKey,
         SharedStore.trackedMetric2TargetKey, SharedStore.trackedMetric2IconKey,
         SharedStore.untrackedBelowKey, SharedStore.energyStatsStyleKey,
-        SharedStore.textSearchSourceKey,
+        SharedStore.textSearchSourceKey, SharedStore.onlineLookupsKey,
         SharedStore.holdToLogWaterKey,
-        AIProviderSettings.enabledKey,
+        AIProviderSettings.enabledKey, AIProviderSettings.hintDismissedKey,
         AIProviderSettings.providerKey, AIProviderSettings.anthropicModelKey,
         AIProviderSettings.openAIModelKey, AIProviderSettings.localModelKey,
         AIProviderSettings.localBaseURLKey, AIProviderSettings.localVisionKey,
@@ -1131,6 +1151,13 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // Front and center (the user, 2026-07-20): the privacy
+                // story is the app's spine — one row, first thing.
+                Section {
+                    Link(destination: URL(string: "https://ecliptik.github.io/onigiri/privacy/")!) {
+                        Label("Privacy Policy", systemImage: "hand.raised")
+                    }
+                }
                 // Only when write access is denied: every log fails with
                 // an opaque toast otherwise, and iOS can't deep-link the
                 // Health sharing pane — instructions are the recovery.

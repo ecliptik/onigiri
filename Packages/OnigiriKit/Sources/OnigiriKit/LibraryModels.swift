@@ -279,6 +279,17 @@ public enum SharedStore {
     /// installs with a goal are flagged true without seeing it.
     public static let hasOnboardedKey = "hasOnboarded"
 
+    /// Master switch for EVERY online food lookup — text search AND
+    /// barcode lookups, OpenFoodFacts and USDA alike. OFF BY DEFAULT
+    /// (the user, 2026-07-20: the whole privacy story is "nothing
+    /// leaves the device until you say so"); onboarding offers it,
+    /// Settings → Online Database owns it. Absent = OFF. With it off,
+    /// search is library-only and the scanner reads labels only.
+    public static let onlineLookupsKey = "onlineLookups"
+    public static var onlineLookups: Bool {
+        defaults.bool(forKey: onlineLookupsKey)
+    }
+
     /// Text-search database: "off" (OpenFoodFacts, default), "fdc"
     /// (USDA FoodData Central), or "both" (one merged list). Barcode
     /// scans always use OpenFoodFacts.

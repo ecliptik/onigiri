@@ -37,7 +37,8 @@ struct OnboardingView: View {
             healthPage.tag(1)
             goalPage.tag(2)
             waterPage.tag(3)
-            donePage.tag(4)
+            privacyPage.tag(4)
+            donePage.tag(5)
         }
         .tabViewStyle(.page)
         .indexViewStyle(.page(backgroundDisplayMode: .always))
@@ -58,7 +59,7 @@ struct OnboardingView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(.ricePaper)
                 .padding()
-            } else if selection < 4 {
+            } else if selection < 5 {
                 Button("Set Up Later") { finish() }
                     .font(.subheadline)
                     .padding()
@@ -82,6 +83,48 @@ struct OnboardingView: View {
     }
 
     // MARK: - Pages
+
+    // Both network-touching feature groups ship OFF (the user,
+    // 2026-07-20: "nothing leaves the device until you say so") —
+    // onboarding is the one offer; Settings owns them after. "Set Up
+    // Later" leaves both off, which IS the default story.
+    @AppStorage(SharedStore.onlineLookupsKey, store: SharedStore.defaults) private var onlineLookups = false
+    @AppStorage(AIProviderSettings.enabledKey, store: SharedStore.defaults) private var aiEnabled = false
+
+    private var privacyPage: some View {
+        page {
+            Image(systemName: "hand.raised.fill")
+                .font(.system(size: pageIconSize))
+                .foregroundStyle(Color.nori)
+            Text("Private by default")
+                .font(.title2.bold())
+            Text("Everything remains on your iPhone by default. Want online lookups or AI estimates? Turn them on here — or later in Settings.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            VStack(spacing: 14) {
+                Toggle(isOn: $onlineLookups) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Online food lookups")
+                        Text("Barcode scans and food search, via OpenFoodFacts and USDA")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Toggle(isOn: $aiEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("AI features")
+                        Text("Estimates, label reading, and Identify Food — on-device by default")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(.top, 8)
+        } action: {
+            advanceButton("Continue")
+        }
+    }
 
     private var welcomePage: some View {
         page {

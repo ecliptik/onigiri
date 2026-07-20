@@ -190,6 +190,13 @@ question deferred again.
   a live probe of the exact syntax during a STABLE window, since a
   wrong filter fails as a silent 200-with-zero-hits that never trips
   the legacy fallback. Breadcrumb in `OpenFoodFactsClient.searchALicious`.
+- Accessibility round SHIPPED 2026-07-20 (a409c5a on main, both
+  devices): Differentiate Without Color glyph twins (kit statusSymbol
+  seam), Reduce Motion gating, hit-area-only 44 pt targets, VoiceOver
+  water-shortcut twin, meter groupings, iPad keyboard shortcuts —
+  device-verified. Only deliberately-open item: a manual "type the
+  barcode" row for VoiceOver users when the live camera is available
+  (text search and the AI estimate door cover the same foods today).
 - Watch complication-freshness verification over a normal week
   (1.9 batch A).
 - The paid-developer-account question: CloudKit library sync,

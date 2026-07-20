@@ -117,6 +117,12 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   and QA tests now do).
 - Watch-window clicks need the window focused first (click its title bar); clicks
   silently stop landing after sheets open — relaunch the watch app to recover.
+- The iOS 26.5 sim can't exercise Differentiate Without Color: the Settings
+  toggle is inert to synthetic touch (as is the whole Settings switch layer)
+  and writing the com.apple.Accessibility plist key changes nothing — verify
+  DWC-gated UI on a device (done 2026-07-20). Synthesized taps also can't
+  invoke a SwiftUI .accessibilityAction (only real VoiceOver's AXActivate
+  can), so those need on-device VoiceOver too.
 
 ## SwiftData landmines (each cost a debugging session)
 

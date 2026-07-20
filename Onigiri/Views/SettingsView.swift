@@ -480,7 +480,9 @@ struct SettingsView: View {
                 aiModelField($aiOpenAIModel, prompt: AIProviderSettings.defaultOpenAIModel)
             case .local:
                 LabeledContent("Server") {
-                    TextField("Server", text: $aiLocalBaseURL, prompt: Text("http://192.168.1.20:11434/v1"))
+                    // verbatim: a literal prompt goes through markdown,
+                    // which auto-links the URL and renders it blue.
+                    TextField("Server", text: $aiLocalBaseURL, prompt: Text(verbatim: "http://192.168.1.20:11434/v1"))
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)

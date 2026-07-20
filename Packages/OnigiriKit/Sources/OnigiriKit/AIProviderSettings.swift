@@ -29,7 +29,7 @@ public enum AIProvider: String, CaseIterable, Sendable {
     public var providerDescription: String {
         switch self {
         case .onDevice:
-            "Use Apple Intelligence on this iPhone to estimate nutrition, read labels, and identify food. Nothing leaves this iPhone."
+            "Use Apple Intelligence on this iPhone to estimate nutrition, read labels, and identify food. No data is sent to third parties — everything remains on this iPhone."
         case .anthropic:
             "Use your Anthropic account to estimate nutrition, read labels, and identify food."
         case .openAI:

@@ -14,7 +14,8 @@ and Apple Watch. It is built so that your data stays yours.
 
 - Your logs live in **Apple Health** on your device. We never see them.
 - Onigiri has **no accounts, no analytics, no ads, and no servers**.
-- **Nothing leaves your device by default.** Online food lookups (the
+- **By default, no data is sent to third parties — everything remains
+  on your device.** Online food lookups (the
   search text or barcode sent to public food databases) and the AI
   features are both **off until you turn them on** — offered once
   during onboarding, changeable anytime in Settings.
@@ -56,8 +57,8 @@ Onigiri's AI features — food estimates, meal-name suggestions,
 nutrition-label reading, and Identify Food — are **off by default**.
 Nothing AI-related runs until you turn the switch on in Settings → AI.
 When you do, they run **on-device** through Apple Intelligence on
-devices that support it — on that setting, nothing about them leaves
-your iPhone.
+devices that support it — on that setting, no data is sent to third
+parties and everything remains on your iPhone.
 
 Two of these features are hybrids with an on-device first stage that
 runs no matter which provider you pick: nutrition labels are read by

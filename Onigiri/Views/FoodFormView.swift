@@ -25,6 +25,9 @@ struct FoodFormView: View {
     var startScanning = false
     /// Prefill from a scanned/searched product (new-food log flow).
     var prefill: ScannedProduct?
+    /// Provenance for a prefill that arrived from an AI estimate
+    /// (ProductPrefill.provenance) — seeds the lookup caption on open.
+    var prefillMessage: String? = nil
     /// Timestamp for the entry the Log action writes (backfill support).
     var logDate: Date = .now
     /// Called after the Log action completes, so the presenter can dismiss too.
@@ -76,10 +79,6 @@ struct FoodFormView: View {
     @State private var onlineSearch = OnlineFoodSearch()
     @State private var isLookingUp = false
     @State private var lookupMessage: String?
-    /// "Describe it" quick add (iOS 26 + Apple Intelligence only; the
-    /// field does not exist on other devices).
-    @State private var describeText = ""
-    @State private var isEstimating = false
     /// onDismiss fires after activeSheet is already nil — this marker
     /// says the closed sheet was the portion sheet, so the "saved but
     /// not logged" toast only follows an actual portion cancel.
@@ -173,61 +172,27 @@ struct FoodFormView: View {
                 // pick — the toolbar icon crowded the Save cluster);
                 // lookup status lands right beneath it. The search field
                 // lives at the bottom, system placement.
+                // The shared entry doors (scan + describe) — identical
+                // on Foods, the Log sheet, and here (PLAN-entry-doors).
+                // The component captions the describe door itself; the
+                // scan door shows this form's lookup provenance.
                 if isBlankNewFood {
-                Section {
-                    // ONE camera behind one row: barcode fires live,
-                    // the shutter photographs the label (the third door
-                    // — foods no database knows) or, when Apple
-                    // Intelligence is around, the food itself.
-                    Button {
-                        activeSheet = .scanner
-                    } label: {
-                        Label(FoodIntelligence.isAvailable
-                            ? "Scan Barcode, Label, or Food"
-                            : "Scan Barcode or Nutrition Label",
-                            systemImage: "barcode.viewfinder")
-                    }
-                    .disabled(isLookingUp)
-                    if isLookingUp {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                            Text("Looking up product…")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    if let lookupMessage {
+                    EntryDoorsSection(
+                        scanBusy: isLookingUp,
+                        scanCaption: lookupMessage,
+                        onScan: { activeSheet = .scanner },
+                        onEstimate: { applyEstimate($0) }
+                    )
+                } else if let lookupMessage {
+                    // Prefilled opens hide the doors (the form isn't
+                    // blank), so provenance that traveled in with the
+                    // prefill — Foods' describe door, most importantly —
+                    // needs its own row or "review before saving" is
+                    // silently lost at the sheet boundary.
+                    Section {
                         Text(lookupMessage)
                             .font(.footnote)
                             .foregroundStyle(.orange)
-                    }
-                }
-                }
-
-                // "Describe it": plain language → on-device estimate,
-                // reviewed right here in the form. Renders only when the
-                // Apple Intelligence model is actually available — no AI
-                // affordance exists anywhere else.
-                if isBlankNewFood, FoodIntelligence.isAvailable {
-                    Section {
-                        HStack(spacing: 8) {
-                            Image(systemName: "sparkles")
-                                .foregroundStyle(Color.riceToast)
-                            TextField(
-                                "Describe it — half cup rice, fried egg",
-                                text: $describeText
-                            )
-                            .onSubmit { estimateFromDescription() }
-                            .submitLabel(.done)
-                        }
-                        if isEstimating {
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                Text("Estimating…")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    } footer: {
-                        Text("On-device estimates — review before saving.")
                     }
                 }
 
@@ -415,9 +380,11 @@ struct FoodFormView: View {
                     }, onFood: { product in
                         // Identified from a photo of the food itself:
                         // estimates, not printed values — say so, in the
-                        // same slot the other lookup notes use.
+                        // same slot the other lookup notes use, naming
+                        // the provider (BYO-AI can send the photo off
+                        // device; "on-device" would be a lie there).
                         apply(product)
-                        lookupMessage = "Estimated from your photo — review and adjust."
+                        lookupMessage = AIProviderSettings.selected.photoEstimateCaption
                     })
                 case .portion(let target):
                     PortionSheet(target: target) { quantity, category, _ in
@@ -432,6 +399,7 @@ struct FoodFormView: View {
                     loadFields(from: food)
                 } else if let prefill {
                     apply(prefill)
+                    if let prefillMessage { lookupMessage = prefillMessage }
                 } else if startScanning {
                     activeSheet = .scanner
                 }
@@ -597,30 +565,20 @@ struct FoodFormView: View {
         }
     }
 
-    /// "Describe it" → on-device estimate → the same prefill funnel,
-    /// marked clearly as an estimate. Failure (or the model declining)
-    /// leaves the form exactly as typed.
-    private func estimateFromDescription() {
-        let description = describeText.trimmingCharacters(in: .whitespaces)
-        guard !description.isEmpty, !isEstimating else { return }
-        isEstimating = true
-        Task {
-            defer { isEstimating = false }
-            guard let estimate = await FoodIntelligence.describeFood(description) else {
-                lookupMessage = "Couldn't estimate that — add the numbers by hand."
-                return
-            }
-            apply(ScannedProduct(
-                barcode: "",
-                name: estimate.name,
-                kcal: estimate.kcal,
-                sodiumMg: estimate.sodiumMg,
-                servingDescription: estimate.serving,
-                nutrients: NutrientValues()
-            ))
-            describeText = ""
-            lookupMessage = "On-device estimate — review before saving."
-        }
+    /// "Describe food" (the shared door) → the same prefill funnel.
+    /// The component captions its own door; clearing the scan-door
+    /// message here is what keeps the caption to ONE line (it used to
+    /// show under the scan row AND a static footer — the double).
+    private func applyEstimate(_ estimate: FoodIntelligence.DescribedFood) {
+        apply(ScannedProduct(
+            barcode: "",
+            name: estimate.name,
+            kcal: estimate.kcal,
+            sodiumMg: estimate.sodiumMg,
+            servingDescription: estimate.serving,
+            nutrients: NutrientValues()
+        ))
+        lookupMessage = nil
     }
 
     /// A scanned label prefills through the same funnel as a barcode —

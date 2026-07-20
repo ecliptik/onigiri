@@ -212,6 +212,15 @@ final class OnigiriUITests: XCTestCase {
         }
         XCTAssertTrue(recentBurrito.waitForExistence(timeout: 5),
                       "History-only food should surface in Recents")
+        // Exists ≠ tappable: the entry doors (scan + describe) sit above
+        // the list now, so this row can land in the floating bottom
+        // search bar's dead zone where taps are swallowed — and
+        // isHittable still reports true there (caught + sim-reproduced
+        // 2026-07-19, manual coordinate tap also dead). Scroll by FRAME
+        // until the row sits clear of the bar's zone (~bottom 180 pt).
+        for _ in 0..<3 where recentBurrito.frame.midY > app.frame.height - 180 {
+            app.swipeUp()
+        }
         recentBurrito.tap()
         // LabeledContent folds label and value into one element, so match
         // the combined label rather than a bare static text.

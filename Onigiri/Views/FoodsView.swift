@@ -180,21 +180,26 @@ struct FoodsView: View {
                 // scanning adds a FOOD; meals are built from foods
                 // already added (the user).
                 if searchText.isEmpty, scope != .meals {
-                    Section {
-                        Button {
-                            activeSheet = .scanner
-                        } label: {
-                            ScanRowLabel()
+                    // The shared entry doors (scan + describe), same as
+                    // the Log sheet and the food form (PLAN-entry-doors).
+                    EntryDoorsSection(
+                        scanBusy: isLookingUpBarcode,
+                        onScan: { activeSheet = .scanner },
+                        onEstimate: { estimate in
+                            // Foods is the library screen: describing here
+                            // ADDS — the prefilled form opens for review,
+                            // carrying the estimate's provenance caption.
+                            activeSheet = .form(ProductPrefill(
+                                product: ScannedProduct(
+                                    barcode: "",
+                                    name: estimate.name,
+                                    kcal: estimate.kcal,
+                                    sodiumMg: estimate.sodiumMg,
+                                    servingDescription: estimate.serving,
+                                    nutrients: NutrientValues()),
+                                provenance: AIProviderSettings.selected.estimateCaption))
                         }
-                        .disabled(isLookingUpBarcode)
-                        if isLookingUpBarcode {
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                Text("Looking up product…")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
+                    )
                 }
 
                 switch scope {
@@ -384,7 +389,7 @@ struct FoodsView: View {
             case .newMeal:
                 MealFormView()
             case .form(let prefill):
-                FoodFormView(food: nil, prefill: prefill.product)
+                FoodFormView(food: nil, prefill: prefill.product, prefillMessage: prefill.provenance)
             case .editFood(let food):
                 FoodFormView(food: food)
             case .editMeal(let meal):

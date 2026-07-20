@@ -51,6 +51,7 @@ struct SettingsView: View {
     // Bring-your-own-AI (PLAN-byo-ai). Selection + models + server
     // address are defaults; secrets go straight to the Keychain like
     // the FDC key.
+    @AppStorage(AIProviderSettings.enabledKey, store: SharedStore.defaults) private var aiEnabled = true
     @AppStorage(AIProviderSettings.providerKey, store: SharedStore.defaults) private var aiProvider = AIProvider.onDevice.rawValue
     @AppStorage(AIProviderSettings.anthropicModelKey, store: SharedStore.defaults) private var aiAnthropicModel = ""
     @AppStorage(AIProviderSettings.openAIModelKey, store: SharedStore.defaults) private var aiOpenAIModel = ""
@@ -439,6 +440,10 @@ struct SettingsView: View {
     /// Apple Intelligence.
     private var aiProviderSection: some View {
         Section {
+            // The master switch leads: AI is entirely optional, and OFF
+            // hides every AI affordance app-wide (the user).
+            Toggle("AI features", isOn: $aiEnabled)
+            if aiEnabled {
             Picker("Engine", selection: $aiProvider) {
                 ForEach(AIProvider.allCases, id: \.rawValue) { provider in
                     Text(provider.displayName).tag(provider.rawValue)
@@ -452,7 +457,7 @@ struct SettingsView: View {
             switch AIProviderSettings.selected {
             case .onDevice:
                 if !FoodIntelligence.onDeviceAvailable {
-                    Text("Apple Intelligence isn't available on this device, so AI features stay hidden. Pick a provider above to bring your own.")
+                    Text("Apple Intelligence isn't available on this iPhone, so AI features stay hidden. Pick a provider above to bring your own.")
                         .font(.footnote)
                         .foregroundStyle(.orange)
                 }
@@ -500,18 +505,17 @@ struct SettingsView: View {
                     }
                 }
             }
+            }
         } header: {
             Text("AI")
         } footer: {
-            switch AIProviderSettings.selected {
-            case .onDevice:
-                Text("Describe-it, meal names, label reading, and Identify Food run on this iPhone. Nothing leaves the device.")
-            case .anthropic:
-                Text("AI features send the food text or photo to Anthropic under your key. The key lives in this phone's keychain — never in backups or exports.")
-            case .openAI:
-                Text("AI features send the food text or photo to OpenAI under your key. The key lives in this phone's keychain — never in backups or exports.")
-            case .local:
-                Text("AI features talk only to your own server. The address and token stay on this phone.")
+            // ONE tight line per state — the provider descriptions are
+            // the user's copy (kit providerDescription; privacy detail
+            // lives in the privacy policy, not here).
+            if !aiEnabled {
+                Text("All AI features are off — Describe food, label reading, and Identify Food are hidden.")
+            } else {
+                Text(AIProviderSettings.selected.providerDescription)
             }
         }
     }
@@ -603,6 +607,7 @@ struct SettingsView: View {
         SharedStore.untrackedBelowKey, SharedStore.energyStatsStyleKey,
         SharedStore.textSearchSourceKey,
         SharedStore.holdToLogWaterKey,
+        AIProviderSettings.enabledKey,
         AIProviderSettings.providerKey, AIProviderSettings.anthropicModelKey,
         AIProviderSettings.openAIModelKey, AIProviderSettings.localModelKey,
         AIProviderSettings.localBaseURLKey, AIProviderSettings.localVisionKey,

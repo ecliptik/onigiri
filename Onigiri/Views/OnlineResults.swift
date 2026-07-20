@@ -410,6 +410,11 @@ final class OnlineFoodSearch {
 /// (the prefilled food form for new-food logging).
 struct ProductPrefill: Identifiable {
     let product: ScannedProduct
+    /// Optional provenance the form shows in its scan-door caption slot
+    /// on open — set when the prefill came from an AI estimate
+    /// (Foods' describe door), so "review before saving" travels WITH
+    /// the estimate instead of being lost at the sheet boundary.
+    var provenance: String? = nil
     var id: String { product.barcode }
 }
 

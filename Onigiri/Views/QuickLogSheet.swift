@@ -201,21 +201,25 @@ struct QuickLogSheet: View {
                 // Meals scope — scanning adds a FOOD; meals are built
                 // from foods already added (the user).
                 if searchText.isEmpty, kind != .meals {
-                    Section {
-                        Button {
-                            activeSheet = .scanner
-                        } label: {
-                            ScanRowLabel()
+                    // The shared entry doors (scan + describe), same as
+                    // Foods and the food form (PLAN-entry-doors).
+                    EntryDoorsSection(
+                        scanBusy: isLookingUpBarcode,
+                        onScan: { activeSheet = .scanner },
+                        onEstimate: { estimate in
+                            // Describe → portion sheet → ONE-OFF log (the
+                            // user's pick): no library write — Recents
+                            // resurface it "as last logged", the library
+                            // stays curated. The portion confirm lands in
+                            // log() like every online-result pick.
+                            activeSheet = .portion(PortionTarget(
+                                name: estimate.name,
+                                kcal: estimate.kcal,
+                                sodiumMg: estimate.sodiumMg,
+                                nutrients: NutrientValues(),
+                                serving: estimate.serving))
                         }
-                        .disabled(isLookingUpBarcode)
-                        if isLookingUpBarcode {
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                Text("Looking up product…")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
+                    )
                 }
                 // Water leads the sheet, above Recent in every scope
                 // (Micheal moved it off Today's header — one + button,

@@ -102,4 +102,34 @@ struct AIChatClientTests {
         #expect(!AIProviderSettings.defaultAnthropicModel.isEmpty)
         #expect(!AIProviderSettings.defaultOpenAIModel.isEmpty)
     }
+
+    // MARK: Token-cap parameter (gpt-5.4-nano 400'd on max_tokens)
+
+    @Test func openAIGetsMaxCompletionTokens() {
+        #expect(OpenAICompatibleClient.tokenParameterName(
+            for: OpenAICompatibleClient.openAIBaseURL) == "max_completion_tokens")
+    }
+
+    @Test func localServersKeepMaxTokens() {
+        #expect(OpenAICompatibleClient.tokenParameterName(
+            for: URL(string: "http://192.168.1.20:11434/v1")!) == "max_tokens")
+    }
+
+    // MARK: Server error-message extraction
+
+    @Test func extractsOpenAIErrorMessage() {
+        let body = #"{"error":{"message":"Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.","type":"invalid_request_error"}}"#
+        let message = AIChat.errorMessage(from: Data(body.utf8))
+        #expect(message?.contains("max_completion_tokens") == true)
+    }
+
+    @Test func extractsAnthropicErrorMessage() {
+        let body = #"{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}"#
+        #expect(AIChat.errorMessage(from: Data(body.utf8)) == "invalid x-api-key")
+    }
+
+    @Test func errorMessageNilOnGarbage() {
+        #expect(AIChat.errorMessage(from: Data("<html>502</html>".utf8)) == nil)
+        #expect(AIChat.errorMessage(from: Data(#"{"error":{}}"#.utf8)) == nil)
+    }
 }

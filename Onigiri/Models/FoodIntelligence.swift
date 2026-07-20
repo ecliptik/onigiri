@@ -24,6 +24,9 @@ enum FoodIntelligence {
     /// configuring a provider lights the features up consistently —
     /// including on devices without Apple Intelligence.
     static var isAvailable: Bool {
+        // The Settings master switch wins over everything: AI is
+        // entirely optional, and OFF means no affordance anywhere.
+        guard AIProviderSettings.enabled else { return false }
         switch AIProviderSettings.selected {
         case .onDevice: return onDeviceAvailable
         case .anthropic, .openAI, .local: return AIProviderSettings.selectedRemoteIsConfigured
@@ -59,7 +62,7 @@ enum FoodIntelligence {
         #endif
     }
 
-    // MARK: "Describe it" quick add
+    // MARK: "Describe food" quick add
 
     /// A reviewed-in-the-form estimate from a plain-language description
     /// ("half cup cooked white rice and a fried egg"). nil means the
@@ -337,7 +340,7 @@ enum FoodIntelligence {
                 sodiumMg: estimate.sodiumMg,
                 serving: estimate.serving.trimmingCharacters(in: .whitespacesAndNewlines))
         } catch {
-            log.notice("describe-it fell back: \(String(describing: error))")
+            log.notice("describe-food fell back: \(String(describing: error))")
             return nil
         }
     }

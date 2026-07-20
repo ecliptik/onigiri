@@ -12,14 +12,55 @@ public enum AIProvider: String, CaseIterable, Sendable {
     case openAI
     case local
 
-    /// Settings-picker copy.
+    /// Settings-picker copy. (The rawValues persist in defaults —
+    /// display names can move, cases must not.)
     public var displayName: String {
         switch self {
-        case .onDevice: "On-Device (Apple)"
+        case .onDevice: "Apple Intelligence"
         case .anthropic: "Anthropic"
         case .openAI: "OpenAI"
-        case .local: "Local server"
+        case .local: "Local AI"
         }
+    }
+
+    /// One-line Settings description per provider — the user's copy
+    /// (2026-07-19), tight and parallel: same three verbs everywhere,
+    /// one extra trust sentence only where it's true.
+    public var providerDescription: String {
+        switch self {
+        case .onDevice:
+            "Use Apple Intelligence on this iPhone to estimate nutrition, read labels, and identify food. Nothing leaves this iPhone."
+        case .anthropic:
+            "Use your Anthropic account to estimate nutrition, read labels, and identify food."
+        case .openAI:
+            "Use your OpenAI account to estimate nutrition, read labels, and identify food."
+        case .local:
+            "Use a local OpenAI-compatible service — Ollama or LM Studio, running Gemma, Qwen, or any model — to estimate nutrition, read labels, and identify food."
+        }
+    }
+
+    /// The provenance noun for estimate captions — matches the picker
+    /// name, and a remote provider's name tells the user where the
+    /// text went (the privacy policy discloses per provider).
+    public var estimateNoun: String {
+        switch self {
+        case .onDevice: "Apple Intelligence"
+        case .anthropic: "Anthropic"
+        case .openAI: "OpenAI"
+        case .local: "Local AI"
+        }
+    }
+
+    /// The ONE caption an AI-filled form shows, under the door that
+    /// produced it (PLAN-entry-doors — every "On-device estimate"
+    /// string routes through here so copy can't drift).
+    public var estimateCaption: String {
+        "\(estimateNoun) estimate — review before saving."
+    }
+
+    /// The photo-identification variant.
+    public var photoEstimateCaption: String {
+        "\(estimateNoun) estimate from your photo — review and adjust."
     }
 }
 
@@ -29,6 +70,18 @@ public enum AIProvider: String, CaseIterable, Sendable {
 /// else (selection, model ids, base URL) is App Group defaults.
 public enum AIProviderSettings {
     // MARK: Selection + non-secret config (defaults)
+
+    /// The master switch — AI is entirely optional (the user). OFF
+    /// hides every AI affordance app-wide (describe, label reading,
+    /// Identify Food, the Siri describe intent) regardless of the
+    /// selected provider. Opt-out like holdToLogWater: absent = ON, so
+    /// existing installs keep their features.
+    public static let enabledKey = "aiEnabled"
+    public static var enabled: Bool {
+        SharedStore.defaults.object(forKey: enabledKey) == nil
+            ? true
+            : SharedStore.defaults.bool(forKey: enabledKey)
+    }
 
     public static let providerKey = "aiProvider"
     public static let anthropicModelKey = "aiAnthropicModel"

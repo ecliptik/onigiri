@@ -9,19 +9,29 @@ private nonisolated(unsafe) let aiLog = Logger(subsystem: "com.ecliptik.Onigiri"
 /// the Settings connection test surfaces them to the user.
 public enum AIChatError: Error, LocalizedError {
     case badURL
-    case badStatus(Int)
+    /// Status code plus the server's own error message when one could
+    /// be extracted — a bare "status 400" sent the user hunting when
+    /// the body said exactly what was wrong (gpt-5.4-nano rejecting
+    /// max_tokens, 2026-07-19).
+    case badStatus(Int, String?)
     case badResponse
     case emptyContent
 
     public var errorDescription: String? {
         switch self {
-        case .badURL: "The server address isn't a valid URL."
-        case .badStatus(let code):
-            code == 401 || code == 403
+        case .badURL:
+            return "The server address isn't a valid URL."
+        case .badStatus(let code, let message):
+            if let message, !message.isEmpty {
+                return "Status \(code): \(message)"
+            }
+            return code == 401 || code == 403
                 ? "The API key was rejected (\(code))."
                 : "The server answered with status \(code)."
-        case .badResponse: "The response wasn't in the expected format."
-        case .emptyContent: "The model returned no content."
+        case .badResponse:
+            return "The response wasn't in the expected format."
+        case .emptyContent:
+            return "The model returned no content."
         }
     }
 }
@@ -60,10 +70,24 @@ enum AIChat {
         let (data, response) = try await session().data(for: request)
         guard let http = response as? HTTPURLResponse else { throw AIChatError.badResponse }
         guard (200..<300).contains(http.statusCode) else {
-            aiLog.notice("AI request failed: status \(http.statusCode)")
-            throw AIChatError.badStatus(http.statusCode)
+            let message = errorMessage(from: data)
+            aiLog.notice("AI request failed: status \(http.statusCode) — \(message ?? "no body")")
+            throw AIChatError.badStatus(http.statusCode, message)
         }
         return data
+    }
+
+    /// Pull the human-readable message out of a provider error body.
+    /// OpenAI(-compatible): {"error":{"message":…}}; Anthropic:
+    /// {"type":"error","error":{"message":…}} — one extractor covers
+    /// both. Trimmed: Settings shows it inline. (Fixture-tested.)
+    static func errorMessage(from data: Data) -> String? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let error = obj["error"] as? [String: Any],
+              let message = error["message"] as? String else { return nil }
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return String(trimmed.prefix(200))
     }
 }
 
@@ -167,16 +191,26 @@ public enum OpenAICompatibleClient {
         } else {
             userContent = user
         }
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": model,
-            "max_tokens": maxTokens,
             "messages": [
                 ["role": "system", "content": system],
                 ["role": "user", "content": userContent],
             ],
         ]
+        body[Self.tokenParameterName(for: baseURL)] = maxTokens
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         return try extractContent(from: try await AIChat.data(for: request))
+    }
+
+    /// api.openai.com: `max_tokens` is legacy and 400s on the GPT-5
+    /// family ("use 'max_completion_tokens' instead" — hit live with
+    /// gpt-5.4-nano, 2026-07-19); the new name works on every current
+    /// OpenAI model. Local runners are the reverse — Ollama and LM
+    /// Studio honor `max_tokens` and may predate the new name — so
+    /// each endpoint gets its own. (Tested.)
+    static func tokenParameterName(for baseURL: URL) -> String {
+        baseURL == openAIBaseURL ? "max_completion_tokens" : "max_tokens"
     }
 
     /// Envelope → the reply text as JSON bytes (fixture-tested).

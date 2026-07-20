@@ -135,7 +135,8 @@ struct AIEstimateSection: View {
             kcal: food.kcal,
             sodiumMg: food.sodiumMg,
             servingDescription: food.serving,
-            nutrients: food.nutrients)
+            nutrients: food.nutrients,
+            aiGenerated: true)
     }
 
     private func estimate(_ trimmed: String) {

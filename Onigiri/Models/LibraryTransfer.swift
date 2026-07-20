@@ -20,14 +20,16 @@ enum LibraryTransfer {
                       isFavorite: $0.isFavorite ? true : nil,
                       category: $0.category,
                       lastUsedAt: $0.lastUsedAt,
-                      createdAt: $0.createdAt)
+                      createdAt: $0.createdAt,
+                      aiGenerated: $0.aiGenerated ? true : nil)
             },
             meals: meals.map { meal in
                 .init(name: meal.name, items: meal.items.compactMap { item in
                     item.food.map { .init(foodName: $0.name, quantity: item.quantity) }
                 }, isFavorite: meal.isFavorite ? true : nil, category: meal.category,
                 uuid: meal.uuid, lastUsedAt: meal.lastUsedAt,
-                createdAt: meal.createdAt)
+                createdAt: meal.createdAt,
+                aiGenerated: meal.aiGenerated ? true : nil)
             },
             goal: goal.map {
                 .init(targetWeightLb: $0.targetWeightLb, targetDate: $0.targetDate,
@@ -58,7 +60,8 @@ enum LibraryTransfer {
                 servingDescription: item.servingDescription, barcode: item.barcode,
                 nutrients: item.nutrients ?? NutrientValues(),
                 isFavorite: item.isFavorite ?? false,
-                category: item.category
+                category: item.category,
+                aiGenerated: item.aiGenerated ?? false
             )
             // Restore recency so Recent/ranked ordering survives the
             // round-trip. Both halves matter: most foods never bump
@@ -82,7 +85,8 @@ enum LibraryTransfer {
             guard !items.isEmpty else { continue }
             let meal = Meal(
                 name: mealDef.name, items: items,
-                isFavorite: mealDef.isFavorite ?? false, category: mealDef.category
+                isFavorite: mealDef.isFavorite ?? false, category: mealDef.category,
+                aiGenerated: mealDef.aiGenerated ?? false
             )
             // Keep the exported identity so configured meal widgets survive.
             if let uuid = mealDef.uuid { meal.uuid = uuid }

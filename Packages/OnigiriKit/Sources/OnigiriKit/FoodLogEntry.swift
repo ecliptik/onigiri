@@ -19,6 +19,9 @@ public struct FoodLogEntry: Identifiable, Sendable, Equatable {
     /// from anyone but the saver (and this app's watch/phone twin), so
     /// the UI must not offer Edit/Delete on them.
     public let editable: Bool
+    /// The logged item carried AI-estimate provenance (correlation
+    /// metadata) — drives the ✨ mark on log rows.
+    public let aiGenerated: Bool
 
     public init(
         id: UUID,
@@ -28,7 +31,8 @@ public struct FoodLogEntry: Identifiable, Sendable, Equatable {
         date: Date,
         category: FoodCategory? = nil,
         nutrients: NutrientValues = NutrientValues(),
-        editable: Bool = true
+        editable: Bool = true,
+        aiGenerated: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -38,6 +42,7 @@ public struct FoodLogEntry: Identifiable, Sendable, Equatable {
         self.category = category ?? FoodCategory.slot(for: date)
         self.nutrients = nutrients
         self.editable = editable
+        self.aiGenerated = aiGenerated
     }
 }
 

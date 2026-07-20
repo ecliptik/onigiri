@@ -88,6 +88,8 @@ struct QuickLogSheet: View {
         let nutrients: NutrientValues
         let isFavorite: Bool
         let category: String?
+        /// AI-estimate provenance — ✨ in the row, metadata on the log.
+        var aiGenerated = false
         var recency: Date = .distantPast
         var food: Food?
         var meal: Meal?
@@ -116,6 +118,7 @@ struct QuickLogSheet: View {
                 nutrients: meal.totalNutrients,
                 isFavorite: meal.isFavorite,
                 category: meal.category,
+                aiGenerated: meal.aiGenerated,
                 recency: meal.recencyDate,
                 meal: meal
             )
@@ -130,6 +133,7 @@ struct QuickLogSheet: View {
                 nutrients: food.nutrients,
                 isFavorite: food.isFavorite,
                 category: food.category,
+                aiGenerated: food.aiGenerated,
                 recency: food.recencyDate,
                 food: food
             )
@@ -156,6 +160,7 @@ struct QuickLogSheet: View {
                 nutrients: entry.nutrients,
                 isFavorite: false,
                 category: entry.category.rawValue,
+                aiGenerated: entry.aiGenerated,
                 recency: entry.date,
                 isHistory: true
             )
@@ -590,7 +595,8 @@ struct QuickLogSheet: View {
                 metricAmount: libraryMetric.itemAmount(
                     sodiumMg: item.sodiumMg, nutrients: item.nutrients) ?? 0,
                 isFavorite: item.isFavorite,
-                isMeal: item.isMeal
+                isMeal: item.isMeal,
+                aiGenerated: item.aiGenerated
             )
             LogButton(
                 name: item.name,
@@ -654,7 +660,8 @@ struct QuickLogSheet: View {
             // A history row's detail is its relative log date, not a
             // serving description.
             nutrients: item.nutrients, serving: item.isHistory ? "as last logged" : item.detail,
-            defaultCategory: PortionTarget.category(from: item.category)
+            defaultCategory: PortionTarget.category(from: item.category),
+            aiGenerated: item.aiGenerated
         )
     }
 
@@ -685,7 +692,8 @@ struct QuickLogSheet: View {
                 sodiumMg: item.sodiumMg * quantity,
                 nutrients: item.nutrients.scaled(by: quantity),
                 category: category,
-                date: logDate
+                date: logDate,
+                aiGenerated: item.aiGenerated
             )
             isLogging = false
             // Recency moved — refresh the cached list order and the

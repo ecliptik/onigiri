@@ -24,6 +24,8 @@ public struct LibraryExport: Codable, Sendable, Equatable {
         /// dropping it collapsed every such food to the restore timestamp
         /// and broke Recent sort after a backup. Optional: old exports.
         public var createdAt: Date?
+        /// AI-estimate provenance (the ✨ mark). Optional: old exports.
+        public var aiGenerated: Bool?
 
         public init(
             name: String,
@@ -35,7 +37,8 @@ public struct LibraryExport: Codable, Sendable, Equatable {
             isFavorite: Bool? = nil,
             category: String? = nil,
             lastUsedAt: Date? = nil,
-            createdAt: Date? = nil
+            createdAt: Date? = nil,
+            aiGenerated: Bool? = nil
         ) {
             self.name = name
             self.kcal = kcal
@@ -47,6 +50,7 @@ public struct LibraryExport: Codable, Sendable, Equatable {
             self.category = category
             self.lastUsedAt = lastUsedAt
             self.createdAt = createdAt
+            self.aiGenerated = aiGenerated
         }
     }
 
@@ -72,11 +76,13 @@ public struct LibraryExport: Codable, Sendable, Equatable {
         public var lastUsedAt: Date?
         /// Recency fallback, like FoodItem's — optional: old exports.
         public var createdAt: Date?
+        /// AI-named provenance (the ✨ mark). Optional: old exports.
+        public var aiGenerated: Bool?
 
         public init(
             name: String, items: [MealItemRef], isFavorite: Bool? = nil,
             category: String? = nil, uuid: UUID? = nil, lastUsedAt: Date? = nil,
-            createdAt: Date? = nil
+            createdAt: Date? = nil, aiGenerated: Bool? = nil
         ) {
             self.name = name
             self.items = items
@@ -85,6 +91,7 @@ public struct LibraryExport: Codable, Sendable, Equatable {
             self.uuid = uuid
             self.lastUsedAt = lastUsedAt
             self.createdAt = createdAt
+            self.aiGenerated = aiGenerated
         }
     }
 

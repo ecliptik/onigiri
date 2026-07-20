@@ -431,7 +431,8 @@ struct FoodsView: View {
                 metricAmount: libraryMetric.itemAmount(
                     sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients) ?? 0,
                 isFavorite: meal.isFavorite,
-                isMeal: badged
+                isMeal: badged,
+                aiGenerated: meal.aiGenerated
             )
             // Meals stay one-tap: their category rides along;
             // long-press still offers portions.
@@ -439,14 +440,16 @@ struct FoodsView: View {
                 meal.lastUsedAt = .now
                 log(name: meal.name, kcal: meal.totalKcal,
                     sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
-                    category: PortionTarget.category(from: meal.category))
+                    category: PortionTarget.category(from: meal.category),
+                    aiGenerated: meal.aiGenerated)
             } onLongPress: {
                 meal.lastUsedAt = .now
                 activeSheet = .portion(PortionTarget(
                     name: meal.name, kcal: meal.totalKcal,
                     sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
                     serving: "1 meal",
-                    defaultCategory: PortionTarget.category(from: meal.category)
+                    defaultCategory: PortionTarget.category(from: meal.category),
+                    aiGenerated: meal.aiGenerated
                 ))
             }
         }
@@ -504,7 +507,8 @@ struct FoodsView: View {
                 metric: libraryMetric,
                 metricAmount: libraryMetric.itemAmount(
                     sodiumMg: food.sodiumMg, nutrients: food.nutrients) ?? 0,
-                isFavorite: food.isFavorite
+                isFavorite: food.isFavorite,
+                aiGenerated: food.aiGenerated
             )
             LogButton(name: food.name, longPressName: "Log default portion") {
                 food.lastUsedAt = .now
@@ -513,7 +517,8 @@ struct FoodsView: View {
                 food.lastUsedAt = .now
                 log(name: food.name, kcal: food.kcal,
                     sodiumMg: food.sodiumMg, nutrients: food.nutrients,
-                    category: PortionTarget.category(from: food.category))
+                    category: PortionTarget.category(from: food.category),
+                    aiGenerated: food.aiGenerated)
             }
         }
         .contentShape(.rect)
@@ -662,13 +667,15 @@ struct FoodsView: View {
             name: food.name, kcal: food.kcal,
             sodiumMg: food.sodiumMg, nutrients: food.nutrients,
             serving: food.servingDescription,
-            defaultCategory: PortionTarget.category(from: food.category)
+            defaultCategory: PortionTarget.category(from: food.category),
+            aiGenerated: food.aiGenerated
         )
     }
 
     private func log(
         name: String, kcal: Double, sodiumMg: Double,
-        nutrients: NutrientValues, category: FoodCategory, quantity: Double = 1
+        nutrients: NutrientValues, category: FoodCategory, quantity: Double = 1,
+        aiGenerated: Bool = false
     ) {
         // The log keeps the plain food name; the portion only scales values.
         guard !isLogging else { return }
@@ -680,7 +687,8 @@ struct FoodsView: View {
                 kcal: kcal * quantity,
                 sodiumMg: sodiumMg * quantity,
                 nutrients: nutrients.scaled(by: quantity),
-                category: category
+                category: category,
+                aiGenerated: aiGenerated
             )
         }
     }
@@ -701,6 +709,8 @@ struct PortionTarget: Identifiable {
     let nutrients: NutrientValues
     let serving: String
     var defaultCategory: FoodCategory = .slot(for: .now)
+    /// AI-estimate provenance, carried into the log's metadata.
+    var aiGenerated = false
 
     static func category(from stored: String?) -> FoodCategory {
         stored.flatMap(FoodCategory.init(rawValue:)) ?? .slot(for: .now)
@@ -967,6 +977,8 @@ struct LibraryRow: View {
     /// Favorites scope) — the Foods/Meals scopes already say which is
     /// which.
     var isMeal = false
+    /// AI-estimate provenance — a small ✨ after the name.
+    var aiGenerated = false
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -979,6 +991,11 @@ struct LibraryRow: View {
             }
             Text(name)
                 .foregroundStyle(.primary)
+            if aiGenerated {
+                Text(verbatim: "✨")
+                    .font(.caption2)
+                    .accessibilityLabel("AI estimated")
+            }
             if isMeal {
                 Text("Meal")
                     .font(.caption2.weight(.medium))

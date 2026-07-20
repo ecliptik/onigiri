@@ -428,6 +428,9 @@ public final class HealthKitService {
     /// log can be listed later. Returns the correlation UUID for undo.
     /// Custom metadata key carrying the meal slot (FoodCategory rawValue).
     public static let mealCategoryMetadataKey = "OnigiriMealCategory"
+    /// Custom metadata key marking an entry whose values came from an
+    /// AI estimate — read back for the ✨ mark on log rows.
+    public static let aiGeneratedMetadataKey = "OnigiriAIGenerated"
 
     @discardableResult
     public func logFood(
@@ -436,7 +439,8 @@ public final class HealthKitService {
         sodiumMg: Double,
         nutrients: NutrientValues = NutrientValues(),
         category: FoodCategory? = nil,
-        date: Date = .now
+        date: Date = .now,
+        aiGenerated: Bool = false
     ) async throws -> UUID {
         var metadata: [String: Any] = [
             HKMetadataKeyFoodType: name,
@@ -446,6 +450,9 @@ public final class HealthKitService {
         ]
         if let category {
             metadata[Self.mealCategoryMetadataKey] = category.rawValue
+        }
+        if aiGenerated {
+            metadata[Self.aiGeneratedMetadataKey] = true
         }
         var objects: Set<HKSample> = [
             HKQuantitySample(
@@ -579,7 +586,8 @@ public final class HealthKitService {
             category: (correlation.metadata?[Self.mealCategoryMetadataKey] as? String)
                 .flatMap(FoodCategory.init(rawValue:)),
             nutrients: correlation.nutrientValues,
-            editable: Self.isFamilySource(correlation.sourceRevision.source)
+            editable: Self.isFamilySource(correlation.sourceRevision.source),
+            aiGenerated: correlation.metadata?[Self.aiGeneratedMetadataKey] as? Bool ?? false
         )
     }
 

@@ -157,7 +157,8 @@ enum FoodIntelligence {
                 servingDescription: components
                     .map { "\($0.portion) \($0.name)" }
                     .joined(separator: " + "),
-                nutrients: NutrientValues())
+                nutrients: NutrientValues(),
+                aiGenerated: true)
         }
     }
 

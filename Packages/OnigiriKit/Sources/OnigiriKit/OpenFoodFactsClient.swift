@@ -8,6 +8,10 @@ public struct ScannedProduct: Sendable, Equatable {
     public let sodiumMg: Double?
     public let servingDescription: String
     public let nutrients: NutrientValues
+    /// True when the values are an AI estimate (describe / photo
+    /// identify) rather than a database record — rides through the
+    /// form so saved foods keep their ✨ provenance.
+    public let aiGenerated: Bool
 
     public init(
         barcode: String,
@@ -15,7 +19,8 @@ public struct ScannedProduct: Sendable, Equatable {
         kcal: Double?,
         sodiumMg: Double?,
         servingDescription: String,
-        nutrients: NutrientValues
+        nutrients: NutrientValues,
+        aiGenerated: Bool = false
     ) {
         self.barcode = barcode
         self.name = name
@@ -23,6 +28,7 @@ public struct ScannedProduct: Sendable, Equatable {
         self.sodiumMg = sodiumMg
         self.servingDescription = servingDescription
         self.nutrients = nutrients
+        self.aiGenerated = aiGenerated
     }
 }
 

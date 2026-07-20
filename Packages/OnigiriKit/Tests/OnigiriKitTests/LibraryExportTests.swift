@@ -13,7 +13,8 @@ struct LibraryExportTests {
                 // No lastUsedAt: recency lives entirely in createdAt, the
                 // common case that broke Recent sort after a restore.
                 .init(name: "Rice bowl", kcal: 320, sodiumMg: 10, servingDescription: "1 bowl", barcode: "12345678",
-                      createdAt: Date(timeIntervalSince1970: 1_798_500_000)),
+                      createdAt: Date(timeIntervalSince1970: 1_798_500_000),
+                      aiGenerated: true),
             ],
             meals: [
                 .init(name: "Chicken & rice", items: [

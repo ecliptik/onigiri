@@ -44,7 +44,8 @@ struct DescribeFoodIntent: AppIntent {
             // same review contract: the spoken confirmation covers
             // kcal/sodium, the rest lands like any label's numbers.
             nutrients: food.nutrients,
-            category: nil
+            category: nil,
+            aiGenerated: true
         )
         WidgetReloader.reloadNow(kinds: [
             WidgetKinds.gauge, WidgetKinds.streak, WidgetKinds.monthStats,

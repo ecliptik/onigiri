@@ -34,6 +34,12 @@ struct MealFormView: View {
     @State private var confirmDiscard = false
     @State private var initialSnapshot: FieldsSnapshot?
     @State private var isSuggestingName = false
+    /// The AI's accepted name suggestion — the meal is marked ✨ only
+    /// when the SAVED name is the suggestion, untouched.
+    @State private var suggestedName: String?
+    /// Provenance carried over when editing an already-AI-named meal.
+    @State private var wasAINamed = false
+    @State private var originalName = ""
     @FocusState private var quantityFocused: Bool
 
     private struct FieldsSnapshot: Equatable {
@@ -261,6 +267,8 @@ struct MealFormView: View {
             .onAppear {
                 if let meal {
                     name = meal.name
+                    originalName = meal.name
+                    wasAINamed = meal.aiGenerated
                     category = meal.category
                     isFavorite = meal.isFavorite
                     quantities = Dictionary(uniqueKeysWithValues: meal.items.compactMap { item in
@@ -284,6 +292,7 @@ struct MealFormView: View {
             defer { isSuggestingName = false }
             if let suggestion = await FoodIntelligence.suggestMealName(for: members) {
                 name = suggestion
+                suggestedName = suggestion
             }
         }
     }
@@ -326,6 +335,11 @@ struct MealFormView: View {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         ToastCenter.shared.show("Saved \(name.trimmingCharacters(in: .whitespaces)) ✓")
         let trimmed = name.trimmingCharacters(in: .whitespaces)
+        // ✨ when the saved name IS an accepted AI suggestion, or an
+        // already-AI-named meal keeps its name; a hand-rewritten name
+        // clears the mark.
+        let aiNamed = if let suggestedName { trimmed == suggestedName }
+                      else { wasAINamed && trimmed == originalName }
         let items = foods.compactMap { food -> MealItem? in
             let quantity = quantities[food.persistentModelID] ?? 0
             return quantity > 0 ? MealItem(food: food, quantity: quantity) : nil
@@ -334,13 +348,14 @@ struct MealFormView: View {
             meal.name = trimmed
             meal.category = category
             meal.isFavorite = isFavorite
+            meal.aiGenerated = aiNamed
             // Unlink before deleting: deleting items the meal still
             // references is the dangling-reference crash class.
             let oldItems = meal.items
             meal.items = items
             oldItems.forEach(context.delete)
         } else {
-            context.insert(Meal(name: trimmed, items: items, isFavorite: isFavorite, category: category))
+            context.insert(Meal(name: trimmed, items: items, isFavorite: isFavorite, category: category, aiGenerated: aiNamed))
         }
         // Explicit save (GoalUpsert's discipline) — see FoodFormView.
         try? context.save()

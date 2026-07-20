@@ -79,6 +79,9 @@ struct FoodFormView: View {
     @State private var onlineSearch = OnlineFoodSearch()
     @State private var isLookingUp = false
     @State private var lookupMessage: String?
+    /// AI-estimate provenance — set by any AI prefill/apply, persisted
+    /// on the food, shown as ✨ in library rows.
+    @State private var aiGenerated = false
     /// onDismiss fires after activeSheet is already nil — this marker
     /// says the closed sheet was the portion sheet, so the "saved but
     /// not logged" toast only follows an actual portion cancel.
@@ -498,6 +501,7 @@ struct FoodFormView: View {
         micros = food.micros ?? [:]
         category = food.category
         isFavorite = food.isFavorite
+        aiGenerated = food.aiGenerated
     }
 
     /// Zero is "nothing on the label", not data worth advertising —
@@ -609,6 +613,9 @@ struct FoodFormView: View {
         sugarG = product.nutrients.sugarG
         caffeineMg = product.nutrients.caffeineMg
         micros = product.nutrients.micros
+        // Provenance sticks once set — reviewing/editing an estimate's
+        // numbers doesn't change where they came from.
+        if product.aiGenerated { aiGenerated = true }
         // Only for real lookups (barcode present): a manual "Add Food"
         // prefill carries just the searched name, which isn't a finding.
         lookupMessage = product.kcal == nil && !product.barcode.isEmpty
@@ -654,7 +661,8 @@ struct FoodFormView: View {
             sodiumMg: sodiumMg ?? 0,
             nutrients: formNutrients,
             serving: serving,
-            defaultCategory: PortionTarget.category(from: category)
+            defaultCategory: PortionTarget.category(from: category),
+            aiGenerated: aiGenerated
         ))
     }
 
@@ -678,7 +686,8 @@ struct FoodFormView: View {
                 sodiumMg: target.sodiumMg * quantity,
                 nutrients: target.nutrients.scaled(by: quantity),
                 category: category,
-                date: logDate
+                date: logDate,
+                aiGenerated: target.aiGenerated
             )
             if logged {
                 onLogged?()
@@ -698,6 +707,7 @@ struct FoodFormView: View {
             food.nutrients = formNutrients
             food.category = category
             food.isFavorite = isFavorite
+            food.aiGenerated = aiGenerated
         } else {
             let new = Food(
                 name: trimmed,
@@ -707,7 +717,8 @@ struct FoodFormView: View {
                 barcode: barcode,
                 nutrients: formNutrients,
                 isFavorite: isFavorite,
-                category: category
+                category: category,
+                aiGenerated: aiGenerated
             )
             context.insert(new)
             createdFood = new

@@ -33,6 +33,10 @@ public final class Food {
     /// as createdAt.
     public var lastUsedAt: Date?
     public var recencyDate: Date { lastUsedAt ?? createdAt }
+    /// Provenance: values came from an AI estimate (describe or photo
+    /// identify) — drives the ✨ mark in library rows. Defaulted so
+    /// pre-existing stores migrate lightweight.
+    public var aiGenerated: Bool = false
     /// Inverse of MealItem.food (declared there): deleting a food nullifies
     /// the items that reference it instead of leaving a dangling pointer
     /// that traps SwiftData on the next property access.
@@ -46,7 +50,8 @@ public final class Food {
         barcode: String? = nil,
         nutrients: NutrientValues = NutrientValues(),
         isFavorite: Bool = false,
-        category: String? = nil
+        category: String? = nil,
+        aiGenerated: Bool = false
     ) {
         self.name = name
         self.kcal = kcal
@@ -54,6 +59,7 @@ public final class Food {
         self.servingDescription = servingDescription
         self.barcode = barcode
         self.createdAt = .now
+        self.aiGenerated = aiGenerated
         self.fatG = nutrients.fatG
         self.saturatedFatG = nutrients.saturatedFatG
         self.transFatG = nutrients.transFatG
@@ -131,14 +137,18 @@ public final class Meal {
     /// Bumped on every log — drives the recency sort under favorites.
     public var lastUsedAt: Date?
     public var recencyDate: Date { lastUsedAt ?? createdAt }
+    /// Provenance: the meal's name came from an AI suggestion — drives
+    /// the ✨ mark. Defaulted so pre-existing stores migrate lightweight.
+    public var aiGenerated: Bool = false
 
-    public init(name: String, items: [MealItem], isFavorite: Bool = false, category: String? = nil) {
+    public init(name: String, items: [MealItem], isFavorite: Bool = false, category: String? = nil, aiGenerated: Bool = false) {
         self.uuid = UUID()
         self.name = name
         self.items = items
         self.createdAt = .now
         self.isFavorite = isFavorite
         self.category = category
+        self.aiGenerated = aiGenerated
     }
 
     public var totalKcal: Double { items.reduce(0) { $0 + $1.kcal } }

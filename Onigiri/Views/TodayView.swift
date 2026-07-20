@@ -945,7 +945,14 @@ private struct FoodLogRow: View, Equatable {
     var body: some View {
         let label = HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(entry.name)
+                HStack(spacing: 4) {
+                    Text(entry.name)
+                    if entry.aiGenerated {
+                        Text(verbatim: "✨")
+                            .font(.caption2)
+                            .accessibilityLabel("AI estimated")
+                    }
+                }
                 Text(entry.date, style: .time)
                     .font(.caption)
                     .foregroundStyle(.secondary)

@@ -129,12 +129,14 @@ enum LogActions {
         sodiumMg: Double,
         nutrients: NutrientValues = NutrientValues(),
         category: FoodCategory,
-        date: Date = .now
+        date: Date = .now,
+        aiGenerated: Bool = false
     ) async -> Bool {
         do {
             let id = try await health.logFood(
                 name: name, kcal: kcal, sodiumMg: sodiumMg,
-                nutrients: nutrients, category: category, date: date
+                nutrients: nutrients, category: category, date: date,
+                aiGenerated: aiGenerated
             )
             didMutate(haptic: .success)
             ToastCenter.shared.show("Logged \(name) ✓") {

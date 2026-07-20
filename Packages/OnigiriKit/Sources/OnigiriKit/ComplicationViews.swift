@@ -60,7 +60,12 @@ public struct BalanceAccessoryView: View {
             Text("\(SharedStore.rewardEmoji) Open Onigiri to set up")
         case .accessoryRectangular:
             HStack(spacing: 8) {
+                // The words beside/beneath these badges carry the
+                // announcement; the user-chosen emoji's automatic
+                // pronunciation ("rice ball") is noise — hidden here
+                // and at every badge below.
                 Text(SharedStore.rewardEmoji)
+                    .accessibilityHidden(true)
                 Text("Open Onigiri\nto set up")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -70,11 +75,15 @@ public struct BalanceAccessoryView: View {
         case .accessoryCorner:
             Text(SharedStore.rewardEmoji)
                 .font(.system(size: cornerBadgeSize))
+                .accessibilityHidden(true)
                 .widgetLabel { Text("Set up Onigiri") }
         #endif
         default:
             Gauge(value: 0) {
+                // Sole content beside the "—": an explicit label, not
+                // hidden — otherwise VoiceOver hears only the dash.
                 Text(SharedStore.rewardEmoji).font(.system(size: gaugeEmojiSize))
+                    .accessibilityLabel("Open Onigiri to set up")
             } currentValueLabel: {
                 Text("—")
             }
@@ -92,6 +101,7 @@ public struct BalanceAccessoryView: View {
             // The badge in the corner, the headline on the curve.
             Text(SharedStore.rewardEmoji)
                 .font(.system(size: cornerBadgeSize))
+                .accessibilityHidden(true)
                 .widgetLabel {
                     headlineText
                         .foregroundStyle(headlineColor)
@@ -127,6 +137,7 @@ public struct BalanceAccessoryView: View {
             Gauge(value: eaten ?? state.gaugeProgress) {
                 Text(SharedStore.rewardEmoji)
                     .font(.system(size: gaugeEmojiSize))
+                    .accessibilityHidden(true)
             } currentValueLabel: {
                 Text(readout.value, format: valueFormat)
                     .font(.system(size: gaugeValueSize, weight: .bold, design: .rounded))

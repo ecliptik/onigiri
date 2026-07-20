@@ -60,6 +60,10 @@ struct MonthGridView: View {
                         isFuture: day > .now,
                         isSelected: dayStart == selectedDay
                     )
+                    // Each cell claims half the 6 pt gutter as tap area
+                    // (hit only, no layout): 7 flexible columns compute
+                    // ~40 pt wide on SE-class phones, under the HIG 44.
+                    .contentShape(Rectangle().inset(by: -3))
                     .onTapGesture {
                         if day <= .now {
                             onSelect(dayStart)

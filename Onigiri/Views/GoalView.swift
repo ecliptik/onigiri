@@ -7,6 +7,9 @@ import OnigiriKit
 /// deficit and calorie budget with safety guardrails.
 struct GoalView: View {
     @Environment(\.modelContext) private var context
+    /// The trend chart's height rides Dynamic Type so its axis labels
+    /// keep room at accessibility sizes (the fixed 220 clipped them).
+    @ScaledMetric(relativeTo: .body) private var chartHeight = 220.0
     @Query private var goals: [GoalSettings]
 
     @State private var targetWeightLb: Double?
@@ -202,6 +205,7 @@ struct GoalView: View {
                 // Confirm in the nav bar like every other form in the app.
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
+                        .keyboardShortcut("s", modifiers: .command)
                         .disabled(!isDirty)
                 }
                 // Decimal pads have no return key; surface a Done while
@@ -303,7 +307,7 @@ struct GoalView: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Weight trend chart")
                 .accessibilityValue(chartSummary)
-                .frame(height: 220)
+                .frame(height: chartHeight)
                 .padding(.vertical, 4)
 
                 if isMaintenance {

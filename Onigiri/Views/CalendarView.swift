@@ -10,6 +10,10 @@ struct CalendarView: View {
     @State private var selectedDay = Calendar.current.startOfDay(for: .now)
     @Query private var goals: [GoalSettings]
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Differentiate Without Color: limit-mode status hues gain a glyph
+    /// twin (see BrandColors.sodiumStatusSymbol).
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     // AppStorage (not static SharedStore reads) so icon changes re-render
     // this screen immediately.
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
@@ -283,7 +287,7 @@ struct CalendarView: View {
         }
         .accessibilityAddTraits(.isButton)
         .accessibilityHint("Opens this day on Today, where you can view and edit it")
-        .animation(.snappy, value: selectedDay)
+        .animation(reduceMotion ? nil : .snappy, value: selectedDay)
     }
 
     /// A slot's nutrient from the reactive raw key; nil when set to None.
@@ -327,8 +331,12 @@ struct CalendarView: View {
         } ?? .secondary
         let status = (mode == .limit ? value : nil)
             .flatMap { Color.sodiumStatusLabel(mg: $0, limitMg: target) }
+        let symbol = differentiateWithoutColor
+            ? (mode == .limit ? value : nil)
+                .flatMap { Color.sodiumStatusSymbol(mg: $0, limitMg: target) }
+            : nil
         return metric(icon: { slotIcon(slot: slot, nutrient: nutrient) },
-                      text: text, color: color)
+                      text: text, color: color, symbol: symbol)
             // Without grouping, the value never reaches VoiceOver — it
             // must sit on a combined element, not a plain HStack.
             .accessibilityElement(children: .combine)
@@ -350,12 +358,21 @@ struct CalendarView: View {
     private func metric(
         @ViewBuilder icon: () -> some View,
         text: String,
-        color: Color = .primary
+        color: Color = .primary,
+        symbol: String? = nil
     ) -> some View {
         HStack(spacing: 6) {
             icon()
                 .frame(width: 22, alignment: .center)
             Text(text).foregroundStyle(color)
+            // Differentiate Without Color's glyph twin of the status
+            // hue; callers pass it only under that setting.
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.caption)
+                    .foregroundStyle(color)
+                    .accessibilityHidden(true)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

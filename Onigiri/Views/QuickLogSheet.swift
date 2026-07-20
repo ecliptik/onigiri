@@ -365,10 +365,12 @@ struct QuickLogSheet: View {
                 // emphasized) like Settings' Done.
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .keyboardShortcut(.cancelAction)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                         .fontWeight(.semibold)
+                        .keyboardShortcut(.return, modifiers: .command)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     // The Foods screen's sort circle, third surface — kept on

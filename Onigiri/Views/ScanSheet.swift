@@ -54,6 +54,7 @@ struct ScanSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .keyboardShortcut(.cancelAction)
                 }
             }
             .onChange(of: photoItem) { _, item in

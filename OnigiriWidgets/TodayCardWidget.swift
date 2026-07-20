@@ -77,6 +77,9 @@ private let logURL = URL(string: "onigiri://log")!
 
 struct TodayCardView: View {
     @Environment(\.widgetFamily) private var family
+    /// Differentiate Without Color: limit-mode status hues gain a glyph
+    /// twin (see BrandColors.sodiumStatusSymbol).
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     let entry: TodayCardEntry
 
     private var snapshot: DaySnapshot { entry.snapshot }
@@ -239,6 +242,9 @@ struct TodayCardView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+        // One VoiceOver stop ("1,505, Burned"), not two — mirrors the
+        // app-side energyFlank grouping.
+        .accessibilityElement(children: .combine)
     }
 
     /// The medium family's one-line flank: "1,505 Burned".
@@ -252,6 +258,7 @@ struct TodayCardView: View {
                 .foregroundStyle(.secondary)
         }
         .lineLimit(1)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Tracked metrics
@@ -291,10 +298,19 @@ struct TodayCardView: View {
         return Label {
             switch mode {
             case .limit:
-                Text("\(total, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(nutrient.inlineName)")
-                    .foregroundStyle(Color.sodiumStatus(mg: total, limitMg: target))
-                    .fontWeight(.medium)
-                    .accessibilityValue(Color.sodiumStatusLabel(mg: total, limitMg: target) ?? "")
+                HStack(spacing: 3) {
+                    Text("\(total, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(nutrient.inlineName)")
+                        .foregroundStyle(Color.sodiumStatus(mg: total, limitMg: target))
+                        .fontWeight(.medium)
+                        .accessibilityValue(Color.sodiumStatusLabel(mg: total, limitMg: target) ?? "")
+                    if differentiateWithoutColor,
+                       let symbol = Color.sodiumStatusSymbol(mg: total, limitMg: target) {
+                        Image(systemName: symbol)
+                            .font(.caption2)
+                            .foregroundStyle(Color.sodiumStatus(mg: total, limitMg: target))
+                            .accessibilityHidden(true)
+                    }
+                }
             case .goal:
                 Text("\(total, format: .number.precision(.fractionLength(0))) / \(target, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(nutrient.inlineName)")
                     .foregroundStyle(met ? Color.green : Color.secondary)

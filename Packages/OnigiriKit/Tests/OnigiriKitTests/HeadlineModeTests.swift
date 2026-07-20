@@ -15,6 +15,7 @@ struct HeadlineModeTests {
         #expect(r.value == 582)            // 1682 − 1100
         #expect(r.caption == "kcal left")
         #expect(r.signed == false)
+        #expect(r.statusSymbol == nil)     // comfortably under: no glyph
     }
 
     @Test func remainingFlipsToOverWhenBudgetExceeded() {
@@ -22,6 +23,7 @@ struct HeadlineModeTests {
         let r = CalorieBudget.headlineReadout(mode: .remaining, summary: over, dailyBudgetKcal: budget)
         #expect(r.value == 318)            // |1682 − 2000|
         #expect(r.caption == "kcal over")
+        #expect(r.statusSymbol == "exclamationmark.triangle.fill")
     }
 
     @Test func balanceIsSignedIntakeMinusBurn() {
@@ -30,6 +32,7 @@ struct HeadlineModeTests {
         #expect(r.caption == "kcal balance")
         #expect(r.signed)
         #expect(r.statusLabel == "deficit")
+        #expect(r.statusSymbol == nil)     // the ± sign already differentiates
     }
 
     @Test func eatenIsIntake() {

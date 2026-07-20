@@ -20,6 +20,9 @@ struct WatchMetricsView: View {
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
+    /// Differentiate Without Color: limit-mode status hues gain a glyph
+    /// twin (see BrandColors.sodiumStatusSymbol).
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
 
     var body: some View {
         NavigationStack {
@@ -101,15 +104,29 @@ struct WatchMetricsView: View {
         return HStack(spacing: 8) {
             metricIcon(slot: slot, nutrient: nutrient)
                 .frame(width: 24, alignment: .center)
+                // The caption below already names the metric inside the
+                // combined element — letting VoiceOver also pronounce a
+                // user-chosen emoji ("salt shaker") is noise at best,
+                // misleading at worst.
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 0) {
-                Text(mode == .limit
-                    ? "\(total.formatted(.number.precision(.fractionLength(0)))) \(nutrient.unitSymbol)"
-                    : "\(total.formatted(.number.precision(.fractionLength(0)))) / \(target.formatted(.number.precision(.fractionLength(0)))) \(nutrient.unitSymbol)")
-                    .font(.headline)
-                    .foregroundStyle(valueColor)
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.7)
-                    .lineLimit(1)
+                HStack(spacing: 3) {
+                    Text(mode == .limit
+                        ? "\(total.formatted(.number.precision(.fractionLength(0)))) \(nutrient.unitSymbol)"
+                        : "\(total.formatted(.number.precision(.fractionLength(0)))) / \(target.formatted(.number.precision(.fractionLength(0)))) \(nutrient.unitSymbol)")
+                        .font(.headline)
+                        .foregroundStyle(valueColor)
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.7)
+                        .lineLimit(1)
+                    if differentiateWithoutColor, mode == .limit,
+                       let symbol = Color.sodiumStatusSymbol(mg: total, limitMg: target) {
+                        Image(systemName: symbol)
+                            .font(.caption2)
+                            .foregroundStyle(valueColor)
+                            .accessibilityHidden(true)
+                    }
+                }
                 Text(nutrient.displayName)
                     .font(.caption2)
                     .foregroundStyle(.secondary)

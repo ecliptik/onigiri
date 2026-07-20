@@ -72,6 +72,19 @@ public extension Color {
         return nil
     }
 
+    /// The Differentiate Without Color twin of `sodiumStatus`, colocated
+    /// like the label so the thresholds can't drift. The VoiceOver label
+    /// never renders on screen, so sighted users who set Differentiate
+    /// Without Color still need a non-hue cue — surfaces show this SF
+    /// Symbol beside the value ONLY under that setting (the default
+    /// stays color-only by ruling). Outline = near limit, filled = over;
+    /// nil while comfortably under.
+    static func sodiumStatusSymbol(mg: Double, limitMg: Double) -> String? {
+        if mg > limitMg { return "exclamationmark.triangle.fill" }
+        if mg >= limitMg - 300 { return "exclamationmark.triangle" }
+        return nil
+    }
+
     /// Traffic-light for the "kcal left" headline, mirroring sodiumStatus:
     /// green with room, toast yellow within a snack (150 kcal) of the
     /// budget, orange once over.
@@ -88,6 +101,15 @@ public extension Color {
     static func remainingStatusLabel(kcal: Double) -> String? {
         if kcal < 0 { return "over budget" }
         if kcal <= 150 { return "near budget" }
+        return nil
+    }
+
+    /// The Differentiate Without Color twin of `remainingStatus` — see
+    /// `sodiumStatusSymbol` for the ruling and rendering contract.
+    /// Outline = near budget, filled = over; nil while comfortably under.
+    static func remainingStatusSymbol(kcal: Double) -> String? {
+        if kcal < 0 { return "exclamationmark.triangle.fill" }
+        if kcal <= 150 { return "exclamationmark.triangle" }
         return nil
     }
 }

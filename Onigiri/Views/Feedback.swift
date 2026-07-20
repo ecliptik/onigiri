@@ -82,6 +82,9 @@ private struct ToastChrome: ViewModifier {
 
 private struct ToastHost: ViewModifier {
     @State private var center = ToastCenter.shared
+    /// Reduce Motion: the toast appears/disappears in place instead of
+    /// sliding up from the bottom edge.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
@@ -108,7 +111,7 @@ private struct ToastHost: ViewModifier {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            .animation(.snappy, value: center.current?.id)
+            .animation(reduceMotion ? nil : .snappy, value: center.current?.id)
     }
 }
 

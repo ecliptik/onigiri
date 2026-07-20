@@ -17,6 +17,9 @@ struct DayNutritionView: View {
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
+    /// Differentiate Without Color: the remaining/sodium status hues
+    /// gain a glyph twin (see BrandColors.sodiumStatusSymbol).
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
 
     private var totals: NutrientValues { model.foodLog.totalNutrients }
 
@@ -83,10 +86,19 @@ struct DayNutritionView: View {
             if let dailyBudget {
                 let remaining = dailyBudget - model.summary.intakeKcal
                 iconRow("Calories remaining", icon: { Image(systemName: "chart.pie.fill").foregroundStyle(Color.remainingStatus(kcal: remaining)) }) {
-                    Text("\(remaining, format: .number.precision(.fractionLength(0))) kcal")
-                        .foregroundStyle(Color.remainingStatus(kcal: remaining))
-                        .monospacedDigit()
-                        .accessibilityValue(Color.remainingStatusLabel(kcal: remaining) ?? "")
+                    HStack(spacing: 4) {
+                        Text("\(remaining, format: .number.precision(.fractionLength(0))) kcal")
+                            .foregroundStyle(Color.remainingStatus(kcal: remaining))
+                            .monospacedDigit()
+                            .accessibilityValue(Color.remainingStatusLabel(kcal: remaining) ?? "")
+                        if differentiateWithoutColor,
+                           let symbol = Color.remainingStatusSymbol(kcal: remaining) {
+                            Image(systemName: symbol)
+                                .font(.caption)
+                                .foregroundStyle(Color.remainingStatus(kcal: remaining))
+                                .accessibilityHidden(true)
+                        }
+                    }
                 }
             }
             iconRow("Active burn", icon: { Image(systemName: "flame.fill").foregroundStyle(.red) }) {
@@ -112,10 +124,19 @@ struct DayNutritionView: View {
             // Both rows carry a VoiceOver twin of their status colors —
             // near/over limit and goal-met are otherwise color-only.
             iconRow("Sodium", icon: { Text("🧂") }) {
-                Text("\(model.summary.sodiumMg, format: .number.precision(.fractionLength(0))) / \(sodiumLimitMg, format: .number.precision(.fractionLength(0))) mg")
-                    .foregroundStyle(Color.sodiumStatus(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg))
-                    .monospacedDigit()
-                    .accessibilityValue(Color.sodiumStatusLabel(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg) ?? "")
+                HStack(spacing: 4) {
+                    Text("\(model.summary.sodiumMg, format: .number.precision(.fractionLength(0))) / \(sodiumLimitMg, format: .number.precision(.fractionLength(0))) mg")
+                        .foregroundStyle(Color.sodiumStatus(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg))
+                        .monospacedDigit()
+                        .accessibilityValue(Color.sodiumStatusLabel(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg) ?? "")
+                    if differentiateWithoutColor,
+                       let symbol = Color.sodiumStatusSymbol(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg) {
+                        Image(systemName: symbol)
+                            .font(.caption)
+                            .foregroundStyle(Color.sodiumStatus(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg))
+                            .accessibilityHidden(true)
+                    }
+                }
             }
             iconRow("Water", icon: { WaterIconView(raw: waterIcon) }) {
                 Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(waterGoalOz, format: .number.precision(.fractionLength(0))) oz")

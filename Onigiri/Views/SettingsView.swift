@@ -286,6 +286,9 @@ struct SettingsView: View {
                         showFDCKey.toggle()
                     } label: {
                         Image(systemName: showFDCKey ? "eye.slash" : "eye")
+                            // HIG 44 pt tap target via hit area only —
+                            // the negative inset must not move layout.
+                            .contentShape(Rectangle().inset(by: -14))
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
@@ -382,6 +385,9 @@ struct SettingsView: View {
                 showAIKey.toggle()
             } label: {
                 Image(systemName: showAIKey ? "eye.slash" : "eye")
+                    // HIG 44 pt tap target via hit area only — the
+                    // negative inset must not move layout.
+                    .contentShape(Rectangle().inset(by: -14))
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
@@ -1265,9 +1271,11 @@ struct SettingsView: View {
                         revertToEntrySnapshot()
                         dismiss()
                     }
+                    .keyboardShortcut(.cancelAction)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
+                        .keyboardShortcut(.return, modifiers: .command)
                 }
             }
             .onAppear {

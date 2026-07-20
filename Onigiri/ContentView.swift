@@ -243,6 +243,27 @@ struct ContentView: View {
         // removing that swipe fixed it without touching this. iOS 18 bars
         // never minimize; the modifier is a no-op there.
         .modifier(TabBarMinimizePin())
+        // VoiceOver twin of the pill's hold-to-log-water shortcut: the
+        // window-level long-press below never reaches assistive tech,
+        // and TabContent has no accessibilityAction to hang it on
+        // (checked the iOS SDK interface — label/value/hint only). An
+        // invisible 1 pt element carries the same call instead: no
+        // layout, no touch (hit testing off), VoiceOver-only.
+        .overlay(alignment: .bottomTrailing) {
+            if SharedStore.holdToLogWater {
+                Color.clear
+                    .frame(width: 1, height: 1)
+                    .allowsHitTesting(false)
+                    .accessibilityElement()
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityLabel("Log a serving of water")
+                    .accessibilityHint("Logs one water serving without opening the add sheet.")
+                    .accessibilityAction {
+                        guard SharedStore.holdToLogWater else { return }
+                        Task { await LogActions.logWater(oz: SharedStore.waterServingOz) }
+                    }
+            }
+        }
         // The corner +'s real activation path: tap intercepted at the
         // window level (the tab never selects — no cross-fade flash) and
         // routed for the tab the user is on; hold logs a water serving

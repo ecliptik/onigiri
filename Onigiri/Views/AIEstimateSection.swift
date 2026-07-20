@@ -48,6 +48,9 @@ struct AIEstimateSection: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.tertiary)
+                            // HIG 44 pt tap target via hit area only —
+                            // the negative inset must not move layout.
+                            .contentShape(Rectangle().inset(by: -14))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Dismiss AI hint")

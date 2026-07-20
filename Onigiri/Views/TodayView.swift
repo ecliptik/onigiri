@@ -12,6 +12,14 @@ struct TodayView: View {
     @Environment(\.scenePhase) private var scenePhase
     /// Regular width lays the summary beside the log (two panes).
     @Environment(\.horizontalSizeClass) private var hSizeClass
+    /// Reduce Motion swaps every custom spring/glide for an instant cut
+    /// (nil animation) — the layouts land identically, nothing moves.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Status stays color-only on screen by ruling — EXCEPT under
+    /// Differentiate Without Color, where a small glyph twin appears
+    /// (the VoiceOver twins never render, so sighted colorblind users
+    /// otherwise get nothing).
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @Query private var goals: [GoalSettings]
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
@@ -483,13 +491,21 @@ struct TodayView: View {
                     .lineLimit(1)
                     .foregroundStyle(readout.tint)
                     .contentTransition(.numericText())
-                Text(readout.caption)
-                    .font(.subheadline)
-                    // Scale down inside the ring at accessibility sizes,
-                    // like the number above — truncated to "kcal bala…".
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    if differentiateWithoutColor, let symbol = readout.statusSymbol {
+                        Image(systemName: symbol)
+                            .font(.caption)
+                            .foregroundStyle(readout.tint)
+                            .accessibilityHidden(true)
+                    }
+                    Text(readout.caption)
+                        .font(.subheadline)
+                        // Scale down inside the ring at accessibility sizes,
+                        // like the number above — truncated to "kcal bala…".
+                        .minimumScaleFactor(0.5)
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.top, 16)
             .contentShape(.rect)
@@ -569,6 +585,9 @@ struct TodayView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+        // One VoiceOver stop ("1,505, Burned"), not two — the
+        // CalendarView.slotMetric grouping discipline.
+        .accessibilityElement(children: .combine)
     }
 
     private var meterGrid: some View {
@@ -640,11 +659,21 @@ struct TodayView: View {
             case .limit:
                 // Color-only ON SCREEN by ruling (the user vetoed a
                 // visible "· near limit" tail — the traffic light IS the
-                // status); VoiceOver still hears it via the value.
-                Text("\(total, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(metricName(nutrient))")
-                    .foregroundStyle(Color.sodiumStatus(mg: total, limitMg: target))
-                    .fontWeight(.medium)
-                    .accessibilityValue(Color.sodiumStatusLabel(mg: total, limitMg: target) ?? "")
+                // status); VoiceOver still hears it via the value, and
+                // Differentiate Without Color gets the glyph twin.
+                HStack(spacing: 4) {
+                    Text("\(total, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(metricName(nutrient))")
+                        .foregroundStyle(Color.sodiumStatus(mg: total, limitMg: target))
+                        .fontWeight(.medium)
+                        .accessibilityValue(Color.sodiumStatusLabel(mg: total, limitMg: target) ?? "")
+                    if differentiateWithoutColor,
+                       let symbol = Color.sodiumStatusSymbol(mg: total, limitMg: target) {
+                        Image(systemName: symbol)
+                            .font(.caption)
+                            .foregroundStyle(Color.sodiumStatus(mg: total, limitMg: target))
+                            .accessibilityHidden(true)
+                    }
+                }
             case .goal:
                 Text("\(total, format: .number.precision(.fractionLength(0))) / \(target, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(metricName(nutrient))")
                     .foregroundStyle(met ? Color.green : Color.secondary)
@@ -712,7 +741,7 @@ struct TodayView: View {
                     // pairs with a viewport glide below, and spring
                     // bounce on either half reads as stutter ("a little
                     // jerky", the user — device-tested).
-                    withAnimation(.smooth) {
+                    withAnimation(reduceMotion ? nil : .smooth) {
                         if anyExpanded {
                             collapsedSections = Set(FoodCategory.allCases)
                             waterCollapsed = true
@@ -739,7 +768,7 @@ struct TodayView: View {
                     if hSizeClass != .regular {
                         Task {
                             try? await Task.sleep(for: .milliseconds(100))
-                            withAnimation(.smooth) {
+                            withAnimation(reduceMotion ? nil : .smooth) {
                                 proxy.scrollTo(
                                     anyExpanded ? ScrollTarget.dayTop : ScrollTarget.logHeader,
                                     anchor: .top
@@ -782,7 +811,7 @@ struct TodayView: View {
                         entryMetric: entryMetric,
                         swipe: rowSwipe,
                         onToggle: {
-                            withAnimation(.snappy) {
+                            withAnimation(reduceMotion ? nil : .snappy) {
                                 if collapsedSections.contains(category) {
                                     collapsedSections.remove(category)
                                 } else {
@@ -803,7 +832,7 @@ struct TodayView: View {
                     isCollapsed: waterCollapsed,
                     waterIcon: waterIcon,
                     swipe: rowSwipe,
-                    onToggle: { withAnimation(.snappy) { waterCollapsed.toggle() } },
+                    onToggle: { withAnimation(reduceMotion ? nil : .snappy) { waterCollapsed.toggle() } },
                     onEdit: { entry in activeSheet = .editWater(entry) }
                 )
                 .equatable()
@@ -1117,6 +1146,7 @@ private struct LogRowSwipeActions: ViewModifier {
     @State private var offset: CGFloat = 0
     /// Where the row currently rests: 0, or ±revealWidth when open.
     @State private var restOffset: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Floating circular buttons, like the system's iOS 26 swipe pills.
     private static let buttonSize: CGFloat = 44
@@ -1290,7 +1320,7 @@ private struct LogRowSwipeActions: ViewModifier {
         // the same bit of life as the native .swipeActions release (barely
         // damped, no visible bounce). Only the swipe uses this — section-
         // collapse animations keep .snappy.
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { offset = value }
+        withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.8)) { offset = value }
         restOffset = value
     }
 }
@@ -1649,6 +1679,10 @@ struct MeterCell<Icon: View>: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
         .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 14))
+        // One VoiceOver stop per card ("350, Intake"), not icon/number/
+        // caption as three — the CalendarView.slotMetric grouping
+        // discipline.
+        .accessibilityElement(children: .combine)
     }
 }
 

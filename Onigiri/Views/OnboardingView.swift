@@ -14,6 +14,8 @@ struct OnboardingView: View {
 
     @State private var selection = 0
     @State private var healthRequested = false
+    /// Reduce Motion: page advances cut instead of sliding.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isRequestingHealth = false
     @State private var healthWeightLb: Double?
     @State private var manualWeightLb: Double?
@@ -185,7 +187,7 @@ struct OnboardingView: View {
         averageBurnKcal = (try? await health.averageDailyBurnKcal()) ?? nil
         todayBurnKcal = ((try? await health.todaySummary()) ?? .zero).totalBurnKcal
         if advance, selection == 1 {
-            withAnimation { selection = 2 }
+            withAnimation(reduceMotion ? nil : .default) { selection = 2 }
         }
     }
 
@@ -316,7 +318,7 @@ struct OnboardingView: View {
     private func advanceButton(_ title: String) -> some View {
         Button {
             if selection == 2 { saveGoalIfValid() }
-            withAnimation { selection += 1 }
+            withAnimation(reduceMotion ? nil : .default) { selection += 1 }
         } label: {
             Text(title)
                 .frame(maxWidth: .infinity)

@@ -40,13 +40,17 @@ public enum HeadlineMode: String, CaseIterable, Sendable {
 public extension CalorieBudget {
     /// Everything a surface needs to render the headline for one mode:
     /// the number, its caption, whether it carries an explicit ± sign
-    /// (balance only), its tint, and the VoiceOver twin of that tint.
+    /// (balance only), its tint, the VoiceOver twin of that tint, and
+    /// the Differentiate Without Color glyph twin (shown beside the
+    /// caption only under that setting; balance needs none — its ± sign
+    /// already carries deficit/surplus without color).
     struct HeadlineReadout: Equatable, Sendable {
         public let value: Double
         public let caption: String
         public let signed: Bool
         public let tint: Color
         public let statusLabel: String?
+        public let statusSymbol: String?
     }
 
     /// The one shared answer to "show this mode as what?", so Today, the
@@ -63,24 +67,26 @@ public extension CalorieBudget {
             return HeadlineReadout(
                 value: headline.value, caption: headline.caption, signed: false,
                 tint: .remainingStatus(kcal: remaining),
-                statusLabel: Color.remainingStatusLabel(kcal: remaining)
+                statusLabel: Color.remainingStatusLabel(kcal: remaining),
+                statusSymbol: Color.remainingStatusSymbol(kcal: remaining)
             )
         case .balance:
             let balance = summary.balanceKcal
             return HeadlineReadout(
                 value: balance, caption: "kcal balance", signed: true,
                 tint: balance <= 0 ? .green : .orange,
-                statusLabel: balance <= 0 ? "deficit" : "surplus"
+                statusLabel: balance <= 0 ? "deficit" : "surplus",
+                statusSymbol: nil
             )
         case .eaten:
             return HeadlineReadout(
                 value: summary.intakeKcal, caption: "kcal eaten", signed: false,
-                tint: .primary, statusLabel: nil
+                tint: .primary, statusLabel: nil, statusSymbol: nil
             )
         case .budget:
             return HeadlineReadout(
                 value: dailyBudgetKcal ?? 0, caption: "kcal budget", signed: false,
-                tint: .riceToast, statusLabel: nil
+                tint: .riceToast, statusLabel: nil, statusSymbol: nil
             )
         }
     }

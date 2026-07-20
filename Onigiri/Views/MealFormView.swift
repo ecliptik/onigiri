@@ -111,6 +111,10 @@ struct MealFormView: View {
             Form {
                 HStack {
                     TextField("Meal name", text: $name)
+                        // Placeholder rides as the VALUE and vanishes
+                        // once text is typed — same fix as the food
+                        // form's Name field.
+                        .accessibilityLabel("Meal name")
                     // One tap, one on-device suggestion, freely edited or
                     // retried — only on Apple Intelligence devices, and
                     // only once there are foods to name.
@@ -118,12 +122,17 @@ struct MealFormView: View {
                         Button {
                             suggestName()
                         } label: {
-                            if isSuggestingName {
-                                ProgressView()
-                            } else {
-                                Image(systemName: "sparkles")
-                                    .foregroundStyle(Color.riceToast)
+                            Group {
+                                if isSuggestingName {
+                                    ProgressView()
+                                } else {
+                                    Image(systemName: "sparkles")
+                                        .foregroundStyle(Color.riceToast)
+                                }
                             }
+                            // HIG 44 pt tap target via hit area only —
+                            // the negative inset must not move layout.
+                            .contentShape(Rectangle().inset(by: -14))
                         }
                         .buttonStyle(.borderless)
                         .disabled(isSuggestingName)
@@ -219,9 +228,11 @@ struct MealFormView: View {
                             dismiss()
                         }
                     }
+                    .keyboardShortcut(.cancelAction)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
+                        .keyboardShortcut("s", modifiers: .command)
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || !hasItems)
                 }
                 // Decimal pads have no return key; surface a Done while a

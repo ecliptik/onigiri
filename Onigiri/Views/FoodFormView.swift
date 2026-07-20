@@ -224,6 +224,11 @@ struct FoodFormView: View {
 
                 Section {
                     TextField("Name", text: $name)
+                        // The siblings get spoken labels from their
+                        // LabeledContent; this placeholder rides as the
+                        // VALUE and vanishes once text is typed, leaving
+                        // the field nameless to VoiceOver.
+                        .accessibilityLabel("Name")
                     LabeledContent("Calories (kcal)") {
                         TextField("0", value: $kcal, format: .number)
                             .keyboardType(.decimalPad)
@@ -309,6 +314,7 @@ struct FoodFormView: View {
                             dismiss()
                         }
                     }
+                    .keyboardShortcut(.cancelAction)
                 }
                 // New foods: Save keeps it library-only (meal building);
                 // Save & Log continues to the portion sheet. Two toolbar
@@ -317,12 +323,15 @@ struct FoodFormView: View {
                 ToolbarItemGroup(placement: .confirmationAction) {
                     if food == nil {
                         Button("Save") { saveOnly() }
+                            .keyboardShortcut("s", modifiers: .command)
                             .disabled(!canSave)
                         Button("Save & Log") { saveAndLog() }
                             .fontWeight(.semibold)
+                            .keyboardShortcut("s", modifiers: [.command, .shift])
                             .disabled(!canSave)
                     } else {
                         Button("Save") { save() }
+                            .keyboardShortcut("s", modifiers: .command)
                             .disabled(!canSave)
                     }
                 }

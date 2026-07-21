@@ -213,6 +213,13 @@ public enum SharedStore {
     public static let remindMealsKey = "remindMeals"
     public static let remindWaterKey = "remindWater"
     public static let remindStreakKey = "remindStreak"
+    // Reminder times, minutes since midnight; absent = the planner's
+    // original fixed schedule (ReminderPlanner.Times defaults).
+    public static let remindMealsMinuteKey = "remindMealsMinute"
+    public static let remindStreakMinuteKey = "remindStreakMinute"
+    public static let remindWaterMinute1Key = "remindWaterMinute1"
+    public static let remindWaterMinute2Key = "remindWaterMinute2"
+    public static let remindWaterMinute3Key = "remindWaterMinute3"
     // Today's two tracked-metric slots (historically sodium and water —
     // those defaults keep pre-feature installs unchanged).
     public static let trackedMetric1Key = "trackedMetric1"
@@ -523,6 +530,25 @@ public enum SharedStore {
     public static var waterGoalOz: Double {
         let value = defaults.double(forKey: waterGoalKey)
         return value > 0 ? value : 64
+    }
+
+    /// The user-tuned reminder times; keys never written read the
+    /// planner's original fixed schedule (integer(forKey:) would turn
+    /// an absent key into midnight).
+    public static var reminderTimes: ReminderPlanner.Times {
+        func minute(_ key: String, _ fallback: Int) -> Int {
+            defaults.object(forKey: key) == nil ? fallback : defaults.integer(forKey: key)
+        }
+        let original = ReminderPlanner.Times()
+        return ReminderPlanner.Times(
+            mealMinute: minute(remindMealsMinuteKey, original.mealMinute),
+            streakMinute: minute(remindStreakMinuteKey, original.streakMinute),
+            waterMinutes: [
+                minute(remindWaterMinute1Key, original.waterMinutes[0]),
+                minute(remindWaterMinute2Key, original.waterMinutes[1]),
+                minute(remindWaterMinute3Key, original.waterMinutes[2]),
+            ]
+        )
     }
 
     /// Where the shared SwiftData store lives inside the App Group.

@@ -5,6 +5,30 @@ import UserNotifications
 import OnigiriKit
 
 /// App-wide settings: appearance choices and data portability.
+/// An hour-and-minute picker over a minutes-since-midnight setting.
+private struct ReminderTimeRow: View {
+    let label: String
+    @Binding var minute: Int
+
+    var body: some View {
+        DatePicker(
+            label,
+            selection: Binding(
+                get: {
+                    Calendar.current.date(
+                        bySettingHour: minute / 60, minute: minute % 60, second: 0, of: .now
+                    ) ?? .now
+                },
+                set: { date in
+                    let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+                    minute = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+                }
+            ),
+            displayedComponents: .hourAndMinute
+        )
+    }
+}
+
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -33,6 +57,14 @@ struct SettingsView: View {
     @AppStorage(SharedStore.remindMealsKey, store: SharedStore.defaults) private var remindMeals = false
     @AppStorage(SharedStore.remindWaterKey, store: SharedStore.defaults) private var remindWater = false
     @AppStorage(SharedStore.remindStreakKey, store: SharedStore.defaults) private var remindStreak = false
+    // Reminder times (minutes since midnight); defaults mirror
+    // ReminderPlanner.Times so an untouched install schedules exactly
+    // the original fixed times.
+    @AppStorage(SharedStore.remindMealsMinuteKey, store: SharedStore.defaults) private var remindMealsMinute = 14 * 60
+    @AppStorage(SharedStore.remindStreakMinuteKey, store: SharedStore.defaults) private var remindStreakMinute = 20 * 60
+    @AppStorage(SharedStore.remindWaterMinute1Key, store: SharedStore.defaults) private var remindWaterMinute1 = 11 * 60
+    @AppStorage(SharedStore.remindWaterMinute2Key, store: SharedStore.defaults) private var remindWaterMinute2 = 15 * 60
+    @AppStorage(SharedStore.remindWaterMinute3Key, store: SharedStore.defaults) private var remindWaterMinute3 = 19 * 60
     @AppStorage(SharedStore.holdToLogWaterKey, store: SharedStore.defaults) private var holdToLogWater = true
     @AppStorage(SharedStore.onlineLookupsKey, store: SharedStore.defaults) private var onlineLookups = false
     @AppStorage(SharedStore.textSearchSourceKey, store: SharedStore.defaults) private var textSearchSource = SharedStore.textSearchSourceOFF
@@ -136,9 +168,20 @@ struct SettingsView: View {
     /// the first time a toggle turns on, never at launch.
     private var remindersSection: some View {
         Section {
-            Toggle("Not logged by 2 PM", isOn: $remindMeals)
+            Toggle("Not logged by \(timeLabel(remindMealsMinute))", isOn: $remindMeals)
+            if remindMeals {
+                ReminderTimeRow(label: "Remind at", minute: $remindMealsMinute)
+            }
             Toggle("Water pacing", isOn: $remindWater)
+            if remindWater {
+                ReminderTimeRow(label: "First check-in", minute: $remindWaterMinute1)
+                ReminderTimeRow(label: "Second check-in", minute: $remindWaterMinute2)
+                ReminderTimeRow(label: "Last check-in", minute: $remindWaterMinute3)
+            }
             Toggle("Streak about to lapse", isOn: $remindStreak)
+            if remindStreak {
+                ReminderTimeRow(label: "Check at", minute: $remindStreakMinute)
+            }
             if notificationsDenied {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Notifications are off for Onigiri — reminders won't appear.")
@@ -154,16 +197,32 @@ struct SettingsView: View {
             }
             #if DEBUG
             Button("Preview Reminders", systemImage: "bell.badge") {
-                ReminderScheduler.shared.preview()
+                Task {
+                    if await ReminderScheduler.shared.preview() {
+                        ToastCenter.shared.show("Previews on the way ✓")
+                    } else {
+                        // Same orange door the toggles use — silence was
+                        // the old behavior's bug.
+                        notificationsDenied = true
+                    }
+                }
             }
             #endif
         } header: {
             Text("Reminders")
         } footer: {
-            // The meal time lives in its toggle's label; only what the
-            // rows can't say rides here.
-            Text("Water pacing follows the Water section's goal, nudging at 11 AM, 3 PM, and 7 PM while you're behind; streaks check at 8 PM.")
+            // The times live in the rows now; only what they can't say
+            // rides here.
+            Text("Water check-ins nudge only while you're behind an even pace toward the Water section's goal; the streak check warns before a streak lapses at midnight.")
         }
+    }
+
+    /// "2:00 PM" for a minutes-since-midnight value (toggle labels).
+    private func timeLabel(_ minute: Int) -> String {
+        let date = Calendar.current.date(
+            bySettingHour: minute / 60, minute: minute % 60, second: 0, of: .now
+        ) ?? .now
+        return date.formatted(date: .omitted, time: .shortened)
     }
 
     private func reminderToggled(_ on: Bool) {
@@ -632,6 +691,9 @@ struct SettingsView: View {
         SharedStore.sodiumLimitKey, SharedStore.balanceStyleKey,
         SharedStore.progressGaugesKey, SharedStore.showSodiumKey, SharedStore.showWaterKey,
         SharedStore.remindMealsKey, SharedStore.remindWaterKey, SharedStore.remindStreakKey,
+        SharedStore.remindMealsMinuteKey, SharedStore.remindStreakMinuteKey,
+        SharedStore.remindWaterMinute1Key, SharedStore.remindWaterMinute2Key,
+        SharedStore.remindWaterMinute3Key,
         SharedStore.trackedMetric1Key, SharedStore.trackedMetric1ModeKey,
         SharedStore.trackedMetric1TargetKey, SharedStore.trackedMetric1IconKey,
         SharedStore.trackedMetric2Key, SharedStore.trackedMetric2ModeKey,
@@ -1255,6 +1317,13 @@ struct SettingsView: View {
             .onChange(of: remindMeals) { _, on in reminderToggled(on) }
             .onChange(of: remindWater) { _, on in reminderToggled(on) }
             .onChange(of: remindStreak) { _, on in reminderToggled(on) }
+            // A moved time reschedules everything pending. One observer
+            // over the bundle — five stacked onChanges blew the
+            // type-checker budget for the whole modifier chain.
+            .onChange(of: [
+                remindMealsMinute, remindStreakMinute,
+                remindWaterMinute1, remindWaterMinute2, remindWaterMinute3,
+            ]) { ReminderScheduler.shared.replan() }
             .task {
                 // Surface an existing denial as soon as Settings opens with
                 // any reminder switched on.

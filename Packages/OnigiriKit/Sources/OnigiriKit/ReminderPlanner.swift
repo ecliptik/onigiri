@@ -63,13 +63,30 @@ public enum ReminderPlanner {
         public var any: Bool { meals || water || streak }
     }
 
-    /// Fixed check-in times (Settings offers toggles, not time pickers).
-    static let mealHour = 14
-    /// Hour and the share of the water goal you'd expect by then.
-    static let waterCheckpoints: [(hour: Int, expectedShare: Double)] = [
-        (11, 1.0 / 3), (15, 2.0 / 3), (19, 1.0),
-    ]
-    static let streakHour = 20
+    /// User-tunable check-in times, minutes since midnight. Defaults are
+    /// the original fixed schedule; Settings writes the SharedStore keys
+    /// and the scheduler passes `SharedStore.reminderTimes` through.
+    public struct Times: Sendable, Equatable {
+        public var mealMinute: Int
+        public var streakMinute: Int
+        /// The water check-ins. Pacing expectations attach in
+        /// CHRONOLOGICAL order — the earliest check-in always expects
+        /// the least — and same-time duplicates collapse, with the
+        /// expectations re-paced evenly over what remains (N distinct
+        /// times expect 1/N, 2/N, … of the goal).
+        public var waterMinutes: [Int]
+
+        public init(
+            mealMinute: Int = 14 * 60,
+            streakMinute: Int = 20 * 60,
+            waterMinutes: [Int] = [11 * 60, 15 * 60, 19 * 60]
+        ) {
+            self.mealMinute = mealMinute
+            self.streakMinute = streakMinute
+            self.waterMinutes = waterMinutes
+        }
+    }
+
     /// Days of meal nudges kept pending so they still fire when the app
     /// hasn't been opened; a replan on any launch extends the window.
     static let horizonDays = 3
@@ -77,25 +94,31 @@ public enum ReminderPlanner {
     public static func plan(
         state: DayState,
         enabled: Enabled,
+        times: Times = Times(),
         now: Date = .now,
         calendar: Calendar = .current
     ) -> [PlannedReminder] {
         var planned: [PlannedReminder] = []
         let todayStart = calendar.startOfDay(for: now)
-        func at(_ hour: Int, dayOffset: Int) -> Date? {
+        func at(minute: Int, dayOffset: Int) -> Date? {
             guard let day = calendar.date(byAdding: .day, value: dayOffset, to: todayStart)
             else { return nil }
-            return calendar.date(bySettingHour: hour, minute: 0, second: 0, of: day)
+            let clamped = min(max(0, minute), 24 * 60 - 1)
+            return calendar.date(
+                bySettingHour: clamped / 60, minute: clamped % 60, second: 0, of: day
+            )
         }
 
         if enabled.meals, !state.hasLoggedFood,
-           let fire = at(mealHour, dayOffset: 0), fire > now {
+           let fire = at(minute: times.mealMinute, dayOffset: 0), fire > now {
             planned.append(mealNudge(at: fire))
         }
         if enabled.water, state.waterGoalOz > 0, state.waterOz < state.waterGoalOz {
-            for checkpoint in waterCheckpoints {
-                guard let fire = at(checkpoint.hour, dayOffset: 0), fire > now,
-                      state.waterOz < state.waterGoalOz * checkpoint.expectedShare
+            let checkpoints = Set(times.waterMinutes).sorted()
+            for (index, minute) in checkpoints.enumerated() {
+                let expectedShare = Double(index + 1) / Double(checkpoints.count)
+                guard let fire = at(minute: minute, dayOffset: 0), fire > now,
+                      state.waterOz < state.waterGoalOz * expectedShare
                 else { continue }
                 planned.append(PlannedReminder(
                     kind: .water, fireDate: fire,
@@ -105,7 +128,7 @@ public enum ReminderPlanner {
             }
         }
         if enabled.streak, !state.todayGoalMet, state.streak >= 2,
-           let fire = at(streakHour, dayOffset: 0), fire > now {
+           let fire = at(minute: times.streakMinute, dayOffset: 0), fire > now {
             planned.append(streakWarning(at: fire, streak: state.streak))
         }
         // Tomorrow's streak warning is safe to pre-plan only when today is
@@ -113,12 +136,12 @@ public enum ReminderPlanner {
         // the time it fires, the earned today has JOINED the streak:
         // say N+1, not today's N.
         if enabled.streak, state.todayGoalMet, state.streak >= 2,
-           let fire = at(streakHour, dayOffset: 1) {
+           let fire = at(minute: times.streakMinute, dayOffset: 1) {
             planned.append(streakWarning(at: fire, streak: state.streak + 1))
         }
         if enabled.meals {
             for day in 1...horizonDays {
-                if let fire = at(mealHour, dayOffset: day) {
+                if let fire = at(minute: times.mealMinute, dayOffset: day) {
                     planned.append(mealNudge(at: fire))
                 }
             }

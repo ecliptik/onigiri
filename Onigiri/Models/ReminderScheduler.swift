@@ -60,11 +60,13 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
             plan = await DailyPlanLoader.load(goal: goal)
         }
         let center = UNUserNotificationCenter.current()
-        // Only OUR reminders — removeAll would nuke any future
-        // notification type this app grows.
+        // Only PLANNED reminders — the narrower "onigiri.reminder."
+        // namespace, not "onigiri.", because the preview samples live
+        // beside it and this sweep used to cancel them before their
+        // few-second triggers could fire (tapping Preview did nothing).
         let pendingIDs = await center.pendingNotificationRequests()
             .map(\.identifier)
-            .filter { $0.hasPrefix("onigiri.") }
+            .filter { $0.hasPrefix("onigiri.reminder.") }
         center.removePendingNotificationRequests(withIdentifiers: pendingIDs)
         guard enabled.any, let plan else { return }
         let settings = await center.notificationSettings()
@@ -72,7 +74,9 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
         guard let state = await currentState(
             plan: plan, isMaintenance: goal?.isMaintenance ?? false
         ) else { return }
-        for reminder in ReminderPlanner.plan(state: state, enabled: enabled) {
+        for reminder in ReminderPlanner.plan(
+            state: state, enabled: enabled, times: SharedStore.reminderTimes
+        ) {
             let content = UNMutableNotificationContent()
             content.title = reminder.title
             content.body = reminder.body
@@ -129,30 +133,41 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
 
     #if DEBUG
     /// Settings row: fire a sample of each reminder in a few seconds so
-    /// on-device verification doesn't wait for 2 PM.
-    func preview() {
-        Task {
-            guard await requestPermission() else { return }
-            let center = UNUserNotificationCenter.current()
-            let samples: [(PlannedReminder.Kind, String, String)] = [
-                (.meals, "Nothing logged yet", "Log your meals to keep today's balance up to date."),
-                (.water, "Water check-in", "You're at 12 of 64 oz."),
-                (.streak, "Keep your streak going", "Your 3-day streak ends at midnight — log your day."),
-            ]
-            for (index, sample) in samples.enumerated() {
-                let content = UNMutableNotificationContent()
-                content.title = sample.1
-                content.body = sample.2
-                content.sound = .default
-                try? await center.add(UNNotificationRequest(
-                    identifier: "onigiri.preview.\(sample.0.rawValue)",
-                    content: content,
-                    trigger: UNTimeIntervalNotificationTrigger(
-                        timeInterval: TimeInterval(3 + index * 3), repeats: false
-                    )
-                ))
-            }
+    /// on-device verification doesn't wait for 2 PM. Returns whether the
+    /// samples were scheduled (false = notifications denied, the caller
+    /// surfaces it). Deliberately NOT `requestPermission()`: its replan
+    /// raced these very samples out of the pending set — and the sweep
+    /// is namespaced away from "onigiri.preview." now too.
+    func preview() async -> Bool {
+        let center = UNUserNotificationCenter.current()
+        switch await center.notificationSettings().authorizationStatus {
+        case .denied:
+            return false
+        case .notDetermined:
+            guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true
+            else { return false }
+        default:
+            break
         }
+        let samples: [(PlannedReminder.Kind, String, String)] = [
+            (.meals, "Nothing logged yet", "Log your meals to keep today's balance up to date."),
+            (.water, "Water check-in", "You're at 12 of 64 oz."),
+            (.streak, "Keep your streak going", "Your 3-day streak ends at midnight — log your day."),
+        ]
+        for (index, sample) in samples.enumerated() {
+            let content = UNMutableNotificationContent()
+            content.title = sample.1
+            content.body = sample.2
+            content.sound = .default
+            try? await center.add(UNNotificationRequest(
+                identifier: "onigiri.preview.\(sample.0.rawValue)",
+                content: content,
+                trigger: UNTimeIntervalNotificationTrigger(
+                    timeInterval: TimeInterval(3 + index * 3), repeats: false
+                )
+            ))
+        }
+        return true
     }
     #endif
 

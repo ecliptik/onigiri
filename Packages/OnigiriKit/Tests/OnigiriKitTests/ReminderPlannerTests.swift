@@ -138,4 +138,61 @@ struct ReminderPlannerTests {
         #expect(planned.map(\.fireDate) == planned.map(\.fireDate).sorted())
         #expect(Set(planned.map(\.id)).count == planned.count)
     }
+
+    // The 13 tests above all ride the default `times:` — they pin that an
+    // untouched install keeps the original 2 PM / 11-3-7 / 8 PM schedule.
+
+    @Test func customTimesMoveTheSchedule() {
+        // Meal at 10:30 AM, streak at 9:15 PM — minute precision included.
+        let times = ReminderPlanner.Times(
+            mealMinute: 10 * 60 + 30, streakMinute: 21 * 60 + 15
+        )
+        let planned = ReminderPlanner.plan(
+            state: .init(streak: 4),
+            enabled: .init(meals: true, streak: true),
+            times: times, now: today(at: 8)
+        )
+        let meal = planned.first { $0.kind == .meals }
+        #expect(meal.map { calendar.component(.hour, from: $0.fireDate) } == 10)
+        #expect(meal.map { calendar.component(.minute, from: $0.fireDate) } == 30)
+        let streak = planned.first { $0.kind == .streak }
+        #expect(streak.map { calendar.component(.hour, from: $0.fireDate) } == 21)
+        #expect(streak.map { calendar.component(.minute, from: $0.fireDate) } == 15)
+        // The horizon nudges follow the moved meal time too.
+        #expect(fireHours(planned, kind: .meals, dayOffset: 2) == [10])
+    }
+
+    @Test func waterExpectationsFollowChronologicalOrder() {
+        // Times entered out of order: the earliest check-in must expect
+        // the least. Chronologically 9 AM expects 1/3 (21.3 oz) — 30 oz
+        // satisfies it — while 1 PM (2/3) and 7 PM (all) still nudge.
+        let times = ReminderPlanner.Times(waterMinutes: [19 * 60, 13 * 60, 9 * 60])
+        let planned = ReminderPlanner.plan(
+            state: .init(waterOz: 30, waterGoalOz: 64),
+            enabled: .init(water: true),
+            times: times, now: today(at: 6)
+        )
+        #expect(fireHours(planned, kind: .water) == [13, 19])
+    }
+
+    @Test func duplicateWaterTimesCollapseAndRepace() {
+        // Two check-ins on the same minute collapse: 2 distinct times
+        // remain and expectations re-pace to 1/2 and all. 30 of 64 oz is
+        // under the halfway 32, so both nudge…
+        let times = ReminderPlanner.Times(waterMinutes: [15 * 60, 15 * 60, 19 * 60])
+        let planned = ReminderPlanner.plan(
+            state: .init(waterOz: 30, waterGoalOz: 64),
+            enabled: .init(water: true),
+            times: times, now: today(at: 8)
+        )
+        #expect(fireHours(planned, kind: .water) == [15, 19])
+        #expect(planned.filter { $0.kind == .water }.count == 2)
+        // …and 33 oz clears halfway, leaving only the full-goal check.
+        let ahead = ReminderPlanner.plan(
+            state: .init(waterOz: 33, waterGoalOz: 64),
+            enabled: .init(water: true),
+            times: times, now: today(at: 8)
+        )
+        #expect(fireHours(ahead, kind: .water) == [19])
+    }
 }

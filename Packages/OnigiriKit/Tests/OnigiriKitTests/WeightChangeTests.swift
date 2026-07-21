@@ -17,24 +17,40 @@ struct WeightChangeTests {
         #expect(WeightTrend.Change.predictedLb(totalDeficitKcal: 0) == 0)
     }
 
-    @Test func actualReadsSmoothedEndpointsInsideTheWindow() {
-        // A steady 0.2 lb/day drop: the 7-day average lags the raw values,
-        // but endpoints a window apart still show the loss direction.
+    @Test func actualReadsTheFittedChangeAcrossTheWindow() {
+        // A steady 0.2 lb/day drop fits exactly: 30 days ⇒ −6.0 lb, no
+        // smoothing lag eating into it (the old smoothed-endpoint read
+        // came in shy).
         let history = (0...30).map { point(day: $0, lb: 200 - Double($0) * 0.2) }
         let change = WeightTrend.Change.actualLb(
             history: history,
             from: day0,
             to: day0.addingTimeInterval(30 * 86_400)
         )
-        // 0.2 lb/day for 30 days ≈ 6 lb lost; the trailing average lags a
-        // few tenths behind the raw drop, so accept a band.
         #expect(change != nil)
         if let change {
-            #expect(change < -5 && change > -6.5)
+            #expect(abs(change - (-6.0)) < 0.001)
         }
     }
 
-    @Test func actualNilWithoutTwoPointsInWindow() {
+    @Test func youngHistoryReadsItsFullMovement() {
+        // Weigh-ins only 8 days old inside a 30-day window: the change
+        // is the data span's movement (−1.75 lb over 7 days at 0.25/day)
+        // — the ramp-in artifact of the old smoothed read halved this,
+        // and the fit must not extrapolate to the empty 3 weeks either.
+        let history = (0...7).map { point(day: $0, lb: 200 - Double($0) * 0.25) }
+        let change = WeightTrend.Change.actualLb(
+            history: history,
+            from: day0.addingTimeInterval(-23 * 86_400),
+            to: day0.addingTimeInterval(7 * 86_400)
+        )
+        #expect(change != nil)
+        if let change {
+            #expect(abs(change - (-1.75)) < 0.01)
+        }
+    }
+
+    @Test func actualNilWithoutASpanningWindow() {
         let history = [point(day: 0, lb: 200)]
         #expect(WeightTrend.Change.actualLb(
             history: history, from: day0, to: day0.addingTimeInterval(30 * 86_400)
@@ -46,12 +62,20 @@ struct WeightChangeTests {
             from: day0.addingTimeInterval(40 * 86_400),
             to: day0.addingTimeInterval(70 * 86_400)
         ) == nil)
+        // Two readings hours apart aren't a change — morning/evening
+        // wobble would masquerade as one.
+        let sameDay = [
+            WeightTrend.Point(date: day0, weightLb: 199.2),
+            WeightTrend.Point(date: day0.addingTimeInterval(13 * 3_600), weightLb: 200.6),
+        ]
+        #expect(WeightTrend.Change.actualLb(
+            history: sameDay, from: day0, to: day0.addingTimeInterval(86_400)
+        ) == nil)
     }
 
-    @Test func noiseBarelyMovesTheSmoothedChange() {
+    @Test func noiseBarelyMovesTheFittedChange() {
         // ±0.6 lb sawtooth around a flat 200: raw endpoints could differ
-        // by 1.2 lb, but with both window endpoints fully smoothed (7 days
-        // of trailing history each) the change stays near zero.
+        // by 1.2 lb, but the fit reads through the wobble to ~zero.
         let history = (0...20).map { point(day: $0, lb: 200 + ($0 % 2 == 0 ? 0.6 : -0.6)) }
         let change = WeightTrend.Change.actualLb(
             history: history,

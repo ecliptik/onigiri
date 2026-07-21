@@ -135,10 +135,13 @@ public extension DailyPlanLoader {
         health: any HealthPlanReading = HealthKitService()
     ) async -> State {
         let state = await computeState(goal: goal, health: health)
-        // Every plan load stamps today's target, so history keeps being
+        // Every plan load stamps today's rule, so history keeps being
         // judged by the goal in force that day even after the goal (or
         // the weight behind it) changes.
-        DeficitTargetHistory.recordToday(targetKcal: state.deficitTargetKcal)
+        DeficitTargetHistory.recordToday(
+            targetKcal: state.deficitTargetKcal,
+            isMaintenance: goal?.isMaintenance ?? false
+        )
         return state
     }
 

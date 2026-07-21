@@ -10,6 +10,9 @@ final class CalendarModel {
     private(set) var streak = 0
     private(set) var bestStreak = 0
     private(set) var targetDeficitKcal: Double?
+    /// Whether the current goal is maintenance — days without a snapshot
+    /// fall back to the current rule, so the fallback needs the mode.
+    private(set) var isMaintenance = false
     private(set) var totalsByDay: [Date: DayEnergyTotals] = [:]
     /// Full summary (sodium, water) for the selected day's detail card.
     private(set) var selectedDaySummary: DailyEnergySummary?
@@ -48,9 +51,10 @@ final class CalendarModel {
     }
 
     func refresh(goal: SyncedGoal?, forceWeights: Bool = false) async {
-        // Today's plan supplies the deficit target the calendar judges against.
+        // Today's plan supplies the rule the calendar judges against.
         let plan = await DailyPlanLoader.load(goal: goal)
         targetDeficitKcal = plan.deficitTargetKcal
+        isMaintenance = goal?.isMaintenance ?? false
         let totals = (try? await health.dailyEnergyTotals()) ?? []
         let calendar = Calendar.current
         windowStart = calendar.date(byAdding: .day, value: -92, to: calendar.startOfDay(for: .now))
@@ -99,13 +103,13 @@ final class CalendarModel {
     }
 
     /// Badges are awarded when a day completes, judged by that day's
-    /// snapshotted target (falling back to today's), and days under the
+    /// snapshotted rule (falling back to today's), and days under the
     /// untracked threshold never qualify.
     private func recomputeBadges() {
         earned = StreakCalendar.earnedDays(
             totals: Array(totalsByDay.values),
-            targetDeficitKcal: targetDeficitKcal,
-            targetsByDay: DeficitTargetHistory.targetsByDay(),
+            fallbackRule: .current(targetKcal: targetDeficitKcal, isMaintenance: isMaintenance),
+            rulesByDay: DeficitTargetHistory.rulesByDay(),
             untrackedBelowKcal: SharedStore.untrackedBelowKcal
         )
         streak = StreakCalendar.currentStreak(earned: earned)

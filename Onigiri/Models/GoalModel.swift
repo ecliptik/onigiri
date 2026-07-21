@@ -55,7 +55,6 @@ final class GoalModel {
     func deriveTrendStats(targetWeightLb: Double?, isMaintenance: Bool) {
         trend = GoalTrendStats.derive(
             weightHistory: weightHistory,
-            smoothedHistory: smoothedHistory,
             dailyTotals: dailyTotals,
             targetWeightLb: targetWeightLb,
             isMaintenance: isMaintenance

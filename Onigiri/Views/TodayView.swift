@@ -529,8 +529,10 @@ struct TodayView: View {
             if let goal = goals.first, let plan = plan(for: goal) {
                 DailyGoalCard(
                     bankedKcal: max(0, -model.summary.balanceKcal),
+                    deficitKcal: -model.summary.balanceKcal,
                     intakeKcal: model.summary.intakeKcal,
                     plan: plan,
+                    isMaintenanceMode: goal.isMaintenance,
                     showsRemaining: model.isToday,
                     weeklyTrendLb: model.weeklyTrendLb
                 )
@@ -1553,8 +1555,15 @@ private struct DayJumpSheet: View {
 
 struct DailyGoalCard: View, Equatable {
     let bankedKcal: Double
+    /// Signed day deficit (negative = surplus) — the band judgment
+    /// needs the sign that the display-clamped `bankedKcal` drops.
+    let deficitKcal: Double
     let intakeKcal: Double
     let plan: CalorieBudget.Plan
+    /// The goal's ACTUAL mode — `isMaintenance` below is a zero-deficit
+    /// presentation heuristic that a met lose goal also trips, and the
+    /// two judge past days differently (band vs any-deficit).
+    let isMaintenanceMode: Bool
     var showsRemaining = true
     /// Actual scale movement over the past week (negative = down);
     /// nil when Health has too few weigh-ins to say.
@@ -1573,8 +1582,10 @@ struct DailyGoalCard: View, Equatable {
     /// updates the card independently of this equality.
     static func == (lhs: DailyGoalCard, rhs: DailyGoalCard) -> Bool {
         lhs.bankedKcal == rhs.bankedKcal
+            && lhs.deficitKcal == rhs.deficitKcal
             && lhs.intakeKcal == rhs.intakeKcal
             && lhs.plan == rhs.plan
+            && lhs.isMaintenanceMode == rhs.isMaintenanceMode
             && lhs.showsRemaining == rhs.showsRemaining
             && lhs.weeklyTrendLb == rhs.weeklyTrendLb
     }
@@ -1592,6 +1603,16 @@ struct DailyGoalCard: View, Equatable {
     private var remainingKcal: Double { plan.dailyBudget - intakeKcal }
     /// `max(0, -0.0)` keeps IEEE negative zero, which formats as "-0".
     private var displayBankedKcal: Double { bankedKcal == 0 ? 0 : bankedKcal }
+
+    /// The past-day earned look, matching StreakCalendar's judgment:
+    /// maintenance runs the band rule on the signed deficit; a met lose
+    /// goal (deficit target 0, snapshot 0) stays any-deficit; a live
+    /// lose goal wants the full target banked.
+    private var dayEarnedLook: Bool {
+        if isMaintenanceMode { return abs(deficitKcal) <= StreakCalendar.maintenanceBandKcal }
+        if plan.requiredDailyDeficit <= 0 { return deficitKcal > 0 }
+        return progress >= 1
+    }
 
     var body: some View {
         HStack(spacing: 16) {
@@ -1627,13 +1648,15 @@ struct DailyGoalCard: View, Equatable {
                             .font(.subheadline)
                             .foregroundStyle(.orange)
                     }
-                } else if isMaintenance ? bankedKcal > 0 : progress >= 1 {
+                } else if dayEarnedLook {
                     Text("\(SharedStore.rewardEmoji(for: rewardIcon)) earned")
                         .font(.subheadline)
                         .foregroundStyle(.green)
                 } else {
                     // An untracked day isn't a failed day.
-                    Text(intakeKcal == 0 ? "nothing logged" : "goal not met")
+                    Text(intakeKcal == 0
+                         ? "nothing logged"
+                         : (isMaintenanceMode ? "off budget" : "goal not met"))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

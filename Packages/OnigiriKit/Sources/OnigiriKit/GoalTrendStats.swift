@@ -15,32 +15,43 @@ public struct GoalTrendStats: Equatable, Sendable {
     /// least-squares fit over the last three weeks of RAW weigh-ins
     /// (`WeightTrend.recencyWeightedFit`), so a diet started last week
     /// outweighs the flat weeks before it and twice-a-day weighers get
-    /// the same window as once-a-day ones. nil without a target, a
-    /// fitted current weight above the target, a meaningful downward
-    /// slope, weigh-ins on 3+ days spanning a full week, or when the
-    /// answer is over three years out (a projection that far is noise,
-    /// not motivation).
+    /// the same window as once-a-day ones. nil in maintenance, without
+    /// a target, a fitted current weight above the target, a meaningful
+    /// downward slope, weigh-ins on 3+ days spanning a full week, or
+    /// when the answer is over three years out (a projection that far
+    /// is noise, not motivation).
     public let projectedDate: Date?
-    /// Weigh-ins (and the target, when losing) padded by 2 lb.
+    /// Maintenance's counterpart to the projection: the same fit's
+    /// slope as lb/week, signed (negative = losing). nil outside
+    /// maintenance or under the same weigh-in-span gate.
+    public let driftLbPerWeek: Double?
+    /// Weigh-ins (and the target/anchor line, when one is set) padded
+    /// by 2 lb.
     public let chartYDomain: ClosedRange<Double>
 
+    /// |drift| below this reads "holding steady" rather than a trend —
+    /// under the scale's own noise floor for a week-scale readout.
+    public static let steadyDriftThresholdLbPerWeek = 0.15
+
     public static let empty = GoalTrendStats(
-        predicted30Lb: nil, actual30Lb: nil, projectedDate: nil, chartYDomain: 0...1
+        predicted30Lb: nil, actual30Lb: nil, projectedDate: nil,
+        driftLbPerWeek: nil, chartYDomain: 0...1
     )
 
     public init(
         predicted30Lb: Double?, actual30Lb: Double?,
-        projectedDate: Date?, chartYDomain: ClosedRange<Double>
+        projectedDate: Date?, driftLbPerWeek: Double?,
+        chartYDomain: ClosedRange<Double>
     ) {
         self.predicted30Lb = predicted30Lb
         self.actual30Lb = actual30Lb
         self.projectedDate = projectedDate
+        self.driftLbPerWeek = driftLbPerWeek
         self.chartYDomain = chartYDomain
     }
 
     public static func derive(
         weightHistory: [WeightTrend.Point],
-        smoothedHistory: [WeightTrend.Point],
         dailyTotals: [DayEnergyTotals],
         targetWeightLb: Double?,
         isMaintenance: Bool,
@@ -55,25 +66,32 @@ public struct GoalTrendStats: Equatable, Sendable {
         let predicted = deficits.isEmpty
             ? nil
             : WeightTrend.Change.predictedLb(totalDeficitKcal: deficits.reduce(0, +))
-        let actual = WeightTrend.Change.actualLb(smoothed: smoothedHistory, from: thirtyDaysAgo, to: now)
+        let actual = WeightTrend.Change.actualLb(history: weightHistory, from: thirtyDaysAgo, to: now)
+
+        // One fit powers both modes: lose projects a finish date from
+        // it, maintenance reads it as drift.
+        let trendStart = calendar.date(byAdding: .day, value: -21, to: now)
+        let recent = trendStart.map { start in weightHistory.filter { $0.date >= start } } ?? []
+        let trendFit = hasProjectableSpan(recent, calendar: calendar)
+            ? WeightTrend.recencyWeightedFit(recent, reference: now)
+            : nil
 
         var projected: Date?
-        if let target = targetWeightLb,
-           let trendStart = calendar.date(byAdding: .day, value: -21, to: now) {
-            let recent = weightHistory.filter { $0.date >= trendStart }
-            if hasProjectableSpan(recent, calendar: calendar),
-               let fit = WeightTrend.recencyWeightedFit(recent, reference: now),
-               fit.currentLb > target,
-               fit.slopeLbPerDay < -0.01 {
-                let days = (fit.currentLb - target) / -fit.slopeLbPerDay
-                if days < 365 * 3 {
-                    projected = calendar.date(byAdding: .day, value: Int(days.rounded(.up)), to: now)
-                }
+        var drift: Double?
+        if isMaintenance {
+            drift = trendFit.map { $0.slopeLbPerDay * 7 }
+        } else if let target = targetWeightLb, let fit = trendFit,
+                  fit.currentLb > target, fit.slopeLbPerDay < -0.01 {
+            let days = (fit.currentLb - target) / -fit.slopeLbPerDay
+            if days < 365 * 3 {
+                projected = calendar.date(byAdding: .day, value: Int(days.rounded(.up)), to: now)
             }
         }
 
-        let weights = weightHistory.map(\.weightLb)
-            + (isMaintenance ? [] : [targetWeightLb].compactMap(\.self))
+        // The target line (lose) or hold-near anchor (maintenance)
+        // belongs in the domain whenever it's drawn; 0 means no anchor.
+        let anchor = (targetWeightLb ?? 0) > 0 ? targetWeightLb : nil
+        let weights = weightHistory.map(\.weightLb) + [anchor].compactMap(\.self)
         let domain: ClosedRange<Double>
         if let lo = weights.min(), let hi = weights.max() {
             domain = (lo - 2)...(hi + 2)
@@ -82,7 +100,7 @@ public struct GoalTrendStats: Equatable, Sendable {
         }
         return GoalTrendStats(
             predicted30Lb: predicted, actual30Lb: actual,
-            projectedDate: projected, chartYDomain: domain
+            projectedDate: projected, driftLbPerWeek: drift, chartYDomain: domain
         )
     }
 

@@ -15,8 +15,37 @@ public struct DayEnergyTotals: Sendable, Equatable {
     public var deficitKcal: Double { burnKcal - intakeKcal }
 }
 
+/// How a completed day is judged for the badge: losing measures the
+/// deficit against that day's target, no-goal celebrates any deficit,
+/// and maintenance scores landing near even — adherence, not
+/// restriction (a big under-eat day deliberately does NOT earn).
+public enum DayBadgeRule: Equatable, Sendable {
+    case deficitTarget(Double)
+    case anyDeficit
+    case maintenanceBand
+
+    /// The rule in force right now, from the current plan/mode.
+    public static func current(targetKcal: Double?, isMaintenance: Bool) -> DayBadgeRule {
+        if isMaintenance { return .maintenanceBand }
+        if let targetKcal, targetKcal > 0 { return .deficitTarget(targetKcal) }
+        return .anyDeficit
+    }
+
+    public func met(deficitKcal: Double) -> Bool {
+        switch self {
+        case .deficitTarget(let target): deficitKcal >= target
+        case .anyDeficit: deficitKcal > 0
+        case .maintenanceBand: abs(deficitKcal) <= StreakCalendar.maintenanceBandKcal
+        }
+    }
+}
+
 /// The gamification rules: which days earned an onigiri, and the streak.
 public enum StreakCalendar {
+    /// Maintenance badge tolerance: the day lands within this many kcal
+    /// of even (|burn − intake|).
+    public static let maintenanceBandKcal = 100.0
+
     /// A day counts as tracked when enough food was logged to trust its
     /// numbers. Below the threshold it's a missed day: streak-breaking,
     /// and excluded from the month's totals (sparse early-adoption days
@@ -25,18 +54,19 @@ public enum StreakCalendar {
         day.intakeKcal > 0 && day.intakeKcal >= untrackedBelowKcal
     }
 
-    /// A day earns an onigiri when it was tracked and the deficit met the
-    /// target — or showed any deficit at all when no goal is set. The
-    /// badge is awarded only once the day COMPLETES: a live "earned" at
-    /// breakfast (trivially at deficit) read as a broken meter.
+    /// A day earns an onigiri when it was tracked and its `DayBadgeRule`
+    /// was met. The badge is awarded only once the day COMPLETES: a live
+    /// "earned" at breakfast (trivially at deficit) read as a broken
+    /// meter.
     ///
-    /// `targetsByDay` (start-of-day keyed) judges each day by the target
-    /// in force THAT day (a snapshot of 0 means the no-goal any-deficit
-    /// rule); days without a snapshot fall back to `targetDeficitKcal`.
+    /// `rulesByDay` (start-of-day keyed, from
+    /// `DeficitTargetHistory.rulesByDay()`) judges each day by the rule
+    /// in force THAT day; days without a snapshot fall back to
+    /// `fallbackRule` (the current one).
     public static func earnedDays(
         totals: [DayEnergyTotals],
-        targetDeficitKcal: Double?,
-        targetsByDay: [Date: Double] = [:],
+        fallbackRule: DayBadgeRule,
+        rulesByDay: [Date: DayBadgeRule] = [:],
         untrackedBelowKcal: Double = 0,
         today: Date = .now,
         calendar: Calendar = .current
@@ -46,14 +76,8 @@ public enum StreakCalendar {
                   day.day < today,
                   isTracked(day, untrackedBelowKcal: untrackedBelowKcal) else { return nil }
             let dayStart = calendar.startOfDay(for: day.day)
-            let target = targetsByDay[dayStart] ?? targetDeficitKcal
-            let met: Bool
-            if let target, target > 0 {
-                met = day.deficitKcal >= target
-            } else {
-                met = day.deficitKcal > 0
-            }
-            return met ? dayStart : nil
+            let rule = rulesByDay[dayStart] ?? fallbackRule
+            return rule.met(deficitKcal: day.deficitKcal) ? dayStart : nil
         })
     }
 

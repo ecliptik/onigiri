@@ -19,7 +19,7 @@ struct StreakCalendarTests {
             totals(-2, intake: 2000, burn: 2300),  // deficit 300 < 600 → no
             totals(-1, intake: 0, burn: 2300),     // nothing logged → no credit
         ]
-        let earned = StreakCalendar.earnedDays(totals: history, targetDeficitKcal: 600)
+        let earned = StreakCalendar.earnedDays(totals: history, fallbackRule: .deficitTarget(600))
         #expect(earned == [day(-3)])
     }
 
@@ -28,8 +28,20 @@ struct StreakCalendarTests {
             totals(-2, intake: 1500, burn: 1600),  // deficit 100 → earned
             totals(-1, intake: 1700, burn: 1600),  // surplus → no
         ]
-        let earned = StreakCalendar.earnedDays(totals: history, targetDeficitKcal: nil)
+        let earned = StreakCalendar.earnedDays(totals: history, fallbackRule: .anyDeficit)
         #expect(earned == [day(-2)])
+    }
+
+    @Test func maintenanceBandScoresAdherenceNotRestriction() {
+        let history = [
+            totals(-5, intake: 2250, burn: 2300),  // 50 under → earned
+            totals(-4, intake: 2380, burn: 2300),  // 80 over → earned
+            totals(-3, intake: 2150, burn: 2300),  // 150 under → NOT earned
+            totals(-2, intake: 2450, burn: 2300),  // 150 over → no
+            totals(-1, intake: 2200, burn: 2300),  // exactly at the band edge → earned
+        ]
+        let earned = StreakCalendar.earnedDays(totals: history, fallbackRule: .maintenanceBand)
+        #expect(earned == [day(-5), day(-4), day(-1)])
     }
 
     @Test func todayNeverEarnsMidDay() {
@@ -39,25 +51,31 @@ struct StreakCalendarTests {
             totals(0, intake: 1500, burn: 2400),
             totals(-1, intake: 1500, burn: 2400),
         ]
-        let earned = StreakCalendar.earnedDays(totals: history, targetDeficitKcal: 600)
+        let earned = StreakCalendar.earnedDays(totals: history, fallbackRule: .deficitTarget(600))
         #expect(earned == [day(-1)])
     }
 
-    @Test func perDaySnapshotTargetsBeatTheCurrentTarget() {
+    @Test func perDaySnapshotRulesBeatTheCurrentRule() {
         let history = [
+            totals(-4, intake: 1500, burn: 2300),  // deficit 800
             totals(-3, intake: 1500, burn: 2300),  // deficit 800
-            totals(-2, intake: 1500, burn: 2300),  // deficit 800
-            totals(-1, intake: 1900, burn: 2300),  // deficit 400
+            totals(-2, intake: 1900, burn: 2300),  // deficit 400
+            totals(-1, intake: 2250, burn: 2300),  // deficit 50
         ]
-        // Today's target is a demanding 900 — but the days were lived
-        // under snapshotted targets of 600 (met), none (falls back to
-        // 900: missed), and 0 = the no-goal any-deficit rule (met).
+        // Today's rule is a demanding 900 — but the days were lived
+        // under snapshots: 600 (met), none (falls back to 900: missed),
+        // the no-goal any-deficit rule (met), and a maintenance day
+        // whose near-even 50 earns under the band.
         let earned = StreakCalendar.earnedDays(
             totals: history,
-            targetDeficitKcal: 900,
-            targetsByDay: [day(-3): 600, day(-1): 0]
+            fallbackRule: .deficitTarget(900),
+            rulesByDay: [
+                day(-4): .deficitTarget(600),
+                day(-2): .anyDeficit,
+                day(-1): .maintenanceBand,
+            ]
         )
-        #expect(earned == [day(-3), day(-1)])
+        #expect(earned == [day(-4), day(-2), day(-1)])
     }
 
     @Test func untrackedThresholdExcludesSparseDays() {
@@ -66,7 +84,7 @@ struct StreakCalendarTests {
             totals(-1, intake: 1500, burn: 2300),  // tracked, deficit 800 → earned
         ]
         let earned = StreakCalendar.earnedDays(
-            totals: history, targetDeficitKcal: 600, untrackedBelowKcal: 1000
+            totals: history, fallbackRule: .deficitTarget(600), untrackedBelowKcal: 1000
         )
         #expect(earned == [day(-1)])
         #expect(!StreakCalendar.isTracked(history[0], untrackedBelowKcal: 1000))

@@ -55,12 +55,16 @@ struct MonthStatsProvider: TimelineProvider {
         let calendar = Calendar.current
         let month = calendar.date(from: calendar.dateComponents([.year, .month], from: anchor)) ?? anchor
         let needsSetup = await PlanCache.needsSetup()
-        let state = await PlanCache.state(goal: WatchSync.loadGoal())
+        let goal = WatchSync.loadGoal()
+        let state = await PlanCache.state(goal: goal)
         let totals = await PlanCache.energyTotals()
         let earned = StreakCalendar.earnedDays(
             totals: totals,
-            targetDeficitKcal: state.deficitTargetKcal,
-            targetsByDay: DeficitTargetHistory.targetsByDay(),
+            fallbackRule: .current(
+                targetKcal: state.deficitTargetKcal,
+                isMaintenance: goal?.isMaintenance ?? false
+            ),
+            rulesByDay: DeficitTargetHistory.rulesByDay(),
             untrackedBelowKcal: SharedStore.untrackedBelowKcal,
             today: anchor
         )

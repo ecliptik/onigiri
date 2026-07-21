@@ -30,7 +30,7 @@ struct GoalTrendStatsTests {
         let totals = (0..<10).map { DayEnergyTotals(day: Self.day(-$0), intakeKcal: 2000, burnKcal: 2350) }
             + [DayEnergyTotals(day: Self.day(-40), intakeKcal: 0, burnKcal: 99000)]
         let stats = GoalTrendStats.derive(
-            weightHistory: [], smoothedHistory: [], dailyTotals: totals,
+            weightHistory: [], dailyTotals: totals,
             targetWeightLb: nil, isMaintenance: false,
             calendar: Self.cal, now: Self.now
         )
@@ -41,7 +41,7 @@ struct GoalTrendStatsTests {
 
     @Test func noLoggedDaysMeansNoPrediction() {
         let stats = GoalTrendStats.derive(
-            weightHistory: [], smoothedHistory: [],
+            weightHistory: [],
             dailyTotals: [DayEnergyTotals(day: Self.day(-45), intakeKcal: 2000, burnKcal: 2500)],
             targetWeightLb: nil, isMaintenance: false,
             calendar: Self.cal, now: Self.now
@@ -53,7 +53,7 @@ struct GoalTrendStatsTests {
         // 0.2 lb/day down from 200: 10 lb above the 190 target ≈ 50 days.
         let history = Self.history(days: 30, startLb: 205.8, slope: -0.2)
         let stats = GoalTrendStats.derive(
-            weightHistory: history, smoothedHistory: history, dailyTotals: [],
+            weightHistory: history, dailyTotals: [],
             targetWeightLb: 190, isMaintenance: false,
             calendar: Self.cal, now: Self.now
         )
@@ -65,7 +65,7 @@ struct GoalTrendStatsTests {
     @Test func flatTrendProjectsNothing() {
         let history = Self.history(days: 30, startLb: 200, slope: 0)
         let stats = GoalTrendStats.derive(
-            weightHistory: history, smoothedHistory: history, dailyTotals: [],
+            weightHistory: history, dailyTotals: [],
             targetWeightLb: 190, isMaintenance: false,
             calendar: Self.cal, now: Self.now
         )
@@ -76,7 +76,7 @@ struct GoalTrendStatsTests {
         // Barely-meaningful slope, 50 lb to go: thousands of days out.
         let history = Self.history(days: 30, startLb: 240.6, slope: -0.02)
         let stats = GoalTrendStats.derive(
-            weightHistory: history, smoothedHistory: history, dailyTotals: [],
+            weightHistory: history, dailyTotals: [],
             targetWeightLb: 190, isMaintenance: false,
             calendar: Self.cal, now: Self.now
         )
@@ -105,7 +105,6 @@ struct GoalTrendStatsTests {
         }
         let stats = GoalTrendStats.derive(
             weightHistory: history,
-            smoothedHistory: WeightTrend.movingAverage(history),
             dailyTotals: [],
             targetWeightLb: 210, isMaintenance: false,
             calendar: Self.cal, now: Self.now
@@ -121,7 +120,7 @@ struct GoalTrendStatsTests {
             WeightTrend.Point(date: Self.day(-7 * (3 - $0)), weightLb: 221 - Double($0))
         }
         let stats = GoalTrendStats.derive(
-            weightHistory: history, smoothedHistory: history, dailyTotals: [],
+            weightHistory: history, dailyTotals: [],
             targetWeightLb: 210, isMaintenance: false,
             calendar: Self.cal, now: Self.now
         )
@@ -139,7 +138,7 @@ struct GoalTrendStatsTests {
             WeightTrend.Point(date: Self.at(0, hour: 7), weightLb: 219),
         ]
         let stats = GoalTrendStats.derive(
-            weightHistory: history, smoothedHistory: history, dailyTotals: [],
+            weightHistory: history, dailyTotals: [],
             targetWeightLb: 210, isMaintenance: false,
             calendar: Self.cal, now: Self.now
         )
@@ -153,7 +152,7 @@ struct GoalTrendStatsTests {
             WeightTrend.Point(date: Self.day($0 - 5), weightLb: 220 - 0.3 * Double($0))
         }
         let stats = GoalTrendStats.derive(
-            weightHistory: history, smoothedHistory: history, dailyTotals: [],
+            weightHistory: history, dailyTotals: [],
             targetWeightLb: 210, isMaintenance: false,
             calendar: Self.cal, now: Self.now
         )
@@ -166,24 +165,81 @@ struct GoalTrendStatsTests {
             WeightTrend.Point(date: Self.day(0), weightLb: 198),
         ]
         let losing = GoalTrendStats.derive(
-            weightHistory: history, smoothedHistory: history, dailyTotals: [],
+            weightHistory: history, dailyTotals: [],
             targetWeightLb: 190, isMaintenance: false,
             calendar: Self.cal, now: Self.now
         )
         #expect(losing.chartYDomain == 188...202)
-        // Maintenance draws no target line — the stale target must not
-        // stretch the domain.
-        let maintaining = GoalTrendStats.derive(
-            weightHistory: history, smoothedHistory: history, dailyTotals: [],
+        // Maintenance draws the hold-near anchor line, so a set anchor
+        // stretches the domain exactly like a lose target…
+        let anchored = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
             targetWeightLb: 190, isMaintenance: true,
             calendar: Self.cal, now: Self.now
         )
-        #expect(maintaining.chartYDomain == 196...202)
+        #expect(anchored.chartYDomain == 188...202)
+        // …while the 0 "no anchor parked" placeholder must not drag the
+        // domain to zero.
+        let anchorless = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: 0, isMaintenance: true,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(anchorless.chartYDomain == 196...202)
+    }
+
+    @Test func maintenanceReadsDriftInsteadOfProjecting() throws {
+        // The same steady loss that projects a date in lose mode reads
+        // as drift in maintenance — and never a projection, even with
+        // the parked target still on the record.
+        let history = Self.history(days: 30, startLb: 205.8, slope: -0.2)
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: 190, isMaintenance: true,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(stats.projectedDate == nil)
+        let drift = try #require(stats.driftLbPerWeek)
+        #expect(abs(drift - (-1.4)) < 0.05)
+    }
+
+    @Test func loseModeReadsNoDrift() {
+        let history = Self.history(days: 30, startLb: 205.8, slope: -0.2)
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: 190, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(stats.driftLbPerWeek == nil)
+    }
+
+    @Test func flatMaintenanceReadsSteady() throws {
+        let history = Self.history(days: 30, startLb: 200, slope: 0)
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: nil, isMaintenance: true,
+            calendar: Self.cal, now: Self.now
+        )
+        let drift = try #require(stats.driftLbPerWeek)
+        #expect(abs(drift) < GoalTrendStats.steadyDriftThresholdLbPerWeek)
+    }
+
+    @Test func driftGatesOnYoungDataLikeTheProjection() {
+        // Six days of clear movement — same span gate as lose mode.
+        let history = (0..<6).map {
+            WeightTrend.Point(date: Self.day($0 - 5), weightLb: 200 + 0.3 * Double($0))
+        }
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: nil, isMaintenance: true,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(stats.driftLbPerWeek == nil)
     }
 
     @Test func emptyDataFallsBackToUnitDomain() {
         let stats = GoalTrendStats.derive(
-            weightHistory: [], smoothedHistory: [], dailyTotals: [],
+            weightHistory: [], dailyTotals: [],
             targetWeightLb: nil, isMaintenance: true,
             calendar: Self.cal, now: Self.now
         )

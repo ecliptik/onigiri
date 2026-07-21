@@ -57,31 +57,27 @@ public enum WeightTrend {
             -totalDeficitKcal / kcalPerLb
         }
 
-        /// Scale change (lb) across the window, read from the 7-day moving
-        /// average so single noisy weigh-ins don't swing it: last smoothed
-        /// point in the window minus the first. Nil until the window holds
-        /// two smoothed points on different days.
+        /// Scale change (lb) across the window: an unweighted linear fit
+        /// over the RAW weigh-ins inside it, read between the first and
+        /// last reading's dates. The fit absorbs single noisy weigh-ins
+        /// the way the old smoothed-endpoint read did, without its lag —
+        /// the trailing average's endpoints under-reported a young
+        /// history's movement by roughly half (the same ramp-in artifact
+        /// the goal projection had). It never extrapolates past the data,
+        /// so a month-in-progress reads month-to-date, not a guess.
+        /// Nil until the window holds readings at least a day apart.
         public static func actualLb(
             history: [Point],
             from start: Date,
             to end: Date
         ) -> Double? {
-            actualLb(smoothed: movingAverage(history, windowDays: 7), from: start, to: end)
-        }
-
-        /// The same read over ALREADY-smoothed points — for callers that
-        /// hold the 7-day moving average (GoalTrendStats receives it from
-        /// GoalModel); re-smoothing the raw history here was a redundant
-        /// O(n) pass on every goal-form keystroke.
-        public static func actualLb(
-            smoothed: [Point],
-            from start: Date,
-            to end: Date
-        ) -> Double? {
-            let windowed = smoothed.filter { $0.date >= start && $0.date <= end }
-            guard let first = windowed.first, let last = windowed.last,
-                  first.date < last.date else { return nil }
-            return last.weightLb - first.weightLb
+            let windowed = history.filter { $0.date >= start && $0.date <= end }
+            guard let first = windowed.first, let last = windowed.last else { return nil }
+            let spanDays = last.date.timeIntervalSince(first.date) / 86400
+            guard spanDays >= 1,
+                  let fit = WeightTrend.fit(windowed, reference: last.date, lambda: 0)
+            else { return nil }
+            return fit.slopeLbPerDay * spanDays
         }
     }
 
@@ -117,7 +113,14 @@ public enum WeightTrend {
         reference: Date,
         halfLifeDays: Double = 7
     ) -> LinearFit? {
-        let lambda = log(2.0) / (halfLifeDays * 86400)
+        fit(points, reference: reference, lambda: log(2.0) / (halfLifeDays * 86400))
+    }
+
+    /// The weighted-least-squares core: lambda 0 is a plain (unweighted)
+    /// fit — what window-change reads want ("what happened over the
+    /// window"), where the projection wants recency ("what's the trend
+    /// now").
+    static func fit(_ points: [Point], reference: Date, lambda: Double) -> LinearFit? {
         var sumW = 0.0, sumX = 0.0, sumY = 0.0, sumXX = 0.0, sumXY = 0.0
         for point in points {
             let age = point.date.timeIntervalSince(reference) // ≤ 0 in the past

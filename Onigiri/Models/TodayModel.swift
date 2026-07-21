@@ -149,11 +149,11 @@ final class TodayModel {
         // Independent reads — run them concurrently.
         async let weightRead = health.latestBodyMassLb()
         async let burnRead = health.averageDailyBurnKcal()
-        async let historyRead = health.bodyMassHistory(days: 21)
+        async let historyRead = health.bodyMassHistory(days: 7)
         currentWeightLb = (try? await weightRead) ?? currentWeightLb
         averageBurnKcal = (try? await burnRead) ?? averageBurnKcal
-        // 21 days of history so the 7-day moving average has runway
-        // before the week window it's read over.
+        // The week's change comes from a linear fit over the raw
+        // weigh-ins in the window — no smoothing, so no extra runway.
         if let history = try? await historyRead {
             weeklyTrendLb = WeightTrend.Change.actualLb(
                 history: history,

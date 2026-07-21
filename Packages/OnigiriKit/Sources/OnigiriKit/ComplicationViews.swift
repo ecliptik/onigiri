@@ -215,14 +215,18 @@ public enum StreakLoader {
     /// post-generation log pushes a reload that regenerates both.
     public static func loadWithMidnight(_ midnight: Date) async -> (streak: Int, atMidnight: Int, needsSetup: Bool) {
         let needsSetup = await PlanCache.needsSetup()
-        let state = await PlanCache.state(goal: WatchSync.loadGoal())
+        let goal = WatchSync.loadGoal()
+        let state = await PlanCache.state(goal: goal)
         let totals = await PlanCache.energyTotals()
-        let targets = DeficitTargetHistory.targetsByDay()
+        let rules = DeficitTargetHistory.rulesByDay()
+        let fallback = DayBadgeRule.current(
+            targetKcal: state.deficitTargetKcal, isMaintenance: goal?.isMaintenance ?? false
+        )
         func streak(asOf date: Date) -> Int {
             let earned = StreakCalendar.earnedDays(
                 totals: totals,
-                targetDeficitKcal: state.deficitTargetKcal,
-                targetsByDay: targets,
+                fallbackRule: fallback,
+                rulesByDay: rules,
                 untrackedBelowKcal: SharedStore.untrackedBelowKcal,
                 today: date
             )

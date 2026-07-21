@@ -18,7 +18,11 @@ struct GoalView: View {
     @State private var manualWeightLb: Double?
     @State private var loaded = false
     @State private var confirmingGoalRemoval = false
-    @FocusState private var weightFieldFocused: Bool
+    /// Which weight field is editing — an enum (not a Bool) so moving
+    /// directly between the two fields still fires the select-all
+    /// onChange below.
+    private enum WeightField: Hashable { case target, current }
+    @FocusState private var focusedField: WeightField?
 
     /// HealthKit reads and derived chart stats live in the model (the
     /// TodayModel shape) — the view keeps only form state.
@@ -39,12 +43,43 @@ struct GoalView: View {
         guard validation == .valid else { return false }
         guard let goal = goals.first else { return true }
         if (goal.mode ?? GoalMode.lose) != mode { return true }
-        // In maintenance the target knobs are hidden — their staleness
-        // isn't a difference the user can see or intend.
-        if isMaintenance { return false }
+        if isMaintenance {
+            // The hold-near anchor is maintenance's one knob; an empty
+            // field means "keep the stored anchor", not a change.
+            return targetWeightLb.map { $0 != goal.targetWeightLb } ?? false
+        }
         return goal.targetWeightLb != targetWeightLb
             || !Calendar.current.isDate(goal.targetDate, inSameDayAs: targetDate)
             || (model.healthWeightLb == nil && goal.fallbackCurrentWeightLb != manualWeightLb)
+    }
+
+    /// The form differs from the stored goal at all, validity aside —
+    /// isDirty gates Save, but Cancel must appear even for edits Save
+    /// would refuse (an over-current target, a cleared field).
+    private var hasEdits: Bool {
+        guard let goal = goals.first else {
+            return targetWeightLb != nil || manualWeightLb != nil || mode != GoalMode.lose
+        }
+        if (goal.mode ?? GoalMode.lose) != mode { return true }
+        let storedTarget: Double? = goal.targetWeightLb > 0 ? goal.targetWeightLb : nil
+        if isMaintenance {
+            return targetWeightLb.map { $0 != storedTarget } ?? false
+        }
+        return storedTarget != targetWeightLb
+            || !Calendar.current.isDate(goal.targetDate, inSameDayAs: targetDate)
+            || (model.healthWeightLb == nil && goal.fallbackCurrentWeightLb != manualWeightLb)
+    }
+
+    /// The saved lose goal is met: the scale reached the stored target,
+    /// and the form still shows that target (editing the field into
+    /// invalidity keeps the plain warning instead of the celebration).
+    private var goalReached: Bool {
+        guard !isMaintenance, let goal = goals.first,
+              (goal.mode ?? GoalMode.lose) == GoalMode.lose,
+              let current = currentWeightLb,
+              targetWeightLb == goal.targetWeightLb
+        else { return false }
+        return current <= goal.targetWeightLb
     }
 
     private var plan: CalorieBudget.Plan? {
@@ -84,7 +119,7 @@ struct GoalView: View {
                     .listRowInsets(EdgeInsets())
                 } footer: {
                     if isMaintenance {
-                        Text("To hold steady, eat within your average daily burn. Any deficit earns the day's badge.")
+                        Text("To hold steady, eat close to your average daily burn. Landing within \(StreakCalendar.maintenanceBandKcal, format: .number.precision(.fractionLength(0))) kcal of even earns the day's badge.")
                     }
                 }
 
@@ -100,7 +135,7 @@ struct GoalView: View {
                             TextField("0", value: $manualWeightLb, format: .number)
                                 .keyboardType(.decimalPad)
                                 .multilineTextAlignment(.trailing)
-                                .focused($weightFieldFocused)
+                                .focused($focusedField, equals: .current)
                         }
                         Text("No weight in Apple Health yet — enter it here.")
                             .font(.caption)
@@ -109,26 +144,9 @@ struct GoalView: View {
                 }
 
                 if !isMaintenance {
-                    Section("Target") {
-                    LabeledContent("Weight (lb)") {
-                        TextField("0", value: $targetWeightLb, format: .number)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .focused($weightFieldFocused)
-                    }
-                    DatePicker("By date", selection: $targetDate, in: Date.now..., displayedComponents: .date)
-                    // Say WHY the plan is missing and Save is disabled —
-                    // it used to just silently vanish.
-                    if validation == .targetNotBelowCurrent {
-                        Text("Target must be below your current weight.")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    } else if targetWeightLb == nil {
-                        Text("Enter a target weight to set a goal.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    }
+                    targetSection
+                } else {
+                    holdNearSection
                 }
 
                 if let plan {
@@ -202,44 +220,54 @@ struct GoalView: View {
             .navigationTitle("Goal")
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
-                // Confirm in the nav bar like every other form in the app.
+                // Cancel ↔ Save, the same pair as every sheet — the
+                // styled principal "Done" read as belonging to nothing.
+                // Cancel appears once there's anything to back out of
+                // (edits, valid or not, or an open keyboard) and
+                // DISCARDS: it restores the stored goal and drops the
+                // keyboard. Keeping edits while closing the keyboard is
+                // the scroll (interactive dismiss) or Save.
+                if hasEdits || focusedField != nil {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { revertEdits() }
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
                         .keyboardShortcut("s", modifiers: .command)
                         .disabled(!isDirty)
                 }
-                // Decimal pads have no return key; surface a Done while
-                // editing. (The keyboard-accessory toolbar placement doesn't
-                // reliably render on iOS 26, so this lives in the nav bar —
-                // .principal, matching the food form's.)
-                if weightFieldFocused {
-                    ToolbarItem(placement: .principal) {
-                        Button {
-                            weightFieldFocused = false
-                        } label: {
-                            Text("Done")
-                                .fontWeight(.semibold)
-                                .foregroundStyle(Color.onRicePaper)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.ricePaper)
-                    }
-                }
             }
         }
         .task {
             await model.loadIfStale()
-            if !loaded, let goal = goals.first {
-                targetWeightLb = goal.targetWeightLb
-                targetDate = goal.targetDate
-                manualWeightLb = goal.fallbackCurrentWeightLb
-                mode = goal.mode ?? GoalMode.lose
+            if !loaded, goals.first != nil {
+                applyStoredGoal()
                 loaded = true
             }
             deriveTrendStats()
         }
+        .onChange(of: focusedField) {
+            // A tapped weight field starts with its value selected, so
+            // typing replaces instead of appending. sendAction targets
+            // the first responder — exactly the freshly-focused field —
+            // one runloop later, once UIKit has installed it.
+            guard focusedField != nil else { return }
+            DispatchQueue.main.async {
+                UIApplication.shared.sendAction(
+                    #selector(UIResponder.selectAll(_:)), to: nil, from: nil, for: nil
+                )
+            }
+        }
         .onChange(of: targetWeightLb) { deriveTrendStats() }
-        .onChange(of: mode) { deriveTrendStats() }
+        .onChange(of: mode) {
+            // First switch into Maintain offers the current weight as
+            // the hold-near anchor; a parked lose target, if any, wins.
+            if isMaintenance, targetWeightLb == nil {
+                targetWeightLb = currentWeightLb
+            }
+            deriveTrendStats()
+        }
     }
 
     /// The chart stats derive from the model's Health data plus the
@@ -262,6 +290,60 @@ struct GoalView: View {
 
     private func signedLb(_ value: Double) -> String {
         "\(value.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always(includingZero: false)))) lb"
+    }
+
+    // MARK: - Target / hold-near
+
+    /// The weight field both modes share (lose target / hold-near anchor).
+    private var targetWeightField: some View {
+        LabeledContent("Weight (lb)") {
+            TextField("0", value: $targetWeightLb, format: .number)
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+                .focused($focusedField, equals: .target)
+        }
+    }
+
+    private var targetSection: some View {
+        Section("Target") {
+            targetWeightField
+            DatePicker("By date", selection: $targetDate, in: Date.now..., displayedComponents: .date)
+            // Reaching the target is a milestone, not a form error —
+            // celebrate and offer the mode that fits now.
+            if goalReached {
+                Label {
+                    Text("You've reached your target — nice work.")
+                } icon: {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundStyle(.green)
+                }
+                .font(.subheadline)
+                Button("Switch to Maintain") {
+                    mode = GoalMode.maintain
+                    save()
+                }
+            // Say WHY the plan is missing and Save is disabled —
+            // it used to just silently vanish.
+            } else if validation == .targetNotBelowCurrent {
+                Text("Target must be below your current weight.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            } else if targetWeightLb == nil {
+                Text("Enter a target weight to set a goal.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var holdNearSection: some View {
+        Section {
+            targetWeightField
+        } header: {
+            Text("Hold near")
+        } footer: {
+            Text("The chart's reference line. The badge judges eating within your burn, not the scale.")
+        }
     }
 
     // MARK: - Weight trend
@@ -291,12 +373,14 @@ struct GoalView: View {
                         .foregroundStyle(.blue)
                         .interpolationMethod(.catmullRom)
                     }
-                    if !isMaintenance, let target = targetWeightLb {
-                        RuleMark(y: .value("Target", target))
+                    // The lose target or the maintenance hold-near
+                    // anchor — same line, different name.
+                    if let line = targetWeightLb, line > 0 {
+                        RuleMark(y: .value(isMaintenance ? "Hold near" : "Target", line))
                             .foregroundStyle(.green)
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [6, 4]))
                             .annotation(position: .bottom, alignment: .leading) {
-                                Text("Target \(target, format: .number.precision(.fractionLength(0))) lb")
+                                Text("\(isMaintenance ? "Hold near" : "Target") \(line, format: .number.precision(.fractionLength(0))) lb")
                                     .font(.caption2)
                                     .foregroundStyle(.green)
                             }
@@ -311,9 +395,11 @@ struct GoalView: View {
                 .padding(.vertical, 4)
 
                 if isMaintenance {
-                    // No target line in maintenance — the chart is just
-                    // the scale holding (or not).
-                    EmptyView()
+                    // Maintenance's counterpart to the projection line:
+                    // is the scale holding?
+                    if let drift = model.trend.driftLbPerWeek {
+                        driftLabel(drift)
+                    }
                 } else if let projectedDate = model.trend.projectedDate {
                     Label {
                         Text("On this trend, you'll hit your target around \(projectedDate, format: .dateTime.month(.wide).day())")
@@ -322,7 +408,7 @@ struct GoalView: View {
                             .foregroundStyle(.green)
                     }
                     .font(.subheadline)
-                } else if targetWeightLb != nil {
+                } else if targetWeightLb != nil, !goalReached {
                     Text("No steady downward trend yet — a projection appears after a week of weigh-ins trending down.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -333,6 +419,53 @@ struct GoalView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// Copy the stored goal (or a blank slate) into the form fields.
+    private func applyStoredGoal() {
+        if let goal = goals.first {
+            // 0 is the "no anchor parked" placeholder some historic
+            // maintenance saves wrote — surface it as empty.
+            targetWeightLb = goal.targetWeightLb > 0 ? goal.targetWeightLb : nil
+            targetDate = goal.targetDate
+            manualWeightLb = goal.fallbackCurrentWeightLb
+            mode = goal.mode ?? GoalMode.lose
+        } else {
+            targetWeightLb = nil
+            manualWeightLb = nil
+            mode = GoalMode.lose
+            targetDate = Calendar.current.date(byAdding: .day, value: 90, to: .now) ?? .now
+        }
+    }
+
+    /// The Cancel action: back out of un-saved edits and drop the
+    /// keyboard.
+    private func revertEdits() {
+        applyStoredGoal()
+        focusedField = nil
+        deriveTrendStats()
+    }
+
+    /// The maintenance trend readout under the chart: is the scale
+    /// holding? Direction gets its own SF Symbol (flat/down/up), so the
+    /// tint is reinforcement, not the only signal.
+    private func driftLabel(_ drift: Double) -> some View {
+        let steady = abs(drift) < GoalTrendStats.steadyDriftThresholdLbPerWeek
+        return Label {
+            if steady, let anchor = targetWeightLb, anchor > 0 {
+                Text("Holding near \(anchor, format: .number.precision(.fractionLength(0))) lb — steady over the last 3 weeks")
+            } else if steady {
+                Text("Holding steady over the last 3 weeks")
+            } else {
+                Text("Trending \(drift < 0 ? "down" : "up") \(abs(drift), format: .number.precision(.fractionLength(1))) lb/week over the last 3 weeks")
+            }
+        } icon: {
+            Image(systemName: steady
+                ? "chart.line.flattrend.xyaxis"
+                : drift < 0 ? "chart.line.downtrend.xyaxis" : "chart.line.uptrend.xyaxis")
+                .foregroundStyle(steady ? Color.green : drift > 0 ? Color.orange : Color.secondary)
+        }
+        .font(.subheadline)
     }
 
     private func save() {
@@ -351,7 +484,7 @@ struct GoalView: View {
             goals: goals,
             context: context
         )
-        weightFieldFocused = false
+        focusedField = nil
         ToastCenter.shared.show("Goal saved ✓")
     }
 
@@ -362,7 +495,7 @@ struct GoalView: View {
         try? context.save()
         targetWeightLb = nil
         mode = GoalMode.lose
-        weightFieldFocused = false
+        focusedField = nil
         // push sends GoalUpdate.clear to the watch and reloads widgets.
         PhoneSyncService.shared.push(from: context)
         ReminderScheduler.shared.replan()

@@ -54,8 +54,10 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
         // last stamp of the day is the one that stands. Mutation replans
         // with reminders off only load when today has no stamp yet.
         var plan: DailyPlanLoader.State?
-        if enabled.any || !afterMutation || DeficitTargetHistory.target(on: .now) == nil {
-            plan = await DailyPlanLoader.load(goal: WatchSync.loadGoal())
+        var goal: SyncedGoal?
+        if enabled.any || !afterMutation || !DeficitTargetHistory.hasSnapshot(on: .now) {
+            goal = WatchSync.loadGoal()
+            plan = await DailyPlanLoader.load(goal: goal)
         }
         let center = UNUserNotificationCenter.current()
         // Only OUR reminders — removeAll would nuke any future
@@ -67,7 +69,9 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
         guard enabled.any, let plan else { return }
         let settings = await center.notificationSettings()
         guard settings.authorizationStatus == .authorized else { return }
-        guard let state = await currentState(plan: plan) else { return }
+        guard let state = await currentState(
+            plan: plan, isMaintenance: goal?.isMaintenance ?? false
+        ) else { return }
         for reminder in ReminderPlanner.plan(state: state, enabled: enabled) {
             let content = UNMutableNotificationContent()
             content.title = reminder.title
@@ -87,15 +91,20 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// Today's state, judged exactly like the Calendar tab judges days
     /// (StreakCalendar over dailyEnergyTotals with the plan's target,
     /// per-day snapshots, and the untracked threshold).
-    private func currentState(plan: DailyPlanLoader.State) async -> ReminderPlanner.DayState? {
+    private func currentState(
+        plan: DailyPlanLoader.State, isMaintenance: Bool
+    ) async -> ReminderPlanner.DayState? {
         let health = HealthKitService()
+        let rule = DayBadgeRule.current(
+            targetKcal: plan.deficitTargetKcal, isMaintenance: isMaintenance
+        )
         async let entries = health.todayFoodEntries()
         async let totals = health.dailyEnergyTotals()
         guard let loadedEntries = try? await entries else { return nil }
         let earned = StreakCalendar.earnedDays(
             totals: (try? await totals) ?? [],
-            targetDeficitKcal: plan.deficitTargetKcal,
-            targetsByDay: DeficitTargetHistory.targetsByDay(),
+            fallbackRule: rule,
+            rulesByDay: DeficitTargetHistory.rulesByDay(),
             untrackedBelowKcal: SharedStore.untrackedBelowKcal
         )
         // earnedDays excludes today by design (badges award only when
@@ -106,14 +115,9 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
             intakeKcal: plan.summary.intakeKcal,
             burnKcal: plan.summary.totalBurnKcal
         )
-        let todayGoalMet: Bool
-        if !StreakCalendar.isTracked(todayTotals, untrackedBelowKcal: SharedStore.untrackedBelowKcal) {
-            todayGoalMet = false
-        } else if let target = plan.deficitTargetKcal, target > 0 {
-            todayGoalMet = todayTotals.deficitKcal >= target
-        } else {
-            todayGoalMet = todayTotals.deficitKcal > 0
-        }
+        let todayGoalMet = StreakCalendar.isTracked(
+            todayTotals, untrackedBelowKcal: SharedStore.untrackedBelowKcal
+        ) && rule.met(deficitKcal: todayTotals.deficitKcal)
         return ReminderPlanner.DayState(
             hasLoggedFood: !loadedEntries.isEmpty,
             waterOz: plan.summary.waterOz,

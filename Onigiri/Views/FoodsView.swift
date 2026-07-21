@@ -721,7 +721,8 @@ struct FoodsView: View {
                 sodiumMg: sodiumMg * quantity,
                 nutrients: nutrients.scaled(by: quantity),
                 category: category,
-                aiGenerated: aiGenerated
+                aiGenerated: aiGenerated,
+                quantity: quantity
             )
         }
     }
@@ -744,6 +745,11 @@ struct PortionTarget: Identifiable {
     var defaultCategory: FoodCategory = .slot(for: .now)
     /// AI-estimate provenance, carried into the log's metadata.
     var aiGenerated = false
+    /// How many portions the target's values ALREADY represent — 1 for
+    /// library items, the entry's stored quantity for history rows that
+    /// re-log a multi-portion entry. The logged quantity metadata is
+    /// the sheet's pick × this, so per-portion values stay recoverable.
+    var baseQuantity: Double = 1
 
     static func category(from stored: String?) -> FoodCategory {
         stored.flatMap(FoodCategory.init(rawValue:)) ?? .slot(for: .now)
@@ -856,11 +862,13 @@ struct PortionSheet: View {
     init(
         target: PortionTarget,
         editDate: Date? = nil,
+        initialQuantity: Double = 1,
         onLog: @escaping (Double, FoodCategory, Date?) -> Void
     ) {
         self.target = target
         self.editDate = editDate
         self.onLog = onLog
+        _quantity = State(initialValue: initialQuantity)
         _category = State(initialValue: target.defaultCategory)
         _entryDate = State(initialValue: editDate ?? .now)
     }

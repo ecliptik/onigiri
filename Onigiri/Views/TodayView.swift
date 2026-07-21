@@ -220,21 +220,28 @@ struct TodayView: View {
                                 sodiumMg: target.sodiumMg * quantity,
                                 nutrients: target.nutrients.scaled(by: quantity),
                                 category: category,
-                                date: DayBounds.logTimestamp(for: model.selectedDate)
+                                date: DayBounds.logTimestamp(for: model.selectedDate),
+                                quantity: quantity * target.baseQuantity
                             )
                         }
                     }
                     .presentationDetents([.medium, .large])
                 case .editEntry(let entry):
-                    // Rescale a logged entry: the sheet treats what was
-                    // logged as one serving; confirming replaces the entry
-                    // (chosen slot, and now a movable date/time), Undo
-                    // restores it.
+                    // Rescale a logged entry ON ITS PER-PORTION BASIS:
+                    // the sheet opens at the stored portion count (3 hot
+                    // dogs edit as Serving 3, not as one triple-sized
+                    // serving); confirming replaces the entry (chosen
+                    // slot, and now a movable date/time), Undo restores
+                    // it. "as logged" only fits single-portion entries —
+                    // for the rest the row hides and the Will-log
+                    // preview carries the per-portion math.
                     PortionSheet(target: PortionTarget(
-                        name: entry.name, kcal: entry.kcal,
-                        sodiumMg: entry.sodiumMg, nutrients: entry.nutrients,
-                        serving: "as logged", defaultCategory: entry.category
-                    ), editDate: entry.date) { quantity, category, date in
+                        name: entry.name, kcal: entry.kcal / entry.quantity,
+                        sodiumMg: entry.sodiumMg / entry.quantity,
+                        nutrients: entry.nutrients.scaled(by: 1 / entry.quantity),
+                        serving: entry.quantity == 1 ? "as logged" : "",
+                        defaultCategory: entry.category
+                    ), editDate: entry.date, initialQuantity: entry.quantity) { quantity, category, date in
                         Task {
                             await LogActions.editFoodEntry(
                                 entry, quantity: quantity, category: category, date: date

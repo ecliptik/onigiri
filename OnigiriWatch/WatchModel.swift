@@ -139,7 +139,11 @@ final class WatchModel {
                 sodiumMg: entry.sodiumMg * scale,
                 nutrients: entry.nutrients.scaled(by: scale),
                 category: entry.category,
-                date: entry.date
+                date: entry.date,
+                aiGenerated: entry.aiGenerated,
+                // Totals scaled by s = s× the portions too — keep the
+                // phone's per-portion basis intact for its edit sheet.
+                quantity: entry.quantity * scale
             )
             do {
                 try await health.deleteFoodEntry(id: entry.id)

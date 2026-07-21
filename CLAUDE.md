@@ -167,6 +167,11 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   library (foods, meals, goals). Do not add a second source of truth for logs.
   The meal slot (Breakfast/…) rides in correlation metadata `OnigiriMealCategory`;
   entries without it infer the slot from time of day (`FoodCategory.slot(for:)`).
+  The portion count rides in `OnigiriQuantity` (absent = 1) — log writes store
+  multiplied totals PLUS this key, and the edit sheet divides totals by it to
+  recover the per-portion basis, so "3 hot dogs" edits as 3, not one triple
+  serving. Any new log/re-log path must carry the quantity through or edits
+  of its entries regress to 1.
 - Free personal team: no iCloud/CloudKit entitlements; watch↔phone library sync is
   WatchConnectivity, log sync is HealthKit's own.
 - OpenFoodFacts: the search index has NO nutrition fields — search rows lazily

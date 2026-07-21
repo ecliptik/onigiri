@@ -696,7 +696,8 @@ struct FoodFormView: View {
                 nutrients: target.nutrients.scaled(by: quantity),
                 category: category,
                 date: logDate,
-                aiGenerated: target.aiGenerated
+                aiGenerated: target.aiGenerated,
+                quantity: quantity
             )
             if logged {
                 onLogged?()

@@ -22,6 +22,12 @@ public struct FoodLogEntry: Identifiable, Sendable, Equatable {
     /// The logged item carried AI-estimate provenance (correlation
     /// metadata) — drives the ✨ mark on log rows.
     public let aiGenerated: Bool
+    /// How many portions the entry's totals represent (correlation
+    /// metadata). 1 for entries logged before the key existed or by
+    /// other apps — the edit sheet divides by this to recover the
+    /// per-portion values, so "3 hot dogs" edits as 3, not as one
+    /// triple-sized serving.
+    public let quantity: Double
 
     public init(
         id: UUID,
@@ -32,7 +38,8 @@ public struct FoodLogEntry: Identifiable, Sendable, Equatable {
         category: FoodCategory? = nil,
         nutrients: NutrientValues = NutrientValues(),
         editable: Bool = true,
-        aiGenerated: Bool = false
+        aiGenerated: Bool = false,
+        quantity: Double = 1
     ) {
         self.id = id
         self.name = name
@@ -43,6 +50,7 @@ public struct FoodLogEntry: Identifiable, Sendable, Equatable {
         self.nutrients = nutrients
         self.editable = editable
         self.aiGenerated = aiGenerated
+        self.quantity = quantity > 0 && quantity.isFinite ? quantity : 1
     }
 }
 

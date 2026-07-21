@@ -467,6 +467,11 @@ public final class HealthKitService {
     /// Custom metadata key marking an entry whose values came from an
     /// AI estimate — read back for the ✨ mark on log rows.
     public static let aiGeneratedMetadataKey = "OnigiriAIGenerated"
+    /// Custom metadata key carrying how many portions the totals
+    /// represent — the edit sheet reads it back so a 3-portion log
+    /// edits as 3, not as one triple-sized serving. Absent means 1
+    /// (older logs, other apps).
+    public static let quantityMetadataKey = "OnigiriQuantity"
 
     @discardableResult
     public func logFood(
@@ -476,7 +481,8 @@ public final class HealthKitService {
         nutrients: NutrientValues = NutrientValues(),
         category: FoodCategory? = nil,
         date: Date = .now,
-        aiGenerated: Bool = false
+        aiGenerated: Bool = false,
+        quantity: Double = 1
     ) async throws -> UUID {
         var metadata: [String: Any] = [
             HKMetadataKeyFoodType: name,
@@ -489,6 +495,9 @@ public final class HealthKitService {
         }
         if aiGenerated {
             metadata[Self.aiGeneratedMetadataKey] = true
+        }
+        if quantity != 1, quantity > 0, quantity.isFinite {
+            metadata[Self.quantityMetadataKey] = quantity
         }
         var objects: Set<HKSample> = [
             HKQuantitySample(
@@ -623,7 +632,8 @@ public final class HealthKitService {
                 .flatMap(FoodCategory.init(rawValue:)),
             nutrients: correlation.nutrientValues,
             editable: Self.isFamilySource(correlation.sourceRevision.source),
-            aiGenerated: correlation.metadata?[Self.aiGeneratedMetadataKey] as? Bool ?? false
+            aiGenerated: correlation.metadata?[Self.aiGeneratedMetadataKey] as? Bool ?? false,
+            quantity: correlation.metadata?[Self.quantityMetadataKey] as? Double ?? 1
         )
     }
 

@@ -96,6 +96,10 @@ struct QuickLogSheet: View {
         /// True for HealthKit-history rows with no library twin — they
         /// re-log their own values ("as last logged").
         var isHistory = false
+        /// Portions the item's values already represent (a history row
+        /// mirroring a 3-portion entry re-logs as 3, so a later edit
+        /// still knows the per-portion basis). 1 for library items.
+        var baseQuantity: Double = 1
         var isMeal: Bool { meal != nil }
     }
 
@@ -162,7 +166,8 @@ struct QuickLogSheet: View {
                 category: entry.category.rawValue,
                 aiGenerated: entry.aiGenerated,
                 recency: entry.date,
-                isHistory: true
+                isHistory: true,
+                baseQuantity: entry.quantity
             )
         }
     }
@@ -438,7 +443,9 @@ struct QuickLogSheet: View {
                         log(
                             Item(id: target.name, name: target.name, detail: target.serving,
                                  kcal: target.kcal, sodiumMg: target.sodiumMg,
-                                 nutrients: target.nutrients, isFavorite: false, category: nil),
+                                 nutrients: target.nutrients, isFavorite: false, category: nil,
+                                 aiGenerated: target.aiGenerated,
+                                 baseQuantity: target.baseQuantity),
                             quantity: quantity,
                             category: category
                         )
@@ -685,7 +692,8 @@ struct QuickLogSheet: View {
             // serving description.
             nutrients: item.nutrients, serving: item.isHistory ? "as last logged" : item.detail,
             defaultCategory: PortionTarget.category(from: item.category),
-            aiGenerated: item.aiGenerated
+            aiGenerated: item.aiGenerated,
+            baseQuantity: item.baseQuantity
         )
     }
 
@@ -716,7 +724,8 @@ struct QuickLogSheet: View {
                 nutrients: item.nutrients.scaled(by: quantity),
                 category: category,
                 date: logDate,
-                aiGenerated: item.aiGenerated
+                aiGenerated: item.aiGenerated,
+                quantity: quantity * item.baseQuantity
             )
             isLogging = false
             // Recency moved — refresh the cached list order and the

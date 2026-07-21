@@ -133,13 +133,14 @@ enum LogActions {
         nutrients: NutrientValues = NutrientValues(),
         category: FoodCategory,
         date: Date = .now,
-        aiGenerated: Bool = false
+        aiGenerated: Bool = false,
+        quantity: Double = 1
     ) async -> Bool {
         do {
             let id = try await health.logFood(
                 name: name, kcal: kcal, sodiumMg: sodiumMg,
                 nutrients: nutrients, category: category, date: date,
-                aiGenerated: aiGenerated
+                aiGenerated: aiGenerated, quantity: quantity
             )
             didMutate(haptic: .success)
             ToastCenter.shared.show("Logged \(name) ✓") {
@@ -172,10 +173,12 @@ enum LogActions {
     }
 
     /// Rescale a logged entry (the log row's Edit): replace it with the
-    /// same food at `quantity` servings of what was logged, at `date`
-    /// (nil keeps the original time — passing one moves the entry, the
-    /// "logged at 11 pm but it was yesterday's dinner" fix). Undo
-    /// restores the original entry.
+    /// same food at `quantity` portions — on the entry's PER-PORTION
+    /// basis (its totals ÷ its stored quantity), so 3 logged hot dogs
+    /// edited to 2 means two hot dogs, not two triple-portions — at
+    /// `date` (nil keeps the original time — passing one moves the
+    /// entry, the "logged at 11 pm but it was yesterday's dinner" fix).
+    /// Undo restores the original entry.
     static func editFoodEntry(
         _ entry: FoodLogEntry, quantity: Double, category: FoodCategory, date: Date? = nil
     ) async {
@@ -184,13 +187,16 @@ enum LogActions {
             // undo restores before it deletes): a failed write can then
             // never lose the entry, only leave both — and the rollback
             // below covers the delete-failed case.
+            let scale = quantity / entry.quantity
             let newId = try await health.logFood(
                 name: entry.name,
-                kcal: entry.kcal * quantity,
-                sodiumMg: entry.sodiumMg * quantity,
-                nutrients: entry.nutrients.scaled(by: quantity),
+                kcal: entry.kcal * scale,
+                sodiumMg: entry.sodiumMg * scale,
+                nutrients: entry.nutrients.scaled(by: scale),
                 category: category,
-                date: date ?? entry.date
+                date: date ?? entry.date,
+                aiGenerated: entry.aiGenerated,
+                quantity: quantity
             )
             do {
                 try await health.deleteFoodEntry(id: entry.id)
@@ -205,7 +211,8 @@ enum LogActions {
                         try await health.logFood(
                             name: entry.name, kcal: entry.kcal, sodiumMg: entry.sodiumMg,
                             nutrients: entry.nutrients, category: entry.category,
-                            date: entry.date
+                            date: entry.date, aiGenerated: entry.aiGenerated,
+                            quantity: entry.quantity
                         )
                         try? await health.deleteFoodEntry(id: newId)
                         didMutate(haptic: nil)
@@ -233,7 +240,8 @@ enum LogActions {
                         try await health.logFood(
                             name: entry.name, kcal: entry.kcal, sodiumMg: entry.sodiumMg,
                             nutrients: entry.nutrients, category: entry.category,
-                            date: entry.date
+                            date: entry.date, aiGenerated: entry.aiGenerated,
+                            quantity: entry.quantity
                         )
                         didMutate(haptic: nil)
                     } catch {

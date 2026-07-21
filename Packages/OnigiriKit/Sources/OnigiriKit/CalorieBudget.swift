@@ -89,19 +89,6 @@ public enum CalorieBudget {
             isAggressive: deficit > maxSafeDailyDeficit || budget < minReasonableBudget
         )
     }
-
-    /// Days to reach the target at the observed rate of loss (lb/day), or nil
-    /// if the trend is flat or moving the wrong way.
-    public static func projectedDaysToGoal(
-        currentWeightLb: Double,
-        targetWeightLb: Double,
-        observedLossPerDayLb: Double
-    ) -> Int? {
-        let remainingLb = currentWeightLb - targetWeightLb
-        guard remainingLb > 0 else { return 0 }
-        guard observedLossPerDayLb > 0 else { return nil }
-        return Int((remainingLb / observedLossPerDayLb).rounded(.up))
-    }
 }
 
 public extension CalorieBudget {

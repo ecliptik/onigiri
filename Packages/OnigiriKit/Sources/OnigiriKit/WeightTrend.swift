@@ -85,19 +85,57 @@ public enum WeightTrend {
         }
     }
 
-    /// Least-squares slope in lb/day. Negative means losing weight.
-    /// Nil when there are fewer than two distinct dates.
-    public static func slopeLbPerDay(_ points: [Point]) -> Double? {
-        guard points.count >= 2 else { return nil }
-        let days = points.map { $0.date.timeIntervalSince(points[0].date) / 86400 }
-        let weights = points.map(\.weightLb)
-        let n = Double(points.count)
-        let sumX = days.reduce(0, +)
-        let sumY = weights.reduce(0, +)
-        let sumXY = zip(days, weights).reduce(0) { $0 + $1.0 * $1.1 }
-        let sumXX = days.reduce(0) { $0 + $1 * $1 }
-        let denominator = n * sumXX - sumX * sumX
-        guard denominator != 0 else { return nil }
-        return (n * sumXY - sumX * sumY) / denominator
+    /// A fitted trend line, evaluated where the projection needs it.
+    public struct LinearFit: Equatable, Sendable {
+        /// lb/day; negative means losing weight.
+        public let slopeLbPerDay: Double
+        /// The line's value at the reference date — the de-noised
+        /// current weight. (A trailing moving average lags a real loss
+        /// by days; the fit's endpoint doesn't.)
+        public let currentLb: Double
+
+        public init(slopeLbPerDay: Double, currentLb: Double) {
+            self.slopeLbPerDay = slopeLbPerDay
+            self.currentLb = currentLb
+        }
+    }
+
+    /// Recency-weighted least squares over RAW weigh-ins: each reading's
+    /// influence halves per `halfLifeDays` of age, so the fit answers
+    /// "what's the trend now", not "what was the window's average trend"
+    /// — a diet started last week outweighs the flat weeks before it.
+    /// Raw points on purpose: least squares already absorbs the
+    /// morning/evening wobble, while fitting the trailing moving average
+    /// (the old projection input) halved a fresh trend's slope for its
+    /// first week — the average was still ramping in — and quoted goal
+    /// dates weeks late. The under-read that remains in week one is a
+    /// feature, not a bug: early loss is partly water, so converging
+    /// over a couple of weeks beats extrapolating day three.
+    /// Nil with fewer than two distinct timestamps.
+    public static func recencyWeightedFit(
+        _ points: [Point],
+        reference: Date,
+        halfLifeDays: Double = 7
+    ) -> LinearFit? {
+        let lambda = log(2.0) / (halfLifeDays * 86400)
+        var sumW = 0.0, sumX = 0.0, sumY = 0.0, sumXX = 0.0, sumXY = 0.0
+        for point in points {
+            let age = point.date.timeIntervalSince(reference) // ≤ 0 in the past
+            let x = age / 86400
+            let w = exp(lambda * age)
+            sumW += w
+            sumX += w * x
+            sumY += w * point.weightLb
+            sumXX += w * x * x
+            sumXY += w * x * point.weightLb
+        }
+        // Weighted variance of the dates; ~0 means one distinct timestamp.
+        let denominator = sumW * sumXX - sumX * sumX
+        guard denominator > 1e-9 else { return nil }
+        let slope = (sumW * sumXY - sumX * sumY) / denominator
+        return LinearFit(
+            slopeLbPerDay: slope,
+            currentLb: (sumY - slope * sumX) / sumW
+        )
     }
 }

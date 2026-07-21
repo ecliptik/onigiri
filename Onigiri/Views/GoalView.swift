@@ -323,7 +323,7 @@ struct GoalView: View {
                     }
                     .font(.subheadline)
                 } else if targetWeightLb != nil {
-                    Text("No steady downward trend yet — projections appear once the 7-day average starts moving.")
+                    Text("No steady downward trend yet — a projection appears after a week of weigh-ins trending down.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

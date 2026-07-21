@@ -48,21 +48,6 @@ struct CalorieBudgetTests {
         #expect(plan.dailyBudget == 2600)
     }
 
-    @Test func projection() {
-        // Losing 0.25 lb/day with 10 lb to go → 40 days
-        #expect(CalorieBudget.projectedDaysToGoal(
-            currentWeightLb: 190, targetWeightLb: 180, observedLossPerDayLb: 0.25
-        ) == 40)
-        // Flat trend → no projection
-        #expect(CalorieBudget.projectedDaysToGoal(
-            currentWeightLb: 190, targetWeightLb: 180, observedLossPerDayLb: 0
-        ) == nil)
-        // Already there
-        #expect(CalorieBudget.projectedDaysToGoal(
-            currentWeightLb: 179, targetWeightLb: 180, observedLossPerDayLb: 0.1
-        ) == 0)
-    }
-
     @Test func remainingHeadlineFlipsToOverWithPositiveNumber() {
         let left = CalorieBudget.remainingHeadline(402)
         #expect(left.value == 402)

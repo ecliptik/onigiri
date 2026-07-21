@@ -11,11 +11,15 @@ public struct GoalTrendStats: Equatable, Sendable {
     public let predicted30Lb: Double?
     /// Smoothed scale movement over the same window.
     public let actual30Lb: Double?
-    /// Date the target is reached at the recent trend — least-squares
-    /// slope of the last three weeks of smoothed weigh-ins. nil without
-    /// a target, above-target weight, a meaningful downward slope, or
-    /// when the answer is over three years out (a projection that far
-    /// is noise, not motivation).
+    /// Date the target is reached at the recent trend — recency-weighted
+    /// least-squares fit over the last three weeks of RAW weigh-ins
+    /// (`WeightTrend.recencyWeightedFit`), so a diet started last week
+    /// outweighs the flat weeks before it and twice-a-day weighers get
+    /// the same window as once-a-day ones. nil without a target, a
+    /// fitted current weight above the target, a meaningful downward
+    /// slope, weigh-ins on 3+ days spanning a full week, or when the
+    /// answer is over three years out (a projection that far is noise,
+    /// not motivation).
     public let projectedDate: Date?
     /// Weigh-ins (and the target, when losing) padded by 2 lb.
     public let chartYDomain: ClosedRange<Double>
@@ -55,13 +59,16 @@ public struct GoalTrendStats: Equatable, Sendable {
 
         var projected: Date?
         if let target = targetWeightLb,
-           let current = smoothedHistory.last?.weightLb,
-           current > target,
-           let slope = WeightTrend.slopeLbPerDay(smoothedHistory.suffix(21).map { $0 }),
-           slope < -0.01 {
-            let days = (current - target) / -slope
-            if days < 365 * 3 {
-                projected = calendar.date(byAdding: .day, value: Int(days.rounded(.up)), to: now)
+           let trendStart = calendar.date(byAdding: .day, value: -21, to: now) {
+            let recent = weightHistory.filter { $0.date >= trendStart }
+            if hasProjectableSpan(recent, calendar: calendar),
+               let fit = WeightTrend.recencyWeightedFit(recent, reference: now),
+               fit.currentLb > target,
+               fit.slopeLbPerDay < -0.01 {
+                let days = (fit.currentLb - target) / -fit.slopeLbPerDay
+                if days < 365 * 3 {
+                    projected = calendar.date(byAdding: .day, value: Int(days.rounded(.up)), to: now)
+                }
             }
         }
 
@@ -77,5 +84,17 @@ public struct GoalTrendStats: Equatable, Sendable {
             predicted30Lb: predicted, actual30Lb: actual,
             projectedDate: projected, chartYDomain: domain
         )
+    }
+
+    /// A projection needs a real base under it: weigh-ins on at least
+    /// three distinct days spanning at least a full week. Below that a
+    /// weekend of scale readings would mint a goal date.
+    private static func hasProjectableSpan(
+        _ points: [WeightTrend.Point], calendar: Calendar
+    ) -> Bool {
+        guard let first = points.first?.date, let last = points.last?.date,
+              last.timeIntervalSince(first) >= 7 * 86400
+        else { return false }
+        return Set(points.map { calendar.startOfDay(for: $0.date) }).count >= 3
     }
 }

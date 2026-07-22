@@ -68,6 +68,12 @@ struct SettingsView: View {
     @AppStorage(SharedStore.holdToLogWaterKey, store: SharedStore.defaults) private var holdToLogWater = true
     @AppStorage(SharedStore.onlineLookupsKey, store: SharedStore.defaults) private var onlineLookups = false
     @AppStorage(SharedStore.textSearchSourceKey, store: SharedStore.defaults) private var textSearchSource = SharedStore.textSearchSourceOFF
+    // Raw unit preferences ("auto"/explicit). Observed HERE (not just in
+    // the Units subscreen) so the summary row updates and the onChange
+    // sync push fires from a view that stays mounted.
+    @AppStorage(SharedStore.weightUnitKey, store: SharedStore.defaults) private var weightUnit = SharedStore.unitAutomatic
+    @AppStorage(SharedStore.waterUnitKey, store: SharedStore.defaults) private var waterUnit = SharedStore.unitAutomatic
+    @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults) private var sodiumUnit = SharedStore.unitAutomatic
     /// What the key field shows; only plausible keys flow to storage
     /// (the Keychain now — see SharedStore.saveFDCAPIKey).
     @State private var fdcAPIKeyDraft = SharedStore.fdcAPIKey
@@ -262,11 +268,61 @@ struct SettingsView: View {
     // keeps its own — serving size is about the log buttons, and the
     // goal rides with it. Placed right under the tracked metrics: the
     // water slot's caption points here for its target.
+    /// Resolved display units (raw setting + region fallback).
+    private var resolvedWaterUnit: WaterUnit { WaterUnit.resolve(waterUnit) }
+    private var resolvedSodiumUnit: SodiumUnit { SodiumUnit.resolve(sodiumUnit) }
+
+    /// "12 oz" / "355 mL" — the water rows' converted readout.
+    private func waterAmountText(_ oz: Double) -> String {
+        let unit = resolvedWaterUnit
+        return "\(unit.fromOz(oz).formatted(.number.precision(.fractionLength(0)))) \(unit.symbol)"
+    }
+
+    /// One "Units" row, deliberately down in the housekeeping zone —
+    /// set-once plumbing, not a headline feature (the user, 2026-07-21).
+    /// The trailing summary shows the resolved trio at a glance.
+    private var unitsSection: some View {
+        Section {
+            NavigationLink {
+                UnitsSettingsView()
+            } label: {
+                LabeledContent("Units") {
+                    Text("\(WeightUnit.resolve(weightUnit).symbol) · \(resolvedWaterUnit.symbol) · \(resolvedSodiumUnit.symbol)")
+                }
+            }
+        }
+        // The pickers live on the subscreen; the push must fire from this
+        // always-mounted view so the watch and widgets hear the change.
+        .onChange(of: weightUnit) { PhoneSyncService.shared.push(from: context) }
+        .onChange(of: waterUnit) { PhoneSyncService.shared.push(from: context) }
+        .onChange(of: sodiumUnit) { PhoneSyncService.shared.push(from: context) }
+    }
+
     private var waterSection: some View {
         Section {
-            Stepper(value: $waterServingOz, in: 4...40, step: 2) {
+            // Steps in round display units: ±2 oz, or ±25 mL in metric
+            // mode (stepping the stored oz by twos would read as
+            // ±59 mL). Storage stays oz either way.
+            Stepper {
                 LabeledContent("Serving size") {
-                    Text("\(waterServingOz, format: .number.precision(.fractionLength(0))) oz")
+                    Text(waterAmountText(waterServingOz))
+                }
+            } onIncrement: {
+                if resolvedWaterUnit == .fluidOunces {
+                    waterServingOz = min(40, waterServingOz + 2)
+                } else {
+                    // Snap-then-step keeps the readout on round mL;
+                    // bounds clamp in mL too (100–1,200 ≈ the oz range)
+                    // so the edges don't land on 118/1,183.
+                    let ml = (WaterUnit.milliliters.fromOz(waterServingOz) / 25).rounded() * 25
+                    waterServingOz = WaterUnit.milliliters.toOz(min(1_200, ml + 25))
+                }
+            } onDecrement: {
+                if resolvedWaterUnit == .fluidOunces {
+                    waterServingOz = max(4, waterServingOz - 2)
+                } else {
+                    let ml = (WaterUnit.milliliters.fromOz(waterServingOz) / 25).rounded() * 25
+                    waterServingOz = WaterUnit.milliliters.toOz(max(100, ml - 25))
                 }
             }
             // The goal is drunk in servings, so stepping SNAPS to
@@ -279,7 +335,9 @@ struct SettingsView: View {
             // Floor = one serving, ceiling 200.
             Stepper {
                 LabeledContent("Daily goal") {
-                    Text("\(waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
+                    // Serving-multiple snapping below is oz-space and
+                    // unit-agnostic; only this readout converts.
+                    Text(waterAmountText(waterGoalOz))
                 }
             } onIncrement: {
                 let serving = max(1, waterServingOz)
@@ -1104,14 +1162,15 @@ struct SettingsView: View {
                 switch nutrient {
                 case .sodium:
                     // Generic in presentation; the value stays on the
-                    // long-standing sodium-limit key.
+                    // long-standing sodium-limit key (mg) — salt mode
+                    // edits through a converted binding.
                     LabeledContent("Target") {
                         HStack(spacing: 4) {
-                            TextField("0", value: $sodiumLimitMg, format: .number)
+                            TextField("0", value: sodiumLimitBinding, format: .number)
                                 .keyboardType(.decimalPad)
                                 .multilineTextAlignment(.trailing)
                                 .frame(maxWidth: 100)
-                            Text(nutrient.unitSymbol)
+                            Text(resolvedSodiumUnit.symbol)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -1146,24 +1205,33 @@ struct SettingsView: View {
         // reachable.
         if slot == 2, !slotTracksSodium {
             Section {
-                LabeledContent("Sodium limit") {
+                LabeledContent("\(resolvedSodiumUnit.nutrientName) limit") {
                     HStack(spacing: 4) {
-                        TextField("0", value: $sodiumLimitMg, format: .number)
+                        TextField("0", value: sodiumLimitBinding, format: .number)
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                             .frame(maxWidth: 100)
-                        Text("mg")
+                        Text(resolvedSodiumUnit.symbol)
                             .foregroundStyle(.secondary)
                     }
                 }
             } footer: {
-                Text("Colors sodium in the calendar and day details even while untracked.")
+                Text("Colors \(resolvedSodiumUnit.nutrientName.lowercased()) in the calendar and day details even while untracked.")
             }
         }
     }
 
     private var slotTracksSodium: Bool {
         slotNutrient(1) == .sodium || slotNutrient(2) == .sodium
+    }
+
+    /// The sodium-limit fields edit mg through the display unit — an
+    /// identity in mg mode; ×2.5/1000 both ways in salt mode.
+    private var sodiumLimitBinding: Binding<Double> {
+        Binding(
+            get: { resolvedSodiumUnit.fromMg(sodiumLimitMg) },
+            set: { sodiumLimitMg = resolvedSodiumUnit.toMg($0) }
+        )
     }
 
     /// Default emoji or a custom pick — same prompt as the goal badge.
@@ -1277,6 +1345,8 @@ struct SettingsView: View {
                 onlineDatabaseSection
 
                 aiProviderSection
+
+                unitsSection
 
                 dataSection
 

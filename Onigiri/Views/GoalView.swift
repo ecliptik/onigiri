@@ -28,6 +28,24 @@ struct GoalView: View {
     /// TodayModel shape) — the view keeps only form state.
     @State private var model = GoalModel()
 
+    /// Display unit only: all state, validation, and saves stay lb.
+    @AppStorage(SharedStore.weightUnitKey, store: SharedStore.defaults)
+    private var weightUnitRaw = SharedStore.unitAutomatic
+    private var unit: WeightUnit { WeightUnit.resolve(weightUnitRaw) }
+    /// Whole pounds read fine; kg wants a decimal (1 kg ≈ 2.2 lb) — the
+    /// target/anchor lines follow this where lb kept 0 digits.
+    private var targetDigits: Int { unit == .pounds ? 0 : 1 }
+
+    /// Entry proxy: shows (and accepts) the display unit, stores lb.
+    /// The shown value rounds to 0.1 so a kg reopen reads "81.6", not
+    /// the conversion's full tail.
+    private func displayBinding(_ source: Binding<Double?>) -> Binding<Double?> {
+        Binding(
+            get: { source.wrappedValue.map { (unit.fromLb($0) * 10).rounded() / 10 } },
+            set: { source.wrappedValue = $0.map(unit.toLb) }
+        )
+    }
+
     private var currentWeightLb: Double? { model.healthWeightLb ?? manualWeightLb }
 
     private var isMaintenance: Bool { mode == GoalMode.maintain }
@@ -128,11 +146,11 @@ struct GoalView: View {
                 Section("Current weight") {
                     if let healthWeightLb = model.healthWeightLb {
                         LabeledContent("From Apple Health") {
-                            Text("\(healthWeightLb, format: .number.precision(.fractionLength(1))) lb")
+                            Text("\(unit.fromLb(healthWeightLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
                         }
                     } else {
-                        LabeledContent("Weight (lb)") {
-                            TextField("0", value: $manualWeightLb, format: .number)
+                        LabeledContent("Weight (\(unit.symbol))") {
+                            TextField("0", value: displayBinding($manualWeightLb), format: .number)
                                 .keyboardType(.decimalPad)
                                 .multilineTextAlignment(.trailing)
                                 .focused($focusedField, equals: .current)
@@ -153,7 +171,7 @@ struct GoalView: View {
                     Section("Daily plan") {
                         if !isMaintenance, let current = currentWeightLb, let target = targetWeightLb {
                             LabeledContent("To lose") {
-                                Text("\(current - target, format: .number.precision(.fractionLength(1))) lb")
+                                Text("\(unit.fromLb(current - target), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
                             }
                             LabeledContent("Deficit needed") {
                                 Text("\(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal/day")
@@ -280,24 +298,24 @@ struct GoalView: View {
     private var chartSummary: String {
         var parts: [String] = []
         if let latest = model.smoothedHistory.last?.weightLb {
-            parts.append("7-day average \(latest.formatted(.number.precision(.fractionLength(1)))) pounds")
+            parts.append("7-day average \(unit.fromLb(latest).formatted(.number.precision(.fractionLength(1)))) \(unit.spoken)")
         }
         if !isMaintenance, let target = targetWeightLb {
-            parts.append("target \(target.formatted(.number.precision(.fractionLength(0)))) pounds")
+            parts.append("target \(unit.fromLb(target).formatted(.number.precision(.fractionLength(targetDigits)))) \(unit.spoken)")
         }
         return parts.isEmpty ? "No weigh-ins yet" : parts.joined(separator: ", ")
     }
 
     private func signedLb(_ value: Double) -> String {
-        "\(value.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always(includingZero: false)))) lb"
+        "\(unit.fromLb(value).formatted(.number.precision(.fractionLength(1)).sign(strategy: .always(includingZero: false)))) \(unit.symbol)"
     }
 
     // MARK: - Target / hold-near
 
     /// The weight field both modes share (lose target / hold-near anchor).
     private var targetWeightField: some View {
-        LabeledContent("Weight (lb)") {
-            TextField("0", value: $targetWeightLb, format: .number)
+        LabeledContent("Weight (\(unit.symbol))") {
+            TextField("0", value: displayBinding($targetWeightLb), format: .number)
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.trailing)
                 .focused($focusedField, equals: .target)
@@ -355,11 +373,13 @@ struct GoalView: View {
         // itself.
         Section {
             if model.weightHistory.count >= 2 {
+                // Plotted in the display unit (not just relabeled) so
+                // the y-axis ticks read as real kg/lb values.
                 Chart {
                     ForEach(Array(model.weightHistory.enumerated()), id: \.offset) { _, point in
                         PointMark(
                             x: .value("Date", point.date),
-                            y: .value("Weight", point.weightLb)
+                            y: .value("Weight", unit.fromLb(point.weightLb))
                         )
                         .foregroundStyle(.secondary)
                         .opacity(0.35)
@@ -368,7 +388,7 @@ struct GoalView: View {
                     ForEach(Array(model.smoothedHistory.enumerated()), id: \.offset) { _, point in
                         LineMark(
                             x: .value("Date", point.date),
-                            y: .value("7-day average", point.weightLb)
+                            y: .value("7-day average", unit.fromLb(point.weightLb))
                         )
                         .foregroundStyle(.blue)
                         .interpolationMethod(.catmullRom)
@@ -376,17 +396,17 @@ struct GoalView: View {
                     // The lose target or the maintenance hold-near
                     // anchor — same line, different name.
                     if let line = targetWeightLb, line > 0 {
-                        RuleMark(y: .value(isMaintenance ? "Hold near" : "Target", line))
+                        RuleMark(y: .value(isMaintenance ? "Hold near" : "Target", unit.fromLb(line)))
                             .foregroundStyle(.green)
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [6, 4]))
                             .annotation(position: .bottom, alignment: .leading) {
-                                Text("\(isMaintenance ? "Hold near" : "Target") \(line, format: .number.precision(.fractionLength(0))) lb")
+                                Text("\(isMaintenance ? "Hold near" : "Target") \(unit.fromLb(line), format: .number.precision(.fractionLength(targetDigits))) \(unit.symbol)")
                                     .font(.caption2)
                                     .foregroundStyle(.green)
                             }
                     }
                 }
-                .chartYScale(domain: model.trend.chartYDomain)
+                .chartYScale(domain: unit.fromLb(model.trend.chartYDomain.lowerBound) ... unit.fromLb(model.trend.chartYDomain.upperBound))
                 // One spoken sentence, not ~90 unlabeled point stops.
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Weight trend chart")
@@ -453,11 +473,11 @@ struct GoalView: View {
         let steady = abs(drift) < GoalTrendStats.steadyDriftThresholdLbPerWeek
         return Label {
             if steady, let anchor = targetWeightLb, anchor > 0 {
-                Text("Holding near \(anchor, format: .number.precision(.fractionLength(0))) lb — steady over the last 3 weeks")
+                Text("Holding near \(unit.fromLb(anchor), format: .number.precision(.fractionLength(targetDigits))) \(unit.symbol) — steady over the last 3 weeks")
             } else if steady {
                 Text("Holding steady over the last 3 weeks")
             } else {
-                Text("Trending \(drift < 0 ? "down" : "up") \(abs(drift), format: .number.precision(.fractionLength(1))) lb/week over the last 3 weeks")
+                Text("Trending \(drift < 0 ? "down" : "up") \(unit.fromLb(abs(drift)), format: .number.precision(.fractionLength(1))) \(unit.symbol)/week over the last 3 weeks")
             }
         } icon: {
             Image(systemName: steady

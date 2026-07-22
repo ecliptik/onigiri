@@ -922,7 +922,7 @@ struct PortionSheet: View {
                         .pickerStyle(.segmented)
                     }
                     LabeledContent("Will log") {
-                        Text("\(target.kcal * quantity, format: .number.precision(.fractionLength(0))) kcal • \((portionMetric.itemAmount(sodiumMg: target.sodiumMg, nutrients: target.nutrients) ?? 0) * quantity, format: .number.precision(.fractionLength(0...1))) \(portionMetric.captionUnit)")
+                        Text("\(target.kcal * quantity, format: .number.precision(.fractionLength(0))) kcal • \(portionMetric.captionText((portionMetric.itemAmount(sodiumMg: target.sodiumMg, nutrients: target.nutrients) ?? 0) * quantity, sodium: SharedStore.sodiumUnit))")
                             .monospacedDigit()
                     }
                 }
@@ -1022,6 +1022,8 @@ struct LibraryRow: View {
     var aiGenerated = false
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults) private var sodiumUnitRaw = SharedStore.unitAutomatic
+    private var sodiumUnit: SodiumUnit { SodiumUnit.resolve(sodiumUnitRaw) }
 
     private var nameLine: some View {
         HStack(spacing: 4) {
@@ -1059,7 +1061,7 @@ struct LibraryRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Text("\(kcal, format: .number.precision(.fractionLength(0))) kcal · \(metricAmount, format: .number.precision(.fractionLength(0...1))) \(metric.captionUnit)")
+                Text("\(kcal, format: .number.precision(.fractionLength(0))) kcal · \(metric.captionText(metricAmount, sodium: sodiumUnit))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
@@ -1084,7 +1086,7 @@ struct LibraryRow: View {
                 Text("\(kcal, format: .number.precision(.fractionLength(0))) kcal")
                     .foregroundStyle(.primary)
                     .monospacedDigit()
-                Text("\(metricAmount, format: .number.precision(.fractionLength(0...1))) \(metric.captionUnit)")
+                Text(metric.captionText(metricAmount, sodium: sodiumUnit))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()

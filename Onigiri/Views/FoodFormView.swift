@@ -36,6 +36,17 @@ struct FoodFormView: View {
     @State private var name = ""
     @State private var kcal: Double?
     @State private var sodiumMg: Double?
+    /// Sodium's display unit; the field state above stays canonical mg.
+    @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults) private var sodiumUnitRaw = SharedStore.unitAutomatic
+    private var sodiumUnit: SodiumUnit { SodiumUnit.resolve(sodiumUnitRaw) }
+    /// Salt mode shows 2 decimals (0.75 g salt = 300 mg — one decimal
+    /// would drop real label precision); mg passes through untouched.
+    private var sodiumEntryBinding: Binding<Double?> {
+        Binding(
+            get: { sodiumMg.map { (sodiumUnit.fromMg($0) * 100).rounded() / 100 } },
+            set: { sodiumMg = $0.map(sodiumUnit.toMg) }
+        )
+    }
     @State private var serving = ""
     @State private var barcode: String?
     @State private var fatG: Double?
@@ -263,7 +274,13 @@ struct FoodFormView: View {
                         nutrientRow("Polyunsaturated fat (g)", value: $polyunsaturatedFatG)
                         nutrientRow("Monounsaturated fat (g)", value: $monounsaturatedFatG)
                         nutrientRow("Cholesterol (mg)", value: $cholesterolMg)
-                        nutrientRow("Sodium (mg)", value: $sodiumMg)
+                        // Salt mode edits grams-of-salt (EU label
+                        // framing) through a converted binding — the
+                        // stored field stays sodium mg.
+                        nutrientRow(
+                            sodiumUnit == .milligrams ? "Sodium (mg)" : "Salt (g)",
+                            value: sodiumEntryBinding
+                        )
                         nutrientRow("Carbs (g)", value: $carbsG)
                         nutrientRow("Fiber (g)", value: $fiberG)
                         nutrientRow("Sugar (g)", value: $sugarG)

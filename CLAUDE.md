@@ -128,6 +128,12 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   extract distinct frames (`ffmpeg -vsync vfr`). A constant-fps dump pads
   duplicates and LIES about what was on screen (looked like the sheet stayed
   visible; the VFR re-extraction showed the shield frame). 2026-07-20.
+- Seeding app-group defaults from a test script: `simctl spawn <udid>
+  defaults write group.com.ecliptik.Onigiri …` writes the sim's UNSANDBOXED
+  root prefs — the sandboxed app never sees it. Write the real container
+  plist instead: `data/Containers/Shared/AppGroup/<UUID>/Library/Preferences/
+  group.com.ecliptik.Onigiri.plist` (pass the path minus `.plist` to
+  `defaults write`, app terminated first). Cost a smoke-test cycle 2026-07-21.
 
 ## SwiftData landmines (each cost a debugging session)
 
@@ -174,6 +180,17 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   of its entries regress to 1.
 - Free personal team: no iCloud/CloudKit entitlements; watch↔phone library sync is
   WatchConnectivity, log sync is HealthKit's own.
+- Unit preferences (Settings → Units): display/entry-only. Storage is ALWAYS
+  canonical — lb, US fl oz, sodium mg — in HealthKit, SwiftData, WatchSync,
+  and backups; `WeightUnit`/`WaterUnit`/`SodiumUnit` (kit, UnitPreferences.swift)
+  convert at the UI boundary and any new weight/water/sodium readout must go
+  through them. Status/color/validation math stays canonical (the sodium
+  near-limit band is an absolute 300 mg). "auto"/absent = follow region
+  (sodium resolves via an EU/UK/EFTA region list, NOT measurementSystem —
+  Australia is metric but labels sodium in mg). The three keys ALWAYS ride
+  the watch sync with an explicit "auto" (an absent key would leave a stale
+  explicit choice alive on the watch). Siri's LogWaterIntent parameter stays
+  ounces by design; only its reply converts.
 - OpenFoodFacts: the search index has NO nutrition fields — search rows lazily
   fetch the full product per barcode to show kcal/serving.
 - Label scanning is the third door beside barcode and text search, and

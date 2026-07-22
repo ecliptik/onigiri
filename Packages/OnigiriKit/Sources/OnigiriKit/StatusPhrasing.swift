@@ -24,7 +24,9 @@ public enum StatusPhrasing {
         metric: Metric,
         plan: DailyPlanLoader.State,
         waterGoalOz: Double,
-        sodiumLimitMg: Double
+        sodiumLimitMg: Double,
+        waterUnit: WaterUnit = .fluidOunces,
+        sodiumUnit: SodiumUnit = .milligrams
     ) -> Status {
         switch metric {
         case .caloriesLeft:
@@ -47,24 +49,32 @@ public enum StatusPhrasing {
                     + "\(whole(summary.totalBurnKcal)) today. Set a goal in Onigiri for a budget."
             )
         case .water:
-            let oz = plan.summary.waterOz
-            let met = oz >= waterGoalOz && waterGoalOz > 0
+            // Over/goal-met judged on the canonical values; only the
+            // spoken/shown numbers convert.
+            let met = plan.summary.waterOz >= waterGoalOz && waterGoalOz > 0
+            let value = whole(waterUnit.fromOz(plan.summary.waterOz))
+            let goal = whole(waterUnit.fromOz(waterGoalOz))
+            let unit = waterUnit.spoken(waterUnit.fromOz(waterGoalOz))
             return Status(
-                headline: "\(whole(oz)) / \(whole(waterGoalOz)) oz",
+                headline: "\(value) / \(goal) \(waterUnit.symbol)",
                 caption: "water",
                 spoken: met
-                    ? "Water goal met — \(whole(oz)) of \(whole(waterGoalOz)) ounces today."
-                    : "You're at \(whole(oz)) of \(whole(waterGoalOz)) ounces of water today."
+                    ? "Water goal met — \(value) of \(goal) \(unit) today."
+                    : "You're at \(value) of \(goal) \(unit) of water today."
             )
         case .sodium:
-            let mg = plan.summary.sodiumMg
-            let over = sodiumLimitMg > 0 && mg > sodiumLimitMg
+            let over = sodiumLimitMg > 0 && plan.summary.sodiumMg > sodiumLimitMg
+            let digits = sodiumUnit.fractionDigits
+            let value = amount(sodiumUnit.fromMg(plan.summary.sodiumMg), digits: digits)
+            let limit = amount(sodiumUnit.fromMg(sodiumLimitMg), digits: digits)
+            let name = sodiumUnit.nutrientName.lowercased()
+            let unit = sodiumUnit.spoken(sodiumUnit.fromMg(sodiumLimitMg))
             return Status(
-                headline: "\(whole(mg)) / \(whole(sodiumLimitMg)) mg",
-                caption: over ? "sodium — over limit" : "sodium",
+                headline: "\(value) / \(limit) \(sodiumUnit.symbol)",
+                caption: over ? "\(name) — over limit" : name,
                 spoken: over
-                    ? "You're over your sodium limit — \(whole(mg)) of \(whole(sodiumLimitMg)) milligrams today."
-                    : "You're at \(whole(mg)) of \(whole(sodiumLimitMg)) milligrams of sodium today."
+                    ? "You're over your \(name) limit — \(value) of \(limit) \(unit) today."
+                    : "You're at \(value) of \(limit) \(unit) of \(name) today."
             )
         }
     }
@@ -76,36 +86,45 @@ public enum StatusPhrasing {
         nutrient: TrackedNutrient,
         value: Double,
         target: Double?,
-        mode: TrackedMetricMode?
+        mode: TrackedMetricMode?,
+        waterUnit: WaterUnit = .fluidOunces,
+        sodiumUnit: SodiumUnit = .milligrams
     ) -> Status {
-        let name = nutrient.displayName.lowercased()
-        let unit = spokenUnit(nutrient.unitSymbol, amount: value)
+        // value/target arrive canonical (oz/mg); judgments stay on them.
+        // Display/speech convert — and salt mode renames the nutrient.
+        let name = nutrient.displayInlineName(sodium: sodiumUnit).lowercased()
+        let symbol = nutrient.displayUnitSymbol(water: waterUnit, sodium: sodiumUnit)
+        let digits = nutrient.displayFractionDigits(sodium: sodiumUnit)
+        let displayValue = nutrient.displayValue(value, water: waterUnit, sodium: sodiumUnit)
+        let shown = amount(displayValue, digits: digits)
+        let unit = spokenUnit(symbol, amount: displayValue)
         guard let target, target > 0 else {
             return Status(
-                headline: "\(whole(value)) \(nutrient.unitSymbol)",
+                headline: "\(shown) \(symbol)",
                 caption: name,
-                spoken: "You've had \(whole(value)) \(unit) of \(name) today."
+                spoken: "You've had \(shown) \(unit) of \(name) today."
             )
         }
-        let headline = "\(whole(value)) / \(whole(target)) \(nutrient.unitSymbol)"
+        let shownTarget = amount(nutrient.displayValue(target, water: waterUnit, sodium: sodiumUnit), digits: digits)
+        let headline = "\(shown) / \(shownTarget) \(symbol)"
         switch mode ?? nutrient.defaultMode {
         case .limit where value > target:
             return Status(
                 headline: headline,
                 caption: "\(name) — over limit",
-                spoken: "You're over your \(name) limit — \(whole(value)) of \(whole(target)) \(unit) today."
+                spoken: "You're over your \(name) limit — \(shown) of \(shownTarget) \(unit) today."
             )
         case .goal where value >= target:
             return Status(
                 headline: headline,
                 caption: name,
-                spoken: "\(name.capitalized) goal met — \(whole(value)) of \(whole(target)) \(unit) today."
+                spoken: "\(name.capitalized) goal met — \(shown) of \(shownTarget) \(unit) today."
             )
         default:
             return Status(
                 headline: headline,
                 caption: name,
-                spoken: "You're at \(whole(value)) of \(whole(target)) \(unit) of \(name) today."
+                spoken: "You're at \(shown) of \(shownTarget) \(unit) of \(name) today."
             )
         }
     }
@@ -119,11 +138,17 @@ public enum StatusPhrasing {
         case "mg": singular ? "milligram" : "milligrams"
         case "oz": singular ? "ounce" : "ounces"
         case "µg", "mcg": singular ? "microgram" : "micrograms"
+        case "mL": singular ? "milliliter" : "milliliters"
         default: symbol
         }
     }
 
     private static func whole(_ value: Double) -> String {
         value.formatted(.number.precision(.fractionLength(0)))
+    }
+
+    /// whole() with a decimal when the unit needs one (salt grams).
+    private static func amount(_ value: Double, digits: Int) -> String {
+        value.formatted(.number.precision(.fractionLength(digits)))
     }
 }

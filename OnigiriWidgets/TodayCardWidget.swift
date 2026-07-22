@@ -295,11 +295,19 @@ struct TodayCardView: View {
             ? Color.sodiumStatus(mg: total, limitMg: target)
             : (nutrient == .water ? .blue : .green)
 
+        // Units follow the preference (widgets share the app-group
+        // defaults); status colors keep judging canonical totals.
+        let water = SharedStore.waterUnit
+        let sodium = SharedStore.sodiumUnit
+        let digits = nutrient.displayFractionDigits(sodium: sodium)
+        let symbol = nutrient.displayUnitSymbol(water: water, sodium: sodium)
+        let name = nutrient.displayInlineName(sodium: sodium)
+
         return Label {
             switch mode {
             case .limit:
                 HStack(spacing: 3) {
-                    Text("\(total, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(nutrient.inlineName)")
+                    Text("\(nutrient.displayValue(total, water: water, sodium: sodium), format: .number.precision(.fractionLength(digits))) \(symbol) \(name)")
                         .foregroundStyle(Color.sodiumStatus(mg: total, limitMg: target))
                         .fontWeight(.medium)
                         .accessibilityValue(Color.sodiumStatusLabel(mg: total, limitMg: target) ?? "")
@@ -312,7 +320,7 @@ struct TodayCardView: View {
                     }
                 }
             case .goal:
-                Text("\(total, format: .number.precision(.fractionLength(0))) / \(target, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(nutrient.inlineName)")
+                Text("\(nutrient.displayValue(total, water: water, sodium: sodium), format: .number.precision(.fractionLength(digits))) / \(nutrient.displayValue(target, water: water, sodium: sodium), format: .number.precision(.fractionLength(digits))) \(symbol) \(name)")
                     .foregroundStyle(met ? Color.green : Color.secondary)
                     .fontWeight(met ? .medium : .regular)
             }

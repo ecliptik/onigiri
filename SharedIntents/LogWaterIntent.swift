@@ -42,7 +42,11 @@ struct LogWaterIntent: AppIntent {
         WidgetReloader.reloadNow(kinds: [
             WidgetKinds.waterAccessory, WidgetKinds.todayCard,
         ])
+        // The parameter stays ounces (a display-unit parameter would make
+        // "log 20" ambiguous across installs); only the reply converts.
+        let unit = SharedStore.waterUnit
+        let shown = unit.fromOz(oz)
         return .result(dialog: IntentDialog(
-            stringLiteral: "Logged \(oz.formatted(.number.precision(.fractionLength(0)))) ounces of water."))
+            stringLiteral: "Logged \(shown.formatted(.number.precision(.fractionLength(0)))) \(unit.spoken(shown)) of water."))
     }
 }

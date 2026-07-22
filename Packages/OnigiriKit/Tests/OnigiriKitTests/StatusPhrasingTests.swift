@@ -107,4 +107,49 @@ struct StatusPhrasingTests {
         #expect(over.caption == "sodium — over limit")
         #expect(over.spoken == "You're over your sodium limit — 2,600 of 2,300 milligrams today.")
     }
+
+    // MARK: Unit preferences — numbers convert, judgments stay canonical
+
+    @Test func waterSpeaksMilliliters() {
+        let status = StatusPhrasing.phrase(
+            metric: .water, plan: state(waterOz: 36),
+            waterGoalOz: 64, sodiumLimitMg: 2_300, waterUnit: .milliliters)
+        #expect(status.headline == "1,065 / 1,893 mL")
+        #expect(status.spoken == "You're at 1,065 of 1,893 milliliters of water today.")
+    }
+
+    @Test func sodiumSpeaksSaltGrams() {
+        // 2,600 mg sodium = 6.5 g salt; still judged over the 2,300 mg
+        // (5.8 g) limit — the boundary lives on the canonical values.
+        let over = StatusPhrasing.phrase(
+            metric: .sodium, plan: state(sodiumMg: 2_600),
+            waterGoalOz: 64, sodiumLimitMg: 2_300, sodiumUnit: .saltGrams)
+        #expect(over.headline == "6.5 / 5.8 g")
+        #expect(over.caption == "salt — over limit")
+        #expect(over.spoken == "You're over your salt limit — 6.5 of 5.8 grams today.")
+    }
+
+    @Test func nutrientStatusConvertsTrackedSodiumAndWater() {
+        let salt = StatusPhrasing.nutrientStatus(
+            nutrient: .sodium, value: 1_450, target: 2_300, mode: nil,
+            sodiumUnit: .saltGrams)
+        #expect(salt.headline == "3.6 / 5.8 g")
+        #expect(salt.caption == "salt")
+        #expect(salt.spoken == "You're at 3.6 of 5.8 grams of salt today.")
+
+        let water = StatusPhrasing.nutrientStatus(
+            nutrient: .water, value: 36, target: 64, mode: nil,
+            waterUnit: .milliliters)
+        #expect(water.headline == "1,065 / 1,893 mL")
+        #expect(water.spoken == "You're at 1,065 of 1,893 milliliters of water today.")
+    }
+
+    @Test func defaultUnitsPreserveLongstandingPhrasing() {
+        // No unit arguments = exactly the pre-preference strings.
+        let status = StatusPhrasing.phrase(
+            metric: .water, plan: state(waterOz: 36),
+            waterGoalOz: 64, sodiumLimitMg: 2_300)
+        #expect(status.headline == "36 / 64 oz")
+        #expect(status.spoken == "You're at 36 of 64 ounces of water today.")
+    }
 }

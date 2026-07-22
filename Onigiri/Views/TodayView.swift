@@ -44,6 +44,10 @@ struct TodayView: View {
     }
     @AppStorage(SharedStore.trackedMetric2IconKey, store: SharedStore.defaults) private var trackedMetric2Icon = ""
     @AppStorage(SharedStore.energyStatsStyleKey, store: SharedStore.defaults) private var energyStatsStyle = "cards"
+    @AppStorage(SharedStore.waterUnitKey, store: SharedStore.defaults) private var waterUnitRaw = SharedStore.unitAutomatic
+    @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults) private var sodiumUnitRaw = SharedStore.unitAutomatic
+    private var waterUnit: WaterUnit { WaterUnit.resolve(waterUnitRaw) }
+    private var sodiumUnit: SodiumUnit { SodiumUnit.resolve(sodiumUnitRaw) }
     @State private var activeSheet: TodaySheet?
     @State private var quickActions = QuickActions.shared
     /// Value-routed push so the deep-link path can force-pop: a bare
@@ -671,7 +675,9 @@ struct TodayView: View {
                 // status); VoiceOver still hears it via the value, and
                 // Differentiate Without Color gets the glyph twin.
                 HStack(spacing: 4) {
-                    Text("\(total, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(metricName(nutrient))")
+                    // Status color/gauge judge canonical totals; only
+                    // the readout converts (sodium → salt g).
+                    Text("\(nutrient.displayValue(total, water: waterUnit, sodium: sodiumUnit), format: .number.precision(.fractionLength(nutrient.displayFractionDigits(sodium: sodiumUnit)))) \(nutrient.displayUnitSymbol(water: waterUnit, sodium: sodiumUnit)) \(metricName(nutrient))")
                         .foregroundStyle(Color.sodiumStatus(mg: total, limitMg: target))
                         .fontWeight(.medium)
                         .accessibilityValue(Color.sodiumStatusLabel(mg: total, limitMg: target) ?? "")
@@ -684,7 +690,8 @@ struct TodayView: View {
                     }
                 }
             case .goal:
-                Text("\(total, format: .number.precision(.fractionLength(0))) / \(target, format: .number.precision(.fractionLength(0))) \(nutrient.unitSymbol) \(metricName(nutrient))")
+                let digits = nutrient.displayFractionDigits(sodium: sodiumUnit)
+                Text("\(nutrient.displayValue(total, water: waterUnit, sodium: sodiumUnit), format: .number.precision(.fractionLength(digits))) / \(nutrient.displayValue(target, water: waterUnit, sodium: sodiumUnit), format: .number.precision(.fractionLength(digits))) \(nutrient.displayUnitSymbol(water: waterUnit, sodium: sodiumUnit)) \(metricName(nutrient))")
                     .foregroundStyle(met ? Color.green : Color.secondary)
                     .fontWeight(met ? .medium : .regular)
             }
@@ -712,7 +719,7 @@ struct TodayView: View {
     }
 
     private func metricName(_ nutrient: TrackedNutrient) -> String {
-        nutrient.inlineName
+        nutrient.displayInlineName(sodium: sodiumUnit)
     }
 
     /// Water renders the app-wide water icon (SF droplet option incl.);
@@ -927,6 +934,10 @@ private struct WaterSectionView: View, Equatable {
     let swipe: RowSwipeState
     let onToggle: () -> Void
     let onEdit: (WaterLogEntry) -> Void
+    // Uncompared in == (the rewardIcon pattern): its own observation
+    // re-renders the section when the unit changes.
+    @AppStorage(SharedStore.waterUnitKey, store: SharedStore.defaults) private var waterUnitRaw = SharedStore.unitAutomatic
+    private var waterUnit: WaterUnit { WaterUnit.resolve(waterUnitRaw) }
 
     static func == (lhs: WaterSectionView, rhs: WaterSectionView) -> Bool {
         lhs.isCollapsed == rhs.isCollapsed
@@ -945,7 +956,7 @@ private struct WaterSectionView: View, Equatable {
                 Text("Water")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text("\(totalOz, format: .number.precision(.fractionLength(0))) oz")
+                Text(waterUnit.text(fromOz: totalOz))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
@@ -954,7 +965,7 @@ private struct WaterSectionView: View, Equatable {
         }
         .buttonStyle(.plain)
         .padding(.horizontal)
-        .accessibilityLabel("Water, \(totalOz.formatted(.number.precision(.fractionLength(0)))) ounces, \(isCollapsed ? "collapsed" : "expanded")")
+        .accessibilityLabel("Water, \(waterUnit.value(fromOz: totalOz)) \(waterUnit.spoken(waterUnit.fromOz(totalOz))), \(isCollapsed ? "collapsed" : "expanded")")
 
         if !isCollapsed {
             ForEach(entries) { entry in
@@ -975,6 +986,7 @@ private struct FoodLogRow: View, Equatable {
     let entryMetric: TrackedNutrient
     let swipe: RowSwipeState
     let onEdit: (FoodLogEntry) -> Void
+    @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults) private var sodiumUnitRaw = SharedStore.unitAutomatic
 
     static func == (lhs: FoodLogRow, rhs: FoodLogRow) -> Bool {
         lhs.entry == rhs.entry && lhs.entryMetric == rhs.entryMetric
@@ -999,7 +1011,10 @@ private struct FoodLogRow: View, Equatable {
             VStack(alignment: .trailing, spacing: 2) {
                 Text("\(entry.kcal, format: .number.precision(.fractionLength(0))) kcal")
                     .monospacedDigit()
-                Text("\((entryMetric.itemAmount(sodiumMg: entry.sodiumMg, nutrients: entry.nutrients) ?? 0), format: .number.precision(.fractionLength(0...1))) \(entryMetric.captionUnit)")
+                Text(entryMetric.captionText(
+                    entryMetric.itemAmount(sodiumMg: entry.sodiumMg, nutrients: entry.nutrients) ?? 0,
+                    sodium: SodiumUnit.resolve(sodiumUnitRaw)
+                ))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
@@ -1047,6 +1062,8 @@ private struct WaterLogRow: View, Equatable {
     let waterIcon: String
     let swipe: RowSwipeState
     let onEdit: (WaterLogEntry) -> Void
+    @AppStorage(SharedStore.waterUnitKey, store: SharedStore.defaults) private var waterUnitRaw = SharedStore.unitAutomatic
+    private var waterUnit: WaterUnit { WaterUnit.resolve(waterUnitRaw) }
 
     static func == (lhs: WaterLogRow, rhs: WaterLogRow) -> Bool {
         lhs.entry == rhs.entry && lhs.waterIcon == rhs.waterIcon
@@ -1059,18 +1076,18 @@ private struct WaterLogRow: View, Equatable {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
-            Text("\(entry.oz, format: .number.precision(.fractionLength(0))) oz")
+            Text(waterUnit.text(fromOz: entry.oz))
                 .monospacedDigit()
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 20)
         .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 12))
         if entry.editable {
-            let amount = entry.oz.formatted(.number.precision(.fractionLength(0)))
+            let amount = waterUnit.value(fromOz: entry.oz)
             label
                 .logRowSwipeActions(
                     swipe: swipe,
-                    itemName: "\(amount) ounce entry",
+                    itemName: "\(amount) \(waterUnit.spoken(waterUnit.fromOz(entry.oz))) entry",
                     onTap: { onEdit(entry) },
                     onEdit: { onEdit(entry) }
                 ) {
@@ -1423,6 +1440,8 @@ private struct WaterEditSheet: View {
     @State private var oz: Double
     @State private var date: Date
     @FocusState private var amountFocused: Bool
+    @AppStorage(SharedStore.waterUnitKey, store: SharedStore.defaults) private var waterUnitRaw = SharedStore.unitAutomatic
+    private var unit: WaterUnit { WaterUnit.resolve(waterUnitRaw) }
 
     init(entry: WaterLogEntry) {
         self.entry = entry
@@ -1434,11 +1453,15 @@ private struct WaterEditSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    Stepper(value: $oz, in: 1...128, step: 4) {
-                        LabeledContent("Amount (oz)") {
+                    // State stays oz (1–128); mL mode steps ±50 on a
+                    // snapped readout and the field edits whole mL.
+                    Stepper {
+                        LabeledContent("Amount (\(unit.symbol))") {
                             TextField("0", value: Binding(
-                                get: { oz },
-                                set: { oz = min(max($0, 1), 128) }
+                                get: {
+                                    unit == .fluidOunces ? oz : unit.fromOz(oz).rounded()
+                                },
+                                set: { oz = min(max(unit.toOz($0), 1), 128) }
                             ), format: .number.precision(.fractionLength(0...1)))
                                 .keyboardType(.decimalPad)
                                 .multilineTextAlignment(.trailing)
@@ -1446,6 +1469,20 @@ private struct WaterEditSheet: View {
                                 .focused($amountFocused)
                         }
                         .padding(.trailing, 8)
+                    } onIncrement: {
+                        if unit == .fluidOunces {
+                            oz = min(128, oz + 4)
+                        } else {
+                            let ml = (unit.fromOz(oz) / 50).rounded() * 50
+                            oz = min(128, unit.toOz(ml + 50))
+                        }
+                    } onDecrement: {
+                        if unit == .fluidOunces {
+                            oz = max(1, oz - 4)
+                        } else {
+                            let ml = (unit.fromOz(oz) / 50).rounded() * 50
+                            oz = max(1, unit.toOz(ml - 50))
+                        }
                     }
                     DatePicker(
                         "Time",
@@ -1576,6 +1613,9 @@ struct DailyGoalCard: View, Equatable {
     /// nil when Health has too few weigh-ins to say.
     var weeklyTrendLb: Double? = nil
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
+    // Display-only (like the reward icon, uncompared in ==): its own
+    // observation re-renders the scale line when the unit changes.
+    @AppStorage(SharedStore.weightUnitKey, store: SharedStore.defaults) private var weightUnitRaw = SharedStore.unitAutomatic
     /// The gauge badge scales with its frame, so the frame must follow
     /// Dynamic Type or the badge stays frozen beside growing text.
     /// (Not compared in ==: ScaledMetric is a DynamicProperty — its
@@ -1668,8 +1708,9 @@ struct DailyGoalCard: View, Equatable {
                         .foregroundStyle(.secondary)
                 }
                 if let trend = weeklyTrendLb {
+                    let unit = WeightUnit.resolve(weightUnitRaw)
                     Label {
-                        Text("Scale: \(trend < 0 ? "down" : "up") \(abs(trend), format: .number.precision(.fractionLength(1))) lb this week")
+                        Text("Scale: \(trend < 0 ? "down" : "up") \(unit.fromLb(abs(trend)), format: .number.precision(.fractionLength(1))) \(unit.symbol) this week")
                     } icon: {
                         Image(systemName: trend < 0 ? "arrow.down.right" : "arrow.up.right")
                     }

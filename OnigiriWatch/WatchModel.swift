@@ -201,7 +201,7 @@ final class WatchModel {
             try await health.logWater(oz: waterServingOz)
             WKInterfaceDevice.current().play(.success)
             showFlash(
-                "+\(waterServingOz.formatted(.number.precision(.fractionLength(0)))) oz ✓",
+                "+\(SharedStore.waterUnit.text(fromOz: waterServingOz)) ✓",
                 isError: false
             )
             await refresh()

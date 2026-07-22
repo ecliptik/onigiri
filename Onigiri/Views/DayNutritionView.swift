@@ -17,6 +17,10 @@ struct DayNutritionView: View {
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
+    @AppStorage(SharedStore.waterUnitKey, store: SharedStore.defaults) private var waterUnitRaw = SharedStore.unitAutomatic
+    @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults) private var sodiumUnitRaw = SharedStore.unitAutomatic
+    private var waterUnit: WaterUnit { WaterUnit.resolve(waterUnitRaw) }
+    private var sodiumUnit: SodiumUnit { SodiumUnit.resolve(sodiumUnitRaw) }
     /// Differentiate Without Color: the remaining/sodium status hues
     /// gain a glyph twin (see BrandColors.sodiumStatusSymbol).
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
@@ -123,9 +127,10 @@ struct DayNutritionView: View {
             }
             // Both rows carry a VoiceOver twin of their status colors —
             // near/over limit and goal-met are otherwise color-only.
-            iconRow("Sodium", icon: { Text("🧂") }) {
+            iconRow(sodiumUnit.nutrientName, icon: { Text("🧂") }) {
                 HStack(spacing: 4) {
-                    Text("\(model.summary.sodiumMg, format: .number.precision(.fractionLength(0))) / \(sodiumLimitMg, format: .number.precision(.fractionLength(0))) mg")
+                    // Status colors keep judging canonical mg.
+                    Text("\(sodiumUnit.value(fromMg: model.summary.sodiumMg)) / \(sodiumUnit.text(fromMg: sodiumLimitMg))")
                         .foregroundStyle(Color.sodiumStatus(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg))
                         .monospacedDigit()
                         .accessibilityValue(Color.sodiumStatusLabel(mg: model.summary.sodiumMg, limitMg: sodiumLimitMg) ?? "")
@@ -139,7 +144,7 @@ struct DayNutritionView: View {
                 }
             }
             iconRow("Water", icon: { WaterIconView(raw: waterIcon) }) {
-                Text("\(model.summary.waterOz, format: .number.precision(.fractionLength(0))) / \(waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
+                Text("\(waterUnit.value(fromOz: model.summary.waterOz)) / \(waterUnit.text(fromOz: waterGoalOz))")
                     .foregroundStyle(model.summary.waterOz >= waterGoalOz ? Color.green : Color.secondary)
                     .monospacedDigit()
                     .accessibilityValue(model.summary.waterOz >= waterGoalOz ? "goal met" : "")

@@ -197,6 +197,14 @@ public enum WatchSync {
         SharedStore.trackedMetric1TargetKey, SharedStore.trackedMetric2TargetKey,
     ] }
 
+    /// Unit preferences ride the same stringified settings dict — but
+    /// ALWAYS send, with an explicit "auto" when unset: a ride-only-when-
+    /// set key would leave a stale explicit choice (say, kg) alive on the
+    /// watch after the phone resets to Automatic.
+    public static var unitPreferenceKeys: [String] { [
+        SharedStore.weightUnitKey, SharedStore.waterUnitKey, SharedStore.sodiumUnitKey,
+    ] }
+
     // MARK: Phone side
 
     public static func makeContext(

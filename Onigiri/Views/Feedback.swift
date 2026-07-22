@@ -160,8 +160,7 @@ enum LogActions {
         do {
             let id = try await health.logWater(oz: oz, date: date)
             didMutate(haptic: .success)
-            let amount = oz.formatted(.number.precision(.fractionLength(0)))
-            ToastCenter.shared.show("Logged \(amount) oz water ✓") {
+            ToastCenter.shared.show("Logged \(SharedStore.waterUnit.text(fromOz: oz)) water ✓") {
                 Task {
                     try? await health.deleteWaterEntry(id: id)
                     didMutate(haptic: nil)
@@ -258,8 +257,7 @@ enum LogActions {
         do {
             try await health.deleteWaterEntry(id: entry.id)
             didMutate(haptic: nil)
-            let amount = entry.oz.formatted(.number.precision(.fractionLength(0)))
-            ToastCenter.shared.show("Removed \(amount) oz ✓") {
+            ToastCenter.shared.show("Removed \(SharedStore.waterUnit.text(fromOz: entry.oz)) ✓") {
                 Task {
                     do {
                         try await health.logWater(oz: entry.oz, date: entry.date)

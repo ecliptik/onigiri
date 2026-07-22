@@ -99,6 +99,11 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
                 hasher.combine(defaults.string(forKey: key))
             }
         }
+        // Unit preferences change every complication readout ("64 oz" →
+        // "1,890 mL") without moving any total — they must reload too.
+        for key in WatchSync.unitPreferenceKeys {
+            hasher.combine(defaults.string(forKey: key))
+        }
         return hasher.finalize()
     }
 

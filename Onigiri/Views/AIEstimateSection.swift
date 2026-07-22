@@ -130,7 +130,7 @@ struct AIEstimateSection: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text("\(food.kcal, format: .number.precision(.fractionLength(0))) kcal")
                     .monospacedDigit()
-                Text("\(food.sodiumMg, format: .number.precision(.fractionLength(0))) mg Na")
+                Text(TrackedNutrient.sodium.captionText(food.sodiumMg, sodium: SharedStore.sodiumUnit))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()

@@ -19,6 +19,10 @@ struct WatchMetricsView: View {
     @AppStorage(SharedStore.trackedMetric2IconKey, store: SharedStore.defaults) private var trackedMetric2Icon = ""
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
+    // Synced unit preferences — observed so the cards re-render the
+    // moment the phone's change lands.
+    @AppStorage(SharedStore.waterUnitKey, store: SharedStore.defaults) private var waterUnitRaw = SharedStore.unitAutomatic
+    @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults) private var sodiumUnitRaw = SharedStore.unitAutomatic
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     /// Differentiate Without Color: limit-mode status hues gain a glyph
     /// twin (see BrandColors.sodiumStatusSymbol).
@@ -111,9 +115,17 @@ struct WatchMetricsView: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 3) {
+                    // Units follow the phone's synced preference; status
+                    // colors keep judging the canonical totals.
+                    let water = WaterUnit.resolve(waterUnitRaw)
+                    let sodium = SodiumUnit.resolve(sodiumUnitRaw)
+                    let digits = nutrient.displayFractionDigits(sodium: sodium)
+                    let shownTotal = nutrient.displayValue(total, water: water, sodium: sodium)
+                        .formatted(.number.precision(.fractionLength(digits)))
+                    let symbol = nutrient.displayUnitSymbol(water: water, sodium: sodium)
                     Text(mode == .limit
-                        ? "\(total.formatted(.number.precision(.fractionLength(0)))) \(nutrient.unitSymbol)"
-                        : "\(total.formatted(.number.precision(.fractionLength(0)))) / \(target.formatted(.number.precision(.fractionLength(0)))) \(nutrient.unitSymbol)")
+                        ? "\(shownTotal) \(symbol)"
+                        : "\(shownTotal) / \(nutrient.displayValue(target, water: water, sodium: sodium).formatted(.number.precision(.fractionLength(digits)))) \(symbol)")
                         .font(.headline)
                         .foregroundStyle(valueColor)
                         .monospacedDigit()
@@ -127,7 +139,7 @@ struct WatchMetricsView: View {
                             .accessibilityHidden(true)
                     }
                 }
-                Text(nutrient.displayName)
+                Text(nutrient.displayName(sodium: SodiumUnit.resolve(sodiumUnitRaw)))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

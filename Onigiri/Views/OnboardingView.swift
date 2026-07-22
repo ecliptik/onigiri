@@ -20,6 +20,18 @@ struct OnboardingView: View {
     @State private var healthWeightLb: Double?
     @State private var manualWeightLb: Double?
     @State private var targetWeightLb: Double?
+
+    /// Pre-Settings, so this is the Automatic (regional) resolution —
+    /// a metric-region first run enters kg from the start. State and
+    /// saves stay lb, same as GoalView.
+    private var weightUnit: WeightUnit { SharedStore.weightUnit }
+
+    private func weightDisplayBinding(_ source: Binding<Double?>) -> Binding<Double?> {
+        Binding(
+            get: { source.wrappedValue.map { (weightUnit.fromLb($0) * 10).rounded() / 10 } },
+            set: { source.wrappedValue = $0.map(weightUnit.toLb) }
+        )
+    }
     @State private var averageBurnKcal: Double?
     /// Today's actual burn — the shared clamp's floor, same as Goal/Today.
     @State private var todayBurnKcal: Double = 0
@@ -201,19 +213,19 @@ struct OnboardingView: View {
             VStack(spacing: 12) {
                 if let healthWeightLb {
                     LabeledContent("Current weight") {
-                        Text("\(healthWeightLb, format: .number.precision(.fractionLength(1))) lb")
+                        Text("\(weightUnit.fromLb(healthWeightLb), format: .number.precision(.fractionLength(1))) \(weightUnit.symbol)")
                     }
                 } else {
-                    LabeledContent("Current weight (lb)") {
-                        TextField("0", value: $manualWeightLb, format: .number)
+                    LabeledContent("Current weight (\(weightUnit.symbol))") {
+                        TextField("0", value: weightDisplayBinding($manualWeightLb), format: .number)
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                             .frame(maxWidth: 90)
                             .focused($weightFieldFocused)
                     }
                 }
-                LabeledContent("Target weight (lb)") {
-                    TextField("0", value: $targetWeightLb, format: .number)
+                LabeledContent("Target weight (\(weightUnit.symbol))") {
+                    TextField("0", value: weightDisplayBinding($targetWeightLb), format: .number)
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
                         .frame(maxWidth: 90)
@@ -260,10 +272,27 @@ struct OnboardingView: View {
                 .foregroundStyle(.blue)
             Text("Daily water goal")
                 .font(.title2.bold())
-            Stepper(value: $waterGoalOz, in: 16...200, step: 8) {
-                Text("\(waterGoalOz, format: .number.precision(.fractionLength(0))) oz")
+            // Steps in round display units (±8 oz / ±250 mL snapped);
+            // storage stays oz. Pre-Settings this is the Automatic
+            // (regional) unit, so a metric first run reads mL.
+            Stepper {
+                Text(SharedStore.waterUnit.text(fromOz: waterGoalOz))
                     .font(.title3.bold())
                     .monospacedDigit()
+            } onIncrement: {
+                if SharedStore.waterUnit == .fluidOunces {
+                    waterGoalOz = min(200, waterGoalOz + 8)
+                } else {
+                    let ml = (WaterUnit.milliliters.fromOz(waterGoalOz) / 250).rounded() * 250
+                    waterGoalOz = WaterUnit.milliliters.toOz(min(5_750, ml + 250))
+                }
+            } onDecrement: {
+                if SharedStore.waterUnit == .fluidOunces {
+                    waterGoalOz = max(16, waterGoalOz - 8)
+                } else {
+                    let ml = (WaterUnit.milliliters.fromOz(waterGoalOz) / 250).rounded() * 250
+                    waterGoalOz = WaterUnit.milliliters.toOz(max(500, ml - 250))
+                }
             }
             .padding(.horizontal, 40)
             Text("Sodium and water are tracked on Today by default — customize to use any nutrient in Settings")

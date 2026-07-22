@@ -120,7 +120,7 @@ public struct BalanceAccessoryView: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
-                    Text("\(state.summary.waterOz, format: .number.precision(.fractionLength(0))) oz water")
+                    Text("\(SharedStore.waterUnit.text(fromOz: state.summary.waterOz)) water")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -170,7 +170,10 @@ public struct WaterAccessoryView: View {
             if needsSetup {
                 Text("💧 Open Onigiri to set up")
             } else {
-                Text("💧 \(waterOz, format: .number.precision(.fractionLength(0))) of \(goalOz, format: .number.precision(.fractionLength(0))) oz")
+                // Unit resolves at render; the settings sync reloads
+                // widget timelines, so a change reaches these promptly.
+                let unit = SharedStore.waterUnit
+                Text("💧 \(unit.value(fromOz: waterOz)) of \(unit.text(fromOz: goalOz))")
             }
         #if os(watchOS)
         case .accessoryCorner:
@@ -180,7 +183,7 @@ public struct WaterAccessoryView: View {
                 .widgetLabel {
                     needsSetup
                         ? Text("Set up Onigiri")
-                        : Text("\(waterOz, format: .number.precision(.fractionLength(0)))/\(goalOz, format: .number.precision(.fractionLength(0))) oz")
+                        : Text("\(SharedStore.waterUnit.value(fromOz: waterOz))/\(SharedStore.waterUnit.text(fromOz: goalOz))")
                 }
         #endif
         default:
@@ -189,7 +192,7 @@ public struct WaterAccessoryView: View {
             } currentValueLabel: {
                 needsSetup
                     ? Text("—")
-                    : Text(waterOz, format: .number.precision(.fractionLength(0)))
+                    : Text(SharedStore.waterUnit.value(fromOz: waterOz))
             }
             .gaugeStyle(.accessoryCircular)
             .tint(.blue)

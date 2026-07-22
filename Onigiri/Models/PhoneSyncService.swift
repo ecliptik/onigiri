@@ -125,6 +125,8 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         let rewardIcon = SharedStore.defaults.string(forKey: SharedStore.rewardIconKey) ?? "onigiri"
         // The tracked-metric slots ride verbatim (targets stringified);
         // the watch's metrics page mirrors the phone's configuration.
+        // Unit preferences ride the same dict, always sent ("auto" when
+        // unset) — see WatchSync.unitPreferenceKeys for why.
         let trackedSettings: [String: String] = Dictionary(
             uniqueKeysWithValues: WatchSync.trackedMetricKeys.compactMap { key in
                 // Numeric targets always send — a reset to 0 ("use the
@@ -134,6 +136,9 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
                     return (key, String(SharedStore.defaults.double(forKey: key)))
                 }
                 return SharedStore.defaults.string(forKey: key).map { (key, $0) }
+            }
+            + WatchSync.unitPreferenceKeys.map { key in
+                (key, SharedStore.defaults.string(forKey: key) ?? SharedStore.unitAutomatic)
             }
         )
         // The phone's plan inputs ride along so the watch computes the

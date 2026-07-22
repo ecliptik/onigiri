@@ -317,12 +317,17 @@ struct CalendarView: View {
         let target = SharedStore.trackedTarget(slot: slot, nutrient: nutrient)
         let value = slotValue(slot: slot, nutrient: nutrient)
         let text: String = value.map { total in
-            let totalText = total.formatted(.number.precision(.fractionLength(0)))
+            let water = SharedStore.waterUnit
+            let sodium = SharedStore.sodiumUnit
+            let digits = nutrient.displayFractionDigits(sodium: sodium)
+            let totalText = nutrient.displayValue(total, water: water, sodium: sodium)
+                .formatted(.number.precision(.fractionLength(digits)))
+            let symbol = nutrient.displayUnitSymbol(water: water, sodium: sodium)
             // Color-only on screen by ruling; VoiceOver gets the limit
-            // status via the value below.
+            // status via the value below. Status math stays canonical.
             return mode == .limit
-                ? "\(totalText) \(nutrient.unitSymbol)"
-                : "\(totalText) / \(target.formatted(.number.precision(.fractionLength(0)))) \(nutrient.unitSymbol)"
+                ? "\(totalText) \(symbol)"
+                : "\(totalText) / \(nutrient.displayValue(target, water: water, sodium: sodium).formatted(.number.precision(.fractionLength(digits)))) \(symbol)"
         } ?? "—"
         let color: Color = value.map { total in
             mode == .limit
@@ -438,6 +443,7 @@ struct MonthDetailView: View {
     let model: CalendarModel
     let month: Date
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
+    @AppStorage(SharedStore.weightUnitKey, store: SharedStore.defaults) private var weightUnitRaw = SharedStore.unitAutomatic
 
     var body: some View {
         // Bound once per evaluation (the house pattern): the stats are
@@ -464,7 +470,7 @@ struct MonthDetailView: View {
                 // means winning or losing ground.
                 LabeledContent("Total water") {
                     Text(model.monthWaterOz.map {
-                        "\($0.formatted(.number.precision(.fractionLength(0)))) oz"
+                        SharedStore.waterUnit.text(fromOz: $0)
                     } ?? "—")
                     .monospacedDigit()
                     .foregroundStyle(model.monthWaterOz != nil ? Color.blue : Color.secondary)
@@ -518,7 +524,8 @@ struct MonthDetailView: View {
     }
 
     private func signedLb(_ value: Double) -> String {
-        "\(value.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always(includingZero: false)))) lb"
+        let unit = WeightUnit.resolve(weightUnitRaw)
+        return "\(unit.fromLb(value).formatted(.number.precision(.fractionLength(1)).sign(strategy: .always(includingZero: false)))) \(unit.symbol)"
     }
 
     private func signedKcal(_ value: Double) -> String {

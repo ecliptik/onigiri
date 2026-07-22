@@ -96,7 +96,9 @@ struct CheckTodayIntent: AppIntent {
                 metric: phrasingMetric,
                 plan: plan,
                 waterGoalOz: SharedStore.waterGoalOz,
-                sodiumLimitMg: SharedStore.sodiumLimitMg
+                sodiumLimitMg: SharedStore.sodiumLimitMg,
+                waterUnit: SharedStore.waterUnit,
+                sodiumUnit: SharedStore.sodiumUnit
             )
         } else if let nutrient = metric.nutrient {
             let value = (try? await HealthKitService().dayTotal(of: nutrient, for: .now)) ?? 0
@@ -108,7 +110,9 @@ struct CheckTodayIntent: AppIntent {
                 nutrient: nutrient,
                 value: value,
                 target: slot.map { SharedStore.trackedTarget(slot: $0, nutrient: nutrient) },
-                mode: slot.map { SharedStore.trackedMode(slot: $0, nutrient: nutrient) }
+                mode: slot.map { SharedStore.trackedMode(slot: $0, nutrient: nutrient) },
+                waterUnit: SharedStore.waterUnit,
+                sodiumUnit: SharedStore.sodiumUnit
             )
         } else {
             // Unreachable by construction — every case maps to one arm.

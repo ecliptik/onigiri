@@ -75,7 +75,8 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
             plan: plan, isMaintenance: goal?.isMaintenance ?? false
         ) else { return }
         for reminder in ReminderPlanner.plan(
-            state: state, enabled: enabled, times: SharedStore.reminderTimes
+            state: state, enabled: enabled, times: SharedStore.reminderTimes,
+            waterUnit: SharedStore.waterUnit
         ) {
             let content = UNMutableNotificationContent()
             content.title = reminder.title
@@ -151,7 +152,7 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
         }
         let samples: [(PlannedReminder.Kind, String, String)] = [
             (.meals, "Nothing logged yet", "Log your meals to keep today's balance up to date."),
-            (.water, "Water check-in", "You're at 12 of 64 oz."),
+            (.water, "Water check-in", "You're at \(SharedStore.waterUnit.value(fromOz: 12)) of \(SharedStore.waterUnit.text(fromOz: 64))."),
             (.streak, "Keep your streak going", "Your 3-day streak ends at midnight — log your day."),
         ]
         for (index, sample) in samples.enumerated() {

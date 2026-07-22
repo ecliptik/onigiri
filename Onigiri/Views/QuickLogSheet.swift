@@ -251,15 +251,26 @@ struct QuickLogSheet: View {
                                 WaterIconView(raw: waterIcon)
                                 Text("Water")
                                 Spacer()
-                                Text("\(SharedStore.waterServingOz, format: .number.precision(.fractionLength(0))) oz")
+                                Text(SharedStore.waterUnit.text(fromOz: SharedStore.waterServingOz))
                                     .foregroundStyle(.secondary)
                                     .monospacedDigit()
                             }
                             .contentShape(.rect)
                             .contextMenu {
-                                ForEach([8.0, 12, 16, 20, 24, 32], id: \.self) { oz in
-                                    Button("\(oz, format: .number.precision(.fractionLength(0))) oz") {
-                                        logWater(oz: oz)
+                                // Round presets PER UNIT (237 mL buttons
+                                // would be noise); logs store the exact
+                                // converted oz either way.
+                                if SharedStore.waterUnit == .fluidOunces {
+                                    ForEach([8.0, 12, 16, 20, 24, 32], id: \.self) { oz in
+                                        Button("\(oz, format: .number.precision(.fractionLength(0))) oz") {
+                                            logWater(oz: oz)
+                                        }
+                                    }
+                                } else {
+                                    ForEach([200.0, 250, 330, 500, 750, 1_000], id: \.self) { ml in
+                                        Button("\(ml, format: .number.precision(.fractionLength(0))) mL") {
+                                            logWater(oz: WaterUnit.milliliters.toOz(ml))
+                                        }
                                     }
                                 }
                             }
@@ -269,7 +280,7 @@ struct QuickLogSheet: View {
                             // hides the + from VoiceOver (and XCUITest;
                             // caught by the flow test on the 18.6 sim).
                             .accessibilityElement(children: .combine)
-                            .accessibilityLabel("Water, \(SharedStore.waterServingOz.formatted(.number.precision(.fractionLength(0)))) ounces per serving")
+                            .accessibilityLabel("Water, \(SharedStore.waterUnit.value(fromOz: SharedStore.waterServingOz)) \(SharedStore.waterUnit.spoken(SharedStore.waterUnit.fromOz(SharedStore.waterServingOz))) per serving")
                             .accessibilityHint("Hold for other amounts")
                             LogButton(name: "Water", longPressName: "Log a serving") {
                                 logWater(oz: SharedStore.waterServingOz)

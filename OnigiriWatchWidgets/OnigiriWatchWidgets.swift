@@ -200,13 +200,16 @@ struct WaterComplicationView: View {
 /// is the total colored toward the ceiling, goal mode "x / target".
 struct SummarySlot: Sendable {
     let emoji: String
+    /// Canonical units (mg/oz/…): the sodium status color's absolute
+    /// near-limit band needs them — display conversion happens in
+    /// slotText, not here.
     let total: Double
     let target: Double
-    let unit: String
+    let nutrient: TrackedNutrient
     let isLimit: Bool
 
     var zeroed: SummarySlot {
-        SummarySlot(emoji: emoji, total: 0, target: target, unit: unit, isLimit: isLimit)
+        SummarySlot(emoji: emoji, total: 0, target: target, nutrient: nutrient, isLimit: isLimit)
     }
 }
 
@@ -229,8 +232,8 @@ struct SummaryEntry: TimelineEntry {
             gaugeProgress: 0.38
         ),
         slots: [
-            SummarySlot(emoji: "🧂", total: 1780, target: 2300, unit: "mg", isLimit: true),
-            SummarySlot(emoji: "💧", total: 36, target: 64, unit: "oz", isLimit: false),
+            SummarySlot(emoji: "🧂", total: 1780, target: 2300, nutrient: .sodium, isLimit: true),
+            SummarySlot(emoji: "💧", total: 36, target: 64, nutrient: .water, isLimit: false),
         ]
     )
 
@@ -311,7 +314,7 @@ struct SummaryProvider: TimelineProvider {
                 emoji: SharedStore.trackedEmoji(slot: slot, nutrient: nutrient),
                 total: total,
                 target: SharedStore.trackedTarget(slot: slot, nutrient: nutrient),
-                unit: nutrient.unitSymbol,
+                nutrient: nutrient,
                 isLimit: SharedStore.trackedMode(slot: slot, nutrient: nutrient) == .limit
             ))
         }
@@ -379,11 +382,18 @@ struct SummaryComplicationView: View {
     }
 
     private func slotText(_ slot: SummarySlot) -> String {
-        let total = slot.total.formatted(.number.precision(.fractionLength(0)))
+        let water = SharedStore.waterUnit
+        let sodium = SharedStore.sodiumUnit
+        let digits = slot.nutrient.displayFractionDigits(sodium: sodium)
+        let total = slot.nutrient.displayValue(slot.total, water: water, sodium: sodium)
+            .formatted(.number.precision(.fractionLength(digits)))
+        let symbol = slot.nutrient.displayUnitSymbol(water: water, sodium: sodium)
         if slot.isLimit {
-            return "\(total) \(slot.unit)"
+            return "\(total) \(symbol)"
         }
-        return "\(total) / \(slot.target.formatted(.number.precision(.fractionLength(0)))) \(slot.unit)"
+        let target = slot.nutrient.displayValue(slot.target, water: water, sodium: sodium)
+            .formatted(.number.precision(.fractionLength(digits)))
+        return "\(total) / \(target) \(symbol)"
     }
 
     private func slotColor(_ slot: SummarySlot) -> Color {

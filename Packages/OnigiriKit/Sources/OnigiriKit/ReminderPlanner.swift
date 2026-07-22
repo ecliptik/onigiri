@@ -96,7 +96,8 @@ public enum ReminderPlanner {
         enabled: Enabled,
         times: Times = Times(),
         now: Date = .now,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        waterUnit: WaterUnit = .fluidOunces
     ) -> [PlannedReminder] {
         var planned: [PlannedReminder] = []
         let todayStart = calendar.startOfDay(for: now)
@@ -123,7 +124,7 @@ public enum ReminderPlanner {
                 planned.append(PlannedReminder(
                     kind: .water, fireDate: fire,
                     title: "Water check-in",
-                    body: "You're at \(Int(state.waterOz)) of \(Int(state.waterGoalOz)) oz."
+                    body: "You're at \(waterUnit.value(fromOz: state.waterOz)) of \(waterUnit.text(fromOz: state.waterGoalOz))."
                 ))
             }
         }

@@ -153,7 +153,7 @@ struct MealFormView: View {
                 // foods below (the user — the old bottom Total sat off
                 // screen exactly when it was needed).
                 LabeledContent("Total") {
-                    Text("\(totalKcal, format: .number.precision(.fractionLength(0))) kcal • \(totalMetricAmount, format: .number.precision(.fractionLength(0...1))) \(libraryMetric.captionUnit)")
+                    Text("\(totalKcal, format: .number.precision(.fractionLength(0))) kcal • \(libraryMetric.captionText(totalMetricAmount, sodium: SharedStore.sodiumUnit))")
                         .monospacedDigit()
                         .foregroundStyle(hasItems ? .primary : .secondary)
                 }

@@ -94,9 +94,9 @@ struct ReminderPlannerTests {
         #expect(planned.filter { $0.kind == .water }.count == 1)
     }
 
-    @Test func streakWarningWhenAliveAndUnmet() {
+    @Test func streakWarningWhenNothingLoggedYet() {
         let planned = ReminderPlanner.plan(
-            state: .init(streak: 5, todayGoalMet: false),
+            state: .init(hasLoggedFood: false, streak: 5),
             enabled: .init(streak: true),
             now: today(at: 8)
         )
@@ -106,9 +106,24 @@ struct ReminderPlannerTests {
         #expect(fireHours(planned, kind: .streak, dayOffset: 1).isEmpty)
     }
 
-    @Test func streakWarningMovesToTomorrowOnceTodayIsEarned() {
+    @Test func noStreakWarningOnceAnythingIsLogged() {
+        // The 2026-07-22 report: logged all day but the goal not YET met
+        // at the 8 PM check (burn still accruing) fired the warning
+        // every evening. Logging anything silences it — the warning is
+        // "you forgot to log", not "you're over budget".
         let planned = ReminderPlanner.plan(
-            state: .init(streak: 6, todayGoalMet: true),
+            state: .init(hasLoggedFood: true, streak: 5, todayGoalMet: false),
+            enabled: .init(streak: true),
+            now: today(at: 8)
+        )
+        #expect(planned.filter { $0.kind == .streak }.isEmpty)
+    }
+
+    @Test func streakWarningMovesToTomorrowOnceTodayIsEarned() {
+        // An earned day is by definition a logged day (isTracked gates
+        // the badge) — the synthetic state says both.
+        let planned = ReminderPlanner.plan(
+            state: .init(hasLoggedFood: true, streak: 6, todayGoalMet: true),
             enabled: .init(streak: true),
             now: today(at: 8)
         )

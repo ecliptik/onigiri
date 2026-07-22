@@ -128,7 +128,13 @@ public enum ReminderPlanner {
                 ))
             }
         }
-        if enabled.streak, !state.todayGoalMet, state.streak >= 2,
+        // Gated on LOGGING, not on the goal: todayGoalMet judges with
+        // burn-so-far, and the day's remaining resting burn arrives
+        // between the 8 PM check and midnight — so a fully logged,
+        // on-track day read "unmet" and the warning fired every evening
+        // (the user, 2026-07-22). The warning is "you forgot to log",
+        // matching its own copy; goal math stays out of it.
+        if enabled.streak, !state.hasLoggedFood, state.streak >= 2,
            let fire = at(minute: times.streakMinute, dayOffset: 0), fire > now {
             planned.append(streakWarning(at: fire, streak: state.streak))
         }

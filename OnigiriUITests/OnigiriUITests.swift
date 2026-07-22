@@ -653,17 +653,27 @@ final class OnigiriUITests: XCTestCase {
         if tapIfExists(app.buttons["Settings"]) {
             _ = app.staticTexts["Reminders"].waitForExistence(timeout: 5)
             shot("settings-top")
-            // Leave gauges ON so today-final captures the ring + fills.
-            // Coordinate tap at the row's trailing edge: the switch query
-            // alone failed to register taps on this SwiftUI toggle.
-            var gauges = app.switches["Progress gauges"].firstMatch
-            if !gauges.waitForExistence(timeout: 2) {
-                gauges = app.descendants(matching: .any)
-                    .matching(NSPredicate(format: "label == 'Progress gauges'")).firstMatch
-                _ = gauges.waitForExistence(timeout: 2)
-            }
-            if gauges.exists {
-                gauges.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+            // Appearance lives behind its own row now (the declutter):
+            // gauges toggle + food icon picker moved into the subscreen.
+            if tapIfExists(app.staticTexts["Appearance"]) {
+                // Leave gauges ON so today-final captures the ring + fills.
+                // Coordinate tap at the row's trailing edge: the switch
+                // query alone failed to register taps on this toggle.
+                var gauges = app.switches["Progress gauges"].firstMatch
+                if !gauges.waitForExistence(timeout: 2) {
+                    gauges = app.descendants(matching: .any)
+                        .matching(NSPredicate(format: "label == 'Progress gauges'")).firstMatch
+                    _ = gauges.waitForExistence(timeout: 2)
+                }
+                if gauges.exists {
+                    gauges.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+                }
+                shot("settings-appearance", settle: 0.5)
+                if tapIfExists(app.staticTexts["Food icon"]) {
+                    shot("settings-food-icon-picker")
+                    tapIfExists(app.navigationBars.buttons.firstMatch)
+                }
+                tapIfExists(app.navigationBars.buttons.firstMatch)
             }
             // Hide the water metric via the second slot's None option:
             // today-final shows sodium only.
@@ -675,10 +685,6 @@ final class OnigiriUITests: XCTestCase {
                 }
             }
             shot("settings-gauges-on", settle: 0.5)
-            if tapIfExists(app.staticTexts["Food icon"]) {
-                shot("settings-food-icon-picker")
-                tapIfExists(app.navigationBars.buttons.firstMatch)
-            }
             app.swipeUp()
             shot("settings-bottom")
             tapIfExists(app.buttons["Done"])

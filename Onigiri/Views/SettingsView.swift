@@ -29,13 +29,73 @@ private struct ReminderTimeRow: View {
     }
 }
 
+/// Round-trip verdict for key/connection tests (FDC and AI share the
+/// grammar); editing the tested value voids it back to idle.
+enum FDCKeyTest: Equatable {
+    case idle, testing, success
+    case failure(String)
+}
+
+/// Icon-picker option lists + the custom-emoji rows, shared between the
+/// main screen (water picker, metric slots) and the Appearance subscreen.
+private enum SettingsIcons {
+    static let foodOptions: [(tag: String, name: String)] = [
+        ("sfFork", "Fork & Knife"),
+        ("apple", "Apple"),
+        ("bento", "Bento"),
+        ("noodles", "Noodles"),
+        ("fork", "Fork & Knife"),
+        ("plate", "Plate"),
+        ("onigiri", "Onigiri"),
+    ]
+
+    static let waterOptions: [(tag: String, name: String)] = [
+        ("sfDrop", "Droplet"),
+        ("drop", "Droplet"),
+        ("wave", "Great Wave"),
+        ("cup", "Cup"),
+        ("tap", "Tap"),
+        ("pour", "Pour"),
+        ("ice", "Ice"),
+    ]
+
+    static let rewardOptions: [(tag: String, name: String)] = [
+        ("onigiri", "Onigiri"),
+        ("trophy", "Trophy"),
+        ("medal", "Gold Medal"),
+        ("star", "Star"),
+        ("fire", "Fire"),
+        ("muscle", "Strong"),
+        ("target", "Bullseye"),
+        ("sparkles", "Sparkles"),
+    ]
+
+    /// Appended to every icon picker: the current custom emoji (when one
+    /// is set — otherwise the picker would show no selection) and the
+    /// "Choose your own…" entry that opens the emoji prompt.
+    @ViewBuilder
+    static func customRows(current: String) -> some View {
+        if SharedStore.isCustomEmoji(current) {
+            HStack(spacing: 10) {
+                Text(current)
+                    .frame(width: 28)
+                Text("Custom")
+            }
+            .tag(current)
+        }
+        HStack(spacing: 10) {
+            Image(systemName: "face.smiling")
+                .frame(width: 28)
+                .foregroundStyle(.secondary)
+            Text("Choose custom…")
+        }
+        .tag("custom")
+    }
+}
+
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
-    /// Re-masks any revealed API key on backgrounding — defense in
-    /// depth beside the window-level PrivacyShield: a revealed key must
-    /// never ride into the app-switcher snapshot (2026-07-20 audit).
-    @Environment(\.scenePhase) private var scenePhase
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
@@ -74,40 +134,18 @@ struct SettingsView: View {
     @AppStorage(SharedStore.weightUnitKey, store: SharedStore.defaults) private var weightUnit = SharedStore.unitAutomatic
     @AppStorage(SharedStore.waterUnitKey, store: SharedStore.defaults) private var waterUnit = SharedStore.unitAutomatic
     @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults) private var sodiumUnit = SharedStore.unitAutomatic
-    /// What the key field shows; only plausible keys flow to storage
-    /// (the Keychain now — see SharedStore.saveFDCAPIKey).
-    @State private var fdcAPIKeyDraft = SharedStore.fdcAPIKey
     /// The Keychain key as Settings found it; Cancel restores it (the
     /// field applies as-you-go like the rest of Settings, and the FDC key
-    /// is no longer in the defaults snapshot).
+    /// is no longer in the defaults snapshot). The draft/test/reveal
+    /// state lives in OnlineDatabaseSettingsScreen — each push re-reads
+    /// storage, so resets and Cancel need no hand-mirroring there.
     @State private var fdcKeyAtOpen = SharedStore.fdcAPIKey
-    /// The "Test Key" round-trip's verdict; editing the key voids it.
-    @State private var fdcKeyTest = FDCKeyTest.idle
-    /// The key masks to dots by default; the eye toggle reveals it.
-    @State private var showFDCKey = false
 
-    enum FDCKeyTest: Equatable {
-        case idle, testing, success
-        case failure(String)
-    }
-
-    // Bring-your-own-AI (PLAN-byo-ai). Selection + models + server
-    // address are defaults; secrets go straight to the Keychain like
-    // the FDC key.
+    // Bring-your-own-AI: only the two values the summary row reads live
+    // here now — the full configuration (models, server, secrets, test)
+    // moved into AISettingsScreen with its own state.
     @AppStorage(AIProviderSettings.enabledKey, store: SharedStore.defaults) private var aiEnabled = false
     @AppStorage(AIProviderSettings.providerKey, store: SharedStore.defaults) private var aiProvider = AIProvider.onDevice.rawValue
-    @AppStorage(AIProviderSettings.anthropicModelKey, store: SharedStore.defaults) private var aiAnthropicModel = ""
-    @AppStorage(AIProviderSettings.openAIModelKey, store: SharedStore.defaults) private var aiOpenAIModel = ""
-    @AppStorage(AIProviderSettings.localModelKey, store: SharedStore.defaults) private var aiLocalModel = ""
-    @AppStorage(AIProviderSettings.localBaseURLKey, store: SharedStore.defaults) private var aiLocalBaseURL = ""
-    @AppStorage(AIProviderSettings.localVisionKey, store: SharedStore.defaults) private var aiLocalVision = false
-    /// The SELECTED provider's secret, drafted like the FDC key —
-    /// reloaded when the picker moves (each provider keeps its own
-    /// Keychain slot, so switching never clobbers another's key).
-    @State private var aiKeyDraft = ""
-    @State private var showAIKey = false
-    /// Test-connection verdict; editing anything voids it.
-    @State private var aiTest = FDCKeyTest.idle
 
     /// Which reset is awaiting its confirmation alert.
     @State private var pendingReset: PendingReset?
@@ -170,65 +208,101 @@ struct SettingsView: View {
         var id: String { rawValue }
     }
 
-    /// All opt-in, fixed times (see the footer); permission is requested
-    /// the first time a toggle turns on, never at launch.
-    private var remindersSection: some View {
+    /// The configure-once features, one NavigationLink row each — the
+    /// user's de-clutter call (2026-07-21): daily-relevant sections keep
+    /// the main screen, plumbing collapses behind rows. The trailing
+    /// values keep the privacy posture visible at a glance — Online
+    /// Database and AI must still SAY "Off" from the main screen
+    /// (off-by-default is the app's spine).
+    private var configSection: some View {
         Section {
-            Toggle("Not logged by \(timeLabel(remindMealsMinute))", isOn: $remindMeals)
-            if remindMeals {
-                ReminderTimeRow(label: "Remind at", minute: $remindMealsMinute)
+            NavigationLink {
+                AppearanceSettingsScreen()
+            } label: {
+                Text("Appearance")
             }
-            Toggle("Water pacing", isOn: $remindWater)
-            if remindWater {
-                ReminderTimeRow(label: "First check-in", minute: $remindWaterMinute1)
-                ReminderTimeRow(label: "Second check-in", minute: $remindWaterMinute2)
-                ReminderTimeRow(label: "Last check-in", minute: $remindWaterMinute3)
+            NavigationLink {
+                RemindersSettingsScreen(notificationsDenied: $notificationsDenied)
+            } label: {
+                LabeledContent("Reminders") { Text(remindersSummary) }
             }
-            Toggle("Streak about to lapse", isOn: $remindStreak)
-            if remindStreak {
-                ReminderTimeRow(label: "Check at", minute: $remindStreakMinute)
+            NavigationLink {
+                OnlineDatabaseSettingsScreen()
+            } label: {
+                LabeledContent("Online Database") { Text(onlineDatabaseSummary) }
             }
-            if notificationsDenied {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Notifications are off for Onigiri — reminders won't appear.")
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
-                    Button("Turn On in Settings") {
-                        if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
-                            UIApplication.shared.open(url)
-                        }
-                    }
-                    .font(.footnote.weight(.semibold))
-                }
+            NavigationLink {
+                AISettingsScreen()
+            } label: {
+                LabeledContent("AI") { Text(aiSummary) }
             }
-            #if DEBUG
-            Button("Preview Reminders", systemImage: "bell.badge") {
-                Task {
-                    if await ReminderScheduler.shared.preview() {
-                        ToastCenter.shared.show("Previews on the way ✓")
-                    } else {
-                        // Same orange door the toggles use — silence was
-                        // the old behavior's bug.
-                        notificationsDenied = true
-                    }
-                }
+        }
+        // The icon/metric sync plumbing rode the old Appearance section;
+        // it stays on THIS always-mounted section — the subscreens write
+        // the same defaults keys, and these observers must keep firing
+        // for edits made there (and for the reset sweep).
+        .onChange(of: foodIcon) { old, new in
+            iconChanged(.food, from: old, to: new)
+        }
+        .onChange(of: waterIcon) { old, new in
+            iconChanged(.water, from: old, to: new)
+        }
+        .onChange(of: rewardIcon) { old, new in
+            // The push mirrors the badge into the shared defaults and
+            // reloads the widgets when it actually changed.
+            iconChanged(.reward, from: old, to: new)
+        }
+        // A new metric starts from its own defaults, not the old one's —
+        // and every slot change syncs to the watch's metrics page.
+        .onChange(of: trackedMetric1) {
+            trackedMetric1Mode = ""
+            trackedMetric1Target = 0
+            trackedMetric1Icon = ""
+            PhoneSyncService.shared.push(from: context)
+        }
+        .onChange(of: trackedMetric2) {
+            trackedMetric2Mode = ""
+            trackedMetric2Target = 0
+            trackedMetric2Icon = ""
+            PhoneSyncService.shared.push(from: context)
+        }
+        .onChange(of: sodiumLimitMg) { PhoneSyncService.shared.push(from: context) }
+        .onChange(of: trackedMetric1Mode) { PhoneSyncService.shared.push(from: context) }
+        .onChange(of: trackedMetric2Mode) { PhoneSyncService.shared.push(from: context) }
+        .onChange(of: trackedMetric1Target) { PhoneSyncService.shared.push(from: context) }
+        .onChange(of: trackedMetric2Target) { PhoneSyncService.shared.push(from: context) }
+        .onChange(of: trackedMetric1Icon) { old, new in
+            if new == "custom" {
+                iconChanged(.metric1, from: old, to: new)
+            } else {
+                PhoneSyncService.shared.push(from: context)
             }
-            #endif
-        } header: {
-            Text("Reminders")
-        } footer: {
-            // The times live in the rows now; only what they can't say
-            // rides here.
-            Text("Water check-ins nudge only while you're behind an even pace toward the Water section's goal; the streak check warns before a streak lapses at midnight.")
+        }
+        .onChange(of: trackedMetric2Icon) { old, new in
+            if new == "custom" {
+                iconChanged(.metric2, from: old, to: new)
+            } else {
+                PhoneSyncService.shared.push(from: context)
+            }
         }
     }
 
-    /// "2:00 PM" for a minutes-since-midnight value (toggle labels).
-    private func timeLabel(_ minute: Int) -> String {
-        let date = Calendar.current.date(
-            bySettingHour: minute / 60, minute: minute % 60, second: 0, of: .now
-        ) ?? .now
-        return date.formatted(date: .omitted, time: .shortened)
+    private var remindersSummary: String {
+        let count = [remindMeals, remindWater, remindStreak].count(where: { $0 })
+        return count == 0 ? "Off" : "\(count) on"
+    }
+
+    private var onlineDatabaseSummary: String {
+        guard onlineLookups else { return "Off" }
+        switch textSearchSource {
+        case SharedStore.textSearchSourceFDC: return "USDA FDC"
+        case SharedStore.textSearchSourceBoth: return "Both"
+        default: return "OpenFoodFacts"
+        }
+    }
+
+    private var aiSummary: String {
+        aiEnabled ? AIProviderSettings.selected.displayName : "Off"
     }
 
     private func reminderToggled(_ on: Bool) {
@@ -239,28 +313,6 @@ struct SettingsView: View {
             }
         } else {
             ReminderScheduler.shared.replan()
-        }
-    }
-
-    /// One probe request against FDC with the drafted key. The verdict
-    /// only lands if the field still holds the key it judged.
-    private func testFDCKey(_ key: String) {
-        fdcKeyTest = .testing
-        Task {
-            let verdict: FDCKeyTest
-            do {
-                try await FoodDataCentralClient(apiKey: key).validateKey()
-                verdict = .success
-            } catch let error as FoodDataCentralError where error == .badAPIKey {
-                verdict = .failure("USDA rejected this key")
-            } catch let error as FoodDataCentralError where error.isBusy {
-                verdict = .failure("USDA is busy — try again in a minute")
-            } catch {
-                verdict = .failure("Couldn't reach USDA")
-            }
-            if fdcAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines) == key {
-                fdcKeyTest = verdict
-            }
         }
     }
 
@@ -356,312 +408,6 @@ struct SettingsView: View {
             waterIconPicker
         } header: {
             Text("Water")
-        }
-    }
-
-    /// Where text search looks things up. Barcode scans stay on
-    /// OpenFoodFacts either way; FDC needs the user's own api.data.gov
-    /// key (device-local, never synced — see PLAN-1.7).
-    private var onlineDatabaseSection: some View {
-        Section {
-            // Off by default, like AI (the user, 2026-07-20): nothing
-            // leaves the device until it's switched on. OFF = search is
-            // library-only and the scanner reads labels only.
-            Toggle("Online lookups", isOn: $onlineLookups)
-            if onlineLookups {
-            Picker("Source", selection: $textSearchSource) {
-                Text("OpenFoodFacts").tag(SharedStore.textSearchSourceOFF)
-                Text("USDA FoodData Central").tag(SharedStore.textSearchSourceFDC)
-                Text("Both").tag(SharedStore.textSearchSourceBoth)
-            }
-            if textSearchSource != SharedStore.textSearchSourceOFF {
-                // A plain TextField keeps the standard long-press
-                // paste. It edits a DRAFT: only a plausible key (or a
-                // deliberate clear) reaches storage, so a mis-paste
-                // can't silently break search.
-                HStack {
-                    // Masked by default (it's a credential), revealed by
-                    // the eye toggle. Both edit the same draft, so paste
-                    // and the plausibility gate work either way.
-                    Group {
-                        if showFDCKey {
-                            TextField("API key", text: $fdcAPIKeyDraft)
-                        } else {
-                            SecureField("API key", text: $fdcAPIKeyDraft)
-                        }
-                    }
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.asciiCapable)
-                    .font(.callout.monospaced())
-                    .onChange(of: fdcAPIKeyDraft) { _, raw in
-                        let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if key.isEmpty || SharedStore.isPlausibleFDCKey(key) {
-                            SharedStore.saveFDCAPIKey(key)
-                        }
-                        // A different key means the last verdict is
-                        // about someone else.
-                        fdcKeyTest = .idle
-                    }
-                    Button {
-                        showFDCKey.toggle()
-                    } label: {
-                        Image(systemName: showFDCKey ? "eye.slash" : "eye")
-                            // HIG 44 pt tap target via hit area only —
-                            // the negative inset must not move layout.
-                            .contentShape(Rectangle().inset(by: -14))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel(showFDCKey ? "Hide API key" : "Show API key")
-                }
-                let draft = fdcAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                if draft.isEmpty {
-                    Text("An API key is required to use the USDA FoodData Central, go to [fdc.nal.usda.gov/api-guide](https://fdc.nal.usda.gov/api-guide) to request a key")
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
-                } else if !SharedStore.isPlausibleFDCKey(draft) {
-                    Text("API keys are 40 letters and digits — this one is \(draft.count) and won't be saved.")
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
-                }
-                HStack {
-                    // Answers "is this key REAL?" at entry time — the
-                    // shape check above can't know, and without this the
-                    // first failed search is the messenger.
-                    Button("Test API key") { testFDCKey(draft) }
-                        .disabled(!SharedStore.isPlausibleFDCKey(draft) || fdcKeyTest == .testing)
-                    Spacer()
-                    switch fdcKeyTest {
-                    case .idle:
-                        EmptyView()
-                    case .testing:
-                        ProgressView()
-                    case .success:
-                        Label("Success", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                    case .failure(let reason):
-                        Text(reason)
-                            .font(.footnote)
-                            .foregroundStyle(.orange)
-                            .multilineTextAlignment(.trailing)
-                    }
-                }
-            }
-            }
-        } header: {
-            Text("Online Database")
-        } footer: {
-            if onlineLookups {
-                Text("[OpenFoodFacts](https://world.openfoodfacts.org) is always used for barcode scanning")
-            } else {
-                Text("Online lookups are off — searches use your Food Library only, and the scanner reads nutrition labels on-device. Everything remains local to your device.")
-            }
-        }
-    }
-
-    /// Which Keychain slot the key field edits for the selected
-    /// provider; nil for On-Device (no field shows).
-    private var aiSecretAccount: String? {
-        switch AIProviderSettings.selected {
-        case .onDevice: nil
-        case .anthropic: AIProviderSettings.anthropicKeyAccount
-        case .openAI: AIProviderSettings.openAIKeyAccount
-        case .local: AIProviderSettings.localTokenAccount
-        }
-    }
-
-    private var aiStoredSecret: String {
-        switch AIProviderSettings.selected {
-        case .onDevice: ""
-        case .anthropic: AIProviderSettings.anthropicAPIKey
-        case .openAI: AIProviderSettings.openAIAPIKey
-        case .local: AIProviderSettings.localAIToken
-        }
-    }
-
-    /// Masked-by-default secret field, the FDC key's grammar: plain
-    /// TextField behind an eye toggle, edits a draft, saves as typed
-    /// (no shape gate — provider key formats vary and change).
-    private func aiKeyField(_ title: String) -> some View {
-        HStack {
-            Group {
-                if showAIKey {
-                    TextField(title, text: $aiKeyDraft)
-                } else {
-                    SecureField(title, text: $aiKeyDraft)
-                }
-            }
-            .autocorrectionDisabled()
-            .textInputAutocapitalization(.never)
-            .keyboardType(.asciiCapable)
-            .font(.callout.monospaced())
-            .onChange(of: aiKeyDraft) { _, raw in
-                if let account = aiSecretAccount {
-                    AIProviderSettings.saveSecret(raw, account: account)
-                }
-                aiTest = .idle
-            }
-            Button {
-                showAIKey.toggle()
-            } label: {
-                Image(systemName: showAIKey ? "eye.slash" : "eye")
-                    // HIG 44 pt tap target via hit area only — the
-                    // negative inset must not move layout.
-                    .contentShape(Rectangle().inset(by: -14))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .accessibilityLabel(showAIKey ? "Hide key" : "Show key")
-        }
-    }
-
-    private func aiModelField(_ binding: Binding<String>, prompt: String) -> some View {
-        LabeledContent("Model") {
-            TextField("Model", text: binding, prompt: Text(prompt))
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .font(.callout.monospaced())
-                .multilineTextAlignment(.trailing)
-        }
-    }
-
-    /// One cheapest-possible round trip through the configured provider
-    /// — answers "does this key/server actually work?" at entry time,
-    /// so the first failed estimate isn't the messenger.
-    private func testAIConnection() {
-        aiTest = .testing
-        let provider = AIProviderSettings.selected
-        let system = #"Reply with ONLY the JSON object {"ok":true}."#
-        Task {
-            var verdict: FDCKeyTest
-            do {
-                switch provider {
-                case .onDevice:
-                    return
-                case .anthropic:
-                    _ = try await AnthropicClient.completeJSON(
-                        apiKey: AIProviderSettings.anthropicAPIKey,
-                        model: AIProviderSettings.anthropicModel,
-                        system: system, user: "ping", maxTokens: 24)
-                case .openAI:
-                    _ = try await OpenAICompatibleClient.completeJSON(
-                        baseURL: OpenAICompatibleClient.openAIBaseURL,
-                        apiKey: AIProviderSettings.openAIAPIKey,
-                        model: AIProviderSettings.openAIModel,
-                        system: system, user: "ping", maxTokens: 24)
-                case .local:
-                    guard let base = AIProviderSettings.localBaseURL else {
-                        throw AIChatError.badURL
-                    }
-                    _ = try await OpenAICompatibleClient.completeJSON(
-                        baseURL: base,
-                        apiKey: AIProviderSettings.localAIToken,
-                        model: AIProviderSettings.localModel,
-                        system: system, user: "ping", maxTokens: 24)
-                }
-                verdict = .success
-            } catch let error as AIChatError {
-                verdict = .failure(error.errorDescription ?? "Connection failed")
-            } catch {
-                verdict = .failure("Couldn't reach the server")
-            }
-            if AIProviderSettings.selected == provider { aiTest = verdict }
-        }
-    }
-
-    /// Which engine answers the AI features (PLAN-byo-ai): On-Device
-    /// (Apple Intelligence, the default) or the user's own Anthropic /
-    /// OpenAI / local OpenAI-compatible server. Every AI affordance in
-    /// the app follows FoodIntelligence.isAvailable, so configuring a
-    /// provider here lights them up — including on devices without
-    /// Apple Intelligence.
-    private var aiProviderSection: some View {
-        Section {
-            // The master switch leads: AI is entirely optional, and OFF
-            // hides every AI affordance app-wide (the user).
-            Toggle("AI features", isOn: $aiEnabled)
-            if aiEnabled {
-            Picker("Engine", selection: $aiProvider) {
-                ForEach(AIProvider.allCases, id: \.rawValue) { provider in
-                    Text(provider.displayName).tag(provider.rawValue)
-                }
-            }
-            .onChange(of: aiProvider) { _, _ in
-                aiKeyDraft = aiStoredSecret
-                aiTest = .idle
-            }
-            .onAppear { aiKeyDraft = aiStoredSecret }
-            switch AIProviderSettings.selected {
-            case .onDevice:
-                if !FoodIntelligence.onDeviceAvailable {
-                    Text("Apple Intelligence isn't available on this iPhone — AI features are unavailable. Pick a provider above to bring your own.")
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
-                }
-            case .anthropic:
-                aiKeyField("API key")
-                aiModelField($aiAnthropicModel, prompt: AIProviderSettings.defaultAnthropicModel)
-            case .openAI:
-                aiKeyField("API key")
-                aiModelField($aiOpenAIModel, prompt: AIProviderSettings.defaultOpenAIModel)
-            case .local:
-                LabeledContent("Server") {
-                    // verbatim: a literal prompt goes through markdown,
-                    // which auto-links the URL and renders it blue.
-                    TextField("Server", text: $aiLocalBaseURL, prompt: Text(verbatim: "http://192.168.1.20:11434/v1"))
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.URL)
-                        .font(.callout.monospaced())
-                        .multilineTextAlignment(.trailing)
-                        .onChange(of: aiLocalBaseURL) { _, _ in aiTest = .idle }
-                }
-                aiModelField($aiLocalModel, prompt: "gemma3")
-                aiKeyField("Token (optional)")
-                // The photo path needs the user's word — servers don't
-                // advertise vision. Off = Identify Food sends classifier
-                // labels as text instead of the photo.
-                Toggle("Model accepts photos", isOn: $aiLocalVision)
-            }
-            if AIProviderSettings.selected != .onDevice {
-                HStack {
-                    Button("Test connection") { testAIConnection() }
-                        .disabled(!AIProviderSettings.selectedRemoteIsConfigured || aiTest == .testing)
-                    Spacer()
-                    switch aiTest {
-                    case .idle:
-                        EmptyView()
-                    case .testing:
-                        ProgressView()
-                    case .success:
-                        Label("Success", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                    case .failure(let reason):
-                        Text(reason)
-                            .font(.footnote)
-                            .foregroundStyle(.orange)
-                            .multilineTextAlignment(.trailing)
-                    }
-                }
-            }
-            }
-        } header: {
-            Text("AI")
-        } footer: {
-            // ONE tight line per state — the provider descriptions are
-            // the user's copy (kit providerDescription) — plus the two
-            // doors to the long-form story (the user, 2026-07-20).
-            VStack(alignment: .leading, spacing: 6) {
-                if !aiEnabled {
-                    Text("All AI features are off — estimates, label reading, and Identify Food are hidden.")
-                } else {
-                    Text(AIProviderSettings.selected.providerDescription)
-                }
-                // Deep links to each doc's AI section specifically
-                // (the user) — the general doors live in the colophon.
-                Text("[User Guide](https://github.com/ecliptik/onigiri/wiki/User-Guide#ai-features) · [Privacy Policy](https://ecliptik.github.io/onigiri/privacy/#ai-features-optional)")
-            }
         }
     }
 
@@ -786,8 +532,8 @@ struct SettingsView: View {
             AIProviderSettings.saveSecret("", account: account)
         }
         aiSecretsAtOpen = Self.aiSecretAccounts.reduce(into: [:]) { $0[$1] = "" }
-        aiKeyDraft = ""
-        aiTest = .idle
+        // Draft/test state lives in AISettingsScreen — a fresh push
+        // re-reads the (now empty) Keychain slots.
     }
 
     /// The preference values as the sheet found them (missing key =
@@ -814,17 +560,13 @@ struct SettingsView: View {
         }
         // The FDC key lives in the Keychain, outside the defaults
         // snapshot — restore it to what Settings opened with by hand.
+        // (Key-field drafts live in the subscreens and re-read storage
+        // on each push, so no hand-mirroring here.)
         SharedStore.saveFDCAPIKey(fdcKeyAtOpen)
-        // The key field's draft and reminders/watch mirrors re-derive
-        // from the restored values.
-        fdcAPIKeyDraft = SharedStore.fdcAPIKey
-        fdcKeyTest = .idle
         // Same for the AI secrets (one Keychain slot per provider).
         for (account, value) in aiSecretsAtOpen {
             AIProviderSettings.saveSecret(value, account: account)
         }
-        aiKeyDraft = aiStoredSecret
-        aiTest = .idle
         ReminderScheduler.shared.replan()
         PhoneSyncService.shared.push(from: context)
     }
@@ -846,8 +588,6 @@ struct SettingsView: View {
             // The domain wipe doesn't reach the Keychain — clear the
             // FDC key and the AI provider secrets too.
             SharedStore.saveFDCAPIKey("")
-            fdcAPIKeyDraft = ""
-            fdcKeyTest = .idle
             clearAISecrets()
         }
         // Reminders replan off the (possibly cleared) toggles; the push
@@ -889,63 +629,7 @@ struct SettingsView: View {
         // The FDC key and AI secrets are in the Keychain, not the
         // defaults list.
         SharedStore.saveFDCAPIKey("")
-        // The key field's draft mirrors storage by hand.
-        fdcAPIKeyDraft = ""
-        fdcKeyTest = .idle
         clearAISecrets()
-    }
-
-    private static let foodIconOptions: [(tag: String, name: String)] = [
-        ("sfFork", "Fork & Knife"),
-        ("apple", "Apple"),
-        ("bento", "Bento"),
-        ("noodles", "Noodles"),
-        ("fork", "Fork & Knife"),
-        ("plate", "Plate"),
-        ("onigiri", "Onigiri"),
-    ]
-
-    private static let waterIconOptions: [(tag: String, name: String)] = [
-        ("sfDrop", "Droplet"),
-        ("drop", "Droplet"),
-        ("wave", "Great Wave"),
-        ("cup", "Cup"),
-        ("tap", "Tap"),
-        ("pour", "Pour"),
-        ("ice", "Ice"),
-    ]
-
-    private static let rewardIconOptions: [(tag: String, name: String)] = [
-        ("onigiri", "Onigiri"),
-        ("trophy", "Trophy"),
-        ("medal", "Gold Medal"),
-        ("star", "Star"),
-        ("fire", "Fire"),
-        ("muscle", "Strong"),
-        ("target", "Bullseye"),
-        ("sparkles", "Sparkles"),
-    ]
-
-    /// Appended to every icon picker: the current custom emoji (when one
-    /// is set — otherwise the picker would show no selection) and the
-    /// "Choose your own…" entry that opens the emoji prompt.
-    @ViewBuilder
-    private func customIconRows(current: String) -> some View {
-        if SharedStore.isCustomEmoji(current) {
-            HStack(spacing: 10) {
-                Text(current)
-                    .frame(width: 28)
-                Text("Custom")
-            }
-            .tag(current)
-        }
-        HStack(spacing: 10) {
-            Image(systemName: "face.smiling")
-                .frame(width: 28)
-                .foregroundStyle(.secondary)
-            Text("Choose custom…")
-        }
-        .tag("custom")
     }
 
     /// Selecting "custom" opens the prompt — prefilled with the slot's
@@ -1012,107 +696,9 @@ struct SettingsView: View {
         return "Last backup \(stamp), \(location)."
     }
 
-    // Its own property, like dataSection: the icon pickers pushed the
-    // inline Form past what the type-checker will solve in reasonable time.
-    private var appearanceSection: some View {
-        Section("Appearance") {
-            // navigationLink style: menu pickers strip both image
-            // attachments and icon colors from their rows; a pushed
-            // list renders real SwiftUI rows — true colors, aligned
-            // icon column.
-            Picker("Food icon", selection: $foodIcon) {
-                ForEach(Self.foodIconOptions, id: \.tag) { option in
-                    HStack(spacing: 10) {
-                        FoodIconView(raw: option.tag)
-                            .frame(width: 28)
-                        Text(option.name)
-                    }
-                    .tag(option.tag)
-                }
-                customIconRows(current: foodIcon)
-            }
-            .pickerStyle(.navigationLink)
-            // The water icon lives in the Water section — every water
-            // knob in one place (the user).
-            Picker("Goal badge", selection: $rewardIcon) {
-                ForEach(Self.rewardIconOptions, id: \.tag) { option in
-                    HStack(spacing: 10) {
-                        Text(SharedStore.rewardEmoji(for: option.tag))
-                            .frame(width: 28)
-                        Text(option.name)
-                    }
-                    .tag(option.tag)
-                }
-                customIconRows(current: rewardIcon)
-            }
-            .pickerStyle(.navigationLink)
-            // Also cycled by tapping the Today headline — same setting,
-            // so the picker and the tap stay in agreement.
-            Picker("Calorie display", selection: $balanceStyle) {
-                Text("kcal left").tag("remaining")
-                Text("kcal balance").tag("balance")
-                Text("kcal eaten").tag("eaten")
-                Text("kcal budget").tag("budget")
-            }
-            // "Compact" trades the Intake/Active/Resting cards for
-            // Burned/Eaten beside the headline — more room for the log.
-            Picker("Energy stats", selection: $energyStatsStyle) {
-                Text("Cards").tag("cards")
-                Text("Beside balance").tag("compact")
-            }
-            Toggle("Progress gauges", isOn: $progressGauges)
-        }
-        // The icon plumbing lives here, off the body's modifier chain —
-        // adding it there pushed the whole Form past the type-checker.
-        .onChange(of: foodIcon) { old, new in
-            iconChanged(.food, from: old, to: new)
-        }
-        .onChange(of: waterIcon) { old, new in
-            iconChanged(.water, from: old, to: new)
-        }
-        .onChange(of: rewardIcon) { old, new in
-            // The push mirrors the badge into the shared defaults and
-            // reloads the widgets when it actually changed.
-            iconChanged(.reward, from: old, to: new)
-        }
-        // A new metric starts from its own defaults, not the old one's —
-        // and every slot change syncs to the watch's metrics page.
-        .onChange(of: trackedMetric1) {
-            trackedMetric1Mode = ""
-            trackedMetric1Target = 0
-            trackedMetric1Icon = ""
-            PhoneSyncService.shared.push(from: context)
-        }
-        .onChange(of: trackedMetric2) {
-            trackedMetric2Mode = ""
-            trackedMetric2Target = 0
-            trackedMetric2Icon = ""
-            PhoneSyncService.shared.push(from: context)
-        }
-        .onChange(of: sodiumLimitMg) { PhoneSyncService.shared.push(from: context) }
-        .onChange(of: trackedMetric1Mode) { PhoneSyncService.shared.push(from: context) }
-        .onChange(of: trackedMetric2Mode) { PhoneSyncService.shared.push(from: context) }
-        .onChange(of: trackedMetric1Target) { PhoneSyncService.shared.push(from: context) }
-        .onChange(of: trackedMetric2Target) { PhoneSyncService.shared.push(from: context) }
-        .onChange(of: trackedMetric1Icon) { old, new in
-            if new == "custom" {
-                iconChanged(.metric1, from: old, to: new)
-            } else {
-                PhoneSyncService.shared.push(from: context)
-            }
-        }
-        .onChange(of: trackedMetric2Icon) { old, new in
-            if new == "custom" {
-                iconChanged(.metric2, from: old, to: new)
-            } else {
-                PhoneSyncService.shared.push(from: context)
-            }
-        }
-    }
-
     private var waterIconPicker: some View {
         Picker("Water icon", selection: $waterIcon) {
-            ForEach(Self.waterIconOptions, id: \.tag) { option in
+            ForEach(SettingsIcons.waterOptions, id: \.tag) { option in
                 HStack(spacing: 10) {
                     WaterIconView(raw: option.tag)
                         .frame(width: 28)
@@ -1120,7 +706,7 @@ struct SettingsView: View {
                 }
                 .tag(option.tag)
             }
-            customIconRows(current: waterIcon)
+            SettingsIcons.customRows(current: waterIcon)
         }
         .pickerStyle(.navigationLink)
     }
@@ -1317,8 +903,6 @@ struct SettingsView: View {
                     }
                 }
 
-                appearanceSection
-
                 trackedMetricSection(slot: 1)
                 trackedMetricSection(slot: 2)
 
@@ -1341,11 +925,7 @@ struct SettingsView: View {
                     Text("Untracked days")
                 }
 
-                remindersSection
-
-                onlineDatabaseSection
-
-                aiProviderSection
+                configSection
 
                 unitsSection
 
@@ -1461,13 +1041,542 @@ struct SettingsView: View {
         // Transfer/backup outcomes toast; a sheet needs its own host
         // (the root's renders behind presented sheets).
         .toastHost()
-        // Re-mask revealed keys before the app-switcher snapshot —
-        // defense in depth beside the window-level PrivacyShield.
+        // The revealed-key re-mask (2026-07-20 audit) moved into the
+        // Online Database and AI subscreens with their reveal toggles —
+        // a key can only be revealed while its screen is mounted, and
+        // each screen watches scenePhase itself.
+    }
+}
+
+// MARK: - Pushed subscreens
+
+/// Appearance choices, one push off the main screen. Writes land on the
+/// shared defaults keys; SettingsView's always-mounted observers handle
+/// the icon mirroring, emoji prompt, and watch sync.
+private struct AppearanceSettingsScreen: View {
+    @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
+    @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
+    @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "remaining"
+    @AppStorage(SharedStore.energyStatsStyleKey, store: SharedStore.defaults) private var energyStatsStyle = "cards"
+    @AppStorage(SharedStore.progressGaugesKey, store: SharedStore.defaults) private var progressGauges = false
+
+    var body: some View {
+        Form {
+            Section {
+                // navigationLink style: menu pickers strip both image
+                // attachments and icon colors from their rows; a pushed
+                // list renders real SwiftUI rows — true colors, aligned
+                // icon column.
+                Picker("Food icon", selection: $foodIcon) {
+                    ForEach(SettingsIcons.foodOptions, id: \.tag) { option in
+                        HStack(spacing: 10) {
+                            FoodIconView(raw: option.tag)
+                                .frame(width: 28)
+                            Text(option.name)
+                        }
+                        .tag(option.tag)
+                    }
+                    SettingsIcons.customRows(current: foodIcon)
+                }
+                .pickerStyle(.navigationLink)
+                // The water icon lives in the Water section — every water
+                // knob in one place (the user).
+                Picker("Goal badge", selection: $rewardIcon) {
+                    ForEach(SettingsIcons.rewardOptions, id: \.tag) { option in
+                        HStack(spacing: 10) {
+                            Text(SharedStore.rewardEmoji(for: option.tag))
+                                .frame(width: 28)
+                            Text(option.name)
+                        }
+                        .tag(option.tag)
+                    }
+                    SettingsIcons.customRows(current: rewardIcon)
+                }
+                .pickerStyle(.navigationLink)
+                // Also cycled by tapping the Today headline — same setting,
+                // so the picker and the tap stay in agreement.
+                Picker("Calorie display", selection: $balanceStyle) {
+                    Text("kcal left").tag("remaining")
+                    Text("kcal balance").tag("balance")
+                    Text("kcal eaten").tag("eaten")
+                    Text("kcal budget").tag("budget")
+                }
+                // "Compact" trades the Intake/Active/Resting cards for
+                // Burned/Eaten beside the headline — more room for the log.
+                Picker("Energy stats", selection: $energyStatsStyle) {
+                    Text("Cards").tag("cards")
+                    Text("Beside balance").tag("compact")
+                }
+                Toggle("Progress gauges", isOn: $progressGauges)
+            }
+        }
+        .compactSections()
+        .riceCanvas()
+        .navigationTitle("Appearance")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// All opt-in; permission is requested the first time a toggle turns
+/// on, never at launch. The denied banner's state lives on SettingsView
+/// (its open-time check populates it) and rides in as a binding.
+private struct RemindersSettingsScreen: View {
+    @Binding var notificationsDenied: Bool
+    @AppStorage(SharedStore.remindMealsKey, store: SharedStore.defaults) private var remindMeals = false
+    @AppStorage(SharedStore.remindWaterKey, store: SharedStore.defaults) private var remindWater = false
+    @AppStorage(SharedStore.remindStreakKey, store: SharedStore.defaults) private var remindStreak = false
+    // Reminder times (minutes since midnight); defaults mirror
+    // ReminderPlanner.Times so an untouched install schedules exactly
+    // the original fixed times.
+    @AppStorage(SharedStore.remindMealsMinuteKey, store: SharedStore.defaults) private var remindMealsMinute = 14 * 60
+    @AppStorage(SharedStore.remindStreakMinuteKey, store: SharedStore.defaults) private var remindStreakMinute = 20 * 60
+    @AppStorage(SharedStore.remindWaterMinute1Key, store: SharedStore.defaults) private var remindWaterMinute1 = 11 * 60
+    @AppStorage(SharedStore.remindWaterMinute2Key, store: SharedStore.defaults) private var remindWaterMinute2 = 15 * 60
+    @AppStorage(SharedStore.remindWaterMinute3Key, store: SharedStore.defaults) private var remindWaterMinute3 = 19 * 60
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Not logged by \(timeLabel(remindMealsMinute))", isOn: $remindMeals)
+                if remindMeals {
+                    ReminderTimeRow(label: "Remind at", minute: $remindMealsMinute)
+                }
+                Toggle("Water pacing", isOn: $remindWater)
+                if remindWater {
+                    ReminderTimeRow(label: "First check-in", minute: $remindWaterMinute1)
+                    ReminderTimeRow(label: "Second check-in", minute: $remindWaterMinute2)
+                    ReminderTimeRow(label: "Last check-in", minute: $remindWaterMinute3)
+                }
+                Toggle("Streak about to lapse", isOn: $remindStreak)
+                if remindStreak {
+                    ReminderTimeRow(label: "Check at", minute: $remindStreakMinute)
+                }
+                if notificationsDenied {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Notifications are off for Onigiri — reminders won't appear.")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                        Button("Turn On in Settings") {
+                            if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                                UIApplication.shared.open(url)
+                            }
+                        }
+                        .font(.footnote.weight(.semibold))
+                    }
+                }
+                #if DEBUG
+                Button("Preview Reminders", systemImage: "bell.badge") {
+                    Task {
+                        if await ReminderScheduler.shared.preview() {
+                            ToastCenter.shared.show("Previews on the way ✓")
+                        } else {
+                            // Same orange door the toggles use — silence was
+                            // the old behavior's bug.
+                            notificationsDenied = true
+                        }
+                    }
+                }
+                #endif
+            } footer: {
+                // The times live in the rows now; only what they can't say
+                // rides here.
+                Text("Water check-ins nudge only while you're behind an even pace toward the Water section's goal; the streak check warns before a streak lapses at midnight.")
+            }
+        }
+        .compactSections()
+        .riceCanvas()
+        .navigationTitle("Reminders")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// "2:00 PM" for a minutes-since-midnight value (toggle labels).
+    private func timeLabel(_ minute: Int) -> String {
+        let date = Calendar.current.date(
+            bySettingHour: minute / 60, minute: minute % 60, second: 0, of: .now
+        ) ?? .now
+        return date.formatted(date: .omitted, time: .shortened)
+    }
+}
+
+/// Where text search looks things up. Barcode scans stay on
+/// OpenFoodFacts either way; FDC needs the user's own api.data.gov
+/// key (device-local, never synced — see PLAN-1.7). Draft/test state
+/// lives here and re-reads storage on every push, so Cancel and the
+/// resets (which run on SettingsView) need no hand-mirroring.
+private struct OnlineDatabaseSettingsScreen: View {
+    /// Re-masks a revealed key on backgrounding — defense in depth
+    /// beside the window-level PrivacyShield (2026-07-20 audit); the
+    /// observer rides with the reveal toggle now.
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(SharedStore.onlineLookupsKey, store: SharedStore.defaults) private var onlineLookups = false
+    @AppStorage(SharedStore.textSearchSourceKey, store: SharedStore.defaults) private var textSearchSource = SharedStore.textSearchSourceOFF
+    /// What the key field shows; only plausible keys flow to storage
+    /// (the Keychain — see SharedStore.saveFDCAPIKey).
+    @State private var fdcAPIKeyDraft = SharedStore.fdcAPIKey
+    /// The "Test Key" round-trip's verdict; editing the key voids it.
+    @State private var fdcKeyTest = FDCKeyTest.idle
+    /// The key masks to dots by default; the eye toggle reveals it.
+    @State private var showFDCKey = false
+
+    var body: some View {
+        Form {
+            Section {
+                // Off by default, like AI (the user, 2026-07-20): nothing
+                // leaves the device until it's switched on. OFF = search is
+                // library-only and the scanner reads labels only.
+                Toggle("Online lookups", isOn: $onlineLookups)
+                if onlineLookups {
+                Picker("Source", selection: $textSearchSource) {
+                    Text("OpenFoodFacts").tag(SharedStore.textSearchSourceOFF)
+                    Text("USDA FoodData Central").tag(SharedStore.textSearchSourceFDC)
+                    Text("Both").tag(SharedStore.textSearchSourceBoth)
+                }
+                if textSearchSource != SharedStore.textSearchSourceOFF {
+                    // A plain TextField keeps the standard long-press
+                    // paste. It edits a DRAFT: only a plausible key (or a
+                    // deliberate clear) reaches storage, so a mis-paste
+                    // can't silently break search.
+                    HStack {
+                        // Masked by default (it's a credential), revealed by
+                        // the eye toggle. Both edit the same draft, so paste
+                        // and the plausibility gate work either way.
+                        Group {
+                            if showFDCKey {
+                                TextField("API key", text: $fdcAPIKeyDraft)
+                            } else {
+                                SecureField("API key", text: $fdcAPIKeyDraft)
+                            }
+                        }
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.asciiCapable)
+                        .font(.callout.monospaced())
+                        .onChange(of: fdcAPIKeyDraft) { _, raw in
+                            let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if key.isEmpty || SharedStore.isPlausibleFDCKey(key) {
+                                SharedStore.saveFDCAPIKey(key)
+                            }
+                            // A different key means the last verdict is
+                            // about someone else.
+                            fdcKeyTest = .idle
+                        }
+                        Button {
+                            showFDCKey.toggle()
+                        } label: {
+                            Image(systemName: showFDCKey ? "eye.slash" : "eye")
+                                // HIG 44 pt tap target via hit area only —
+                                // the negative inset must not move layout.
+                                .contentShape(Rectangle().inset(by: -14))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(showFDCKey ? "Hide API key" : "Show API key")
+                    }
+                    let draft = fdcAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if draft.isEmpty {
+                        Text("An API key is required to use the USDA FoodData Central, go to [fdc.nal.usda.gov/api-guide](https://fdc.nal.usda.gov/api-guide) to request a key")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    } else if !SharedStore.isPlausibleFDCKey(draft) {
+                        Text("API keys are 40 letters and digits — this one is \(draft.count) and won't be saved.")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    }
+                    HStack {
+                        // Answers "is this key REAL?" at entry time — the
+                        // shape check above can't know, and without this the
+                        // first failed search is the messenger.
+                        Button("Test API key") { testFDCKey(draft) }
+                            .disabled(!SharedStore.isPlausibleFDCKey(draft) || fdcKeyTest == .testing)
+                        Spacer()
+                        switch fdcKeyTest {
+                        case .idle:
+                            EmptyView()
+                        case .testing:
+                            ProgressView()
+                        case .success:
+                            Label("Success", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        case .failure(let reason):
+                            Text(reason)
+                                .font(.footnote)
+                                .foregroundStyle(.orange)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+                }
+                }
+            } footer: {
+                if onlineLookups {
+                    Text("[OpenFoodFacts](https://world.openfoodfacts.org) is always used for barcode scanning")
+                } else {
+                    Text("Online lookups are off — searches use your Food Library only, and the scanner reads nutrition labels on-device. Everything remains local to your device.")
+                }
+            }
+        }
+        .compactSections()
+        .riceCanvas()
+        .navigationTitle("Online Database")
+        .navigationBarTitleDisplayMode(.inline)
         .onChange(of: scenePhase) { _, phase in
             if phase != .active {
                 showFDCKey = false
+            }
+        }
+    }
+
+    /// One probe request against FDC with the drafted key. The verdict
+    /// only lands if the field still holds the key it judged.
+    private func testFDCKey(_ key: String) {
+        fdcKeyTest = .testing
+        Task {
+            let verdict: FDCKeyTest
+            do {
+                try await FoodDataCentralClient(apiKey: key).validateKey()
+                verdict = .success
+            } catch let error as FoodDataCentralError where error == .badAPIKey {
+                verdict = .failure("USDA rejected this key")
+            } catch let error as FoodDataCentralError where error.isBusy {
+                verdict = .failure("USDA is busy — try again in a minute")
+            } catch {
+                verdict = .failure("Couldn't reach USDA")
+            }
+            if fdcAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines) == key {
+                fdcKeyTest = verdict
+            }
+        }
+    }
+}
+
+/// Which engine answers the AI features (PLAN-byo-ai): On-Device
+/// (Apple Intelligence, the default) or the user's own Anthropic /
+/// OpenAI / local OpenAI-compatible server. Every AI affordance in
+/// the app follows FoodIntelligence.isAvailable, so configuring a
+/// provider here lights them up — including on devices without
+/// Apple Intelligence.
+private struct AISettingsScreen: View {
+    /// Re-masks a revealed key on backgrounding (2026-07-20 audit).
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(AIProviderSettings.enabledKey, store: SharedStore.defaults) private var aiEnabled = false
+    @AppStorage(AIProviderSettings.providerKey, store: SharedStore.defaults) private var aiProvider = AIProvider.onDevice.rawValue
+    @AppStorage(AIProviderSettings.anthropicModelKey, store: SharedStore.defaults) private var aiAnthropicModel = ""
+    @AppStorage(AIProviderSettings.openAIModelKey, store: SharedStore.defaults) private var aiOpenAIModel = ""
+    @AppStorage(AIProviderSettings.localModelKey, store: SharedStore.defaults) private var aiLocalModel = ""
+    @AppStorage(AIProviderSettings.localBaseURLKey, store: SharedStore.defaults) private var aiLocalBaseURL = ""
+    @AppStorage(AIProviderSettings.localVisionKey, store: SharedStore.defaults) private var aiLocalVision = false
+    /// The SELECTED provider's secret, drafted like the FDC key —
+    /// reloaded when the picker moves (each provider keeps its own
+    /// Keychain slot, so switching never clobbers another's key).
+    @State private var aiKeyDraft = ""
+    @State private var showAIKey = false
+    /// Test-connection verdict; editing anything voids it.
+    @State private var aiTest = FDCKeyTest.idle
+
+    var body: some View {
+        Form {
+            Section {
+                // The master switch leads: AI is entirely optional, and OFF
+                // hides every AI affordance app-wide (the user).
+                Toggle("AI features", isOn: $aiEnabled)
+                if aiEnabled {
+                Picker("Engine", selection: $aiProvider) {
+                    ForEach(AIProvider.allCases, id: \.rawValue) { provider in
+                        Text(provider.displayName).tag(provider.rawValue)
+                    }
+                }
+                .onChange(of: aiProvider) { _, _ in
+                    aiKeyDraft = aiStoredSecret
+                    aiTest = .idle
+                }
+                .onAppear { aiKeyDraft = aiStoredSecret }
+                switch AIProviderSettings.selected {
+                case .onDevice:
+                    if !FoodIntelligence.onDeviceAvailable {
+                        Text("Apple Intelligence isn't available on this iPhone — AI features are unavailable. Pick a provider above to bring your own.")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    }
+                case .anthropic:
+                    aiKeyField("API key")
+                    aiModelField($aiAnthropicModel, prompt: AIProviderSettings.defaultAnthropicModel)
+                case .openAI:
+                    aiKeyField("API key")
+                    aiModelField($aiOpenAIModel, prompt: AIProviderSettings.defaultOpenAIModel)
+                case .local:
+                    LabeledContent("Server") {
+                        // verbatim: a literal prompt goes through markdown,
+                        // which auto-links the URL and renders it blue.
+                        TextField("Server", text: $aiLocalBaseURL, prompt: Text(verbatim: "http://192.168.1.20:11434/v1"))
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .keyboardType(.URL)
+                            .font(.callout.monospaced())
+                            .multilineTextAlignment(.trailing)
+                            .onChange(of: aiLocalBaseURL) { _, _ in aiTest = .idle }
+                    }
+                    aiModelField($aiLocalModel, prompt: "gemma3")
+                    aiKeyField("Token (optional)")
+                    // The photo path needs the user's word — servers don't
+                    // advertise vision. Off = Identify Food sends classifier
+                    // labels as text instead of the photo.
+                    Toggle("Model accepts photos", isOn: $aiLocalVision)
+                }
+                if AIProviderSettings.selected != .onDevice {
+                    HStack {
+                        Button("Test connection") { testAIConnection() }
+                            .disabled(!AIProviderSettings.selectedRemoteIsConfigured || aiTest == .testing)
+                        Spacer()
+                        switch aiTest {
+                        case .idle:
+                            EmptyView()
+                        case .testing:
+                            ProgressView()
+                        case .success:
+                            Label("Success", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        case .failure(let reason):
+                            Text(reason)
+                                .font(.footnote)
+                                .foregroundStyle(.orange)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+                }
+                }
+            } footer: {
+                // ONE tight line per state — the provider descriptions are
+                // the user's copy (kit providerDescription) — plus the two
+                // doors to the long-form story (the user, 2026-07-20).
+                VStack(alignment: .leading, spacing: 6) {
+                    if !aiEnabled {
+                        Text("All AI features are off — estimates, label reading, and Identify Food are hidden.")
+                    } else {
+                        Text(AIProviderSettings.selected.providerDescription)
+                    }
+                    // Deep links to each doc's AI section specifically
+                    // (the user) — the general doors live in the colophon.
+                    Text("[User Guide](https://github.com/ecliptik/onigiri/wiki/User-Guide#ai-features) · [Privacy Policy](https://ecliptik.github.io/onigiri/privacy/#ai-features-optional)")
+                }
+            }
+        }
+        .compactSections()
+        .riceCanvas()
+        .navigationTitle("AI")
+        .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active {
                 showAIKey = false
             }
+        }
+    }
+
+    /// Which Keychain slot the key field edits for the selected
+    /// provider; nil for On-Device (no field shows).
+    private var aiSecretAccount: String? {
+        switch AIProviderSettings.selected {
+        case .onDevice: nil
+        case .anthropic: AIProviderSettings.anthropicKeyAccount
+        case .openAI: AIProviderSettings.openAIKeyAccount
+        case .local: AIProviderSettings.localTokenAccount
+        }
+    }
+
+    private var aiStoredSecret: String {
+        switch AIProviderSettings.selected {
+        case .onDevice: ""
+        case .anthropic: AIProviderSettings.anthropicAPIKey
+        case .openAI: AIProviderSettings.openAIAPIKey
+        case .local: AIProviderSettings.localAIToken
+        }
+    }
+
+    /// Masked-by-default secret field, the FDC key's grammar: plain
+    /// TextField behind an eye toggle, edits a draft, saves as typed
+    /// (no shape gate — provider key formats vary and change).
+    private func aiKeyField(_ title: String) -> some View {
+        HStack {
+            Group {
+                if showAIKey {
+                    TextField(title, text: $aiKeyDraft)
+                } else {
+                    SecureField(title, text: $aiKeyDraft)
+                }
+            }
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+            .keyboardType(.asciiCapable)
+            .font(.callout.monospaced())
+            .onChange(of: aiKeyDraft) { _, raw in
+                if let account = aiSecretAccount {
+                    AIProviderSettings.saveSecret(raw, account: account)
+                }
+                aiTest = .idle
+            }
+            Button {
+                showAIKey.toggle()
+            } label: {
+                Image(systemName: showAIKey ? "eye.slash" : "eye")
+                    // HIG 44 pt tap target via hit area only — the
+                    // negative inset must not move layout.
+                    .contentShape(Rectangle().inset(by: -14))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .accessibilityLabel(showAIKey ? "Hide key" : "Show key")
+        }
+    }
+
+    private func aiModelField(_ binding: Binding<String>, prompt: String) -> some View {
+        LabeledContent("Model") {
+            TextField("Model", text: binding, prompt: Text(prompt))
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .font(.callout.monospaced())
+                .multilineTextAlignment(.trailing)
+        }
+    }
+
+    /// One cheapest-possible round trip through the configured provider
+    /// — answers "does this key/server actually work?" at entry time,
+    /// so the first failed estimate isn't the messenger.
+    private func testAIConnection() {
+        aiTest = .testing
+        let provider = AIProviderSettings.selected
+        let system = #"Reply with ONLY the JSON object {"ok":true}."#
+        Task {
+            var verdict: FDCKeyTest
+            do {
+                switch provider {
+                case .onDevice:
+                    return
+                case .anthropic:
+                    _ = try await AnthropicClient.completeJSON(
+                        apiKey: AIProviderSettings.anthropicAPIKey,
+                        model: AIProviderSettings.anthropicModel,
+                        system: system, user: "ping", maxTokens: 24)
+                case .openAI:
+                    _ = try await OpenAICompatibleClient.completeJSON(
+                        baseURL: OpenAICompatibleClient.openAIBaseURL,
+                        apiKey: AIProviderSettings.openAIAPIKey,
+                        model: AIProviderSettings.openAIModel,
+                        system: system, user: "ping", maxTokens: 24)
+                case .local:
+                    guard let base = AIProviderSettings.localBaseURL else {
+                        throw AIChatError.badURL
+                    }
+                    _ = try await OpenAICompatibleClient.completeJSON(
+                        baseURL: base,
+                        apiKey: AIProviderSettings.localAIToken,
+                        model: AIProviderSettings.localModel,
+                        system: system, user: "ping", maxTokens: 24)
+                }
+                verdict = .success
+            } catch let error as AIChatError {
+                verdict = .failure(error.errorDescription ?? "Connection failed")
+            } catch {
+                verdict = .failure("Couldn't reach the server")
+            }
+            if AIProviderSettings.selected == provider { aiTest = verdict }
         }
     }
 }

@@ -36,6 +36,27 @@ enum FDCKeyTest: Equatable {
     case failure(String)
 }
 
+/// Footnote warning whose COLOR rides the icon: orange text on the light
+/// rice canvas measures ≈2.2:1 (2026-07-22 audit, WCAG AA needs 4.5:1) —
+/// the words stay primary, the triangle carries the urgency. Same
+/// glyph-not-color move as the DWC status twins.
+private struct WarningFootnote: View {
+    private let content: Text
+
+    init(_ key: LocalizedStringKey) { content = Text(key) }
+    init(verbatim: String) { content = Text(verbatim) }
+
+    var body: some View {
+        Label {
+            content.foregroundStyle(.primary)
+        } icon: {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+        }
+        .font(.footnote)
+    }
+}
+
 /// Icon-picker option lists + the custom-emoji rows, shared between the
 /// main screen (water picker, metric slots) and the Appearance subscreen.
 private enum SettingsIcons {
@@ -96,6 +117,9 @@ private enum SettingsIcons {
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    /// Foreground return re-checks the permission banners (denials may
+    /// have been fixed in the system round trip our own buttons start).
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
@@ -113,7 +137,6 @@ struct SettingsView: View {
     @AppStorage(SharedStore.trackedMetric2TargetKey, store: SharedStore.defaults) private var trackedMetric2Target = 0.0
     @AppStorage(SharedStore.trackedMetric2IconKey, store: SharedStore.defaults) private var trackedMetric2Icon = ""
     @AppStorage(SharedStore.energyStatsStyleKey, store: SharedStore.defaults) private var energyStatsStyle = "cards"
-    @AppStorage(SharedStore.untrackedBelowKey, store: SharedStore.defaults) private var untrackedBelowKcal = 1000.0
     @AppStorage(SharedStore.remindMealsKey, store: SharedStore.defaults) private var remindMeals = false
     @AppStorage(SharedStore.remindWaterKey, store: SharedStore.defaults) private var remindWater = false
     @AppStorage(SharedStore.remindStreakKey, store: SharedStore.defaults) private var remindStreak = false
@@ -186,6 +209,12 @@ struct SettingsView: View {
     }
     @State private var notificationsDenied = false
     @State private var healthWriteDenied = false
+    /// Cancel-with-edits confirmation (the forms' discard grammar).
+    @State private var confirmDiscard = false
+    /// The deferred emoji-prompt presentation — stored so a Cancel (or a
+    /// newer pick) can cancel it: an orphaned task wrote the old icon
+    /// back AFTER the sheet was dismissed (2026-07-22 audit).
+    @State private var pendingCustomIconTask: Task<Void, Never>?
 
     @State private var showExporter = false
     @State private var showImporter = false
@@ -246,10 +275,18 @@ struct SettingsView: View {
         // The icon/metric/unit sync plumbing stays on THIS always-mounted
         // section — the subscreens write the same defaults keys, and these
         // observers must keep firing for edits made there (and for the
-        // reset sweep).
-        .onChange(of: weightUnit) { PhoneSyncService.shared.push(from: context) }
-        .onChange(of: waterUnit) { PhoneSyncService.shared.push(from: context) }
-        .onChange(of: sodiumUnit) { PhoneSyncService.shared.push(from: context) }
+        // reset sweep). Plain-push observers ride ARRAY bundles: fifteen
+        // stacked onChanges is 3× the size that already blew this file's
+        // type-checker budget once (the reminder-minutes lesson).
+        .onChange(of: [weightUnit, waterUnit, sodiumUnit]) {
+            PhoneSyncService.shared.push(from: context)
+        }
+        .onChange(of: [trackedMetric1Mode, trackedMetric2Mode]) {
+            PhoneSyncService.shared.push(from: context)
+        }
+        .onChange(of: [sodiumLimitMg, trackedMetric1Target, trackedMetric2Target]) {
+            PhoneSyncService.shared.push(from: context)
+        }
         .onChange(of: foodIcon) { old, new in
             iconChanged(.food, from: old, to: new)
         }
@@ -275,11 +312,6 @@ struct SettingsView: View {
             trackedMetric2Icon = ""
             PhoneSyncService.shared.push(from: context)
         }
-        .onChange(of: sodiumLimitMg) { PhoneSyncService.shared.push(from: context) }
-        .onChange(of: trackedMetric1Mode) { PhoneSyncService.shared.push(from: context) }
-        .onChange(of: trackedMetric2Mode) { PhoneSyncService.shared.push(from: context) }
-        .onChange(of: trackedMetric1Target) { PhoneSyncService.shared.push(from: context) }
-        .onChange(of: trackedMetric2Target) { PhoneSyncService.shared.push(from: context) }
         .onChange(of: trackedMetric1Icon) { old, new in
             if new == "custom" {
                 iconChanged(.metric1, from: old, to: new)
@@ -296,22 +328,31 @@ struct SettingsView: View {
         }
     }
 
+    // The trailing values must tell the FUNCTIONAL truth, not stored
+    // intent — "2 on" with notifications denied and "Anthropic" with no
+    // key were confident lies (2026-07-22 audit).
     private var remindersSummary: String {
         let count = [remindMeals, remindWater, remindStreak].count(where: { $0 })
-        return count == 0 ? "Off" : "\(count) on"
+        if count == 0 { return "Off" }
+        return notificationsDenied ? "\(count) on — blocked" : "\(count) on"
     }
 
     private var onlineDatabaseSummary: String {
         guard onlineLookups else { return "Off" }
+        let name: String
         switch textSearchSource {
-        case SharedStore.textSearchSourceFDC: return "USDA FDC"
-        case SharedStore.textSearchSourceBoth: return "Both"
+        case SharedStore.textSearchSourceFDC: name = "USDA FDC"
+        case SharedStore.textSearchSourceBoth: name = "Both"
         default: return "OpenFoodFacts"
         }
+        // FDC-backed sources are dead without the user's key.
+        return SharedStore.isPlausibleFDCKey(SharedStore.fdcAPIKey) ? name : "\(name) — no key"
     }
 
     private var aiSummary: String {
-        aiEnabled ? AIProviderSettings.selected.displayName : "Off"
+        guard aiEnabled else { return "Off" }
+        let name = AIProviderSettings.selected.displayName
+        return FoodIntelligence.isAvailable ? name : "\(name) — not set up"
     }
 
     private func reminderToggled(_ on: Bool) {
@@ -403,6 +444,9 @@ struct SettingsView: View {
     /// outlives the app's library/settings by design.
     private var resetSection: some View {
         Section {
+            Text("These actions can't be undone.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Button("Reset Food Library", role: .destructive) { pendingReset = .library }
             Button("Reset Goals", role: .destructive) { pendingReset = .goals }
             Button("Reset Settings", role: .destructive) { pendingReset = .settings }
@@ -437,32 +481,6 @@ struct SettingsView: View {
         }
     }
 
-    /// Every preference key the settings reset returns to defaults.
-    /// hasOnboarded is deliberately absent (a settings reset shouldn't
-    /// replay onboarding); Reset All wipes the whole domain instead.
-    private static let preferenceKeys: [String] = [
-        SharedStore.waterServingKey, SharedStore.waterGoalKey,
-        SharedStore.waterIconKey, SharedStore.foodIconKey, SharedStore.rewardIconKey,
-        SharedStore.sodiumLimitKey, SharedStore.balanceStyleKey,
-        SharedStore.progressGaugesKey, SharedStore.showSodiumKey, SharedStore.showWaterKey,
-        SharedStore.remindMealsKey, SharedStore.remindWaterKey, SharedStore.remindStreakKey,
-        SharedStore.remindMealsMinuteKey, SharedStore.remindStreakMinuteKey,
-        SharedStore.remindWaterMinute1Key, SharedStore.remindWaterMinute2Key,
-        SharedStore.remindWaterMinute3Key,
-        SharedStore.trackedMetric1Key, SharedStore.trackedMetric1ModeKey,
-        SharedStore.trackedMetric1TargetKey, SharedStore.trackedMetric1IconKey,
-        SharedStore.trackedMetric2Key, SharedStore.trackedMetric2ModeKey,
-        SharedStore.trackedMetric2TargetKey, SharedStore.trackedMetric2IconKey,
-        SharedStore.untrackedBelowKey, SharedStore.energyStatsStyleKey,
-        SharedStore.textSearchSourceKey, SharedStore.onlineLookupsKey,
-        SharedStore.holdToLogWaterKey,
-        SharedStore.weightUnitKey, SharedStore.waterUnitKey, SharedStore.sodiumUnitKey,
-        AIProviderSettings.enabledKey, AIProviderSettings.hintDismissedKey,
-        AIProviderSettings.providerKey, AIProviderSettings.anthropicModelKey,
-        AIProviderSettings.openAIModelKey, AIProviderSettings.localModelKey,
-        AIProviderSettings.localBaseURLKey, AIProviderSettings.localVisionKey,
-    ]
-
     /// The AI secrets as Settings found them (the Keychain sits outside
     /// the defaults snapshot) — Cancel and resets restore/clear by hand,
     /// mirroring the FDC key.
@@ -488,27 +506,45 @@ struct SettingsView: View {
     }
 
     /// The preference values as the sheet found them (missing key =
-    /// was unset). Cancel writes these back.
+    /// was unset). Cancel writes these back. Mechanics live in the kit
+    /// (PreferenceSnapshot, unit-tested); the key list is
+    /// SharedStore.settingsSweepKeys, kept beside the key definitions.
     @State private var entrySnapshot: [String: Any] = [:]
 
     private static func captureSnapshot() -> [String: Any] {
-        var snapshot: [String: Any] = [:]
-        for key in preferenceKeys {
-            if let value = SharedStore.defaults.object(forKey: key) {
-                snapshot[key] = value
-            }
-        }
-        return snapshot
+        PreferenceSnapshot.capture(keys: SharedStore.settingsSweepKeys, from: SharedStore.defaults)
+    }
+
+    /// Anything changed since the sheet opened? Drives the swipe gate
+    /// and the Cancel confirmation. Defaults reads are in-memory-cached
+    /// (cheap per render); the Keychain-backed secrets are deliberately
+    /// NOT polled here — a key-only edit can still swipe away, which
+    /// errs on the KEEP side (nothing is lost; Cancel still catches it
+    /// at tap time via the same snapshot restore).
+    private var hasSessionEdits: Bool {
+        guard !entrySnapshot.isEmpty else { return false }
+        return PreferenceSnapshot.differs(
+            from: entrySnapshot, keys: SharedStore.settingsSweepKeys, in: SharedStore.defaults
+        )
+    }
+
+    /// The permission-banner inputs, shared by the open-time task and
+    /// the foreground re-check.
+    private func refreshDenialStates() async {
+        let status = await UNUserNotificationCenter.current()
+            .notificationSettings().authorizationStatus
+        let denied: Bool = status == .denied
+        let anyReminderOn: Bool = remindMeals || remindWater || remindStreak
+        notificationsDenied = denied && anyReminderOn
+        healthWriteDenied = HealthKitService().sharingDenied()
     }
 
     private func revertToEntrySnapshot() {
-        for key in Self.preferenceKeys {
-            if let value = entrySnapshot[key] {
-                SharedStore.defaults.set(value, forKey: key)
-            } else {
-                SharedStore.defaults.removeObject(forKey: key)
-            }
-        }
+        // A pending custom-icon task must not write after the discard.
+        pendingCustomIconTask?.cancel()
+        PreferenceSnapshot.restore(
+            entrySnapshot, keys: SharedStore.settingsSweepKeys, to: SharedStore.defaults
+        )
         // The FDC key lives in the Keychain, outside the defaults
         // snapshot — restore it to what Settings opened with by hand.
         // (Key-field drafts live in the subscreens and re-read storage
@@ -574,9 +610,7 @@ struct SettingsView: View {
     }
 
     private func resetPreferences() {
-        for key in Self.preferenceKeys {
-            SharedStore.defaults.removeObject(forKey: key)
-        }
+        PreferenceSnapshot.clear(keys: SharedStore.settingsSweepKeys, in: SharedStore.defaults)
         // The FDC key and AI secrets are in the Keychain, not the
         // defaults list.
         SharedStore.saveFDCAPIKey("")
@@ -596,13 +630,31 @@ struct SettingsView: View {
             // Wait out the picker's pop before touching anything: writing
             // the selection back mid-pop aborts the pop, and the deferred
             // pop then tears down the freshly presented sheet.
-            Task { @MainActor in
+            // Stored AND guarded (2026-07-22 audit): unguarded, the
+            // deferred write clobbered a different icon picked inside the
+            // window, and an orphaned task could write to storage after
+            // Cancel had already dismissed the sheet.
+            pendingCustomIconTask?.cancel()
+            pendingCustomIconTask = Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(600))
+                guard !Task.isCancelled, currentIcon(slot) == "custom" else { return }
                 setIcon(slot, to: old)
                 customIconSlot = slot
             }
         } else {
             PhoneSyncService.shared.push(from: context)
+        }
+    }
+
+    /// The slot's stored value right now — the deferred custom-icon
+    /// write's staleness guard.
+    private func currentIcon(_ slot: IconSlot) -> String {
+        switch slot {
+        case .food: foodIcon
+        case .water: waterIcon
+        case .reward: rewardIcon
+        case .metric1: trackedMetric1Icon
+        case .metric2: trackedMetric2Icon
         }
     }
 
@@ -670,9 +722,7 @@ struct SettingsView: View {
                 if healthWriteDenied {
                     Section("Apple Health") {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Health access is off — logging can't save.")
-                                .font(.footnote)
-                                .foregroundStyle(.orange)
+                            WarningFootnote("Health access is off — logging can't save.")
                             Text("Turn it on in the Health app: Profile → Apps → Onigiri.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
@@ -685,21 +735,6 @@ struct SettingsView: View {
                 configSection
 
                 trackingSection
-
-                Section {
-                    Stepper(value: $untrackedBelowKcal, in: 0...2000, step: 100) {
-                        LabeledContent("Counts as untracked") {
-                            Text(untrackedBelowKcal > 0
-                                ? "< \(untrackedBelowKcal, format: .number.precision(.fractionLength(0))) kcal"
-                                : "Off")
-                        }
-                    }
-                    Text("Days with less logged break the streak and stay out of the month's totals. 0 turns this off.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } header: {
-                    Text("Untracked days")
-                }
 
                 dataSection
 
@@ -747,25 +782,30 @@ struct SettingsView: View {
                 remindMealsMinute, remindStreakMinute,
                 remindWaterMinute1, remindWaterMinute2, remindWaterMinute3,
             ]) { ReminderScheduler.shared.replan() }
-            .task {
-                // Surface an existing denial as soon as Settings opens with
-                // any reminder switched on.
-                let status = await UNUserNotificationCenter.current()
-                    .notificationSettings().authorizationStatus
-                let denied: Bool = status == .denied
-                let anyReminderOn: Bool = remindMeals || remindWater || remindStreak
-                notificationsDenied = denied && anyReminderOn
-                healthWriteDenied = HealthKitService().sharingDenied()
+            .task { await refreshDenialStates() }
+            // Re-check when the user returns from the system Settings /
+            // Health round trip this screen's own banners send them on —
+            // a one-shot check left the banner stale after they fixed it
+            // (2026-07-22 audit; TodayModel already re-checks the same way).
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                Task { await refreshDenialStates() }
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     // Settings applies as you go; Cancel rewinds every
                     // preference to how the sheet found it. Resets are
                     // exempt — they re-baseline the snapshot (Cancel
-                    // must not half-resurrect a wiped install).
+                    // must not half-resurrect a wiped install). With
+                    // session edits pending, Cancel confirms first — a
+                    // silent ~30-key rewind (including tested API keys)
+                    // was the audit's headline trap.
                     Button("Cancel") {
-                        revertToEntrySnapshot()
-                        dismiss()
+                        if hasSessionEdits {
+                            confirmDiscard = true
+                        } else {
+                            dismiss()
+                        }
                     }
                     .keyboardShortcut(.cancelAction)
                 }
@@ -773,6 +813,20 @@ struct SettingsView: View {
                     Button("Done") { dismiss() }
                         .keyboardShortcut(.return, modifiers: .command)
                 }
+            }
+            // The forms' discard grammar (MealForm/FoodForm): edits block
+            // the swipe so every exit is an explicit Done or a confirmed
+            // discard — swipe-keeps vs Cancel-discards silently disagreeing
+            // was the other half of the trap.
+            .interactiveDismissDisabled(hasSessionEdits)
+            .alert("Discard changes?", isPresented: $confirmDiscard) {
+                Button("Discard", role: .destructive) {
+                    revertToEntrySnapshot()
+                    dismiss()
+                }
+                Button("Keep Editing", role: .cancel) {}
+            } message: {
+                Text("Every change made in Settings since it opened goes back to how it was.")
             }
             .onAppear {
                 if entrySnapshot.isEmpty {
@@ -925,9 +979,7 @@ private struct RemindersSettingsScreen: View {
                 }
                 if notificationsDenied {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Notifications are off for Onigiri — reminders won't appear.")
-                            .font(.footnote)
-                            .foregroundStyle(.orange)
+                        WarningFootnote("Notifications are off for Onigiri — reminders won't appear.")
                         Button("Turn On in Settings") {
                             if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
                                 UIApplication.shared.open(url)
@@ -1038,7 +1090,8 @@ private struct OnlineDatabaseSettingsScreen: View {
                             Image(systemName: showFDCKey ? "eye.slash" : "eye")
                                 // HIG 44 pt tap target via hit area only —
                                 // the negative inset must not move layout.
-                                .contentShape(Rectangle().inset(by: -14))
+                                .contentShape(.interaction, Rectangle().inset(by: -14))
+                                .contentShape(.accessibility, Rectangle().inset(by: -14))
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
@@ -1046,13 +1099,9 @@ private struct OnlineDatabaseSettingsScreen: View {
                     }
                     let draft = fdcAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
                     if draft.isEmpty {
-                        Text("An API key is required to use the USDA FoodData Central, go to [fdc.nal.usda.gov/api-guide](https://fdc.nal.usda.gov/api-guide) to request a key")
-                            .font(.footnote)
-                            .foregroundStyle(.orange)
+                        WarningFootnote("An API key is required to use the USDA FoodData Central, go to [fdc.nal.usda.gov/api-guide](https://fdc.nal.usda.gov/api-guide) to request a key")
                     } else if !SharedStore.isPlausibleFDCKey(draft) {
-                        Text("API keys are 40 letters and digits — this one is \(draft.count) and won't be saved.")
-                            .font(.footnote)
-                            .foregroundStyle(.orange)
+                        WarningFootnote("API keys are 40 letters and digits — this one is \(draft.count) and won't be saved.")
                     }
                     HStack {
                         // Answers "is this key REAL?" at entry time — the
@@ -1067,12 +1116,14 @@ private struct OnlineDatabaseSettingsScreen: View {
                         case .testing:
                             ProgressView()
                         case .success:
-                            Label("Success", systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
+                            Label {
+                                Text("Success").foregroundStyle(.primary)
+                            } icon: {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                            }
                         case .failure(let reason):
-                            Text(reason)
-                                .font(.footnote)
-                                .foregroundStyle(.orange)
+                            WarningFootnote(verbatim: reason)
                                 .multilineTextAlignment(.trailing)
                         }
                     }
@@ -1115,8 +1166,22 @@ private struct OnlineDatabaseSettingsScreen: View {
             }
             if fdcAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines) == key {
                 fdcKeyTest = verdict
+                announce(verdict)
             }
         }
+    }
+}
+
+/// The visual verdict swap says nothing to VoiceOver — announce it, the
+/// way ToastCenter already does for every other Settings outcome.
+private func announce(_ verdict: FDCKeyTest) {
+    switch verdict {
+    case .success:
+        AccessibilityNotification.Announcement("Success").post()
+    case .failure(let reason):
+        AccessibilityNotification.Announcement(reason).post()
+    case .idle, .testing:
+        break
     }
 }
 
@@ -1164,17 +1229,27 @@ private struct AISettingsScreen: View {
                 switch AIProviderSettings.selected {
                 case .onDevice:
                     if !FoodIntelligence.onDeviceAvailable {
-                        Text("Apple Intelligence isn't available on this iPhone — AI features are unavailable. Pick a provider above to bring your own.")
-                            .font(.footnote)
-                            .foregroundStyle(.orange)
+                        WarningFootnote("Apple Intelligence isn't available on this iPhone — AI features are unavailable. Pick a provider above to bring your own.")
                     }
                 case .anthropic:
+                    // The on-device case always said WHY nothing works;
+                    // the remote cases silently hid every AI affordance
+                    // until a key arrived (2026-07-22 audit).
+                    if !AIProviderSettings.selectedRemoteIsConfigured {
+                        WarningFootnote("Enter an API key below to turn AI features on.")
+                    }
                     aiKeyField("API key")
                     aiModelField($aiAnthropicModel, prompt: AIProviderSettings.defaultAnthropicModel)
                 case .openAI:
+                    if !AIProviderSettings.selectedRemoteIsConfigured {
+                        WarningFootnote("Enter an API key below to turn AI features on.")
+                    }
                     aiKeyField("API key")
                     aiModelField($aiOpenAIModel, prompt: AIProviderSettings.defaultOpenAIModel)
                 case .local:
+                    if !AIProviderSettings.selectedRemoteIsConfigured {
+                        WarningFootnote("Enter a server and model below to turn AI features on.")
+                    }
                     LabeledContent("Server") {
                         // verbatim: a literal prompt goes through markdown,
                         // which auto-links the URL and renders it blue.
@@ -1204,12 +1279,14 @@ private struct AISettingsScreen: View {
                         case .testing:
                             ProgressView()
                         case .success:
-                            Label("Success", systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
+                            Label {
+                                Text("Success").foregroundStyle(.primary)
+                            } icon: {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                            }
                         case .failure(let reason):
-                            Text(reason)
-                                .font(.footnote)
-                                .foregroundStyle(.orange)
+                            WarningFootnote(verbatim: reason)
                                 .multilineTextAlignment(.trailing)
                         }
                     }
@@ -1290,7 +1367,8 @@ private struct AISettingsScreen: View {
                 Image(systemName: showAIKey ? "eye.slash" : "eye")
                     // HIG 44 pt tap target via hit area only — the
                     // negative inset must not move layout.
-                    .contentShape(Rectangle().inset(by: -14))
+                    .contentShape(.interaction, Rectangle().inset(by: -14))
+                    .contentShape(.accessibility, Rectangle().inset(by: -14))
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
@@ -1348,7 +1426,10 @@ private struct AISettingsScreen: View {
             } catch {
                 verdict = .failure("Couldn't reach the server")
             }
-            if AIProviderSettings.selected == provider { aiTest = verdict }
+            if AIProviderSettings.selected == provider {
+                aiTest = verdict
+                announce(verdict)
+            }
         }
     }
 }
@@ -1369,13 +1450,37 @@ private struct MetricsSettingsScreen: View {
     @AppStorage(SharedStore.trackedMetric2IconKey, store: SharedStore.defaults) private var trackedMetric2Icon = ""
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults) private var sodiumUnit = SharedStore.unitAutomatic
+    @AppStorage(SharedStore.untrackedBelowKey, store: SharedStore.defaults) private var untrackedBelowKcal = 1000.0
 
     private var resolvedSodiumUnit: SodiumUnit { SodiumUnit.resolve(sodiumUnit) }
+
+    /// The stepper's readout, doubled as its spoken value.
+    private var untrackedValueText: String {
+        untrackedBelowKcal > 0
+            ? "< \(untrackedBelowKcal.formatted(.number.precision(.fractionLength(0)))) kcal"
+            : "Off"
+    }
 
     var body: some View {
         Form {
             trackedMetricSection(slot: 1)
             trackedMetricSection(slot: 2)
+            // Rehomed from the main screen (the user, 2026-07-22): it's a
+            // tracking-behavior knob, and it was the last inline orphan.
+            Section {
+                Stepper(value: $untrackedBelowKcal, in: 0...2000, step: 100) {
+                    LabeledContent("Counts as untracked") {
+                        Text(untrackedValueText)
+                    }
+                }
+                .accessibilityLabel("Counts as untracked")
+                .accessibilityValue(untrackedValueText)
+                Text("Days with less logged break the streak and stay out of the month's totals. 0 turns this off.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Untracked days")
+            }
         }
         .compactSections()
         .riceCanvas()
@@ -1431,9 +1536,15 @@ private struct MetricsSettingsScreen: View {
                         }
                     }
                 case .water:
-                    Text("See Water settings")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    // A real door, not an inert pointer — the reader is
+                    // two screens away from where this text sends them.
+                    NavigationLink {
+                        WaterSettingsScreen()
+                    } label: {
+                        Text("See Water settings")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 default:
                     LabeledContent("Target") {
                         HStack(spacing: 4) {
@@ -1591,6 +1702,10 @@ private struct WaterSettingsScreen: View {
                         waterServingOz = WaterUnit.milliliters.toOz(max(100, ml - 25))
                     }
                 }
+                // Explicit value: VoiceOver's adjustable swipes speak the
+                // accessibilityValue, not a re-flattened label.
+                .accessibilityLabel("Serving size")
+                .accessibilityValue(waterAmountText(waterServingOz))
                 // The goal is drunk in servings, so stepping SNAPS to
                 // multiples of the serving size (12 oz serving → 12,
                 // 24, 36…) — plain ±serving from a goal set under an
@@ -1614,6 +1729,8 @@ private struct WaterSettingsScreen: View {
                     let previous = (ceil(waterGoalOz / serving - 1e-9) - 1) * serving
                     waterGoalOz = max(serving, previous)
                 }
+                .accessibilityLabel("Daily goal")
+                .accessibilityValue(waterAmountText(waterGoalOz))
                 // Opt-out (default on) — and the row doubles as the
                 // feature's signpost (the user).
                 Toggle("Long press + logs water", isOn: $holdToLogWater)

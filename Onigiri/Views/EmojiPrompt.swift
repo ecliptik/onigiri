@@ -25,8 +25,13 @@ private struct EmojiTextField: UIViewRepresentable {
         let field = EmojiUITextField()
         field.text = text
         field.accessibilityIdentifier = "emojiPromptField"
+        // VoiceOver lands here unlabeled otherwise — the nav title alone
+        // doesn't name the field's purpose (2026-07-22 audit).
+        field.accessibilityLabel = "Custom emoji"
         field.delegate = context.coordinator
-        field.font = .systemFont(ofSize: 24)
+        field.font = UIFontMetrics(forTextStyle: .title2)
+            .scaledFont(for: .systemFont(ofSize: 24))
+        field.adjustsFontForContentSizeCategory = true
         field.textAlignment = .center
         field.borderStyle = .roundedRect
         field.addTarget(context.coordinator, action: #selector(Coordinator.changed), for: .editingChanged)
@@ -74,6 +79,10 @@ struct EmojiPromptSheet: View {
     @Binding var input: String
     let onUse: () -> Void
     let onCancel: () -> Void
+    /// Dynamic Type: the preview and field scale instead of freezing at
+    /// fixed sizes exactly when the user asked for bigger text.
+    @ScaledMetric(relativeTo: .largeTitle) private var previewSize = 56.0
+    @ScaledMetric(relativeTo: .title2) private var fieldHeight = 44.0
 
     var body: some View {
         NavigationStack {
@@ -82,9 +91,9 @@ struct EmojiPromptSheet: View {
             VStack(spacing: 12) {
                 // The preview IS the state: what's here is what Save keeps.
                 Text(input.isEmpty ? " " : input)
-                    .font(.system(size: 56))
+                    .font(.system(size: previewSize))
                 EmojiTextField(text: $input, onSubmit: onUse)
-                    .frame(width: 96, height: 40)
+                    .frame(width: 96, height: fieldHeight)
                 Spacer(minLength: 0)
             }
             .padding()

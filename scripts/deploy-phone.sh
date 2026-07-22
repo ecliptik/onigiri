@@ -54,8 +54,12 @@ xcrun devicectl device install app --device "${DEVICE_NAME}" "${APP}"
 # grepping for "App installed:" (exit codes lie through pipes).
 if [[ -n "$WATCH_BUILD_ID" && -n "$WATCH_INSTALL_ID" ]]; then
   echo "→ Building for the watch"
+  # generic destination, not the device id: an id-destination build
+  # TIMES OUT while the watch reads "Device is busy (Connecting…)" —
+  # the exact state the install loop below is built to ride out
+  # (2026-07-22; CLAUDE.md's generic-build lore).
   xcodebuild -project Onigiri.xcodeproj -scheme OnigiriWatch \
-    -destination "platform=watchOS,id=${WATCH_BUILD_ID}" \
+    -destination 'generic/platform=watchOS' \
     -derivedDataPath build \
     -allowProvisioningUpdates \
     build

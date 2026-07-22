@@ -27,12 +27,18 @@ struct NutrientPickerView: View {
                                 .foregroundStyle(.primary)
                             Spacer()
                             if selectionKey == SharedStore.trackedMetricNone {
+                                // Hidden glyph + trait: VoiceOver says
+                                // "selected", not a literal "Checkmark".
                                 Image(systemName: "checkmark")
                                     .fontWeight(.semibold)
                                     .foregroundStyle(Color.accentColor)
+                                    .accessibilityHidden(true)
                             }
                         }
                     }
+                    .accessibilityAddTraits(
+                        selectionKey == SharedStore.trackedMetricNone ? .isSelected : []
+                    )
                 }
             }
             group("General", TrackedNutrient.general)
@@ -79,9 +85,12 @@ struct NutrientPickerView: View {
                                 .foregroundStyle(taken ? .secondary : .primary)
                             Spacer()
                             if taken {
+                                // .secondary, not .tertiary: this explains
+                                // WHY the row is disabled — informative
+                                // text, not decoration (contrast).
                                 Text("other slot")
                                     .font(.footnote)
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(.secondary)
                             }
                             Text(nutrient.unitSymbol)
                                 .foregroundStyle(.secondary)
@@ -89,10 +98,12 @@ struct NutrientPickerView: View {
                                 Image(systemName: "checkmark")
                                     .fontWeight(.semibold)
                                     .foregroundStyle(Color.accentColor)
+                                    .accessibilityHidden(true)
                             }
                         }
                     }
                     .disabled(taken)
+                    .accessibilityAddTraits(nutrient.key == selectionKey ? .isSelected : [])
                 }
             }
         }

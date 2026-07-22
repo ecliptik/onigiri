@@ -759,6 +759,7 @@ struct SettingsView: View {
         SharedStore.untrackedBelowKey, SharedStore.energyStatsStyleKey,
         SharedStore.textSearchSourceKey, SharedStore.onlineLookupsKey,
         SharedStore.holdToLogWaterKey,
+        SharedStore.weightUnitKey, SharedStore.waterUnitKey, SharedStore.sodiumUnitKey,
         AIProviderSettings.enabledKey, AIProviderSettings.hintDismissedKey,
         AIProviderSettings.providerKey, AIProviderSettings.anthropicModelKey,
         AIProviderSettings.openAIModelKey, AIProviderSettings.localModelKey,

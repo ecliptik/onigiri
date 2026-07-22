@@ -82,6 +82,11 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   rounds, while a loop that ran `devicectl device install app` each
   round succeeded on attempt 2 after one 3002 (2026-07-20) — the
   install attempt itself is the contact that wakes the channel.
+  `IXRemoteErrorDomain code 6` belongs to the same retry-through family
+  (2026-07-21: five of those + one network timeout, then success on
+  attempt 7). deploy-phone.sh runs this loop itself now — and never
+  gates the watch on a one-shot `list devices` (a not-yet-enumerated
+  watch read as "unreachable" and got silently skipped).
 - **Watch discovery requires Mac BLUETOOTH ON.** Two days of debugging
   (reboots, re-pairing, trust resets, cache wipes, VPN toggles) and the watch
   never appeared in Xcode/devicectl until the Mac's Bluetooth was enabled —

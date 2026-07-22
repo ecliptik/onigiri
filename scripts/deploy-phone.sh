@@ -43,22 +43,41 @@ APP=build/Build/Products/Debug-iphoneos/Onigiri.app
 echo "→ Installing on ${DEVICE_NAME}"
 xcrun devicectl device install app --device "${DEVICE_NAME}" "${APP}"
 
-# Watch deploy (best effort): requires Mac Bluetooth ON and the watch
-# unlocked/on wrist. Skipped quietly when unconfigured or unreachable.
-# IDs beat display names (curly apostrophes match neither tool):
+# Watch deploy: requires Mac Bluetooth ON and the watch unlocked/on
+# wrist. IDs beat display names (curly apostrophes match neither tool):
 # xcodebuild wants the hardware UDID, devicectl the CoreDevice identifier.
-if [[ -n "$WATCH_BUILD_ID" && -n "$WATCH_INSTALL_ID" ]] \
-   && xcrun devicectl list devices 2>/dev/null | grep -q "Watch"; then
+#
+# No `list devices` gate: a one-shot visibility check declares a merely
+# not-yet-enumerated watch "unreachable" (it skipped a reachable watch
+# 2026-07-21). Per CLAUDE.md, the install ATTEMPT is the contact that
+# wakes the channel — build unconditionally and loop the install,
+# grepping for "App installed:" (exit codes lie through pipes).
+if [[ -n "$WATCH_BUILD_ID" && -n "$WATCH_INSTALL_ID" ]]; then
   echo "→ Building for the watch"
   xcodebuild -project Onigiri.xcodeproj -scheme OnigiriWatch \
     -destination "platform=watchOS,id=${WATCH_BUILD_ID}" \
     -derivedDataPath build \
     -allowProvisioningUpdates \
     build
-  echo "→ Installing on the watch"
-  xcrun devicectl device install app --device "${WATCH_INSTALL_ID}" \
-    build/Build/Products/Debug-watchos/OnigiriWatch.app
-  echo "✓ Phone and watch deployed."
+  echo "→ Installing on the watch (early 4000/3002/IXRemote-6 errors are normal — retrying)"
+  installed=""
+  for attempt in {1..12}; do
+    out=$(xcrun devicectl device install app --device "${WATCH_INSTALL_ID}" \
+      build/Build/Products/Debug-watchos/OnigiriWatch.app 2>&1) || true
+    if echo "$out" | grep -q "App installed:"; then
+      echo "✓ Watch installed (attempt ${attempt})."
+      installed=1
+      break
+    fi
+    echo "  attempt ${attempt} failed — retrying in 10 s"
+    sleep 10
+  done
+  if [[ -n "$installed" ]]; then
+    echo "✓ Phone and watch deployed."
+  else
+    echo "✗ Watch install failed after 12 attempts — see CLAUDE.md deploy notes (wake the watch, check Mac Bluetooth, pkill CoreDeviceService)." >&2
+    exit 1
+  fi
 else
-  echo "✓ Phone deployed. (Watch unconfigured or unreachable — skipped.)"
+  echo "✓ Phone deployed. (Watch not configured — skipped.)"
 fi

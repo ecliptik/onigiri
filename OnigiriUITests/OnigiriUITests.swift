@@ -675,14 +675,18 @@ final class OnigiriUITests: XCTestCase {
                 }
                 tapIfExists(app.navigationBars.buttons.firstMatch)
             }
-            // Hide the water metric via the second slot's None option:
-            // today-final shows sodium only.
-            let metricRows = app.staticTexts.matching(identifier: "Metric")
-            if metricRows.count >= 2 {
-                metricRows.element(boundBy: 1).tap()
-                if tapIfExists(app.staticTexts["None"]) {
-                    shot("settings-metric-none", settle: 0.5)
+            // Hide the water metric via the second slot's None option
+            // (the slots live behind the Metrics row now): today-final
+            // shows sodium only.
+            if tapIfExists(app.staticTexts["Metrics"]) {
+                let metricRows = app.staticTexts.matching(identifier: "Metric")
+                if metricRows.count >= 2 {
+                    metricRows.element(boundBy: 1).tap()
+                    if tapIfExists(app.staticTexts["None"]) {
+                        shot("settings-metric-none", settle: 0.5)
+                    }
                 }
+                tapIfExists(app.navigationBars.buttons.firstMatch)
             }
             shot("settings-gauges-on", settle: 0.5)
             app.swipeUp()
@@ -876,14 +880,16 @@ final class OnigiriUITests: XCTestCase {
         let gear = app.buttons["Settings"]
         XCTAssertTrue(gear.waitForExistence(timeout: 10), "Settings gear")
         gear.tap()
+        // The serving stepper lives behind the Water row now.
+        let waterRow = app.staticTexts["Water"].firstMatch
+        XCTAssertTrue(waterRow.waitForExistence(timeout: 5), "Water row")
+        waterRow.tap()
         let servingStepper = app.steppers.matching(
             NSPredicate(format: "label CONTAINS[c] 'Serving size'")
         ).firstMatch
-        for _ in 0..<6 where !servingStepper.exists {
-            app.swipeUp()
-        }
         XCTAssertTrue(servingStepper.waitForExistence(timeout: 5), "Water serving stepper")
         servingStepper.buttons["Increment"].tap()
+        app.navigationBars.buttons.firstMatch.tap()
 
         // Snapshot everything into Documents/Backups.
         let backUp = app.buttons["Back Up Now"]
@@ -939,22 +945,21 @@ final class OnigiriUITests: XCTestCase {
         switchTab(in: app, to: "Today")
         XCTAssertTrue(gear.waitForExistence(timeout: 10))
         gear.tap()
+        let restoredWaterRow = app.staticTexts["Water"].firstMatch
+        XCTAssertTrue(restoredWaterRow.waitForExistence(timeout: 5), "Water row after restore")
+        restoredWaterRow.tap()
         let restoredServing = app.steppers.matching(
             NSPredicate(format: "label CONTAINS[c] 'Serving size' AND label CONTAINS '14'")
         ).firstMatch
-        for _ in 0..<6 where !restoredServing.exists {
-            app.swipeUp()
-        }
         XCTAssertTrue(restoredServing.waitForExistence(timeout: 5), "Water serving restored to 14 oz")
-        // Settings OUTSIDE the export stay stock: the text-search picker
-        // reads its default source again.
-        let sourceRow = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS[c] 'Source' AND label CONTAINS[c] 'OpenFoodFacts'")
+        app.navigationBars.buttons.firstMatch.tap()
+        // Settings OUTSIDE the export stay stock: the text-search source
+        // reads its default again — the Online Database row summarizes it
+        // from the main screen.
+        let onlineRow = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] 'Online Database' AND label CONTAINS[c] 'OpenFoodFacts'")
         ).firstMatch
-        for _ in 0..<6 where !sourceRow.exists {
-            app.swipeUp()
-        }
-        XCTAssertTrue(sourceRow.waitForExistence(timeout: 5), "Search source back at default")
+        XCTAssertTrue(onlineRow.waitForExistence(timeout: 5), "Search source back at default")
         app.buttons["Done"].tap()
     }
 
@@ -1815,6 +1820,10 @@ final class OnigiriUITests: XCTestCase {
 
         switchTab(in: app, to: "Today")
         app.buttons["Settings"].tap()
+        // The slots live behind the Metrics row now.
+        let metricsRow = app.staticTexts["Metrics"].firstMatch
+        XCTAssertTrue(metricsRow.waitForExistence(timeout: 10), "Metrics row")
+        metricsRow.tap()
         // Both slots render a "Metric" row; the first belongs to slot 1.
         let metricRow = app.staticTexts["Metric"].firstMatch
         XCTAssertTrue(metricRow.waitForExistence(timeout: 10), "Slot 1 metric row")
@@ -1843,6 +1852,8 @@ final class OnigiriUITests: XCTestCase {
         // None empties the slot everywhere.
         switchTab(in: app, to: "Today")
         app.buttons["Settings"].tap()
+        XCTAssertTrue(metricsRow.waitForExistence(timeout: 10))
+        metricsRow.tap()
         XCTAssertTrue(metricRow.waitForExistence(timeout: 10))
         metricRow.tap()
         // Single-text rows flatten to a Button with no StaticText child.

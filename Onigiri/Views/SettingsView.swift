@@ -125,7 +125,6 @@ struct SettingsView: View {
     @AppStorage(SharedStore.remindWaterMinute1Key, store: SharedStore.defaults) private var remindWaterMinute1 = 11 * 60
     @AppStorage(SharedStore.remindWaterMinute2Key, store: SharedStore.defaults) private var remindWaterMinute2 = 15 * 60
     @AppStorage(SharedStore.remindWaterMinute3Key, store: SharedStore.defaults) private var remindWaterMinute3 = 19 * 60
-    @AppStorage(SharedStore.holdToLogWaterKey, store: SharedStore.defaults) private var holdToLogWater = true
     @AppStorage(SharedStore.onlineLookupsKey, store: SharedStore.defaults) private var onlineLookups = false
     @AppStorage(SharedStore.textSearchSourceKey, store: SharedStore.defaults) private var textSearchSource = SharedStore.textSearchSourceOFF
     // Raw unit preferences ("auto"/explicit). Observed HERE (not just in
@@ -236,11 +235,21 @@ struct SettingsView: View {
             } label: {
                 LabeledContent("AI") { Text(aiSummary) }
             }
+            NavigationLink {
+                UnitsSettingsView()
+            } label: {
+                LabeledContent("Units") {
+                    Text("\(WeightUnit.resolve(weightUnit).symbol) · \(resolvedWaterUnit.symbol) · \(resolvedSodiumUnit.symbol)")
+                }
+            }
         }
-        // The icon/metric sync plumbing rode the old Appearance section;
-        // it stays on THIS always-mounted section — the subscreens write
-        // the same defaults keys, and these observers must keep firing
-        // for edits made there (and for the reset sweep).
+        // The icon/metric/unit sync plumbing stays on THIS always-mounted
+        // section — the subscreens write the same defaults keys, and these
+        // observers must keep firing for edits made there (and for the
+        // reset sweep).
+        .onChange(of: weightUnit) { PhoneSyncService.shared.push(from: context) }
+        .onChange(of: waterUnit) { PhoneSyncService.shared.push(from: context) }
+        .onChange(of: sodiumUnit) { PhoneSyncService.shared.push(from: context) }
         .onChange(of: foodIcon) { old, new in
             iconChanged(.food, from: old, to: new)
         }
@@ -330,85 +339,27 @@ struct SettingsView: View {
         return "\(unit.fromOz(oz).formatted(.number.precision(.fractionLength(0)))) \(unit.symbol)"
     }
 
-    /// One "Units" row, deliberately down in the housekeeping zone —
-    /// set-once plumbing, not a headline feature (the user, 2026-07-21).
-    /// The trailing summary shows the resolved trio at a glance.
-    private var unitsSection: some View {
+    /// Metrics and Water behind rows too (the user, 2026-07-22) — the
+    /// summaries say what's tracked and the goal, so the main screen
+    /// still answers at a glance.
+    private var trackingSection: some View {
         Section {
             NavigationLink {
-                UnitsSettingsView()
+                MetricsSettingsScreen()
             } label: {
-                LabeledContent("Units") {
-                    Text("\(WeightUnit.resolve(weightUnit).symbol) · \(resolvedWaterUnit.symbol) · \(resolvedSodiumUnit.symbol)")
-                }
+                LabeledContent("Metrics") { Text(metricsSummary) }
+            }
+            NavigationLink {
+                WaterSettingsScreen()
+            } label: {
+                LabeledContent("Water") { Text(waterAmountText(waterGoalOz)) }
             }
         }
-        // The pickers live on the subscreen; the push must fire from this
-        // always-mounted view so the watch and widgets hear the change.
-        .onChange(of: weightUnit) { PhoneSyncService.shared.push(from: context) }
-        .onChange(of: waterUnit) { PhoneSyncService.shared.push(from: context) }
-        .onChange(of: sodiumUnit) { PhoneSyncService.shared.push(from: context) }
     }
 
-    private var waterSection: some View {
-        Section {
-            // Steps in round display units: ±2 oz, or ±25 mL in metric
-            // mode (stepping the stored oz by twos would read as
-            // ±59 mL). Storage stays oz either way.
-            Stepper {
-                LabeledContent("Serving size") {
-                    Text(waterAmountText(waterServingOz))
-                }
-            } onIncrement: {
-                if resolvedWaterUnit == .fluidOunces {
-                    waterServingOz = min(40, waterServingOz + 2)
-                } else {
-                    // Snap-then-step keeps the readout on round mL;
-                    // bounds clamp in mL too (100–1,200 ≈ the oz range)
-                    // so the edges don't land on 118/1,183.
-                    let ml = (WaterUnit.milliliters.fromOz(waterServingOz) / 25).rounded() * 25
-                    waterServingOz = WaterUnit.milliliters.toOz(min(1_200, ml + 25))
-                }
-            } onDecrement: {
-                if resolvedWaterUnit == .fluidOunces {
-                    waterServingOz = max(4, waterServingOz - 2)
-                } else {
-                    let ml = (WaterUnit.milliliters.fromOz(waterServingOz) / 25).rounded() * 25
-                    waterServingOz = WaterUnit.milliliters.toOz(max(100, ml - 25))
-                }
-            }
-            // The goal is drunk in servings, so stepping SNAPS to
-            // multiples of the serving size (12 oz serving → 12,
-            // 24, 36…) — plain ±serving from a goal set under an
-            // old serving size stays misaligned forever, and the
-            // tempting reset-to-0 escape hatch can't exist:
-            // storage reads 0 as "unset → 64", so a 0 here would
-            // show while the app secretly runs the fallback.
-            // Floor = one serving, ceiling 200.
-            Stepper {
-                LabeledContent("Daily goal") {
-                    // Serving-multiple snapping below is oz-space and
-                    // unit-agnostic; only this readout converts.
-                    Text(waterAmountText(waterGoalOz))
-                }
-            } onIncrement: {
-                let serving = max(1, waterServingOz)
-                let next = (floor(waterGoalOz / serving + 1e-9) + 1) * serving
-                if next <= 200 { waterGoalOz = next }
-            } onDecrement: {
-                let serving = max(1, waterServingOz)
-                let previous = (ceil(waterGoalOz / serving - 1e-9) - 1) * serving
-                waterGoalOz = max(serving, previous)
-            }
-            // Opt-out (default on) — and the row doubles as the
-            // feature's signpost (the user).
-            Toggle("Long press + logs water", isOn: $holdToLogWater)
-            // The app-wide water icon (Today, log buttons, watch) —
-            // here unconditionally: one home for every water setting.
-            waterIconPicker
-        } header: {
-            Text("Water")
-        }
+    private var metricsSummary: String {
+        let names = [1, 2].compactMap { slotNutrient($0)?.displayName(sodium: resolvedSodiumUnit) }
+        return names.isEmpty ? "Off" : names.joined(separator: " · ")
     }
 
     // Its own property: inlining this pushed the Form past what the
@@ -696,185 +647,11 @@ struct SettingsView: View {
         return "Last backup \(stamp), \(location)."
     }
 
-    private var waterIconPicker: some View {
-        Picker("Water icon", selection: $waterIcon) {
-            ForEach(SettingsIcons.waterOptions, id: \.tag) { option in
-                HStack(spacing: 10) {
-                    WaterIconView(raw: option.tag)
-                        .frame(width: 28)
-                    Text(option.name)
-                }
-                .tag(option.tag)
-            }
-            SettingsIcons.customRows(current: waterIcon)
-        }
-        .pickerStyle(.navigationLink)
-    }
-
     /// The slot's nutrient; nil when set to None (the slot is off).
     private func slotNutrient(_ slot: Int) -> TrackedNutrient? {
         let raw = slot == 1 ? trackedMetric1 : trackedMetric2
         if raw == SharedStore.trackedMetricNone { return nil }
         return TrackedNutrient(key: raw) ?? (slot == 1 ? .sodium : .water)
-    }
-
-    /// One of Today's two tracked-metric slots: metric (or None), type,
-    /// target, icon. Sodium and water targets stay on their long-standing
-    /// keys (nutrition detail, calendar, and reminders read those); water
-    /// also brings the app-wide water icon picker. A None slot shows only
-    /// the Metric row.
-    @ViewBuilder
-    private func trackedMetricSection(slot: Int) -> some View {
-        let nutrient = slotNutrient(slot)
-        Section {
-            NavigationLink {
-                NutrientPickerView(
-                    selectionKey: slot == 1 ? $trackedMetric1 : $trackedMetric2,
-                    takenKey: slotNutrient(slot == 1 ? 2 : 1)?.key
-                )
-            } label: {
-                LabeledContent("Metric") { Text(nutrient?.displayName ?? "None") }
-            }
-            if let nutrient {
-                // Menu, not segmented: segments ignore Dynamic Type.
-                // Water skips the row — it's always a goal (SharedStore
-                // enforces the same).
-                if nutrient != .water {
-                    Picker("Type", selection: modeBinding(slot: slot, nutrient: nutrient)) {
-                        Text("Limit").tag(TrackedMetricMode.limit.rawValue)
-                        Text("Goal").tag(TrackedMetricMode.goal.rawValue)
-                    }
-                    .pickerStyle(.menu)
-                }
-                switch nutrient {
-                case .sodium:
-                    // Generic in presentation; the value stays on the
-                    // long-standing sodium-limit key (mg) — salt mode
-                    // edits through a converted binding.
-                    LabeledContent("Target") {
-                        HStack(spacing: 4) {
-                            TextField("0", value: sodiumLimitBinding, format: .number)
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .frame(maxWidth: 100)
-                            Text(resolvedSodiumUnit.symbol)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                case .water:
-                    Text("See Water settings")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                default:
-                    LabeledContent("Target") {
-                        HStack(spacing: 4) {
-                            TextField("0", value: targetBinding(slot: slot, nutrient: nutrient), format: .number)
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .frame(maxWidth: 100)
-                            Text(nutrient.unitSymbol)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                // Water's icon is NOT a slot icon: it lives with every
-                // other water knob in the Water section (and drives the
-                // log buttons and watch regardless of tracking).
-                if nutrient != .water {
-                    metricIconPicker(slot: slot, nutrient: nutrient)
-                }
-            }
-        } header: {
-            Text(slot == 1 ? "First tracked metric" : "Second tracked metric")
-        }
-        // Sodium's limit keeps coloring the calendar, day details, and
-        // Today's log even when no slot tracks it — keep its knob
-        // reachable.
-        if slot == 2, !slotTracksSodium {
-            Section {
-                LabeledContent("\(resolvedSodiumUnit.nutrientName) limit") {
-                    HStack(spacing: 4) {
-                        TextField("0", value: sodiumLimitBinding, format: .number)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(maxWidth: 100)
-                        Text(resolvedSodiumUnit.symbol)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            } footer: {
-                Text("Colors \(resolvedSodiumUnit.nutrientName.lowercased()) in the calendar and day details even while untracked.")
-            }
-        }
-    }
-
-    private var slotTracksSodium: Bool {
-        slotNutrient(1) == .sodium || slotNutrient(2) == .sodium
-    }
-
-    /// The sodium-limit fields edit mg through the display unit — an
-    /// identity in mg mode; ×2.5/1000 both ways in salt mode.
-    private var sodiumLimitBinding: Binding<Double> {
-        Binding(
-            get: { resolvedSodiumUnit.fromMg(sodiumLimitMg) },
-            set: { sodiumLimitMg = resolvedSodiumUnit.toMg($0) }
-        )
-    }
-
-    /// Default emoji or a custom pick — same prompt as the goal badge.
-    private func metricIconPicker(slot: Int, nutrient: TrackedNutrient) -> some View {
-        let stored = slot == 1 ? trackedMetric1Icon : trackedMetric2Icon
-        return Picker("Icon", selection: slot == 1 ? $trackedMetric1Icon : $trackedMetric2Icon) {
-            HStack(spacing: 10) {
-                Text(nutrient.defaultEmoji)
-                    .frame(width: 28)
-                Text("Default")
-            }
-            .tag("")
-            if SharedStore.isCustomEmoji(stored) {
-                HStack(spacing: 10) {
-                    Text(stored)
-                        .frame(width: 28)
-                    Text("Custom")
-                }
-                .tag(stored)
-            }
-            HStack(spacing: 10) {
-                Image(systemName: "face.smiling")
-                    .frame(width: 28)
-                    .foregroundStyle(.secondary)
-                Text("Choose custom…")
-            }
-            .tag("custom")
-        }
-        .pickerStyle(.navigationLink)
-    }
-
-    /// Empty stored mode means "the nutrient's default".
-    private func modeBinding(slot: Int, nutrient: TrackedNutrient) -> Binding<String> {
-        Binding(
-            get: {
-                let stored = slot == 1 ? trackedMetric1Mode : trackedMetric2Mode
-                return stored.isEmpty ? nutrient.defaultMode.rawValue : stored
-            },
-            set: { value in
-                if slot == 1 { trackedMetric1Mode = value } else { trackedMetric2Mode = value }
-            }
-        )
-    }
-
-    /// Zero stored target means "the nutrient's default" (an FDA daily
-    /// value seed the user overwrites with their own number).
-    private func targetBinding(slot: Int, nutrient: TrackedNutrient) -> Binding<Double> {
-        Binding(
-            get: {
-                let stored = slot == 1 ? trackedMetric1Target : trackedMetric2Target
-                return stored > 0 ? stored : nutrient.defaultTarget
-            },
-            set: { value in
-                if slot == 1 { trackedMetric1Target = value } else { trackedMetric2Target = value }
-            }
-        )
     }
 
     var body: some View {
@@ -903,12 +680,11 @@ struct SettingsView: View {
                     }
                 }
 
-                trackedMetricSection(slot: 1)
-                trackedMetricSection(slot: 2)
+                // Config rows lead (the user, 2026-07-22), tracking
+                // rows next; only Untracked days stays inline.
+                configSection
 
-                // Right under the metrics: the water slot's caption
-                // points here for its target.
-                waterSection
+                trackingSection
 
                 Section {
                     Stepper(value: $untrackedBelowKcal, in: 0...2000, step: 100) {
@@ -924,10 +700,6 @@ struct SettingsView: View {
                 } header: {
                     Text("Untracked days")
                 }
-
-                configSection
-
-                unitsSection
 
                 dataSection
 
@@ -1578,6 +1350,293 @@ private struct AISettingsScreen: View {
             }
             if AIProviderSettings.selected == provider { aiTest = verdict }
         }
+    }
+}
+
+/// Today's two tracked-metric slots: metric (or None), type, target,
+/// icon. Sodium and water targets stay on their long-standing keys
+/// (nutrition detail, calendar, and reminders read those). Writes land
+/// on the shared keys; SettingsView's root observers handle the watch
+/// sync and the custom-emoji prompt.
+private struct MetricsSettingsScreen: View {
+    @AppStorage(SharedStore.trackedMetric1Key, store: SharedStore.defaults) private var trackedMetric1 = "sodium"
+    @AppStorage(SharedStore.trackedMetric1ModeKey, store: SharedStore.defaults) private var trackedMetric1Mode = ""
+    @AppStorage(SharedStore.trackedMetric1TargetKey, store: SharedStore.defaults) private var trackedMetric1Target = 0.0
+    @AppStorage(SharedStore.trackedMetric1IconKey, store: SharedStore.defaults) private var trackedMetric1Icon = ""
+    @AppStorage(SharedStore.trackedMetric2Key, store: SharedStore.defaults) private var trackedMetric2 = "water"
+    @AppStorage(SharedStore.trackedMetric2ModeKey, store: SharedStore.defaults) private var trackedMetric2Mode = ""
+    @AppStorage(SharedStore.trackedMetric2TargetKey, store: SharedStore.defaults) private var trackedMetric2Target = 0.0
+    @AppStorage(SharedStore.trackedMetric2IconKey, store: SharedStore.defaults) private var trackedMetric2Icon = ""
+    @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
+    @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults) private var sodiumUnit = SharedStore.unitAutomatic
+
+    private var resolvedSodiumUnit: SodiumUnit { SodiumUnit.resolve(sodiumUnit) }
+
+    var body: some View {
+        Form {
+            trackedMetricSection(slot: 1)
+            trackedMetricSection(slot: 2)
+        }
+        .compactSections()
+        .riceCanvas()
+        .navigationTitle("Metrics")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// The slot's nutrient; nil when set to None (the slot is off).
+    private func slotNutrient(_ slot: Int) -> TrackedNutrient? {
+        let raw = slot == 1 ? trackedMetric1 : trackedMetric2
+        if raw == SharedStore.trackedMetricNone { return nil }
+        return TrackedNutrient(key: raw) ?? (slot == 1 ? .sodium : .water)
+    }
+
+    /// A None slot shows only the Metric row; water skips Type (always a
+    /// goal) and points at Water settings for its target.
+    @ViewBuilder
+    private func trackedMetricSection(slot: Int) -> some View {
+        let nutrient = slotNutrient(slot)
+        Section {
+            NavigationLink {
+                NutrientPickerView(
+                    selectionKey: slot == 1 ? $trackedMetric1 : $trackedMetric2,
+                    takenKey: slotNutrient(slot == 1 ? 2 : 1)?.key
+                )
+            } label: {
+                LabeledContent("Metric") { Text(nutrient?.displayName ?? "None") }
+            }
+            if let nutrient {
+                // Menu, not segmented: segments ignore Dynamic Type.
+                // Water skips the row — it's always a goal (SharedStore
+                // enforces the same).
+                if nutrient != .water {
+                    Picker("Type", selection: modeBinding(slot: slot, nutrient: nutrient)) {
+                        Text("Limit").tag(TrackedMetricMode.limit.rawValue)
+                        Text("Goal").tag(TrackedMetricMode.goal.rawValue)
+                    }
+                    .pickerStyle(.menu)
+                }
+                switch nutrient {
+                case .sodium:
+                    // Generic in presentation; the value stays on the
+                    // long-standing sodium-limit key (mg) — salt mode
+                    // edits through a converted binding.
+                    LabeledContent("Target") {
+                        HStack(spacing: 4) {
+                            TextField("0", value: sodiumLimitBinding, format: .number)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(maxWidth: 100)
+                            Text(resolvedSodiumUnit.symbol)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                case .water:
+                    Text("See Water settings")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                default:
+                    LabeledContent("Target") {
+                        HStack(spacing: 4) {
+                            TextField("0", value: targetBinding(slot: slot, nutrient: nutrient), format: .number)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(maxWidth: 100)
+                            Text(nutrient.unitSymbol)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                // Water's icon is NOT a slot icon: it lives with every
+                // other water knob in the Water screen (and drives the
+                // log buttons and watch regardless of tracking).
+                if nutrient != .water {
+                    metricIconPicker(slot: slot, nutrient: nutrient)
+                }
+            }
+        } header: {
+            Text(slot == 1 ? "First tracked metric" : "Second tracked metric")
+        }
+        // Sodium's limit keeps coloring the calendar, day details, and
+        // Today's log even when no slot tracks it — keep its knob
+        // reachable.
+        if slot == 2, !slotTracksSodium {
+            Section {
+                LabeledContent("\(resolvedSodiumUnit.nutrientName) limit") {
+                    HStack(spacing: 4) {
+                        TextField("0", value: sodiumLimitBinding, format: .number)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 100)
+                        Text(resolvedSodiumUnit.symbol)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } footer: {
+                Text("Colors \(resolvedSodiumUnit.nutrientName.lowercased()) in the calendar and day details even while untracked.")
+            }
+        }
+    }
+
+    private var slotTracksSodium: Bool {
+        slotNutrient(1) == .sodium || slotNutrient(2) == .sodium
+    }
+
+    /// The sodium-limit fields edit mg through the display unit — an
+    /// identity in mg mode; ×2.5/1000 both ways in salt mode.
+    private var sodiumLimitBinding: Binding<Double> {
+        Binding(
+            get: { resolvedSodiumUnit.fromMg(sodiumLimitMg) },
+            set: { sodiumLimitMg = resolvedSodiumUnit.toMg($0) }
+        )
+    }
+
+    /// Default emoji or a custom pick — same prompt as the goal badge.
+    private func metricIconPicker(slot: Int, nutrient: TrackedNutrient) -> some View {
+        let stored = slot == 1 ? trackedMetric1Icon : trackedMetric2Icon
+        return Picker("Icon", selection: slot == 1 ? $trackedMetric1Icon : $trackedMetric2Icon) {
+            HStack(spacing: 10) {
+                Text(nutrient.defaultEmoji)
+                    .frame(width: 28)
+                Text("Default")
+            }
+            .tag("")
+            if SharedStore.isCustomEmoji(stored) {
+                HStack(spacing: 10) {
+                    Text(stored)
+                        .frame(width: 28)
+                    Text("Custom")
+                }
+                .tag(stored)
+            }
+            HStack(spacing: 10) {
+                Image(systemName: "face.smiling")
+                    .frame(width: 28)
+                    .foregroundStyle(.secondary)
+                Text("Choose custom…")
+            }
+            .tag("custom")
+        }
+        .pickerStyle(.navigationLink)
+    }
+
+    /// Empty stored mode means "the nutrient's default".
+    private func modeBinding(slot: Int, nutrient: TrackedNutrient) -> Binding<String> {
+        Binding(
+            get: {
+                let stored = slot == 1 ? trackedMetric1Mode : trackedMetric2Mode
+                return stored.isEmpty ? nutrient.defaultMode.rawValue : stored
+            },
+            set: { value in
+                if slot == 1 { trackedMetric1Mode = value } else { trackedMetric2Mode = value }
+            }
+        )
+    }
+
+    /// Zero stored target means "the nutrient's default" (an FDA daily
+    /// value seed the user overwrites with their own number).
+    private func targetBinding(slot: Int, nutrient: TrackedNutrient) -> Binding<Double> {
+        Binding(
+            get: {
+                let stored = slot == 1 ? trackedMetric1Target : trackedMetric2Target
+                return stored > 0 ? stored : nutrient.defaultTarget
+            },
+            set: { value in
+                if slot == 1 { trackedMetric1Target = value } else { trackedMetric2Target = value }
+            }
+        )
+    }
+}
+
+/// Every water knob in one place, one push down: serving size, daily
+/// goal, the long-press shortcut, and the app-wide water icon.
+private struct WaterSettingsScreen: View {
+    @AppStorage(SharedStore.waterServingKey, store: SharedStore.defaults) private var waterServingOz = 12.0
+    @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
+    @AppStorage(SharedStore.holdToLogWaterKey, store: SharedStore.defaults) private var holdToLogWater = true
+    @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
+    @AppStorage(SharedStore.waterUnitKey, store: SharedStore.defaults) private var waterUnit = SharedStore.unitAutomatic
+
+    private var resolvedWaterUnit: WaterUnit { WaterUnit.resolve(waterUnit) }
+
+    private func waterAmountText(_ oz: Double) -> String {
+        let unit = resolvedWaterUnit
+        return "\(unit.fromOz(oz).formatted(.number.precision(.fractionLength(0)))) \(unit.symbol)"
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                // Steps in round display units: ±2 oz, or ±25 mL in metric
+                // mode (stepping the stored oz by twos would read as
+                // ±59 mL). Storage stays oz either way.
+                Stepper {
+                    LabeledContent("Serving size") {
+                        Text(waterAmountText(waterServingOz))
+                    }
+                } onIncrement: {
+                    if resolvedWaterUnit == .fluidOunces {
+                        waterServingOz = min(40, waterServingOz + 2)
+                    } else {
+                        // Snap-then-step keeps the readout on round mL;
+                        // bounds clamp in mL too (100–1,200 ≈ the oz range)
+                        // so the edges don't land on 118/1,183.
+                        let ml = (WaterUnit.milliliters.fromOz(waterServingOz) / 25).rounded() * 25
+                        waterServingOz = WaterUnit.milliliters.toOz(min(1_200, ml + 25))
+                    }
+                } onDecrement: {
+                    if resolvedWaterUnit == .fluidOunces {
+                        waterServingOz = max(4, waterServingOz - 2)
+                    } else {
+                        let ml = (WaterUnit.milliliters.fromOz(waterServingOz) / 25).rounded() * 25
+                        waterServingOz = WaterUnit.milliliters.toOz(max(100, ml - 25))
+                    }
+                }
+                // The goal is drunk in servings, so stepping SNAPS to
+                // multiples of the serving size (12 oz serving → 12,
+                // 24, 36…) — plain ±serving from a goal set under an
+                // old serving size stays misaligned forever, and the
+                // tempting reset-to-0 escape hatch can't exist:
+                // storage reads 0 as "unset → 64", so a 0 here would
+                // show while the app secretly runs the fallback.
+                // Floor = one serving, ceiling 200.
+                Stepper {
+                    LabeledContent("Daily goal") {
+                        // Serving-multiple snapping below is oz-space and
+                        // unit-agnostic; only this readout converts.
+                        Text(waterAmountText(waterGoalOz))
+                    }
+                } onIncrement: {
+                    let serving = max(1, waterServingOz)
+                    let next = (floor(waterGoalOz / serving + 1e-9) + 1) * serving
+                    if next <= 200 { waterGoalOz = next }
+                } onDecrement: {
+                    let serving = max(1, waterServingOz)
+                    let previous = (ceil(waterGoalOz / serving - 1e-9) - 1) * serving
+                    waterGoalOz = max(serving, previous)
+                }
+                // Opt-out (default on) — and the row doubles as the
+                // feature's signpost (the user).
+                Toggle("Long press + logs water", isOn: $holdToLogWater)
+                // The app-wide water icon (Today, log buttons, watch) —
+                // here unconditionally: one home for every water setting.
+                Picker("Water icon", selection: $waterIcon) {
+                    ForEach(SettingsIcons.waterOptions, id: \.tag) { option in
+                        HStack(spacing: 10) {
+                            WaterIconView(raw: option.tag)
+                                .frame(width: 28)
+                            Text(option.name)
+                        }
+                        .tag(option.tag)
+                    }
+                    SettingsIcons.customRows(current: waterIcon)
+                }
+                .pickerStyle(.navigationLink)
+            }
+        }
+        .compactSections()
+        .riceCanvas()
+        .navigationTitle("Water")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

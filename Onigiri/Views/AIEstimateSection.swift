@@ -108,10 +108,30 @@ struct AIEstimateSection: View {
             .onChange(of: query) { _, updated in
                 if updated.trimmingCharacters(in: .whitespaces) != phaseQuery {
                     estimateTask?.cancel()
+                    estimateTask = nil
                     phase = .idle
                 }
             }
-            .onDisappear { estimateTask?.cancel() }
+            // Tapping the estimate row while the search keyboard is up
+            // dismisses the keyboard, and the List re-layout tears this
+            // section down and rebuilds it milliseconds later — an
+            // onDisappear/onAppear pair with @State intact. The
+            // disappear cancel killed the just-started inference and
+            // the row spun forever with nothing left to flip the phase
+            // (every provider alike; field report 2026-07-22). The
+            // cancel stays — a dismissed sheet or cleared search must
+            // stop spending the user's tokens — so the appear side
+            // RESUMES instead: a live estimating phase with no live
+            // task can only mean a blip killed it.
+            .onAppear {
+                if case .estimating = phase, estimateTask == nil {
+                    estimate(phaseQuery)
+                }
+            }
+            .onDisappear {
+                estimateTask?.cancel()
+                estimateTask = nil
+            }
         }
     }
 

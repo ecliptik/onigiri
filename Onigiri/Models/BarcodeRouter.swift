@@ -13,11 +13,18 @@ enum BarcodeRouter {
         _ code: String,
         savedTarget: (String) -> PortionTarget?,
         isLookingUp: Binding<Bool>,
-        presentPortion: (PortionTarget) -> Void,
+        presentPortion: @escaping (PortionTarget) -> Void,
         presentForm: @escaping (ProductPrefill) -> Void
     ) {
         if let target = savedTarget(code) {
-            presentPortion(target)
+            // One-turn deferral, the label handoff's pattern: the
+            // scanner sheet dismisses itself right after delivering the
+            // code, and a same-turn item swap is torn down with it —
+            // the library hit ran synchronously and the portion sheet
+            // died with the scanner, a silent no-op scan (2026-07-22).
+            // The fetch path below gets this deferral for free from
+            // network latency.
+            Task { presentPortion(target) }
             return
         }
         isLookingUp.wrappedValue = true

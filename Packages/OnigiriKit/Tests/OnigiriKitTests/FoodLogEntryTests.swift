@@ -33,4 +33,28 @@ struct FoodLogEntryTests {
         #expect(entry(quantity: .nan).quantity == 1)
         #expect(entry(quantity: .infinity).quantity == 1)
     }
+
+    /// The metadata slot is plist-typed, so composition rides as a JSON
+    /// string — the codec must survive the round trip (names with
+    /// quotes/emoji included) and degrade to nothing, never throw.
+    @Test func mealItemsCodecRoundTrips() {
+        let items = [
+            LoggedMealItem(name: "2× Egg", kcal: 140),
+            LoggedMealItem(name: "Rice \"bowl\" 🍚", kcal: 210.5),
+        ]
+        let encoded = LoggedMealItem.encoded(items)
+        #expect(encoded != nil)
+        #expect(LoggedMealItem.decoded(from: encoded) == items)
+    }
+
+    @Test func mealItemsCodecDegradesToEmpty() {
+        #expect(LoggedMealItem.encoded([]) == nil)
+        #expect(LoggedMealItem.decoded(from: nil) == [])
+        #expect(LoggedMealItem.decoded(from: "not json") == [])
+        #expect(LoggedMealItem.decoded(from: "{\"name\":\"half\"}") == [])
+    }
+
+    @Test func mealItemsDefaultToEmptyForPlainFoods() {
+        #expect(entry(quantity: 1).mealItems.isEmpty)
+    }
 }

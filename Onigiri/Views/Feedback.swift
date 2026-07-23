@@ -134,13 +134,15 @@ enum LogActions {
         category: FoodCategory,
         date: Date = .now,
         aiGenerated: Bool = false,
-        quantity: Double = 1
+        quantity: Double = 1,
+        mealItems: [LoggedMealItem] = []
     ) async -> Bool {
         do {
             let id = try await health.logFood(
                 name: name, kcal: kcal, sodiumMg: sodiumMg,
                 nutrients: nutrients, category: category, date: date,
-                aiGenerated: aiGenerated, quantity: quantity
+                aiGenerated: aiGenerated, quantity: quantity,
+                mealItems: mealItems
             )
             didMutate(haptic: .success)
             ToastCenter.shared.show("Logged \(name) ✓") {
@@ -187,6 +189,8 @@ enum LogActions {
             // never lose the entry, only leave both — and the rollback
             // below covers the delete-failed case.
             let scale = quantity / entry.quantity
+            // mealItems ride unscaled: they're the per-portion basis,
+            // which a quantity change doesn't move.
             let newId = try await health.logFood(
                 name: entry.name,
                 kcal: entry.kcal * scale,
@@ -195,7 +199,8 @@ enum LogActions {
                 category: category,
                 date: date ?? entry.date,
                 aiGenerated: entry.aiGenerated,
-                quantity: quantity
+                quantity: quantity,
+                mealItems: entry.mealItems
             )
             do {
                 try await health.deleteFoodEntry(id: entry.id)
@@ -211,7 +216,7 @@ enum LogActions {
                             name: entry.name, kcal: entry.kcal, sodiumMg: entry.sodiumMg,
                             nutrients: entry.nutrients, category: entry.category,
                             date: entry.date, aiGenerated: entry.aiGenerated,
-                            quantity: entry.quantity
+                            quantity: entry.quantity, mealItems: entry.mealItems
                         )
                         try? await health.deleteFoodEntry(id: newId)
                         didMutate(haptic: nil)
@@ -240,7 +245,7 @@ enum LogActions {
                             name: entry.name, kcal: entry.kcal, sodiumMg: entry.sodiumMg,
                             nutrients: entry.nutrients, category: entry.category,
                             date: entry.date, aiGenerated: entry.aiGenerated,
-                            quantity: entry.quantity
+                            quantity: entry.quantity, mealItems: entry.mealItems
                         )
                         didMutate(haptic: nil)
                     } catch {

@@ -393,7 +393,8 @@ struct FoodsView: View {
                 PortionSheet(target: target) { quantity, category, _ in
                     log(name: target.name, kcal: target.kcal,
                         sodiumMg: target.sodiumMg, nutrients: target.nutrients,
-                        category: category, quantity: quantity)
+                        category: category, quantity: quantity,
+                        mealItems: target.mealItems)
                 }
                 .presentationDetents([.medium, .large])
             case .scanner:
@@ -441,7 +442,8 @@ struct FoodsView: View {
                 log(name: meal.name, kcal: meal.totalKcal,
                     sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
                     category: PortionTarget.category(from: meal.category),
-                    aiGenerated: meal.aiGenerated)
+                    aiGenerated: meal.aiGenerated,
+                    mealItems: meal.loggedItems)
             } onLongPress: {
                 markUsed(meal)
                 activeSheet = .portion(PortionTarget(
@@ -449,7 +451,8 @@ struct FoodsView: View {
                     sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
                     serving: "1 meal",
                     defaultCategory: PortionTarget.category(from: meal.category),
-                    aiGenerated: meal.aiGenerated
+                    aiGenerated: meal.aiGenerated,
+                    mealItems: meal.loggedItems
                 ))
             }
         }
@@ -708,7 +711,7 @@ struct FoodsView: View {
     private func log(
         name: String, kcal: Double, sodiumMg: Double,
         nutrients: NutrientValues, category: FoodCategory, quantity: Double = 1,
-        aiGenerated: Bool = false
+        aiGenerated: Bool = false, mealItems: [LoggedMealItem] = []
     ) {
         // The log keeps the plain food name; the portion only scales values.
         guard !isLogging else { return }
@@ -722,7 +725,8 @@ struct FoodsView: View {
                 nutrients: nutrients.scaled(by: quantity),
                 category: category,
                 aiGenerated: aiGenerated,
-                quantity: quantity
+                quantity: quantity,
+                mealItems: mealItems
             )
         }
     }
@@ -750,6 +754,10 @@ struct PortionTarget: Identifiable {
     /// re-log a multi-portion entry. The logged quantity metadata is
     /// the sheet's pick × this, so per-portion values stay recoverable.
     var baseQuantity: Double = 1
+    /// Meal composition on the per-portion basis — drives the portion
+    /// sheet's Contains section and rides into the log's metadata.
+    /// Empty for plain foods.
+    var mealItems: [LoggedMealItem] = []
 
     static func category(from stored: String?) -> FoodCategory {
         stored.flatMap(FoodCategory.init(rawValue:)) ?? .slot(for: .now)
@@ -926,6 +934,29 @@ struct PortionSheet: View {
                             .monospacedDigit()
                     }
                 }
+                // A logged/library MEAL explains its total: each
+                // component's kcal share, live against the serving
+                // stepper. Values are the log-time snapshot — the
+                // library meal may have changed since.
+                if !target.mealItems.isEmpty {
+                    Section {
+                        ForEach(Array(target.mealItems.enumerated()), id: \.offset) { _, item in
+                            LabeledContent(item.name) {
+                                Text("\(item.kcal * quantity, format: .number.precision(.fractionLength(0))) kcal")
+                                    .monospacedDigit()
+                            }
+                        }
+                    } header: {
+                        Text("Contains")
+                    } footer: {
+                        // Snapshot vs entry drift (a kcal edit after
+                        // logging changes the total, never the parts).
+                        let partsKcal = target.mealItems.reduce(0) { $0 + $1.kcal }
+                        if abs(partsKcal - target.kcal) > 1 {
+                            Text("Values were edited after logging.")
+                        }
+                    }
+                }
                 // Edit mode only: move the entry in time ("logged at
                 // 11 pm but it was yesterday's dinner" used to mean
                 // delete + re-log).
@@ -1024,6 +1055,9 @@ struct LibraryRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults) private var sodiumUnitRaw = SharedStore.unitAutomatic
     private var sodiumUnit: SodiumUnit { SodiumUnit.resolve(sodiumUnitRaw) }
+    // @AppStorage, not a static read — the Appearance picker's change
+    // must repaint visible rows (the sodium-unit pattern).
+    @AppStorage(SharedStore.mealIconKey, store: SharedStore.defaults) private var mealIconRaw = "plate"
 
     private var nameLine: some View {
         HStack(spacing: 4) {
@@ -1034,18 +1068,20 @@ struct LibraryRow: View {
             }
             Text(name)
                 .foregroundStyle(.primary)
+            // Marks read at .callout — .caption2 made them squint-sized
+            // beside the body-size name (the user, 2026-07-23).
             if aiGenerated {
                 Text(verbatim: "✨")
-                    .font(.caption2)
+                    .font(.callout)
                     .accessibilityLabel("AI estimated")
             }
             if isMeal {
-                Text("Meal")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(.quaternary.opacity(0.6), in: .capsule)
+                // The meal mark (Appearance-configurable emoji),
+                // replacing the old "Meal" text capsule — one mark
+                // grammar beside the name.
+                Text(verbatim: SharedStore.mealEmoji(for: mealIconRaw))
+                    .font(.callout)
+                    .accessibilityLabel("Meal")
             }
         }
     }

@@ -244,7 +244,10 @@ struct TodayView: View {
                         sodiumMg: entry.sodiumMg / entry.quantity,
                         nutrients: entry.nutrients.scaled(by: 1 / entry.quantity),
                         serving: entry.quantity == 1 ? "as logged" : "",
-                        defaultCategory: entry.category
+                        defaultCategory: entry.category,
+                        // Already per-portion — the sheet's Contains
+                        // section scales it by the live quantity.
+                        mealItems: entry.mealItems
                     ), editDate: entry.date, initialQuantity: entry.quantity) { quantity, category, date in
                         Task {
                             await LogActions.editFoodEntry(
@@ -990,6 +993,7 @@ private struct FoodLogRow: View, Equatable {
     let swipe: RowSwipeState
     let onEdit: (FoodLogEntry) -> Void
     @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults) private var sodiumUnitRaw = SharedStore.unitAutomatic
+    @AppStorage(SharedStore.mealIconKey, store: SharedStore.defaults) private var mealIconRaw = "plate"
 
     static func == (lhs: FoodLogRow, rhs: FoodLogRow) -> Bool {
         lhs.entry == rhs.entry && lhs.entryMetric == rhs.entryMetric
@@ -1000,10 +1004,20 @@ private struct FoodLogRow: View, Equatable {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(entry.name)
+                    // .callout, not .caption2 — the marks read tiny
+                    // beside the body-size name (the user, 2026-07-23).
                     if entry.aiGenerated {
                         Text(verbatim: "✨")
-                            .font(.caption2)
+                            .font(.callout)
                             .accessibilityLabel("AI estimated")
+                    }
+                    if !entry.mealItems.isEmpty {
+                        // @AppStorage so the Appearance change repaints
+                        // this row despite its Equatable gate (dynamic
+                        // properties bypass ==).
+                        Text(verbatim: SharedStore.mealEmoji(for: mealIconRaw))
+                            .font(.callout)
+                            .accessibilityLabel("Meal")
                     }
                 }
                 Text(entry.date, style: .time)

@@ -80,6 +80,11 @@ private enum SettingsIcons {
         ("ice", "Ice"),
     ]
 
+    static let mealOptions: [(tag: String, name: String)] = [
+        ("plate", "Plate"),
+        ("bento", "Bento"),
+    ]
+
     static let rewardOptions: [(tag: String, name: String)] = [
         ("onigiri", "Onigiri"),
         ("trophy", "Trophy"),
@@ -123,6 +128,7 @@ struct SettingsView: View {
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
+    @AppStorage(SharedStore.mealIconKey, store: SharedStore.defaults) private var mealIcon = "plate"
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "remaining"
     @AppStorage(SharedStore.waterServingKey, store: SharedStore.defaults) private var waterServingOz = 12.0
@@ -231,6 +237,7 @@ struct SettingsView: View {
         case food = "Food icon"
         case water = "Water icon"
         case reward = "Goal badge"
+        case meal = "Meal mark"
         case metric1 = "First metric icon"
         case metric2 = "Second metric icon"
         var id: String { rawValue }
@@ -297,6 +304,9 @@ struct SettingsView: View {
             // The push mirrors the badge into the shared defaults and
             // reloads the widgets when it actually changed.
             iconChanged(.reward, from: old, to: new)
+        }
+        .onChange(of: mealIcon) { old, new in
+            iconChanged(.meal, from: old, to: new)
         }
         // A new metric starts from its own defaults, not the old one's —
         // and every slot change syncs to the watch's metrics page.
@@ -653,6 +663,7 @@ struct SettingsView: View {
         case .food: foodIcon
         case .water: waterIcon
         case .reward: rewardIcon
+        case .meal: mealIcon
         case .metric1: trackedMetric1Icon
         case .metric2: trackedMetric2Icon
         }
@@ -674,6 +685,7 @@ struct SettingsView: View {
         case .food: SharedStore.foodEmoji(for: raw)
         case .water: SharedStore.waterEmoji(for: raw)
         case .reward: SharedStore.rewardEmoji(for: raw)
+        case .meal: SharedStore.mealEmoji(for: raw)
         case .metric1: SharedStore.customEmojiOrDefault(raw, for: slotNutrient(1))
         case .metric2: SharedStore.customEmojiOrDefault(raw, for: slotNutrient(2))
         }
@@ -684,6 +696,7 @@ struct SettingsView: View {
         case .food: foodIcon = value
         case .water: waterIcon = value
         case .reward: rewardIcon = value
+        case .meal: mealIcon = value
         case .metric1: trackedMetric1Icon = value
         case .metric2: trackedMetric2Icon = value
         }
@@ -882,6 +895,7 @@ struct SettingsView: View {
 private struct AppearanceSettingsScreen: View {
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
+    @AppStorage(SharedStore.mealIconKey, store: SharedStore.defaults) private var mealIcon = "plate"
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "remaining"
     @AppStorage(SharedStore.energyStatsStyleKey, store: SharedStore.defaults) private var energyStatsStyle = "cards"
     @AppStorage(SharedStore.progressGaugesKey, store: SharedStore.defaults) private var progressGauges = false
@@ -907,6 +921,20 @@ private struct AppearanceSettingsScreen: View {
                 .pickerStyle(.navigationLink)
                 // The water icon lives in the Water section — every water
                 // knob in one place (the user).
+                // The mark beside meal names in mixed lists (Favorites,
+                // the Log sheet, Today's log).
+                Picker("Meal mark", selection: $mealIcon) {
+                    ForEach(SettingsIcons.mealOptions, id: \.tag) { option in
+                        HStack(spacing: 10) {
+                            Text(SharedStore.mealEmoji(for: option.tag))
+                                .frame(width: 28)
+                            Text(option.name)
+                        }
+                        .tag(option.tag)
+                    }
+                    SettingsIcons.customRows(current: mealIcon)
+                }
+                .pickerStyle(.navigationLink)
                 Picker("Goal badge", selection: $rewardIcon) {
                     ForEach(SettingsIcons.rewardOptions, id: \.tag) { option in
                         HStack(spacing: 10) {

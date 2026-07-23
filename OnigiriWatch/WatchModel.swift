@@ -219,12 +219,14 @@ final class WatchModel {
         isLogging = true
         defer { isLogging = false }
         do {
-            // Carry the meal's slot and nutrients like the phone does; old
-            // payloads without them fall back to time-of-day inference.
+            // Carry the meal's slot, nutrients, and composition like the
+            // phone does; old payloads without them fall back to
+            // time-of-day inference (and no breakdown).
             try await health.logFood(
                 name: meal.name, kcal: meal.kcal, sodiumMg: meal.sodiumMg,
                 nutrients: meal.nutrients ?? NutrientValues(),
-                category: meal.category.flatMap(FoodCategory.init(rawValue:))
+                category: meal.category.flatMap(FoodCategory.init(rawValue:)),
+                mealItems: meal.items ?? []
             )
             WKInterfaceDevice.current().play(.success)
             showFlash("✓ \(meal.name)", isError: false)

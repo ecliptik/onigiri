@@ -6,7 +6,9 @@ struct WatchSyncTests {
     @Test func contextRoundTripsAllFields() {
         let meals = [SyncedMeal(
             id: UUID(), name: "Oatmeal", kcal: 320, sodiumMg: 140,
-            category: "Breakfast", nutrients: NutrientValues(fiberG: 4)
+            category: "Breakfast", nutrients: NutrientValues(fiberG: 4),
+            items: [LoggedMealItem(name: "Oats", kcal: 150),
+                    LoggedMealItem(name: "Milk", kcal: 170)]
         )]
         let goal = SyncedGoal(
             targetWeightLb: 170,

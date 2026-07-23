@@ -100,6 +100,9 @@ struct QuickLogSheet: View {
         /// mirroring a 3-portion entry re-logs as 3, so a later edit
         /// still knows the per-portion basis). 1 for library items.
         var baseQuantity: Double = 1
+        /// Meal composition (per-portion) — from the library meal, or
+        /// carried through a history row so re-logs keep the breakdown.
+        var mealItems: [LoggedMealItem] = []
         var isMeal: Bool { meal != nil }
     }
 
@@ -124,7 +127,8 @@ struct QuickLogSheet: View {
                 category: meal.category,
                 aiGenerated: meal.aiGenerated,
                 recency: meal.recencyDate,
-                meal: meal
+                meal: meal,
+                mealItems: meal.loggedItems
             )
         }
         let foodItems = foods.map { food in
@@ -167,7 +171,8 @@ struct QuickLogSheet: View {
                 aiGenerated: entry.aiGenerated,
                 recency: entry.date,
                 isHistory: true,
-                baseQuantity: entry.quantity
+                baseQuantity: entry.quantity,
+                mealItems: entry.mealItems
             )
         }
     }
@@ -456,7 +461,8 @@ struct QuickLogSheet: View {
                                  kcal: target.kcal, sodiumMg: target.sodiumMg,
                                  nutrients: target.nutrients, isFavorite: false, category: nil,
                                  aiGenerated: target.aiGenerated,
-                                 baseQuantity: target.baseQuantity),
+                                 baseQuantity: target.baseQuantity,
+                                 mealItems: target.mealItems),
                             quantity: quantity,
                             category: category
                         )
@@ -704,7 +710,8 @@ struct QuickLogSheet: View {
             nutrients: item.nutrients, serving: item.isHistory ? "as last logged" : item.detail,
             defaultCategory: PortionTarget.category(from: item.category),
             aiGenerated: item.aiGenerated,
-            baseQuantity: item.baseQuantity
+            baseQuantity: item.baseQuantity,
+            mealItems: item.mealItems
         )
     }
 
@@ -736,7 +743,8 @@ struct QuickLogSheet: View {
                 category: category,
                 date: logDate,
                 aiGenerated: item.aiGenerated,
-                quantity: quantity * item.baseQuantity
+                quantity: quantity * item.baseQuantity,
+                mealItems: item.mealItems
             )
             isLogging = false
             // Recency moved — refresh the cached list order and the

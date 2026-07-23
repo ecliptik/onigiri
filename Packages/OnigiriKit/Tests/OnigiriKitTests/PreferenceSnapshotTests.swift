@@ -87,8 +87,10 @@ struct PreferenceSnapshotTests {
         #expect(keys.contains(SharedStore.onlineLookupsKey))
         #expect(keys.contains(AIProviderSettings.enabledKey))
         #expect(keys.contains(AIProviderSettings.localVisionKey))
+        // Icons, including the meal mark (2026-07-23).
+        #expect(keys.contains(SharedStore.mealIconKey))
         // Onboarding deliberately stays OUT (reset must not replay it).
         #expect(!keys.contains(SharedStore.hasOnboardedKey))
-        #expect(keys.count == 42)
+        #expect(keys.count == 43)
     }
 }

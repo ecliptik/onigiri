@@ -472,6 +472,12 @@ public final class HealthKitService {
     /// edits as 3, not as one triple-sized serving. Absent means 1
     /// (older logs, other apps).
     public static let quantityMetadataKey = "OnigiriQuantity"
+    /// Custom metadata key carrying a logged MEAL's composition —
+    /// JSON-encoded [LoggedMealItem] on the per-portion basis. Absent
+    /// means a plain food, or a meal logged before the key existed.
+    /// Like quantity, every log/re-log path must carry it through or
+    /// history silently loses its breakdown.
+    public static let mealItemsMetadataKey = "OnigiriMealItems"
 
     @discardableResult
     public func logFood(
@@ -482,7 +488,8 @@ public final class HealthKitService {
         category: FoodCategory? = nil,
         date: Date = .now,
         aiGenerated: Bool = false,
-        quantity: Double = 1
+        quantity: Double = 1,
+        mealItems: [LoggedMealItem] = []
     ) async throws -> UUID {
         var metadata: [String: Any] = [
             HKMetadataKeyFoodType: name,
@@ -498,6 +505,9 @@ public final class HealthKitService {
         }
         if quantity != 1, quantity > 0, quantity.isFinite {
             metadata[Self.quantityMetadataKey] = quantity
+        }
+        if let encoded = LoggedMealItem.encoded(mealItems) {
+            metadata[Self.mealItemsMetadataKey] = encoded
         }
         var objects: Set<HKSample> = [
             HKQuantitySample(
@@ -633,7 +643,9 @@ public final class HealthKitService {
             nutrients: correlation.nutrientValues,
             editable: Self.isFamilySource(correlation.sourceRevision.source),
             aiGenerated: correlation.metadata?[Self.aiGeneratedMetadataKey] as? Bool ?? false,
-            quantity: correlation.metadata?[Self.quantityMetadataKey] as? Double ?? 1
+            quantity: correlation.metadata?[Self.quantityMetadataKey] as? Double ?? 1,
+            mealItems: LoggedMealItem.decoded(
+                from: correlation.metadata?[Self.mealItemsMetadataKey] as? String)
         )
     }
 

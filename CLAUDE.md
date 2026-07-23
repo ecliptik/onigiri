@@ -193,8 +193,12 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   The portion count rides in `OnigiriQuantity` (absent = 1) — log writes store
   multiplied totals PLUS this key, and the edit sheet divides totals by it to
   recover the per-portion basis, so "3 hot dogs" edits as 3, not one triple
-  serving. Any new log/re-log path must carry the quantity through or edits
-  of its entries regress to 1.
+  serving. A logged MEAL's composition rides in `OnigiriMealItems`
+  (JSON [LoggedMealItem], per-portion kcal, snapshotted at log time —
+  never resolved from the library, which lies after meal edits); absent =
+  plain food or pre-feature log (no meal mark, no Contains section — by
+  design). Any new log/re-log path must carry BOTH keys through or edits
+  regress to 1 and history silently loses its breakdown.
 - Free personal team: no iCloud/CloudKit entitlements; watch↔phone library sync is
   WatchConnectivity, log sync is HealthKit's own.
 - Unit preferences (Settings → Units): display/entry-only. Storage is ALWAYS

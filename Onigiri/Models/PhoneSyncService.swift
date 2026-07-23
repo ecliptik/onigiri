@@ -89,7 +89,8 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
             .sorted { $0.recencyDate > $1.recencyDate }
         let meals = allMeals.map { SyncedMeal(
             id: $0.uuid, name: $0.name, kcal: $0.totalKcal, sodiumMg: $0.totalSodiumMg,
-            category: $0.category, nutrients: $0.totalNutrients
+            category: $0.category, nutrients: $0.totalNutrients,
+            items: $0.loggedItems
         ) }
         let recentFoods = allFoods.prefix(10).map { SyncedMeal(
             id: UUID(), name: $0.name, kcal: $0.kcal, sodiumMg: $0.sodiumMg,
@@ -101,7 +102,8 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
             allMeals.filter(\.isFavorite).map { meal in
                 (meal.recencyDate, SyncedMeal(
                     id: meal.uuid, name: meal.name, kcal: meal.totalKcal, sodiumMg: meal.totalSodiumMg,
-                    category: meal.category, nutrients: meal.totalNutrients
+                    category: meal.category, nutrients: meal.totalNutrients,
+                    items: meal.loggedItems
                 ))
             }
             + allFoods.filter(\.isFavorite).map { food in

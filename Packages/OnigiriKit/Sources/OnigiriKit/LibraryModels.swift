@@ -158,6 +158,20 @@ public final class Meal {
             partial + (item.food?.nutrients.scaled(by: item.quantity) ?? NutrientValues())
         }
     }
+
+    /// The composition snapshot a log write records (per one meal
+    /// portion) — each component's name and kcal share, quantities
+    /// folded in ("2× Egg" contributes one line at doubled kcal, and
+    /// the count rides the name so the breakdown reads naturally).
+    public var loggedItems: [LoggedMealItem] {
+        items.compactMap { item in
+            guard let food = item.food else { return nil }
+            let name = item.quantity == 1
+                ? food.name
+                : "\(item.quantity.formatted(.number.precision(.fractionLength(0...2))))× \(food.name)"
+            return LoggedMealItem(name: name, kcal: item.kcal)
+        }
+    }
 }
 
 @Model
@@ -205,6 +219,7 @@ public enum SharedStore {
     public static let waterIconKey = "waterIcon"
     public static let foodIconKey = "foodIcon"
     public static let rewardIconKey = "rewardIcon"
+    public static let mealIconKey = "mealIcon"
     public static let sodiumLimitKey = "sodiumLimitMg"
     public static let balanceStyleKey = "balanceStyle"
     public static let progressGaugesKey = "progressGauges"
@@ -490,6 +505,21 @@ public enum SharedStore {
 
     public static var foodEmoji: String {
         foodEmoji(for: defaults.string(forKey: foodIconKey))
+    }
+
+    /// The mark beside meal names wherever meals mix with foods
+    /// (Favorites, the Log sheet, Today's log) — 🍽️ by default, 🍱 the
+    /// offered alternate (Appearance); a custom emoji stores as itself.
+    public static func mealEmoji(for raw: String?) -> String {
+        switch raw {
+        case "plate": "🍽️"
+        case "bento": "🍱"
+        default: customEmoji(raw) ?? "🍽️"
+        }
+    }
+
+    public static var mealEmoji: String {
+        mealEmoji(for: defaults.string(forKey: mealIconKey))
     }
 
     /// The earned-goal badge shown on Today, the calendar, and the

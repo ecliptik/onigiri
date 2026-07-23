@@ -11,10 +11,15 @@ public struct SyncedMeal: Codable, Identifiable, Sendable, Hashable {
     public let sodiumMg: Double
     public let category: String?
     public let nutrients: NutrientValues?
+    /// Meal composition for the log's breakdown metadata — optional so
+    /// payloads survive version skew in both directions (an old watch
+    /// just logs meals without a breakdown; foods never carry it).
+    public let items: [LoggedMealItem]?
 
     public init(
         id: UUID, name: String, kcal: Double, sodiumMg: Double,
-        category: String? = nil, nutrients: NutrientValues? = nil
+        category: String? = nil, nutrients: NutrientValues? = nil,
+        items: [LoggedMealItem]? = nil
     ) {
         self.id = id
         self.name = name
@@ -22,6 +27,7 @@ public struct SyncedMeal: Codable, Identifiable, Sendable, Hashable {
         self.sodiumMg = sodiumMg
         self.category = category
         self.nutrients = nutrients
+        self.items = items
     }
 }
 

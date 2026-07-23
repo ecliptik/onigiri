@@ -91,6 +91,24 @@ struct DailyPlanLoaderTests {
         #expect(state.dailyBudgetKcal == nil)
     }
 
+    @Test func burnFloorOutranksARevisedSummary() {
+        // Health revised today's burn down after the day's mark was
+        // set: the budget derives from the floor, while the displayed
+        // summary keeps the honest lower number.
+        let state = DailyPlanLoader.makeState(
+            goal: SyncedGoal(
+                targetWeightLb: 200, targetDate: Self.now,
+                fallbackCurrentWeightLb: nil, mode: GoalMode.maintain
+            ),
+            summary: Self.summary(intake: 2000, burn: 2796),
+            averageBurnKcal: 2500, healthWeightLb: nil,
+            todayBurnFloorKcal: 3021,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(state.dailyBudgetKcal == 3021)
+        #expect(state.summary.totalBurnKcal == 2796)
+    }
+
     @Test func gaugeClampsAtBothEnds() {
         // Eaten far past the budget → surplus, gauge floors at 0.
         let over = DailyPlanLoader.makeState(

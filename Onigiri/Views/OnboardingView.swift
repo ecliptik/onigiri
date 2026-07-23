@@ -374,7 +374,7 @@ struct OnboardingView: View {
             targetWeightLb: targetWeightLb,
             targetDate: targetDate,
             averageDailyBurnKcal: averageBurnKcal,
-            todayActualBurnKcal: todayBurnKcal
+            todayActualBurnKcal: TodayBurnFloor.ratcheted(todayBurnKcal)
         )
     }
 

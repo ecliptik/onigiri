@@ -572,7 +572,10 @@ struct TodayView: View {
             targetWeightLb: goal.targetWeightLb,
             targetDate: goal.targetDate,
             averageDailyBurnKcal: model.averageBurnKcal,
-            todayActualBurnKcal: model.summary.totalBurnKcal
+            // Day-ratcheted: Health revising burn down (watch↔phone
+            // sample reconciliation) must not move the budget against
+            // the user mid-day. Display totals stay raw.
+            todayActualBurnKcal: TodayBurnFloor.ratcheted(model.summary.totalBurnKcal)
         )
     }
 

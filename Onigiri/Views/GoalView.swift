@@ -115,7 +115,7 @@ struct GoalView: View {
             targetWeightLb: targetWeightLb,
             targetDate: targetDate,
             averageDailyBurnKcal: model.averageBurnKcal,
-            todayActualBurnKcal: model.todayBurnKcal
+            todayActualBurnKcal: TodayBurnFloor.ratcheted(model.todayBurnKcal)
         )
     }
 

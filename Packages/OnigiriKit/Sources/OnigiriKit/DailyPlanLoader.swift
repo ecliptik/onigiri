@@ -45,6 +45,11 @@ public enum DailyPlanLoader {
         summary: DailyEnergySummary,
         averageBurnKcal: Double?,
         healthWeightLb: Double?,
+        /// The day-ratcheted burn (TodayBurnFloor) when the caller has
+        /// one — the budget derives from it while the summary keeps the
+        /// honest display numbers. nil = today's raw burn, the pure
+        /// pre-ratchet behavior the tests pin.
+        todayBurnFloorKcal: Double? = nil,
         calendar: Calendar = .current,
         now: Date = .now
     ) -> State {
@@ -53,7 +58,8 @@ public enum DailyPlanLoader {
         }
         if goal.isMaintenance {
             let burn = CalorieBudget.expectedDailyBurn(
-                averageKcal: averageBurnKcal, todayActualKcal: summary.totalBurnKcal
+                averageKcal: averageBurnKcal,
+                todayActualKcal: todayBurnFloorKcal ?? summary.totalBurnKcal
             )
             let plan = CalorieBudget.maintenancePlan(averageDailyBurn: burn)
             let progress = plan.dailyBudget > 0
@@ -72,7 +78,7 @@ public enum DailyPlanLoader {
             targetWeightLb: goal.targetWeightLb,
             targetDate: goal.targetDate,
             averageDailyBurnKcal: averageBurnKcal,
-            todayActualBurnKcal: summary.totalBurnKcal,
+            todayActualBurnKcal: todayBurnFloorKcal ?? summary.totalBurnKcal,
             calendar: calendar,
             now: now
         ) else {
@@ -159,19 +165,23 @@ public extension DailyPlanLoader {
         async let burnRead = health.averageDailyBurnKcal()
         if goal.isMaintenance {
             // The current weight plays no part — don't query it.
+            let summary = (try? await summaryRead) ?? .zero
             return makeState(
                 goal: goal,
-                summary: (try? await summaryRead) ?? .zero,
+                summary: summary,
                 averageBurnKcal: resolvedBurn((try? await burnRead) ?? nil),
-                healthWeightLb: nil
+                healthWeightLb: nil,
+                todayBurnFloorKcal: TodayBurnFloor.ratcheted(summary.totalBurnKcal)
             )
         }
         async let weightRead = health.latestBodyMassLb()
+        let summary = (try? await summaryRead) ?? .zero
         return makeState(
             goal: goal,
-            summary: (try? await summaryRead) ?? .zero,
+            summary: summary,
             averageBurnKcal: resolvedBurn((try? await burnRead) ?? nil),
-            healthWeightLb: resolvedWeight((try? await weightRead) ?? nil)
+            healthWeightLb: resolvedWeight((try? await weightRead) ?? nil),
+            todayBurnFloorKcal: TodayBurnFloor.ratcheted(summary.totalBurnKcal)
         )
     }
 

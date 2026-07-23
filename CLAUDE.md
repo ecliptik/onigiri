@@ -139,6 +139,10 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   plist instead: `data/Containers/Shared/AppGroup/<UUID>/Library/Preferences/
   group.com.ecliptik.Onigiri.plist` (pass the path minus `.plist` to
   `defaults write`, app terminated first). Cost a smoke-test cycle 2026-07-21.
+  AND run that `defaults write` via `simctl spawn <udid>`, not the host: a
+  host-side write to the same path landed in the file but the app still read
+  stale values — the sim's own cfprefsd had the domain cached and served its
+  copy. Spawning defaults inside the sim goes through that daemon (2026-07-22).
 
 ## SwiftData landmines (each cost a debugging session)
 
@@ -159,6 +163,14 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   into one `.sheet(item:)`); a Bool "request" flag that can be set while no
   onChange observer exists goes permanently dead (true→true never fires) — use
   a consumable Optional checked on change, appear, and foreground.
+- Two dismissal races, each a silent field failure (both 2026-07-22):
+  swapping a `.sheet(item:)` binding synchronously inside a closure the
+  presented sheet follows with its own `dismiss()` tears the NEW sheet down
+  with the old (defer the swap one turn — `Task { }` — as the label and
+  known-barcode handoffs now do); and List sections under `.searchable` get a
+  transient onDisappear/onAppear pair (@State intact) when the keyboard
+  dismisses, so an onDisappear that cancels work needs an onAppear that
+  resumes it, or the section wedges in its in-flight state forever.
 
 ## Conventions
 

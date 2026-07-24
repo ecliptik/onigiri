@@ -726,8 +726,12 @@ public final class HealthKitService {
             sample(.dietaryWater, .fluidOunceUS(), 12, start: todayAt(0.4), end: todayAt(0.4)),
             sample(.dietaryWater, .fluidOunceUS(), 12, start: todayAt(0.9), end: todayAt(0.9)),
         ]
-        // a month of daily weigh-ins drifting 202 → 200 lb with scale noise
-        let wobble: [Double] = [0.4, -0.3, 0.6, -0.5, 0.1, 0.3, -0.4]
+        // a month of daily weigh-ins drifting 202 → 200 lb with scale noise.
+        // The noise stays UNDER the drift on purpose: at ±0.6 it swamped
+        // the -0.47 lb/week signal, and the weekly fit (v2.9.0 reads raw
+        // weigh-ins) rendered "Scale: up 0.2 lb this week" — a
+        // weight-loss demo contradicting itself in every capture.
+        let wobble: [Double] = [0.2, -0.15, 0.25, -0.2, 0.05, 0.15, -0.2]
         for day in 0...30 {
             let trend = 202.0 - (Double(day) / 30.0) * 2.0
             guard let dayStart = calendar.date(byAdding: .day, value: day - 30, to: todayStart) else { continue }

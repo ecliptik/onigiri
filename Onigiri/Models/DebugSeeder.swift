@@ -26,10 +26,14 @@ enum DebugSeeder {
             for food in [chicken, rice, eggs, shake] {
                 context.insert(food)
             }
+            // Favorited so the Log sheet's resting Favorites scope —
+            // the frame every demo clip opens on — shows a meal row
+            // with its mark (the library's meal never made it on
+            // camera before v2.12.0's media pass).
             context.insert(Meal(name: "Chicken & rice", items: [
                 MealItem(food: chicken),
                 MealItem(food: rice),
-            ], category: "Dinner"))
+            ], isFavorite: true, category: "Dinner"))
         }
 
         // A page-plus of filler so scroll-dependent behavior (search

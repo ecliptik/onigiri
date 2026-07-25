@@ -34,6 +34,12 @@ public struct ParsedLabel: Sendable, Equatable {
     public var sodiumMg: Double?
     public var nutrients = NutrientValues()
     public var isPer100g = false
+    /// A name for the food, when the image carried one. A photographed
+    /// panel doesn't — a SCREENSHOT of a restaurant's nutrition page
+    /// nearly always does, and retyping it was the whole complaint
+    /// (PLAN-screenshot-nutrition). Always nil from the deterministic
+    /// parse, which never invents one; only a model read fills it.
+    public var name: String?
     /// Set when a per-100g panel was converted to per-serving — anything
     /// later read off the raw transcript (the Foundation Models
     /// refinement pass) must apply the same factor to stay on basis.
@@ -46,12 +52,13 @@ public struct ParsedLabel: Sendable, Equatable {
     }
 
     /// The prefill currency the food form consumes. A label carries no
-    /// barcode and no product name — callers pass through anything the
-    /// user already typed so a scan can't erase it.
+    /// barcode — callers pass through anything the user already typed
+    /// so a scan can't erase it. What the user typed ALWAYS wins; the
+    /// label's own `name` (a screenshot read) fills only a blank.
     public func scannedProduct(name: String = "", fallbackServing: String = "") -> ScannedProduct {
         ScannedProduct(
             barcode: "",
-            name: name,
+            name: name.isEmpty ? (self.name ?? "") : name,
             kcal: kcal,
             sodiumMg: sodiumMg,
             servingDescription: servingDescription ?? fallbackServing,

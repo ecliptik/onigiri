@@ -155,7 +155,11 @@ struct EntryDoorsSection: View {
         isReading = true
         failureMessage = nil
         defer { isReading = false }
-        switch await FoodImageReader.read(image, status: { readingStatus = $0 }) {
+        // .imported: these doors are where SCREENSHOTS arrive, so the
+        // reader also does the screenshot read that supplies a name.
+        switch await FoodImageReader.read(
+            image, source: .imported, status: { readingStatus = $0 }
+        ) {
         case .label(let parsed):
             onLabel?(parsed)
         case .food(let product):

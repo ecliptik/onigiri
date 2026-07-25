@@ -235,6 +235,22 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   (no lazy fetch, no weeding). The FDC search endpoint must be POST — GET
   400s on the `Survey (FNDDS)` dataType parens. Barcode scans are always
   OpenFoodFacts.
+- Screenshot import (PLAN-screenshot-nutrition): the entry doors take a
+  PASTED or PICKED image as well as the camera, and all three run ONE
+  cascade — `FoodImageReader` (OCR → LabelParser → refine → identify).
+  Never fork that path; a screenshot must read the way a photographed
+  label does. Two rules earned live: use SwiftUI `PasteButton`, NEVER a
+  custom row over `UIPasteboard.general.image` — a programmatic read
+  raises the system "would like to paste" alert EVERY time, while the
+  button's tap counts as consent; and gate the door's visibility on
+  `hasImages`, a detection property that raises no prompt, re-checked
+  on appear AND foreground (the clipboard changes while the app is
+  backgrounded — copy in Safari, then switch — where
+  `changedNotification` is unreliable). `FoodImageSource.imported`
+  additionally runs the screenshot read, which supplies the food NAME a
+  photographed panel never carries; deterministic values always win over
+  it, and a name equal to the serving is DROPPED (the on-device model
+  returned "1 burger (312g)" as a name, 2026-07-24 — blank beats wrong).
 - ALL online-search surfaces (Foods, Log sheet, and the food form's
   inline database search) render the shared `OnlineResultsSection` —
   a separate `FoodSearchSheet` with its own drifting list existed until

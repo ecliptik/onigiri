@@ -28,12 +28,23 @@ enum FoodImageOutcome {
 /// (PLAN-screenshot-nutrition). Extracted from ScanSheet so a pasted
 /// screenshot reads EXACTLY the way a photographed label does: one path,
 /// one set of failure messages, one place to change either.
+/// Where the image came from. A camera still is a photographed panel;
+/// an IMPORTED one (pasted or picked) is usually a screenshot of a
+/// restaurant's nutrition page, which carries a name the panel never
+/// does. Only the imported case pays for the screenshot read, so the
+/// camera flow keeps its old cost and latency exactly.
+enum FoodImageSource {
+    case camera
+    case imported
+}
+
 @MainActor
 enum FoodImageReader {
     /// `status` reports the current stage for a progress label; it fires
     /// on the main actor and may be ignored.
     static func read(
         _ image: UIImage,
+        source: FoodImageSource = .camera,
         status: @MainActor (String) -> Void = { _ in }
     ) async -> FoodImageOutcome {
         status("Reading label…")
@@ -53,8 +64,25 @@ enum FoodImageReader {
             // iOS 26 + Apple Intelligence: the model fills whatever the
             // deterministic parse left blank — invisible, and every
             // model failure keeps the deterministic result.
-            let parsed = await FoodIntelligence.refine(result.parsed, transcript: result.transcript)
+            var parsed = await FoodIntelligence.refine(result.parsed, transcript: result.transcript)
             guard !Task.isCancelled else { return .cancelled }
+            // An imported image is usually a screenshot of a published
+            // nutrition page, which carries the one thing a
+            // photographed panel never does: the food's NAME. Read it —
+            // and any values the geometry parser couldn't reach, since
+            // a web table is not the FDA panel LabelParser was built
+            // for. Printed values always win over the model's
+            // (PLAN-screenshot-nutrition Part B).
+            if source == .imported, FoodIntelligence.isAvailable {
+                status("Reading screenshot…")
+                let foods = await FoodIntelligence.readNutritionScreenshot(
+                    transcript: result.transcript)
+                guard !Task.isCancelled else { return .cancelled }
+                if let first = foods.first {
+                    imageLog.notice("Screenshot read: \(foods.count) food(s), first \(first.name)")
+                    parsed = merged(parsed, filling: first)
+                }
+            }
             if !parsed.isEmpty {
                 imageLog.notice("Label parsed: kcal \(parsed.kcal.map(String.init(describing:)) ?? "nil"), \(result.transcript.count) observations")
                 return .label(parsed)
@@ -80,6 +108,24 @@ enum FoodImageReader {
         imageLog.notice("Photo identify came up empty")
         return .nothing(
             message: "Couldn't read a nutrition panel or recognize a food there — try a closer shot.")
+    }
+}
+
+private extension FoodImageReader {
+    /// Deterministic values WIN — the geometry parser read them off the
+    /// pixels, the model read them off a transcript. The screenshot
+    /// read only fills blanks, exactly like refine()'s merge, and it is
+    /// the sole source of the name (the parser never has one).
+    static func merged(_ parsed: ParsedLabel, filling read: FoodIntelligence.ScreenshotFood) -> ParsedLabel {
+        var result = parsed
+        if result.name == nil, !read.name.isEmpty { result.name = read.name }
+        if result.servingDescription == nil, !read.serving.isEmpty {
+            result.servingDescription = read.serving
+        }
+        if result.kcal == nil { result.kcal = read.kcal }
+        if result.sodiumMg == nil { result.sodiumMg = read.sodiumMg }
+        result.nutrients = result.nutrients.fillingBlanks(from: read.nutrients)
+        return result
     }
 }
 

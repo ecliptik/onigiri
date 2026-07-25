@@ -420,6 +420,21 @@ public struct NutrientValues: Sendable, Equatable, Hashable, Codable {
         return scaled
     }
 
+    /// Blank-filling merge: `self` wins wherever it already has a
+    /// value, `other` supplies only what's missing. NOT `+` — that
+    /// SUMS, and summing two readings of the SAME food (a deterministic
+    /// label parse and a model's read of the same panel) would double
+    /// every field they agreed on.
+    public func fillingBlanks(from other: NutrientValues) -> NutrientValues {
+        var result = self
+        for (field, _) in Self.scalarFields where result[keyPath: field] == nil {
+            result[keyPath: field] = other[keyPath: field]
+        }
+        // Mine wins on key collisions, same rule as the scalars.
+        result.micros = other.micros.merging(micros) { _, mine in mine }
+        return result
+    }
+
     /// Sums fields where at least one side has a value.
     public static func + (lhs: NutrientValues, rhs: NutrientValues) -> NutrientValues {
         var sum = lhs

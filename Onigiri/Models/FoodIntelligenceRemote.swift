@@ -255,6 +255,53 @@ extension FoodIntelligence {
         return out as Data
     }
 
+    // MARK: Screenshot nutrition import
+
+    private struct RemoteScreenshotReading: Decodable {
+        struct Item: Decodable {
+            let name: String
+            let serving: String?
+            let kcal: Double?
+            let sodiumMg: Double?
+            let fatG: Double?
+            let carbsG: Double?
+            let proteinG: Double?
+            let fiberG: Double?
+            let sugarG: Double?
+        }
+        let foods: [Item]
+    }
+
+    /// Text relay — the OCR transcript, not the image. Works on every
+    /// provider (no vision required), costs no image tokens, and OCR of
+    /// rendered screen text is near-perfect anyway.
+    static func readNutritionScreenshotRemote(_ text: String) async -> [ScreenshotFood] {
+        let user = Prompts.screenshotUser(text) + """
+            \n\nRespond with ONLY a JSON object, no prose — every \
+            numeric field exactly as printed on the page, or null when \
+            the page doesn't show it: {"foods": array of at most six \
+            {"name": string, "serving": string, "kcal": number|null, \
+            "sodiumMg": number|null (milligrams), "fatG": number|null, \
+            "carbsG": number|null, "proteinG": number|null, "fiberG": \
+            number|null, "sugarG": number|null}}. Return an empty array \
+            when the text shows no nutrition figures.
+            """
+        guard let reading = decode(
+            RemoteScreenshotReading.self,
+            from: await completeRemote(system: Prompts.screenshotInstructions, user: user)
+        ) else { return [] }
+        return plausibleScreenshotFoods(reading.foods.prefix(6).map { item in
+            ScreenshotFood(
+                name: item.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                serving: (item.serving ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+                kcal: item.kcal,
+                sodiumMg: item.sodiumMg,
+                nutrients: macroNutrients(
+                    fatG: item.fatG, carbsG: item.carbsG, proteinG: item.proteinG,
+                    fiberG: item.fiberG, sugarG: item.sugarG))
+        })
+    }
+
     // MARK: Label refinement
 
     private struct RemoteLabelReading: Decodable {

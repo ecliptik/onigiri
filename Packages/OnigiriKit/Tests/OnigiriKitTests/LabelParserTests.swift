@@ -263,3 +263,48 @@ struct LabelParserTests {
         #expect(LabelParser.normalizedNumericText("Omega") == "Omega")
     }
 }
+
+/// The screenshot-import additions (PLAN-screenshot-nutrition Part B):
+/// a parsed label can now carry a NAME, and nutrient merges must fill
+/// blanks rather than sum.
+struct ScreenshotImportTests {
+    @Test func typedNameAlwaysBeatsTheReadName() {
+        var parsed = ParsedLabel()
+        parsed.name = "Quarter Pounder"
+        parsed.kcal = 540
+        // What the user already typed wins — a scan must never erase it.
+        #expect(parsed.scannedProduct(name: "My burger").name == "My burger")
+        // ...and fills in only when they typed nothing.
+        #expect(parsed.scannedProduct().name == "Quarter Pounder")
+    }
+
+    @Test func aLabelWithoutAReadNameStaysBlank() {
+        var parsed = ParsedLabel()
+        parsed.kcal = 200
+        #expect(parsed.name == nil)
+        #expect(parsed.scannedProduct().name.isEmpty)
+    }
+
+    /// The whole point of fillingBlanks: `+` would DOUBLE every field
+    /// the two readings agreed on.
+    @Test func fillingBlanksKeepsMineAndNeverSums() {
+        let mine = NutrientValues(fatG: 26, carbsG: 46)
+        let theirs = NutrientValues(fatG: 99, carbsG: 99, proteinG: 25)
+        let merged = mine.fillingBlanks(from: theirs)
+        #expect(merged.fatG == 26)
+        #expect(merged.carbsG == 46)
+        #expect(merged.proteinG == 25)
+        // Contrast with the summing operator, which is for DIFFERENT foods.
+        #expect((mine + theirs).fatG == 125)
+    }
+
+    @Test func fillingBlanksMergesMicrosWithMineWinning() {
+        var mine = NutrientValues()
+        mine.micros = ["calcium": 100]
+        var theirs = NutrientValues()
+        theirs.micros = ["calcium": 999, "iron": 8]
+        let merged = mine.fillingBlanks(from: theirs)
+        #expect(merged.micros["calcium"] == 100)
+        #expect(merged.micros["iron"] == 8)
+    }
+}

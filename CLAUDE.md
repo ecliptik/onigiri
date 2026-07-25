@@ -236,21 +236,34 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   400s on the `Survey (FNDDS)` dataType parens. Barcode scans are always
   OpenFoodFacts.
 - Screenshot import (PLAN-screenshot-nutrition): the entry doors take a
-  PASTED or PICKED image as well as the camera, and all three run ONE
-  cascade — `FoodImageReader` (OCR → LabelParser → refine → identify).
-  Never fork that path; a screenshot must read the way a photographed
-  label does. Two rules earned live: use SwiftUI `PasteButton`, NEVER a
-  custom row over `UIPasteboard.general.image` — a programmatic read
-  raises the system "would like to paste" alert EVERY time, while the
-  button's tap counts as consent; and gate the door's visibility on
-  `hasImages`, a detection property that raises no prompt, re-checked
-  on appear AND foreground (the clipboard changes while the app is
-  backgrounded — copy in Safari, then switch — where
-  `changedNotification` is unreliable). `FoodImageSource.imported`
+  PASTED image as well as the camera, and every route — those two plus
+  the scan sheet's own photo pick — runs ONE cascade, `FoodImageReader`
+  (OCR → LabelParser → refine → identify). Never fork that path; a
+  screenshot must read the way a photographed label does. A separate
+  "Choose Photo" door on the entry row was built and REMOVED the same
+  day (the user, 2026-07-24): the scan sheet's photos button already
+  covers saved images. Gate the paste door's visibility on `hasImages`,
+  a detection property that raises no prompt, re-checked on appear AND
+  foreground (the clipboard changes while the app is backgrounded —
+  copy in Safari, then switch — where `changedNotification` is
+  unreliable). The paste control itself is UNDER EVALUATION: SwiftUI's
+  `PasteButton` never raises the system "would like to paste" alert
+  (the tap IS the consent) but can't say what it does or match
+  `DoorRowLabel`; the shipped variant is a plain row reading
+  `UIPasteboard.general.itemProviders`, which the user chose so the
+  consent alert is VISIBLE. Privacy is identical either way — the app
+  can never read the clipboard un-prompted. If the alert turns out to
+  fire on every paste, reverting to `PasteButton` is one commit.
+  `FoodImageSource.imported`
   additionally runs the screenshot read, which supplies the food NAME a
   photographed panel never carries; deterministic values always win over
   it, and a name equal to the serving is DROPPED (the on-device model
   returned "1 burger (312g)" as a name, 2026-07-24 — blank beats wrong).
+  When that read returns MORE THAN ONE food the deterministic parse is
+  discarded, not merged: it can only describe one row, so blank-filling
+  stamped its numbers onto every candidate (four salads all reading 490
+  kcal, live 2026-07-24). The host asks with a confirmationDialog —
+  never a sheet swapped from inside a sheet.
 - ALL online-search surfaces (Foods, Log sheet, and the food form's
   inline database search) render the shared `OnlineResultsSection` —
   a separate `FoodSearchSheet` with its own drifting list existed until

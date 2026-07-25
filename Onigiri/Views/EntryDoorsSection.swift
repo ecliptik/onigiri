@@ -1,6 +1,4 @@
 import SwiftUI
-import PhotosUI
-import UniformTypeIdentifiers
 import OnigiriKit
 
 /// The shared entry doors: ONE row each, identical on Foods, the Log
@@ -9,13 +7,16 @@ import OnigiriKit
 /// PLAN-unified-search) — one field instead of two. The section keeps
 /// the scan-door provenance caption slot.
 ///
-/// Three doors now (PLAN-screenshot-nutrition), all feeding the SAME
-/// cascade via FoodImageReader: the camera, a pasted image, and a photo
-/// pick. The two image doors exist for the eat-out case — the restaurant
-/// publishes nutrition on its own site, so the values are only ever in
-/// Safari, and retyping them by hand was the whole complaint. Paste is
-/// the tidier route: iOS's "Copy and Delete" on a screenshot leaves
-/// nothing behind in Photos to clean up later.
+/// Two doors (PLAN-screenshot-nutrition), both feeding the SAME cascade
+/// via FoodImageReader: the camera, and a pasted image. The paste door
+/// exists for the eat-out case — the restaurant publishes nutrition on
+/// its own site, so the values are only ever in Safari, and retyping
+/// them by hand was the whole complaint. iOS's "Copy and Delete" on a
+/// screenshot leaves nothing behind in Photos to clean up either.
+///
+/// A picked-from-library door lived here briefly and was REMOVED (the
+/// user, 2026-07-24): the scan sheet's own photos button already covers
+/// saved images, and a second row for it was noise.
 struct EntryDoorsSection: View {
     /// Scan-door state owned by the host (barcode lookups etc.).
     var scanBusy = false
@@ -30,7 +31,6 @@ struct EntryDoorsSection: View {
     var onFood: ((ScannedProduct) -> Void)?
 
     @Environment(\.scenePhase) private var scenePhase
-    @State private var photoItem: PhotosPickerItem?
     @State private var isReading = false
     @State private var readingStatus = ""
     @State private var failureMessage: String?
@@ -39,6 +39,8 @@ struct EntryDoorsSection: View {
     /// from Safari" prompt, so checking it costs the user nothing.
     @State private var clipboardHasImage = false
     @State private var readTask: Task<Void, Never>?
+    /// Non-empty while the "which item?" dialog is up.
+    @State private var candidates: [ParsedLabel] = []
 
     private var imageDoors: Bool { onLabel != nil || onFood != nil }
 
@@ -59,20 +61,35 @@ struct EntryDoorsSection: View {
                     // appears. Its chrome is system-drawn and can't be
                     // made to match DoorRowLabel exactly — accepted; the
                     // consent behavior is worth more than the pixel.
-                    PasteButton(supportedContentTypes: [.image]) { providers in
-                        load(providers)
+                    // UNDER EVALUATION (2026-07-24): a plain door row
+                    // that reads the pasteboard itself, instead of the
+                    // system PasteButton this replaced. Two differences,
+                    // both deliberate — the row can say what it does
+                    // ("Paste Nutrition Screenshot", matching the scan
+                    // door), and iOS raises its "would like to paste"
+                    // confirmation, which the user wants VISIBLE rather
+                    // than implied by a tap.
+                    //
+                    // Privacy is unchanged either way: the app can never
+                    // read the clipboard un-prompted, and the row's
+                    // visibility still comes from hasImages, which
+                    // reports only THAT an image exists, never what it
+                    // is, and raises nothing.
+                    //
+                    // Open question this variant exists to answer: how
+                    // often the alert actually fires. If iOS remembers
+                    // the grant per source/session it's a clear win; if
+                    // it asks on every paste, reverting to PasteButton
+                    // is one commit.
+                    Button {
+                        load(UIPasteboard.general.itemProviders)
+                    } label: {
+                        DoorRowLabel(
+                            title: "Paste Nutrition Screenshot",
+                            systemImage: "doc.on.clipboard")
                     }
-                    .labelStyle(.titleAndIcon)
-                    .buttonBorderShape(.capsule)
-                    .tint(Color.riceToast)
                     .disabled(isReading)
                 }
-                PhotosPicker(selection: $photoItem, matching: .images) {
-                    DoorRowLabel(
-                        title: "Choose Photo or Screenshot",
-                        systemImage: "photo.on.rectangle")
-                }
-                .disabled(isReading)
             }
 
             if scanBusy {
@@ -100,19 +117,6 @@ struct EntryDoorsSection: View {
                     .foregroundStyle(.orange)
             }
         }
-        .onChange(of: photoItem) { _, item in
-            guard let item else { return }
-            readTask?.cancel()
-            readTask = Task {
-                defer { photoItem = nil }
-                guard let data = try? await item.loadTransferable(type: Data.self),
-                      let image = UIImage(data: data) else {
-                    failureMessage = "Couldn't load that photo — try another."
-                    return
-                }
-                await read(image)
-            }
-        }
         // The defining flow is COPY IN SAFARI, THEN SWITCH — the
         // clipboard changes while this app is backgrounded, where
         // changedNotification is unreliable. Re-check on both edges: a
@@ -123,6 +127,9 @@ struct EntryDoorsSection: View {
             if phase == .active { refreshClipboard() }
         }
         .onDisappear { readTask?.cancel() }
+        .screenshotCandidates($candidates) { picked in
+            onLabel?(picked)
+        }
     }
 
     private func refreshClipboard() {
@@ -133,7 +140,9 @@ struct EntryDoorsSection: View {
     private func load(_ providers: [NSItemProvider]) {
         guard let provider = providers.first(where: { $0.canLoadObject(ofClass: UIImage.self) })
         else {
-            failureMessage = "That clipboard item isn't an image."
+            // Also the "Don't Allow" path: iOS simply hands back
+            // nothing, so declined and empty are indistinguishable here.
+            failureMessage = "Nothing readable on the clipboard."
             return
         }
         readTask?.cancel()
@@ -164,10 +173,53 @@ struct EntryDoorsSection: View {
             onLabel?(parsed)
         case .food(let product):
             onFood?(product)
+        case .candidates(let list):
+            candidates = list
         case .nothing(let message):
             failureMessage = message
         case .cancelled:
             break
         }
+    }
+}
+
+/// The "which item?" chooser for a screenshot that listed several
+/// foods (PLAN-screenshot-nutrition Part C). A confirmationDialog, not
+/// a sheet, on purpose: the image doors and the scan sheet both raise
+/// it, and swapping a sheet from inside a sheet is the dismissal race
+/// that bit twice on 2026-07-22.
+extension View {
+    func screenshotCandidates(
+        _ candidates: Binding<[ParsedLabel]>,
+        onPick: @escaping (ParsedLabel) -> Void
+    ) -> some View {
+        confirmationDialog(
+            "Which item?",
+            isPresented: Binding(
+                get: { !candidates.wrappedValue.isEmpty },
+                set: { if !$0 { candidates.wrappedValue = [] } }),
+            titleVisibility: .visible
+        ) {
+            ForEach(Array(candidates.wrappedValue.enumerated()), id: \.offset) { _, candidate in
+                Button(candidate.candidateLabel) {
+                    candidates.wrappedValue = []
+                    onPick(candidate)
+                }
+            }
+            Button("Cancel", role: .cancel) { candidates.wrappedValue = [] }
+        } message: {
+            Text("That screenshot listed more than one food.")
+        }
+    }
+}
+
+extension ParsedLabel {
+    /// One dialog row: the dish and what logging it would cost. Falls
+    /// back to the serving when the read produced no name, so a row is
+    /// never blank.
+    var candidateLabel: String {
+        let title = name ?? servingDescription ?? "Unnamed item"
+        guard let kcal else { return title }
+        return "\(title) — \(kcal.formatted(.number.precision(.fractionLength(0)))) kcal"
     }
 }

@@ -28,6 +28,8 @@ struct ScanSheet: View {
 
     @State private var manualCode = ""
     @State private var photoItem: PhotosPickerItem?
+    /// Non-empty while the "which item?" dialog is up.
+    @State private var candidates: [ParsedLabel] = []
     @State private var isReading = false
     /// The one in-flight OCR/identify pipeline. Stored so Cancel (and
     /// backgrounding) actually STOPS it — an orphaned cascade used to
@@ -81,10 +83,16 @@ struct ScanSheet: View {
                         failureMessage = "Couldn't load that photo — try another."
                         return
                     }
-                    await read(image)
+                    await read(image, source: .imported)
                 }
             }
             .onAppear { refreshCameraAuth() }
+            // A library pick here can be a menu screenshot too, so this
+            // sheet raises the same chooser the entry doors do.
+            .screenshotCandidates($candidates) { picked in
+                onLabel(picked)
+                dismiss()
+            }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
                     // Coming back from Settings after granting camera
@@ -282,19 +290,21 @@ struct ScanSheet: View {
 
     // MARK: Label pipeline
 
-    private func read(_ image: UIImage) async {
+    private func read(_ image: UIImage, source: FoodImageSource = .camera) async {
         isReading = true
         failureMessage = nil
         defer { isReading = false }
         // The cascade itself lives in FoodImageReader — shared with the
         // paste/photo doors so every route reads identically.
-        switch await FoodImageReader.read(image, status: { readingStatus = $0 }) {
+        switch await FoodImageReader.read(image, source: source, status: { readingStatus = $0 }) {
         case .label(let parsed):
             onLabel(parsed)
             dismiss()
         case .food(let product):
             onFood(product)
             dismiss()
+        case .candidates(let list):
+            candidates = list
         case .nothing(let message):
             failureMessage = message
         case .cancelled:

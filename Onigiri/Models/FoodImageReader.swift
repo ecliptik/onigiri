@@ -14,6 +14,11 @@ enum FoodImageOutcome {
     /// No panel in frame, but the model recognized the food itself.
     /// Estimates — hosts caption them as such.
     case food(ScannedProduct)
+    /// The screenshot showed SEVERAL foods — a menu section, a
+    /// comparison table. Which row the user meant is unknowable, and
+    /// guessing logs the wrong burger, so the host asks. Never produced
+    /// for a camera still (PLAN-screenshot-nutrition Part C).
+    case candidates([ParsedLabel])
     /// Nothing usable; `message` is the user-facing retry copy.
     case nothing(message: String)
     /// Superseded or backed out of — deliver NOTHING. An orphaned
@@ -78,9 +83,23 @@ enum FoodImageReader {
                 let foods = await FoodIntelligence.readNutritionScreenshot(
                     transcript: result.transcript)
                 guard !Task.isCancelled else { return .cancelled }
-                if let first = foods.first {
-                    imageLog.notice("Screenshot read: \(foods.count) food(s), first \(first.name)")
-                    parsed = merged(parsed, filling: first)
+                imageLog.notice("Screenshot read: \(foods.count) food(s)")
+                // A nutrition PAGE often lists a whole menu section.
+                // Two or more readings means the row the user meant is
+                // unknowable — ask rather than guess.
+                if foods.count > 1 {
+                    // Each candidate stands ALONE — do not merge the
+                    // deterministic parse in. It can only represent one
+                    // food, so on a multi-item table it has arbitrarily
+                    // grabbed some row's numbers, and blank-filling
+                    // would stamp those onto every candidate: four
+                    // salads all reading 490 kcal (seen live
+                    // 2026-07-24). Deterministic-wins is right for ONE
+                    // food and wrong for a list.
+                    return .candidates(foods.map(\.parsedLabel))
+                }
+                if let only = foods.first {
+                    parsed = merged(parsed, filling: only)
                 }
             }
             if !parsed.isEmpty {

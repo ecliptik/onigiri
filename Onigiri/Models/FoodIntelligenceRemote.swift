@@ -214,8 +214,14 @@ extension FoodIntelligence {
         return IdentifiedFood(name: name, components: Array(components))
     }
 
-    /// Downscale + JPEG for upload economy (a label-free food shot
-    /// doesn't need more than ~768 px for identification).
+    /// Downscale + JPEG for upload. 1568 px is the long edge every
+    /// current vision model accepts at standard image-token cost — the
+    /// old 768 px "upload economy" guess threw away three quarters of
+    /// the pixels and starved identification on mixed plates, which
+    /// answered "vegetable stir fry" to anything it couldn't resolve
+    /// (field report 2026-07-24). The high-resolution tier (Opus 4.7+,
+    /// Sonnet 5) accepts 2576, but at up to ~3× the image tokens — a
+    /// knob to turn only if 1568 still under-identifies.
     /// @concurrent: this is real CPU work (decode + resample + JPEG
     /// encode of a camera still) and its caller is MainActor-isolated —
     /// under approachable concurrency a plain nonisolated async func
@@ -225,7 +231,7 @@ extension FoodIntelligence {
     nonisolated static func jpegForUpload(
         _ image: CGImage,
         orientation: CGImagePropertyOrientation?,
-        maxEdge: CGFloat = 768
+        maxEdge: CGFloat = 1568
     ) async -> Data? {
         let w = CGFloat(image.width), h = CGFloat(image.height)
         guard w > 0, h > 0 else { return nil }

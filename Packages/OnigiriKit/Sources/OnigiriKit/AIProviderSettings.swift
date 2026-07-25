@@ -83,10 +83,21 @@ public enum AIProviderSettings {
     public static let localBaseURLKey = "aiLocalBaseURL"
     public static let localVisionKey = "aiLocalVisionCapable"
 
-    /// Cheap/fast tiers by default; free-text and user-editable —
-    /// providers rename models, so nothing hardcode-gates on these.
-    public static let defaultAnthropicModel = "claude-haiku-4-5"
-    public static let defaultOpenAIModel = "gpt-4o-mini"
+    /// Free-text and user-editable — providers rename models, so
+    /// nothing hardcode-gates on these. Anthropic's default is a
+    /// CAPABLE tier, not the cheapest: identify-food and describe-it
+    /// are vision/estimation tasks where a small model falls back to
+    /// the modal answer ("vegetable stir fry" for any plate it can't
+    /// resolve — field report 2026-07-24). Set a cheaper model in
+    /// Settings → AI if that trade is worth it for you (or a stronger
+    /// one — claude-opus-5 — if Sonnet still under-identifies).
+    /// Both defaults are the provider's MID tier — the cheap tiers
+    /// (claude-haiku-4-5, and the gpt-4o-mini this replaces) answer an
+    /// unresolvable plate with the modal dish instead of admitting it.
+    /// gpt-4o-mini was also two generations stale: 4o → 5.4 → 5.6, and
+    /// the small tiers were renamed away from mini/nano entirely.
+    public static let defaultAnthropicModel = "claude-sonnet-5"
+    public static let defaultOpenAIModel = "gpt-5.6-terra"
 
     public static var selected: AIProvider {
         AIProvider(rawValue: SharedStore.defaults.string(forKey: providerKey) ?? "") ?? .onDevice

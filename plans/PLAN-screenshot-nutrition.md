@@ -5,6 +5,12 @@ site, so the values exist but only in Safari. Today that means
 app-switching and retyping every field into the food form. The ask: get a
 screenshot into Onigiri and have it fill the form.
 
+> **STATUS — SHIPPED in v2.13.0 (2026-07-24).** Parts A, B, and C are
+> built and verified on device. What changed from the plan below, and
+> why, is recorded at the end under *"What shipped"* — read that before
+> trusting any paragraph here, which is preserved as the pre-build
+> reasoning.
+
 **Two routes, both first-class — neither replaces the other:**
 
 | Route | Steps | Photos residue | Build cost |
@@ -233,3 +239,50 @@ Revisit only if Part A's tap count proves annoying in practice.
 **Available right now, no build:** the Photos button inside the Scan
 sheet already accepts screenshots. Buried, and it won't fill the name,
 but it beats retyping numbers while Part A is built.
+
+## What shipped
+
+Three corrections to the plan above, each earned:
+
+**The paste-consent rule inverted.** The plan insisted on `PasteButton`
+because a programmatic `UIPasteboard` read "raises the system alert
+every time" — the reason it wanted the system control despite its
+unstyleable chrome. On device that turned out to be false: iOS asked
+**once**, then stopped. So the shipped control is a plain `DoorRowLabel`
+row reading `UIPasteboard.general.itemProviders`. It matches the scan
+door, it can say what it does ("Paste Nutrition Screenshot"), and the
+consent alert is visible rather than implied by a tap — which was the
+point. Privacy was never the variable: the app cannot read the
+clipboard un-prompted either way, and visibility still comes from
+`hasImages`, which reports only *that* an image exists.
+
+Side effect worth knowing: a declined paste and an empty clipboard are
+indistinguishable — iOS hands back nothing for both — so they share one
+message.
+
+**The "Choose Photo" door was built and removed the same day.** The
+plan's Gap 2 ("the photo route is buried") was real, but promoting it
+to its own entry row was the wrong fix — the scan sheet's photos button
+already covers saved images, and a second row for it read as noise. The
+photo route stays where it was; it just now runs the imported cascade
+(name read included) instead of the camera one.
+
+**Part C's merge had to become a discard.** The plan said "more than one
+candidate → a picker", which shipped. What it did not anticipate: the
+deterministic geometry parse can only ever describe ONE food, so on a
+multi-item table it grabs some arbitrary row's numbers — and
+blank-filling those into every candidate made four different salads all
+read 490 kcal (seen live). Deterministic-wins is correct for a single
+food and wrong for a list, so a multi-item read now discards the
+deterministic parse entirely and the candidates stand alone.
+
+**Provenance ruling** (the plan flagged it rather than assuming): the
+screenshot read follows `refine()` — AI *reading* printed values earns
+no ✨. The mark stays for estimates.
+
+**Still open:** the eval golden set gating screenshot name and value
+quality (Testing section above) is NOT built; the remote providers'
+screenshot path is written but unverified, since keys are device-local
+and the simulator has no Keychain access to them. Part A3 (paste into
+the food form's Name field via `pasteConfiguration`) and Part D (share
+extension) are unbuilt by choice.

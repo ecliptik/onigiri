@@ -246,15 +246,15 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   a detection property that raises no prompt, re-checked on appear AND
   foreground (the clipboard changes while the app is backgrounded —
   copy in Safari, then switch — where `changedNotification` is
-  unreliable). The paste control itself is UNDER EVALUATION: SwiftUI's
-  `PasteButton` never raises the system "would like to paste" alert
-  (the tap IS the consent) but can't say what it does or match
-  `DoorRowLabel`; the shipped variant is a plain row reading
-  `UIPasteboard.general.itemProviders`, which the user chose so the
-  consent alert is VISIBLE. Privacy is identical either way — the app
-  can never read the clipboard un-prompted. If the alert turns out to
-  fire on every paste, reverting to `PasteButton` is one commit.
-  `FoodImageSource.imported`
+  unreliable). The paste control is a plain `DoorRowLabel` row reading
+  `UIPasteboard.general.itemProviders`, NOT SwiftUI's `PasteButton` —
+  chosen so the system "would like to paste" alert is VISIBLE, and
+  RESOLVED on device 2026-07-24: iOS asked ONCE, not per paste, so the
+  earlier fear that a programmatic read nags every time was wrong.
+  Privacy is identical either way — the app can never read the
+  clipboard un-prompted. A declined paste and an empty clipboard are
+  indistinguishable (iOS returns nothing for both), hence one shared
+  message. `FoodImageSource.imported`
   additionally runs the screenshot read, which supplies the food NAME a
   photographed panel never carries; deterministic values always win over
   it, and a name equal to the serving is DROPPED (the on-device model

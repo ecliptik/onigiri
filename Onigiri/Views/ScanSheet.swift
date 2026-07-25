@@ -284,60 +284,21 @@ struct ScanSheet: View {
 
     private func read(_ image: UIImage) async {
         isReading = true
-        readingStatus = "Reading label…"
         failureMessage = nil
         defer { isReading = false }
-        // Vision needs legible text, not sensor resolution: a 48 MP
-        // library pick decoded at full size spikes memory across the
-        // whole cascade (stacked against the model's own footprint —
-        // jetsam territory on older devices). The redraw also bakes
-        // orientation upright, so Vision gets .up pixels.
-        let image = image.downsampled(maxEdge: 3000)
-        guard let cgImage = image.cgImage else {
-            failureMessage = "Couldn't read that photo — try another."
-            return
-        }
-        let orientation = CGImagePropertyOrientation(image.imageOrientation)
-        do {
-            let result = try await LabelScan.scan(cgImage, orientation: orientation)
-            // A cancelled cascade must never deliver: the host would
-            // re-present a sheet the user already backed out of.
-            guard !Task.isCancelled else { return }
-            // iOS 26 + Apple Intelligence: the on-device model fills
-            // whatever the deterministic parse left blank — invisible,
-            // and every model failure keeps the deterministic result.
-            let parsed = await FoodIntelligence.refine(result.parsed, transcript: result.transcript)
-            guard !Task.isCancelled else { return }
-            if !parsed.isEmpty {
-                scanLog.notice("Label parsed: kcal \(parsed.kcal.map(String.init(describing:)) ?? "nil"), \(result.transcript.count) observations")
-                onLabel(parsed)
-                dismiss()
-                return
-            }
-            scanLog.notice("Label parse empty from \(result.transcript.count) observations")
-        } catch {
-            scanLog.error("Label OCR failed: \(String(describing: error))")
-            failureMessage = "Couldn't read that photo — try another."
-            return
-        }
-        // The cascade (PLAN-identify-food): no nutrition panel in the
-        // still, so maybe it's a photo of the food itself. Classifier
-        // names the dish, the model decomposes it into a reviewable
-        // food; any failure lands on the same retry message as before.
-        if FoodIntelligence.isAvailable {
-            readingStatus = "Identifying food…"
-            let food = await FoodIntelligence.identifyFood(photo: cgImage, orientation: orientation)
-            guard !Task.isCancelled else { return }
-            if let food {
-                scanLog.notice("Photo identified: \(food.name), \(food.components.count) components, \(food.kcal) kcal")
-                onFood(food.scannedProduct)
-                dismiss()
-                return
-            }
-            scanLog.notice("Photo identify came up empty")
-            failureMessage = "Couldn't read a nutrition panel or recognize a food there — try a closer shot."
-        } else {
-            failureMessage = "Couldn't read a nutrition panel there — try a closer, straighter shot with the whole panel in frame."
+        // The cascade itself lives in FoodImageReader — shared with the
+        // paste/photo doors so every route reads identically.
+        switch await FoodImageReader.read(image, status: { readingStatus = $0 }) {
+        case .label(let parsed):
+            onLabel(parsed)
+            dismiss()
+        case .food(let product):
+            onFood(product)
+            dismiss()
+        case .nothing(let message):
+            failureMessage = message
+        case .cancelled:
+            break
         }
     }
 }
@@ -412,37 +373,4 @@ private struct ScannerRepresentable: UIViewControllerRepresentable {
     }
 }
 
-private extension UIImage {
-    /// Cap the long edge before Vision: OCR wants legible text, not
-    /// sensor resolution. Draws through a renderer, which also bakes
-    /// the orientation upright.
-    func downsampled(maxEdge: CGFloat) -> UIImage {
-        let longest = max(size.width, size.height)
-        guard longest > maxEdge, longest > 0 else { return self }
-        let scale = maxEdge / longest
-        let target = CGSize(width: size.width * scale, height: size.height * scale)
-        let format = UIGraphicsImageRendererFormat.default()
-        format.scale = 1
-        return UIGraphicsImageRenderer(size: target, format: format).image { _ in
-            draw(in: CGRect(origin: .zero, size: target))
-        }
-    }
-}
 
-private extension CGImagePropertyOrientation {
-    /// UIKit and ImageIO disagree on orientation raw values; Vision wants
-    /// the ImageIO flavor.
-    init(_ orientation: UIImage.Orientation) {
-        self = switch orientation {
-        case .up: .up
-        case .down: .down
-        case .left: .left
-        case .right: .right
-        case .upMirrored: .upMirrored
-        case .downMirrored: .downMirrored
-        case .leftMirrored: .leftMirrored
-        case .rightMirrored: .rightMirrored
-        @unknown default: .up
-        }
-    }
-}

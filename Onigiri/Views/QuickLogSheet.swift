@@ -219,7 +219,18 @@ struct QuickLogSheet: View {
                     // form (PLAN-entry-doors / PLAN-unified-search).
                     EntryDoorsSection(
                         scanBusy: isLookingUpBarcode,
-                        onScan: { activeSheet = .scanner }
+                        onScan: { activeSheet = .scanner },
+                        // Same routes the scanner's outcomes take — the
+                        // prefilled form, whose Log action returns here
+                        // with logDate intact.
+                        onLabel: { parsed in
+                            let prefill = ProductPrefill(product: parsed.scannedProduct())
+                            Task { activeSheet = .form(prefill) }
+                        },
+                        onFood: { product in
+                            let prefill = ProductPrefill(product: product)
+                            Task { activeSheet = .form(prefill) }
+                        }
                     )
                 }
                 // Search leads with the tap-to-estimate row (AI →

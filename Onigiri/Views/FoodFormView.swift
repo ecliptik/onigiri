@@ -194,7 +194,11 @@ struct FoodFormView: View {
                     EntryDoorsSection(
                         scanBusy: isLookingUp,
                         scanCaption: lookupMessage,
-                        onScan: { activeSheet = .scanner }
+                        onScan: { activeSheet = .scanner },
+                        // Same routes the scanner's outcomes take: fill
+                        // THIS form rather than presenting another one.
+                        onLabel: { parsed in applyLabel(parsed) },
+                        onFood: { product in apply(product) }
                     )
                 } else if let lookupMessage {
                     // Prefilled opens hide the doors (the form isn't

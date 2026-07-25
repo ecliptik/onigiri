@@ -181,7 +181,17 @@ struct FoodsView: View {
                     // the food form (PLAN-entry-doors / unified-search).
                     EntryDoorsSection(
                         scanBusy: isLookingUpBarcode,
-                        onScan: { activeSheet = .scanner }
+                        onScan: { activeSheet = .scanner },
+                        // Same routes the scanner's outcomes take —
+                        // a pasted screenshot is a label like any other.
+                        onLabel: { parsed in
+                            let prefill = ProductPrefill(product: parsed.scannedProduct())
+                            Task { activeSheet = .form(prefill) }
+                        },
+                        onFood: { product in
+                            let prefill = ProductPrefill(product: product)
+                            Task { activeSheet = .form(prefill) }
+                        }
                     )
                 }
                 // Search leads with the tap-to-estimate row (AI →
@@ -773,12 +783,27 @@ struct PortionTarget: Identifiable {
 /// it (the user). Shared by the Foods tab and the Log sheet.
 struct ScanRowLabel: View {
     var body: some View {
-        Label {
-            Text(FoodIntelligence.isAvailable
+        DoorRowLabel(
+            title: FoodIntelligence.isAvailable
                 ? "Scan Barcode, Label, or Food"
-                : "Scan Barcode or Nutrition Label")
+                : "Scan Barcode or Nutrition Label",
+            systemImage: "barcode.viewfinder")
+    }
+}
+
+/// One entry door's row: title plus the circled leading glyph. Extracted
+/// from ScanRowLabel when the paste and photo doors joined it
+/// (PLAN-screenshot-nutrition) — the doors must read as siblings, and
+/// three copies of the measured circle treatment would drift.
+struct DoorRowLabel: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        Label {
+            Text(title)
         } icon: {
-            Image(systemName: "barcode.viewfinder")
+            Image(systemName: systemImage)
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(Color.riceToast)
                 // FIXED frame, not padding: the barcode glyph is wider

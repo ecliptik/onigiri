@@ -108,16 +108,21 @@ struct WatchProvider: TimelineProvider {
             let midnight = Calendar.current.date(
                 byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now)
             )
-            if let midnight, midnight <= refresh {
+            // The midnight entry rides EVERY timeline: a future-dated
+            // entry renders with no reload and no budget, while a
+            // gated one leaves a stale single entry showing yesterday
+            // whenever the overnight reload is deferred (phone widget,
+            // 2026-07-26).
+            var entries = [entry]
+            if let midnight {
                 var fresh = entry.newDay(at: midnight)
                 fresh.relevance = ComplicationRelevance.mealWindow(at: midnight)
-                completion(Timeline(
-                    entries: [entry, fresh],
-                    policy: .after(midnight)
-                ))
-            } else {
-                completion(Timeline(entries: [entry], policy: .after(refresh)))
+                entries.append(fresh)
             }
+            completion(Timeline(
+                entries: entries,
+                policy: .after(midnight.map { min($0, refresh) } ?? refresh)
+            ))
         }
     }
 
@@ -281,16 +286,21 @@ struct SummaryProvider: TimelineProvider {
             let midnight = Calendar.current.date(
                 byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now)
             )
-            if let midnight, midnight <= refresh {
+            // The midnight entry rides EVERY timeline: a future-dated
+            // entry renders with no reload and no budget, while a
+            // gated one leaves a stale single entry showing yesterday
+            // whenever the overnight reload is deferred (phone widget,
+            // 2026-07-26).
+            var entries = [entry]
+            if let midnight {
                 var fresh = entry.newDay(at: midnight)
                 fresh.relevance = ComplicationRelevance.mealWindow(at: midnight)
-                completion(Timeline(
-                    entries: [entry, fresh],
-                    policy: .after(midnight)
-                ))
-            } else {
-                completion(Timeline(entries: [entry], policy: .after(refresh)))
+                entries.append(fresh)
             }
+            completion(Timeline(
+                entries: entries,
+                policy: .after(midnight.map { min($0, refresh) } ?? refresh)
+            ))
         }
     }
 
@@ -443,7 +453,7 @@ struct StreakComplicationProvider: TimelineProvider {
             var entry = StreakEntry(date: .now, streak: streak, needsSetup: needsSetup)
             entry.relevance = ComplicationRelevance.evening(at: .now)
             var entries = [entry]
-            if let midnight, midnight <= refresh {
+            if let midnight {
                 var fresh = StreakEntry(date: midnight, streak: atMidnight, needsSetup: needsSetup)
                 fresh.relevance = ComplicationRelevance.evening(at: midnight)
                 entries.append(fresh)

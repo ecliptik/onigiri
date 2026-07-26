@@ -55,7 +55,7 @@ struct StreakProvider: TimelineProvider {
             let midnight = nextMidnight(after: .now)
             let (streak, atMidnight, needsSetup) = await StreakLoader.loadWithMidnight(midnight ?? .now)
             var entries = [StreakEntry(date: .now, streak: streak, needsSetup: needsSetup)]
-            if let midnight, midnight <= refresh {
+            if let midnight {
                 entries.append(StreakEntry(date: midnight, streak: atMidnight, needsSetup: needsSetup))
             }
             completion(Timeline(

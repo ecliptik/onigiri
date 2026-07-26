@@ -144,6 +144,25 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   stale values — the sim's own cfprefsd had the domain cached and served its
   copy. Spawning defaults inside the sim goes through that daemon (2026-07-22).
 
+## Widget timelines
+
+- **Every provider's timeline carries the midnight entry, unconditionally.**
+  A future-dated entry renders on schedule out of a timeline WidgetKit
+  already holds — no reload, no budget. All seven providers used to
+  append the pre-rendered new-day entry only `if midnight <= refresh`
+  (i.e. only when the build landed in the last poll hour), which made
+  correctness depend on the very reload the budget defers: a timeline
+  built at 22:15 shipped ONE entry, the overnight reload never came, and
+  the home-screen widget showed yesterday's kcal-left until the app was
+  opened (2026-07-26). Keep the poll in `policy:`
+  (`.after(min(refresh, midnight))`) and the rollover in the entries —
+  they are not interchangeable.
+- Pre-rendering needs a `newDay` transform that knows the gauge's
+  direction: a deficit gauge starts empty, a maintenance gauge starts
+  FULL (zero rendered an empty onigiri all morning). Anything derived
+  from the plan rather than the day's samples survives the pre-render;
+  anything read from Health does not.
+
 ## SwiftData landmines (each cost a debugging session)
 
 - Every relationship needs an explicit inverse. Without one, deleting the target

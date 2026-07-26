@@ -40,7 +40,9 @@ struct MonthStatsProvider: TimelineProvider {
             let refresh = Date().addingTimeInterval(WidgetRefreshPolicy.pollFallback)
             let midnight = nextMidnight(after: .now)
             var entries = [await load(asOf: .now)]
-            if let midnight, midnight <= refresh {
+            // Second load costs no Health query: PlanCache serves the
+            // first call's results inside its TTL.
+            if let midnight {
                 entries.append(await load(asOf: midnight))
             }
             completion(Timeline(

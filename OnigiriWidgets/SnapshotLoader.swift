@@ -84,9 +84,21 @@ struct DaySnapshot: Codable {
     }
 }
 
-/// Next midnight, and whether it lands inside the standard 30-minute
-/// refresh window (when it does, the timeline pre-renders the zeroed
-/// entry and reloads at midnight instead).
+/// Next midnight — the second entry EVERY timeline carries.
+///
+/// Load-bearing rule, learned the hard way (2026-07-26: the home-screen
+/// widget still showed yesterday's kcal-left well into the morning, and
+/// only corrected when the app was opened). Every provider used to
+/// append the pre-rendered new-day entry only when midnight fell inside
+/// the poll window — so a timeline built at 22:15 shipped ONE entry and
+/// leaned on WidgetKit granting a reload before 00:00. Overnight, with
+/// the phone idle, that reload is exactly what the budget defers, and a
+/// single stale entry then renders until something forces a reload.
+///
+/// A future-dated entry needs no reload and no budget: WidgetKit
+/// renders it on schedule from a timeline it already holds. Gating it
+/// on the reload cadence defeated the one mechanism that survives the
+/// budget. So: always append, and let the policy handle the cadence.
 func nextMidnight(after now: Date) -> Date? {
     Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now))
 }

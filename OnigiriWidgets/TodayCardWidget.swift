@@ -52,20 +52,16 @@ struct TodayCardProvider: TimelineProvider {
             let snapshot = await SnapshotLoader.load()
             // Push-based reloads keep widgets fresh; this poll is only a fallback.
             let refresh = now.addingTimeInterval(WidgetRefreshPolicy.pollFallback)
-            if let midnight = nextMidnight(after: now), midnight <= refresh {
-                completion(Timeline(
-                    entries: [
-                        TodayCardEntry(date: now, snapshot: snapshot),
-                        TodayCardEntry(date: midnight, snapshot: snapshot.newDay),
-                    ],
-                    policy: .after(midnight)
-                ))
-            } else {
-                completion(Timeline(
-                    entries: [TodayCardEntry(date: now, snapshot: snapshot)],
-                    policy: .after(refresh)
-                ))
+            // The midnight entry rides EVERY timeline — see nextMidnight.
+            let midnight = nextMidnight(after: now)
+            var entries = [TodayCardEntry(date: now, snapshot: snapshot)]
+            if let midnight {
+                entries.append(TodayCardEntry(date: midnight, snapshot: snapshot.newDay))
             }
+            completion(Timeline(
+                entries: entries,
+                policy: .after(midnight.map { min($0, refresh) } ?? refresh)
+            ))
         }
     }
 }

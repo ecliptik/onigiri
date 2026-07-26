@@ -47,6 +47,26 @@ struct ScanSheet: View {
     /// Reaches the live scanner for capturePhoto() — the representable
     /// parks its controller here.
     @State private var scannerProxy = ScannerProxy()
+    /// The still the shutter just took, held over the live preview while
+    /// the cascade runs. Without it the preview keeps moving through
+    /// several seconds of OCR and inference, which reads as "the photo
+    /// hasn't been taken yet — keep the phone pointed at the label or
+    /// you'll lose it" (the user, 2026-07-26). Freezing on the captured
+    /// frame is the whole answer: it shows WHAT was caught, and that
+    /// the camera is done with you.
+    @State private var capturedStill: UIImage?
+    /// A result already handed to the host and the sheet on its way out.
+    /// Keeps the freeze up through the dismissal animation instead of
+    /// flashing the live camera as isReading clears.
+    @State private var delivered = false
+
+    /// The frozen frame outlives `isReading`: the multi-item chooser
+    /// sits on top of it, and a delivered result dismisses behind it.
+    /// Every one of these resolves, so the preview can't wedge — a
+    /// failed read drops straight back to live for the retry.
+    private var showsFrozenFrame: Bool {
+        capturedStill != nil && (isReading || delivered || !candidates.isEmpty)
+    }
 
     /// UI-test hook (LABEL_SCAN=1): a bundled label photo stands in for
     /// the pickers, exercising the real Vision request end to end.
@@ -125,6 +145,20 @@ struct ScanSheet: View {
             dismiss()
         }
         .ignoresSafeArea()
+        // Under the controls overlay below, so the progress capsule and
+        // the shutter stay legible on top of the frozen frame.
+        .overlay {
+            if let capturedStill, showsFrozenFrame {
+                Image(uiImage: capturedStill)
+                    .resizable()
+                    .scaledToFill()
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: showsFrozenFrame)
         .overlay(alignment: .bottom) {
             VStack(spacing: 12) {
                 if isReading {
@@ -142,15 +176,23 @@ struct ScanSheet: View {
                         .padding(10)
                         .background(.regularMaterial, in: .rect(cornerRadius: 12))
                 }
-                // The hint only promises the food-photo door when the
-                // model that opens it is actually available.
-                Text(FoodIntelligence.isAvailable
-                    ? "Point at a barcode, or photograph the nutrition label or the food itself."
-                    : "Point at a barcode or take a photo of the nutrition facts label.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .padding(8)
-                    .background(.regularMaterial, in: .capsule)
+                // Names what works, nothing more (the user, 2026-07-26):
+                // the previous "Point at a barcode, or photograph the
+                // nutrition label or the food itself" instructed at
+                // length in a spot where a list does the job. Still
+                // promises the food door only when the model that opens
+                // it is available, and still goes away once the shot is
+                // taken — "point at a barcode" told you to keep aiming
+                // at the exact moment aiming stopped mattering.
+                if !showsFrozenFrame {
+                    Text(FoodIntelligence.isAvailable
+                        ? "Barcode, nutrition label, or food."
+                        : "Barcode or nutrition label.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(8)
+                        .background(.regularMaterial, in: .capsule)
+                }
                 HStack {
                     PhotosPicker(selection: $photoItem, matching: .images) {
                         Image(systemName: "photo.on.rectangle")
@@ -205,6 +247,8 @@ struct ScanSheet: View {
         do {
             let photo = try await scanner.capturePhoto()
             guard !Task.isCancelled else { return }
+            // Freeze BEFORE the cascade — its first leg is the slow one.
+            capturedStill = photo
             await read(photo)
         } catch {
             scanLog.error("Label capture failed: \(String(describing: error))")
@@ -298,9 +342,11 @@ struct ScanSheet: View {
         // paste/photo doors so every route reads identically.
         switch await FoodImageReader.read(image, source: source, status: { readingStatus = $0 }) {
         case .label(let parsed):
+            delivered = true
             onLabel(parsed)
             dismiss()
         case .food(let product):
+            delivered = true
             onFood(product)
             dismiss()
         case .candidates(let list):
@@ -331,6 +377,13 @@ private struct ScannerRepresentable: UIViewControllerRepresentable {
             recognizedDataTypes: [.barcode(symbologies: [.ean13, .ean8, .upce, .code128])],
             qualityLevel: .balanced,
             recognizesMultipleItems: false,
+            // VisionKit's own guidance ("Find nearby barcodes", "Slow
+            // down") is on by default and speaks for a barcode-only
+            // scanner — wrong for a sheet that also takes labels and
+            // food, and it argued with our hint right beside it. Ours
+            // says what this camera does; the system's doesn't know
+            // (the user, 2026-07-26).
+            isGuidanceEnabled: false,
             isHighlightingEnabled: true
         )
         scanner.delegate = context.coordinator

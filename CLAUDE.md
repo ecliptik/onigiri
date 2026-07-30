@@ -219,7 +219,15 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   design). Any new log/re-log path must carry BOTH keys through or edits
   regress to 1 and history silently loses its breakdown.
 - Free personal team: no iCloud/CloudKit entitlements; watch↔phone library sync is
-  WatchConnectivity, log sync is HealthKit's own.
+  WatchConnectivity, log sync is HealthKit's own. **A watch REINSTALL wipes the
+  watch's library while the phone still believes it's in sync**: `pushNow`
+  skips the send when the payload fingerprint is unchanged, and
+  `lastSentFingerprint` is per-phone-process in-memory state, so the watch
+  sits on its empty state ("add favorites or log food in the app") until the
+  phone app is relaunched or the library happens to change.
+  `sessionWatchStateDidChange` now clears that fingerprint and re-pushes —
+  it's the only callback that fires when `isWatchAppInstalled` moves
+  (2026-07-30). Any future send-side caching needs the same escape hatch.
 - Unit preferences (Settings → Units): display/entry-only. Storage is ALWAYS
   canonical — lb, US fl oz, sodium mg — in HealthKit, SwiftData, WatchSync,
   and backups; `WeightUnit`/`WaterUnit`/`SodiumUnit` (kit, UnitPreferences.swift)

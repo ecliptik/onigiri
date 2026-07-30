@@ -270,6 +270,28 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
     ) {
         guard activationState == .activated else { return }
         Task { @MainActor in
+            // Forget what was last SENT: this process may be talking to a
+            // watch that no longer holds it (see sessionWatchStateDidChange).
+            self.lastSentFingerprint = nil
+            self.onActivate?()
+        }
+    }
+
+    /// The watch was paired, unpaired, or — the case that bit — had the
+    /// app REINSTALLED. A reinstall wipes the watch's library, but
+    /// `lastSentFingerprint` still holds what the OLD installation was
+    /// sent, so the next push computes an identical fingerprint and
+    /// SKIPS the send. The watch then sits on "add favorites or log food
+    /// in the app" forever while the phone's library is full, and only a
+    /// phone relaunch (which clears this in-memory state) or an unrelated
+    /// library edit breaks the deadlock (field report 2026-07-30).
+    ///
+    /// Clearing the fingerprint and re-pushing costs one application
+    /// context update — the cheapest possible push — and only when the
+    /// watch's install/pair state actually moves.
+    nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
+        Task { @MainActor in
+            self.lastSentFingerprint = nil
             self.onActivate?()
         }
     }

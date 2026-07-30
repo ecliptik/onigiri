@@ -887,10 +887,19 @@ struct PortionSheet: View {
     }
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.modelContext) private var context
     @State private var quantity = 1.0
     @State private var category: FoodCategory
     @State private var entryDate: Date
     @FocusState private var quantityFocused: Bool
+    /// Contains rows resolved to library foods, by row offset. A logged
+    /// meal's parts are name+kcal SNAPSHOTS, so this is a name lookup —
+    /// resolved once on appear, not per row render.
+    @State private var resolvedFoods: [Int: Food] = [:]
+    /// The food a Contains row opened. PortionSheet's own single sheet
+    /// slot: a nested sheet is fine, it's SWAPPING one slot's binding
+    /// mid-dismissal that races (the 2026-07-22 landmine).
+    @State private var openFood: Food?
 
     init(
         target: PortionTarget,
@@ -965,11 +974,8 @@ struct PortionSheet: View {
                 // library meal may have changed since.
                 if !target.mealItems.isEmpty {
                     Section {
-                        ForEach(Array(target.mealItems.enumerated()), id: \.offset) { _, item in
-                            LabeledContent(item.name) {
-                                Text("\(item.kcal * quantity, format: .number.precision(.fractionLength(0))) kcal")
-                                    .monospacedDigit()
-                            }
+                        ForEach(Array(target.mealItems.enumerated()), id: \.offset) { offset, item in
+                            containsRow(item, at: offset)
                         }
                     } header: {
                         Text("Contains")
@@ -1045,6 +1051,16 @@ struct PortionSheet: View {
                 }
             }
         }
+        // Resolve once per presentation, not per row: an @Query here
+        // would materialize the whole library and re-render the sheet on
+        // any library change (the food form's checkForDuplicate lesson).
+        .onAppear(perform: resolveContainsRows)
+        // Opening the library food behind a Contains row. Editing it
+        // changes the FOOD, not this already-logged entry — the section
+        // footer already calls out that drift.
+        .sheet(item: $openFood) { food in
+            FoodFormView(food: food)
+        }
         // Frosted, not flat: stacked over the food form (or the Log
         // sheet) the default background blends into the sheet behind —
         // in dark mode only the grabber separated them. The material,
@@ -1058,6 +1074,55 @@ struct PortionSheet: View {
                     .strokeBorder(Color.primary.opacity(0.15), lineWidth: 1)
             }
         }
+    }
+
+    /// One Contains row. A row whose food is still in the library opens
+    /// it — chevron, real Button (so VoiceOver announces and activates
+    /// it). A row whose food was renamed or deleted stays plain text:
+    /// nothing to tap beats a tap that opens nothing.
+    @ViewBuilder
+    private func containsRow(_ item: LoggedMealItem, at offset: Int) -> some View {
+        let kcal = Text("\(item.kcal * quantity, format: .number.precision(.fractionLength(0))) kcal")
+            .monospacedDigit()
+        if let food = resolvedFoods[offset] {
+            Button {
+                openFood = food
+            } label: {
+                HStack(spacing: 6) {
+                    Text(item.name)
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    kcal
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .buttonStyle(.plain)
+        } else {
+            LabeledContent(item.name) { kcal }
+        }
+    }
+
+    /// Snapshot name → library food, once per presentation. The name
+    /// carries its multiplier ("2× Egg", "1.5× Egg" locale-formatted), so
+    /// that comes off before matching; matching itself is deliberately
+    /// strict (ComponentMatch) — a wrong row would open the wrong food.
+    private func resolveContainsRows() {
+        guard !target.mealItems.isEmpty else { return }
+        // On-demand fetch, not an @Query: see the .onAppear note.
+        let foods = (try? context.fetch(FetchDescriptor<Food>())) ?? []
+        guard !foods.isEmpty else { return }
+        let names = foods.map(\.name)
+        var resolved: [Int: Food] = [:]
+        for (offset, item) in target.mealItems.enumerated() {
+            let bare = ComponentMatch.strippingQuantityPrefix(item.name)
+            if let index = ComponentMatch.index(of: bare, in: names) {
+                resolved[offset] = foods[index]
+            }
+        }
+        resolvedFoods = resolved
     }
 }
 

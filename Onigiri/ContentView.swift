@@ -425,6 +425,10 @@ private enum PrivacyShieldWindow {
         let cover = UIWindow(windowScene: scene)
         cover.windowLevel = .alert + 1
         cover.isUserInteractionEnabled = false
+        // Its own window means its own appearance — without this the
+        // shield would snapshot in the system look while the app is
+        // themed the other way.
+        AppearanceWindow.apply(to: cover)
         cover.rootViewController = UIHostingController(rootView: PrivacyShield())
         cover.isHidden = false
         window = cover

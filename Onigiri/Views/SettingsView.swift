@@ -340,11 +340,16 @@ struct SettingsView: View {
 
     // The trailing values must tell the FUNCTIONAL truth, not stored
     // intent — "2 on" with notifications denied and "Anthropic" with no
-    // key were confident lies (2026-07-22 audit).
+    // key were confident lies (2026-07-22 audit). Reminders is the one
+    // narrowed exception (2026-07-29, below); Online Database and AI must
+    // still SAY "Off" from the main screen — off-by-default is the app's
+    // spine, and this row is where it's visible.
+    /// On or Off, nothing more (the user, 2026-07-29): the reminder COUNT
+    /// read as clutter, and the "— blocked" suffix was declined with it.
+    /// The denied state still shows where it can be acted on — the
+    /// Reminders screen's orange footnote and its Turn On button.
     private var remindersSummary: String {
-        let count = [remindMeals, remindWater, remindStreak].count(where: { $0 })
-        if count == 0 { return "Off" }
-        return notificationsDenied ? "\(count) on — blocked" : "\(count) on"
+        remindMeals || remindWater || remindStreak ? "On" : "Off"
     }
 
     private var onlineDatabaseSummary: String {
@@ -893,6 +898,7 @@ struct SettingsView: View {
 /// shared defaults keys; SettingsView's always-mounted observers handle
 /// the icon mirroring, emoji prompt, and watch sync.
 private struct AppearanceSettingsScreen: View {
+    @AppStorage(SharedStore.appearanceKey, store: SharedStore.defaults) private var appearance = AppTheme.system.rawValue
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
     @AppStorage(SharedStore.mealIconKey, store: SharedStore.defaults) private var mealIcon = "plate"
@@ -962,6 +968,17 @@ private struct AppearanceSettingsScreen: View {
                     Text("Beside balance").tag("compact")
                 }
                 Toggle("Progress gauges", isOn: $progressGauges)
+                // Last, under the other choices (the user, 2026-07-29).
+                // "Theme", not "Appearance" — this screen is already
+                // Appearance. System is the default, and the only value
+                // media/QA capture runs may see: those switch the
+                // SIMULATOR's appearance to shoot both looks, and a forced
+                // app theme would defeat that.
+                Picker("Theme", selection: $appearance) {
+                    ForEach(AppTheme.allCases, id: \.rawValue) { theme in
+                        Text(theme.label).tag(theme.rawValue)
+                    }
+                }
             }
         }
         .compactSections()

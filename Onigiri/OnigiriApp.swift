@@ -75,9 +75,25 @@ struct OnigiriApp: App {
         _logObserver = State(initialValue: observer)
     }
 
+    /// @AppStorage, not a static read: the Theme picker must repaint the
+    /// whole app the moment it changes (the Appearance-picker precedent).
+    @AppStorage(SharedStore.appearanceKey, store: SharedStore.defaults)
+    private var appearance = AppTheme.system.rawValue
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                // nil for System — see AppTheme for what this does NOT
+                // cover (widgets, the watch, the launch screen).
+                .preferredColorScheme(AppTheme.resolve(appearance).colorScheme)
+                // …and the window-level override, which is what actually
+                // carries the theme into SHEETS (the picker's own screen
+                // is one). preferredColorScheme alone left Settings on the
+                // old appearance — see AppearanceWindow.
+                .onAppear { AppearanceWindow.apply() }
+                .onChange(of: appearance) { _, raw in
+                    AppearanceWindow.apply(AppTheme.resolve(raw))
+                }
         }
         .modelContainer(Self.container)
     }

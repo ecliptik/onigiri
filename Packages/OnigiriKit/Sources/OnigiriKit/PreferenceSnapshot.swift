@@ -53,6 +53,7 @@ public extension SharedStore {
     /// settings reset shouldn't replay onboarding); Reset All wipes the
     /// whole domain instead.
     static let settingsSweepKeys: [String] = [
+        appearanceKey,
         waterServingKey, waterGoalKey,
         waterIconKey, foodIconKey, rewardIconKey, mealIconKey,
         sodiumLimitKey, balanceStyleKey,

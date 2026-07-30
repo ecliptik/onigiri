@@ -1,9 +1,17 @@
 # PLAN — the tab bar that won't come back (2026-07-30)
 
-`.tabBarMinimizeBehavior(.onScrollDown)` is currently **`.never`**, shipped
-2026-07-30. That is a WORKAROUND, not the destination: the bar sometimes
-stayed collapsed to its lone "Today" pill and would not expand again on
-scroll-up. This plan is what has to be true before `.onScrollDown` goes back.
+> **PARKED 2026-07-30, by the user's call. `.never` stands.** Not because
+> the investigation ran out of road — E1 below was offered and declined —
+> but because a full tab bar is a perfectly good outcome and the collapse
+> was only ever a flourish. Nothing here is blocked or half-finished; this
+> document exists so whoever revisits it starts from evidence instead of
+> repeating the two reverted attempts. **Start at E1.**
+
+`.tabBarMinimizeBehavior(.onScrollDown)` is now **`.never`**, shipped
+2026-07-30. It began as a WORKAROUND: the bar sometimes stayed collapsed to
+its lone "Today" pill and would not expand again on scroll-up. It is now
+also the accepted end state. This plan is what would have to be true before
+`.onScrollDown` could go back.
 
 ## What is PROVEN, not assumed
 
@@ -86,9 +94,13 @@ the List/Form tabs) get re-checked, since E2 re-enters the exact territory
 that was reverted twice. Simulator scroll-phase behavior has already proven
 untrustworthy for this bar — device only.
 
-## Recommendation
+## Outcome
 
-Leave `.never` shipped while this is investigated. It costs a visual flourish
-and costs the user nothing else; the collapsed-forever state cost them a
-readable tab bar with no way back. Restore `.onScrollDown` only if E1 passes
-AND E2 survives all four triggers plus both historical regressions on device.
+`.never` stands (the user, 2026-07-30). It costs a visual flourish and costs
+the user nothing else; the collapsed-forever state cost them a readable tab
+bar with no way back — a bad trade in the only direction that matters.
+
+If this is ever reopened, the bar goes back to `.onScrollDown` only if E1
+passes AND E2 survives all four triggers plus both historical regressions,
+on device. Anything less and it returns a bug that took two reverts and a
+field report to pin down.

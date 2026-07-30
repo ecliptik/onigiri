@@ -28,6 +28,15 @@ final class GoalModel {
     /// TabView re-runs the view's .task on every visit; a quick tab
     /// bounce shouldn't replay four HealthKit reads over 90-day windows
     /// (TodayModel's staleness rule). Day-roll still refreshes.
+    /// Reload regardless of the staleness window — for a weigh-in that
+    /// landed from outside the app while this tab was on screen. The
+    /// window exists to stop a tab bounce replaying four 90-day reads;
+    /// a real new sample is exactly what it must not suppress.
+    func reload() async {
+        lastLoaded = nil
+        await loadIfStale()
+    }
+
     func loadIfStale() async {
         if let last = lastLoaded,
            Date.now.timeIntervalSince(last) < 30,

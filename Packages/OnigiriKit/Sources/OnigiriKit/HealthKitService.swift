@@ -11,6 +11,7 @@ public final class HealthKitService {
 
     private let store = HKHealthStore()
     private var isObservingLogChanges = false
+    private var isObservingWeightChanges = false
 
     public init() {}
 
@@ -113,6 +114,40 @@ public final class HealthKitService {
                 }
             }
         }
+    }
+
+    /// Weigh-ins recorded ELSEWHERE — the Health app, a smart scale, any
+    /// other tracker. The Goal tab's whole chart is built from body-mass
+    /// samples this app never writes, and without this it only reloaded
+    /// on a tab visit older than its staleness window: a weigh-in taken
+    /// while the tab was open never appeared (2026-07-30).
+    ///
+    /// Deliberately NARROWER than startObservingLogChanges in two ways:
+    ///
+    /// - **Body mass only, not burn.** The Goal tab also reads active and
+    ///   basal energy, but those move continuously while you walk around;
+    ///   observing them would fire this constantly for numbers whose whole
+    ///   point is a 90-day average. A weigh-in is a discrete event, a few
+    ///   times a week at most.
+    /// - **No background delivery.** This exists to refresh a VISIBLE
+    ///   screen. An observer query already delivers while the app runs;
+    ///   background delivery would additionally WAKE the app for a weight
+    ///   change nothing else needs — no widget depends on it (the trend
+    ///   chart polls on its own) and no reminder reads it.
+    public func startObservingWeightChanges(_ onChange: @escaping @Sendable () async -> Void) {
+        // Idempotent, for the same reason as the log observer: a second
+        // registration doubles every fire for the process's lifetime.
+        guard !isObservingWeightChanges else { return }
+        isObservingWeightChanges = true
+        let type = HKQuantityType(.bodyMass)
+        let query = HKObserverQuery(sampleType: type, predicate: nil) { _, completion, _ in
+            nonisolated(unsafe) let done = completion
+            Task {
+                await onChange()
+                done()
+            }
+        }
+        store.execute(query)
     }
 
     #if DEBUG

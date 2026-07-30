@@ -22,6 +22,11 @@ final class ToastCenter {
     /// watch, third-party apps). The foreground staleness gates compare
     /// against it so an external write always forces a refresh.
     private(set) var healthWriteVersion = 0
+    /// Bumped when a BODY-MASS sample changes — a weigh-in from the Health
+    /// app, a smart scale, another tracker. Separate from
+    /// healthWriteVersion on purpose: only the Goal tab cares, and the
+    /// food/water surfaces must not re-query for a weigh-in.
+    private(set) var weightWriteVersion = 0
 
     func show(_ message: String, undo: (@MainActor () -> Void)? = nil) {
         let item = Item(message: message, undo: undo)
@@ -53,6 +58,10 @@ final class ToastCenter {
 
     func noteHealthWrite() {
         healthWriteVersion += 1
+    }
+
+    func noteWeightWrite() {
+        weightWriteVersion += 1
     }
 
     fileprivate func performUndo(_ item: Item) {

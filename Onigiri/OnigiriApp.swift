@@ -72,6 +72,17 @@ struct OnigiriApp: App {
             // replan would be stranded mid-flight.
             await ReminderScheduler.shared.replanNow(afterMutation: true)
         }
+        // Weigh-ins from anywhere else (Health app, smart scale, another
+        // tracker). Its own observer and its own version, because the
+        // Goal tab is the only screen that reads body mass and the
+        // food/water surfaces must not re-query for a weigh-in. No
+        // widget reload or reminder replan here either: nothing else
+        // reads weight (the trend widget polls itself).
+        observer.startObservingWeightChanges {
+            await MainActor.run {
+                ToastCenter.shared.noteWeightWrite()
+            }
+        }
         _logObserver = State(initialValue: observer)
     }
 

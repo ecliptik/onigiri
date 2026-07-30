@@ -277,6 +277,15 @@ struct GoalView: View {
                 )
             }
         }
+        // A weigh-in recorded elsewhere while this tab is up — the chart
+        // is built entirely from samples this app never writes, so
+        // without this it sat on the numbers it loaded on arrival.
+        .onChange(of: ToastCenter.shared.weightWriteVersion) { _, _ in
+            Task {
+                await model.reload()
+                deriveTrendStats()
+            }
+        }
         .onChange(of: targetWeightLb) { deriveTrendStats() }
         .onChange(of: mode) {
             // First switch into Maintain offers the current weight as

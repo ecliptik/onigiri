@@ -1244,6 +1244,40 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Name"].waitForExistence(timeout: 3), "Name sort option")
         attachShot(named: "meal-builder-sort-menu")
         app.buttons["Name"].tap()
+
+        // The one field does both jobs (2026-07-29): its prompt must say
+        // so, or describing a meal stays invisible — the exact mistake
+        // the Add Food form made for a release.
+        let search = app.searchFields["Search foods or describe a meal"].firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5), "Meal-builder search prompt names both jobs")
+        // The quantity step above left the decimal pad up, and it covers
+        // the bottom-placed search field — taps land on the keyboard.
+        // The form's own principal Done button is the way out (decimal
+        // pads have no return key).
+        let done = app.buttons["Done"].firstMatch
+        if done.exists {
+            done.tap()
+        }
+        // Settle, then tap-and-retap: the iOS 26 search drawer regularly
+        // ignores the first tap right after another control dismissed
+        // (the same quirk testFoodsSearchAfterSave probes for).
+        Thread.sleep(forTimeInterval: 1.0)
+        search.tap()
+        if (search.value(forKey: "hasKeyboardFocus") as? Bool) != true {
+            Thread.sleep(forTimeInterval: 1.5)
+            search.tap()
+        }
+        search.typeText("burrito bowl with rice and beans")
+        // AI ships OFF, and this launch never turns it on: with the
+        // master switch off there must be NO estimate row, only the
+        // dismissable pointer at Settings. Off-by-default is the app's
+        // spine — this asserts the switch actually gates the new door.
+        XCTAssertFalse(
+            app.buttons.containing(
+                NSPredicate(format: "label BEGINSWITH 'Estimate this meal'")
+            ).firstMatch.exists,
+            "The meal estimate row must not appear while AI is switched off")
+        attachShot(named: "meal-builder-describe-prompt")
     }
 
     /// Adds the Onigiri medium widget to the simulator home screen by driving

@@ -580,9 +580,39 @@ struct TodayView: View {
     }
 
     private func plan(for goal: GoalSettings) -> CalorieBudget.Plan? {
+        // A COMPLETED day is judged by what actually happened that day,
+        // not by today's plan (2026-07-30). Two things were wrong before:
+        //
+        // - The deficit target was always TODAY's, so browsing back showed
+        //   a past day graded against a bar it was never held to — Today
+        //   said "earned" while the calendar, badges, and streak (which
+        //   read the day's snapshot) said missed.
+        // - The budget forecast from the trailing average, so a finished
+        //   day still quoted a burn that never happened ("67 kcal left" on
+        //   a day that ended 29 over break-even).
+        //
+        // For a past day both come from the day itself: its recorded
+        // target, and its own burn (resting already filled for unworn
+        // hours by filledDaySummary).
+        if !model.isToday {
+            let dayBurn = model.summary.totalBurnKcal
+            // No burn recorded at all: nothing to judge the day by, and a
+            // budget of "0 minus the target" would invent a huge overage.
+            guard dayBurn > 0 else { return nil }
+            return CalorieBudget.completedDayPlan(
+                dayBurnKcal: dayBurn,
+                // Maintenance has no deficit target; a lose day uses the
+                // target snapshotted then, falling back to the current one
+                // for days that predate snapshots (StreakCalendar's rule).
+                requiredDailyDeficit: goal.isMaintenance
+                    ? 0
+                    : (DeficitTargetHistory.target(on: model.selectedDate)
+                        ?? currentRequiredDeficit(for: goal) ?? 0)
+            )
+        }
         // The shared kit derivation — one clamp, one days-to-target rule
         // for Today, Goal, onboarding, the widgets, and the watch.
-        CalorieBudget.derivePlan(
+        return CalorieBudget.derivePlan(
             isMaintenance: goal.isMaintenance,
             currentWeightLb: model.currentWeightLb ?? goal.fallbackCurrentWeightLb,
             targetWeightLb: goal.targetWeightLb,
@@ -590,9 +620,25 @@ struct TodayView: View {
             averageDailyBurnKcal: model.averageBurnKcal,
             // Day-ratcheted: Health revising burn down (watch↔phone
             // sample reconciliation) must not move the budget against
-            // the user mid-day. Display totals stay raw.
+            // the user mid-day. Display totals stay raw. ONLY for today —
+            // the floor's stored mark is keyed to today, so feeding it a
+            // browsed day's burn wrote that day's number into today's
+            // floor and inflated today's budget (same-day bug, 2026-07-30).
             todayActualBurnKcal: TodayBurnFloor.ratcheted(model.summary.totalBurnKcal)
         )
+    }
+
+    /// The deficit target today's plan implies — the fallback for a past
+    /// day with no snapshot (pre-feature history, or a day the app never
+    /// ran), which is exactly what StreakCalendar falls back to.
+    private func currentRequiredDeficit(for goal: GoalSettings) -> Double? {
+        CalorieBudget.derivePlan(
+            isMaintenance: goal.isMaintenance,
+            currentWeightLb: model.currentWeightLb ?? goal.fallbackCurrentWeightLb,
+            targetWeightLb: goal.targetWeightLb,
+            targetDate: goal.targetDate,
+            averageDailyBurnKcal: model.averageBurnKcal
+        )?.requiredDailyDeficit
     }
 
     /// Push to the day's full nutrient breakdown (value-routed so the

@@ -28,6 +28,28 @@ public enum CalorieBudget {
         Plan(requiredDailyDeficit: 0, dailyBudget: averageDailyBurn, isAggressive: false)
     }
 
+    /// A COMPLETED day, judged by what actually happened on it: the day's
+    /// own burn (resting already filled for unworn hours) against the
+    /// deficit target recorded THAT day.
+    ///
+    /// Deliberately not `derivePlan`: that one forecasts, flooring burn
+    /// with the trailing average so an in-progress day doesn't read
+    /// "over budget" at 9am. Applied to a finished day the same floor
+    /// keeps quoting a burn that never happened — a day that ended 29 kcal
+    /// over break-even still showed "67 kcal left" (2026-07-30). Once the
+    /// day is over there is nothing left to forecast.
+    public static func completedDayPlan(
+        dayBurnKcal: Double, requiredDailyDeficit: Double
+    ) -> Plan {
+        let deficit = max(0, requiredDailyDeficit)
+        return Plan(
+            requiredDailyDeficit: deficit,
+            dailyBudget: dayBurnKcal - deficit,
+            // A past day can't be talked out of what it already was.
+            isAggressive: false
+        )
+    }
+
     /// The burn figure every plan derivation must use: the historical
     /// average, floored by today's actual burn and the 2000 kcal
     /// cold-start default. Once today's burn tops the average, the

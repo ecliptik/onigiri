@@ -234,16 +234,19 @@ struct ContentView: View {
                 quickActions.addFoodKind = kind
             }
         }
-        // Liquid Glass: the tab bar shrinks while scrolling content,
-        // re-expanding on scroll-up. Constant .onScrollDown — NOT flipped
-        // to .never at the top: that flip breaks the first scroll-down
-        // minimize (it can't retroactively minimize a scroll already
-        // underway) and goes sticky on the List/Form tabs (tried twice,
-        // reverted both — 2026-07-16). The stuck-minimized-after-a-
-        // gesture-less-section-expand bug that motivated the flip turned
-        // out to be Today's day-paging swipe perturbing the scroll phase;
-        // removing that swipe fixed it without touching this. iOS 18 bars
-        // never minimize; the modifier is a no-op there.
+        // The tab bar stays FULL while scrolling (the user, 2026-07-30):
+        // iOS 26's Liquid Glass bar shrank to a lone "Today" pill on
+        // scroll-down and re-expanded on scroll-up, and the shrinking
+        // wasn't wanted — the tabs should always be readable and one tap
+        // away.
+        //
+        // A CONSTANT .never, which is not the thing the 2026-07-16 note
+        // warned about: that was FLIPPING between .never and .onScrollDown
+        // by scroll position, which broke the first scroll-down minimize
+        // (it can't retroactively minimize a scroll already underway) and
+        // went sticky on the List/Form tabs. A value that never changes
+        // can't get stuck mid-gesture. iOS 18 bars never minimize anyway;
+        // the modifier is a no-op there.
         .modifier(TabBarMinimizePin())
         // VoiceOver twin of the pill's hold-to-log-water shortcut: the
         // window-level long-press below never reaches assistive tech,
@@ -287,7 +290,7 @@ struct ContentView: View {
     private struct TabBarMinimizePin: ViewModifier {
         func body(content: Content) -> some View {
             if #available(iOS 26.0, *) {
-                content.tabBarMinimizeBehavior(.onScrollDown)
+                content.tabBarMinimizeBehavior(.never)
             } else {
                 content
             }

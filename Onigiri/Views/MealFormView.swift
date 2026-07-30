@@ -381,6 +381,15 @@ struct MealFormView: View {
                 initialSnapshot = currentSnapshot
             }
         }
+        // This form is a SHEET, and the root toast host sits behind it —
+        // so a toast raised while it's up renders under the sheet and is
+        // never seen. The save toast survived only because it's followed
+        // by dismiss(); the ✨ name suggestion's failure toast fired with
+        // the sheet still up and showed NOTHING, which is exactly the
+        // dead-button silence that toast was added to prevent (found
+        // 2026-07-30). FoodFormView and QuickLogSheet host their own for
+        // the same reason.
+        .toastHost()
     }
 
     /// The described meal's parts, awaiting review. Every component shows

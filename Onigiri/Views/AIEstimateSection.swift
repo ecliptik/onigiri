@@ -1,137 +1,30 @@
 import SwiftUI
 import OnigiriKit
 
-/// The tap-to-estimate row that leads every search-result list
-/// (PLAN-unified-search): "✨ Estimate '<query>'" — one tap, ONE
-/// inference (never per keystroke: remote providers spend the user's
-/// own tokens, and the on-device model takes seconds). The result
-/// becomes a pickable row carrying the provider-named caption; picking
-/// hands the host a ScannedProduct — the same currency as an online
-/// pick, so every host routes it with paths it already has (portion
-/// sheet on the Log sheet, prefilled form on Foods, apply() on the
-/// form). Editing the query resets to the idle row.
+/// The tap-to-estimate row that leads every FOOD search-result list
+/// (PLAN-unified-search): "✨ Estimate with <provider>". Picking hands the
+/// host a ScannedProduct — the same currency as an online pick, so every
+/// host routes it with paths it already has (the full food form from the
+/// Log sheet and Foods, apply() on the form itself).
+///
+/// The phase machine and its four hard-won behaviors live in
+/// `TapToEstimateRow`, shared with `MealEstimateSection`.
 struct AIEstimateSection: View {
     let query: String
     let onPick: (ScannedProduct) -> Void
 
-    private enum Phase {
-        case idle
-        case estimating
-        case result(FoodIntelligence.DescribedFood)
-        case failed
-    }
-
-    @State private var phase = Phase.idle
-    /// The query the current phase belongs to — a changed query
-    /// invalidates a stale estimate back to the idle row.
-    @State private var phaseQuery = ""
-    /// The in-flight inference, stored so an edited query or a vanished
-    /// section CANCELS it: an orphaned completion repainted a stale
-    /// result over the reset row, and for BYO-AI providers the request
-    /// keeps spending the user's tokens after they've moved on
-    /// (2026-07-20 audit).
-    @State private var estimateTask: Task<Void, Never>?
-
-    @AppStorage(AIProviderSettings.enabledKey, store: SharedStore.defaults) private var aiEnabled = false
-    @AppStorage(AIProviderSettings.hintDismissedKey, store: SharedStore.defaults) private var hintDismissed = false
-
     var body: some View {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
-        // AI is off by default — a one-time, dismissable pointer at the
-        // switch keeps the feature discoverable without being an AI
-        // affordance itself (tap the x and it never returns).
-        if !aiEnabled, !hintDismissed, !trimmed.isEmpty {
-            Section {
-                HStack(spacing: 8) {
-                    Image(systemName: "sparkles")
-                        .foregroundStyle(Color.riceToast)
-                    Text("AI estimates are available — turn them on in Settings → AI.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button {
-                        hintDismissed = true
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.tertiary)
-                            // HIG 44 pt tap target via hit area only —
-                            // the negative inset must not move layout.
-                            .contentShape(Rectangle().inset(by: -14))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Dismiss AI hint")
-                }
+        TapToEstimateRow(
+            query: query,
+            title: "Estimate with \(AIProviderSettings.selected.displayName)",
+            estimate: { await FoodIntelligence.describeFood($0) }
+        ) { food in
+            Button {
+                onPick(product(from: food))
+            } label: {
+                resultRow(food)
             }
-        }
-        if FoodIntelligence.isAvailable, !trimmed.isEmpty {
-            Section {
-                switch phase {
-                case .idle:
-                    Button {
-                        estimate(trimmed)
-                    } label: {
-                        // The provider NAME is the AI signal (the user:
-                        // a bare "Estimate" + sparkle didn't read as AI)
-                        // — and for remote providers it's also the
-                        // disclosure of where the typed text will go.
-                        // No quoted-query subtitle: the query is already
-                        // visible in the search field (the user, 2026-07-20).
-                        Label {
-                            Text("Estimate with \(AIProviderSettings.selected.displayName)")
-                        } icon: {
-                            Image(systemName: "sparkles")
-                                .foregroundStyle(Color.riceToast)
-                        }
-                    }
-                case .estimating:
-                    HStack(spacing: 8) {
-                        ProgressView()
-                        Text("Estimating…")
-                            .foregroundStyle(.secondary)
-                    }
-                case .result(let food):
-                    Button {
-                        onPick(product(from: food))
-                    } label: {
-                        resultRow(food)
-                    }
-                    .buttonStyle(.plain)
-                case .failed:
-                    Button {
-                        estimate(trimmed)
-                    } label: {
-                        Label("Couldn't estimate — tap to try again", systemImage: "arrow.clockwise")
-                            .foregroundStyle(.orange)
-                    }
-                }
-            }
-            .onChange(of: query) { _, updated in
-                if updated.trimmingCharacters(in: .whitespaces) != phaseQuery {
-                    estimateTask?.cancel()
-                    estimateTask = nil
-                    phase = .idle
-                }
-            }
-            // Tapping the estimate row while the search keyboard is up
-            // dismisses the keyboard, and the List re-layout tears this
-            // section down and rebuilds it milliseconds later — an
-            // onDisappear/onAppear pair with @State intact. The
-            // disappear cancel killed the just-started inference and
-            // the row spun forever with nothing left to flip the phase
-            // (every provider alike; field report 2026-07-22). The
-            // cancel stays — a dismissed sheet or cleared search must
-            // stop spending the user's tokens — so the appear side
-            // RESUMES instead: a live estimating phase with no live
-            // task can only mean a blip killed it.
-            .onAppear {
-                if case .estimating = phase, estimateTask == nil {
-                    estimate(phaseQuery)
-                }
-            }
-            .onDisappear {
-                estimateTask?.cancel()
-                estimateTask = nil
-            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -169,21 +62,58 @@ struct AIEstimateSection: View {
             nutrients: food.nutrients,
             aiGenerated: true)
     }
+}
 
-    private func estimate(_ trimmed: String) {
-        phaseQuery = trimmed
-        phase = .estimating
-        estimateTask?.cancel()
-        estimateTask = Task {
-            let food = await FoodIntelligence.describeFood(trimmed)
-            // A cancelled or superseded completion must not repaint the
-            // row — the query it answered is no longer on screen.
-            guard !Task.isCancelled, trimmed == phaseQuery else { return }
-            if let food {
-                phase = .result(food)
-            } else {
-                phase = .failed
+/// The meal builder's tap-to-estimate row: describe a whole meal
+/// ("chicken burrito bowl with rice, beans, and guac") and get its PARTS.
+/// Same field, same grammar, same one-inference-per-tap rule as the food
+/// row — the difference is what a pick delivers: a `DescribedMeal` whose
+/// components the form reviews, matches against the library, and mints
+/// only at Save.
+struct MealEstimateSection: View {
+    let query: String
+    /// Raised while inference runs, so the form can quiet its ✨ name
+    /// button — two concurrent calls serialize on-device and double-bill
+    /// a BYO-AI provider.
+    var isEstimating: Binding<Bool>?
+    let onPick: (FoodIntelligence.DescribedMeal) -> Void
+
+    var body: some View {
+        TapToEstimateRow(
+            query: query,
+            title: "Estimate this meal with \(AIProviderSettings.selected.displayName)",
+            isEstimating: isEstimating,
+            estimate: { await FoodIntelligence.describeMeal($0) }
+        ) { meal in
+            Button {
+                onPick(meal)
+            } label: {
+                resultRow(meal)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    /// The meal, its provenance, and what accepting it costs — the part
+    /// count answers "how much am I about to review?".
+    private func resultRow(_ meal: FoodIntelligence.DescribedMeal) -> some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(meal.name)
+                    .foregroundStyle(.primary)
+                Text(AIProviderSettings.selected.estimateCaption)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(meal.kcal, format: .number.precision(.fractionLength(0))) kcal")
+                    .monospacedDigit()
+                Text(meal.components.count == 1 ? "1 item" : "\(meal.components.count) items")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
+        .contentShape(.rect)
     }
 }

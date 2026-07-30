@@ -137,8 +137,12 @@ public final class Meal {
     /// Bumped on every log — drives the recency sort under favorites.
     public var lastUsedAt: Date?
     public var recencyDate: Date { lastUsedAt ?? createdAt }
-    /// Provenance: the meal's name came from an AI suggestion — drives
-    /// the ✨ mark. Defaulted so pre-existing stores migrate lightweight.
+    /// Provenance: AI touched this meal — its NAME came from a suggestion
+    /// (or a described meal's estimate), or its NUMBERS did, because a
+    /// member food is itself an AI estimate. Drives the ✨ mark, and
+    /// sticks the way a food's does: editing an estimate's values doesn't
+    /// change where they came from. Defaulted so pre-existing stores
+    /// migrate lightweight.
     public var aiGenerated: Bool = false
 
     public init(name: String, items: [MealItem], isFavorite: Bool = false, category: String? = nil, aiGenerated: Bool = false) {

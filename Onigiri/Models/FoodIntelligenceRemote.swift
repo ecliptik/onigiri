@@ -110,6 +110,57 @@ extension FoodIntelligence {
                 sugarG: estimate.sugarG))
     }
 
+    // MARK: Describe-meal
+
+    private struct RemoteMealEstimate: Decodable {
+        struct Component: Decodable {
+            let name: String
+            // Optional throughout except kcal: a model that omits a field
+            // degrades to a blank form field, never a failed estimate.
+            let portion: String?
+            let kcal: Double
+            let sodiumMg: Double?
+            let fatG: Double?
+            let carbsG: Double?
+            let proteinG: Double?
+            let fiberG: Double?
+            let sugarG: Double?
+        }
+        let name: String
+        let components: [Component]
+    }
+
+    static func describeMealRemote(_ description: String) async -> DescribedMeal? {
+        let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.count < 500 else { return nil }
+        let user = Prompts.describeMealUser(trimmed) + """
+             Respond with ONLY a JSON object, no prose: {"name": string \
+            (the meal, at most five words, title style), "components": \
+            array of at most six {"name": string, "portion": string (this \
+            component's portion, e.g. "1 cup"), "kcal": number, \
+            "sodiumMg": number, "fatG": number, "carbsG": number, \
+            "proteinG": number, "fiberG": number, "sugarG": number — \
+            grams for that portion}}.
+            """
+        guard let estimate = decode(
+            RemoteMealEstimate.self,
+            from: await completeRemote(system: Prompts.describeMealInstructions, user: user)
+        ) else { return nil }
+        let name = estimate.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Same shared gate as on-device (name/kcal sanity, sodium clamp,
+        // repeat collapse) — and the same six-component ceiling.
+        let components = plausibleMealComponents(estimate.components.prefix(6).map {
+            DescribedMeal.Component(
+                name: $0.name, portion: $0.portion ?? "",
+                kcal: $0.kcal, sodiumMg: $0.sodiumMg ?? 0,
+                nutrients: macroNutrients(
+                    fatG: $0.fatG, carbsG: $0.carbsG, proteinG: $0.proteinG,
+                    fiberG: $0.fiberG, sugarG: $0.sugarG))
+        })
+        guard !name.isEmpty, !components.isEmpty else { return nil }
+        return DescribedMeal(name: name, components: components)
+    }
+
     // MARK: Meal names
 
     private struct RemoteMealName: Decodable { let name: String }

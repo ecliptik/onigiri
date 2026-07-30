@@ -37,6 +37,15 @@ struct MealFormView: View {
     /// Stored so dismissing the sheet cancels an in-flight suggestion
     /// (BYO-AI providers bill the request either way otherwise).
     @State private var suggestTask: Task<Void, Never>?
+    /// Components from a described meal, awaiting review. NOTHING is
+    /// written to the library until Save — Cancel leaves it untouched —
+    /// so a matched component holds its library food by ID and a new one
+    /// holds the estimate's values until then.
+    @State private var pending: [PendingComponent] = []
+    /// Raised by the estimate row while inference runs, so the ✨ name
+    /// button goes quiet: two concurrent calls serialize on-device and
+    /// double-bill a BYO-AI provider.
+    @State private var isEstimatingMeal = false
     /// The AI's accepted name suggestion — the meal is marked ✨ only
     /// when the SAVED name is the suggestion, untouched.
     @State private var suggestedName: String?
@@ -45,18 +54,36 @@ struct MealFormView: View {
     @State private var originalName = ""
     @FocusState private var quantityFocused: Bool
 
+    /// One reviewed component of a described meal. A `matchID` means the
+    /// library already has this food and Save links to it (its values win
+    /// — the food form's adopt() precedent); nil means Save mints it.
+    private struct PendingComponent: Identifiable, Equatable {
+        let id = UUID()
+        let name: String
+        let portion: String
+        let kcal: Double
+        let sodiumMg: Double
+        let nutrients: NutrientValues
+        var matchID: PersistentIdentifier?
+        var quantity: Double = 1
+    }
+
     private struct FieldsSnapshot: Equatable {
         var name: String
         var quantities: [PersistentIdentifier: Double]
         var category: String?
         var isFavorite: Bool
+        /// A described meal is real work in progress — without this, a
+        /// stray swipe discarded it without asking.
+        var pending: [PendingComponent]
     }
 
     private var currentSnapshot: FieldsSnapshot {
         FieldsSnapshot(
             // Zero quantities are "not in the meal" — same as absent.
             name: name, quantities: quantities.filter { $0.value > 0 },
-            category: category, isFavorite: isFavorite
+            category: category, isFavorite: isFavorite,
+            pending: pending.filter { $0.quantity > 0 }
         )
     }
 
@@ -69,6 +96,13 @@ struct MealFormView: View {
     private var visibleFoods: [Food] {
         let trimmed = foodFilter.trimmingCharacters(in: .whitespaces)
         var pool = foods
+        // A food a pending component already claims is hidden here: its
+        // quantity lives in exactly one place (the review row), so it
+        // can't be added twice through two different doors.
+        let claimed = Set(pending.compactMap(\.matchID))
+        if !claimed.isEmpty {
+            pool = pool.filter { !claimed.contains($0.persistentModelID) }
+        }
         if !trimmed.isEmpty {
             pool = pool.filter {
                 $0.name.localizedCaseInsensitiveContains(trimmed)
@@ -94,6 +128,7 @@ struct MealFormView: View {
 
     private var totalKcal: Double {
         foods.reduce(0) { $0 + $1.kcal * (quantities[$1.persistentModelID] ?? 0) }
+            + pending.reduce(0) { $0 + kcal(of: $1) * $1.quantity }
     }
     private var totalMetricAmount: Double {
         foods.reduce(0) { sum, food in
@@ -101,9 +136,39 @@ struct MealFormView: View {
             guard quantity > 0 else { return sum }
             let amount = libraryMetric.itemAmount(sodiumMg: food.sodiumMg, nutrients: food.nutrients) ?? 0
             return sum + amount * quantity
+        } + pending.reduce(0) { sum, component in
+            guard component.quantity > 0 else { return sum }
+            let amount = libraryMetric.itemAmount(
+                sodiumMg: sodiumMg(of: component), nutrients: nutrients(of: component)) ?? 0
+            return sum + amount * component.quantity
         }
     }
-    private var hasItems: Bool { quantities.values.contains { $0 > 0 } }
+    /// Anything in the meal at all — picked from the library OR waiting in
+    /// the review section. Gates Save, the Total's emphasis, and the ✨
+    /// name button; a described meal has nothing in `quantities`, so
+    /// reading only that hid the ✨ exactly when it was most useful.
+    private var hasItems: Bool {
+        quantities.values.contains { $0 > 0 } || pending.contains { $0.quantity > 0 }
+    }
+
+    /// A matched component reads through its LIBRARY food (its values win
+    /// — the food form's adopt() precedent, so a saved food's corrected
+    /// numbers aren't overwritten by an estimate); a new one reads the
+    /// estimate. Same three accessors everywhere, so the Total, the row,
+    /// and the save can't disagree.
+    private func matchedFood(_ component: PendingComponent) -> Food? {
+        guard let id = component.matchID else { return nil }
+        return foods.first { $0.persistentModelID == id }
+    }
+    private func kcal(of component: PendingComponent) -> Double {
+        matchedFood(component)?.kcal ?? component.kcal
+    }
+    private func sodiumMg(of component: PendingComponent) -> Double {
+        matchedFood(component)?.sodiumMg ?? component.sodiumMg
+    }
+    private func nutrients(of component: PendingComponent) -> NutrientValues {
+        matchedFood(component)?.nutrients ?? component.nutrients
+    }
 
     var body: some View {
         // Bound once per evaluation, like FoodsView: each access to the
@@ -138,7 +203,10 @@ struct MealFormView: View {
                             .contentShape(Rectangle().inset(by: -14))
                         }
                         .buttonStyle(.borderless)
-                        .disabled(isSuggestingName)
+                        // Quiet while a meal estimate runs: it names the
+                        // meal itself, and two concurrent inferences
+                        // serialize on-device / double-bill BYO-AI.
+                        .disabled(isSuggestingName || isEstimatingMeal)
                         .accessibilityLabel("Suggest meal name")
                     }
                 }
@@ -156,6 +224,23 @@ struct MealFormView: View {
                     Text("\(totalKcal, format: .number.precision(.fractionLength(0))) kcal • \(libraryMetric.captionText(totalMetricAmount, sodium: SharedStore.sodiumUnit))")
                         .monospacedDigit()
                         .foregroundStyle(hasItems ? .primary : .secondary)
+                }
+
+                // The search field describes a MEAL as readily as it
+                // filters foods (one field, the app-wide grammar): the
+                // estimate row leads the food list whenever something is
+                // typed, and a pick lands in the review section below.
+                if !foodFilter.trimmingCharacters(in: .whitespaces).isEmpty {
+                    MealEstimateSection(
+                        query: foodFilter,
+                        isEstimating: $isEstimatingMeal
+                    ) { meal in
+                        apply(meal)
+                    }
+                }
+
+                if !pending.isEmpty {
+                    pendingSection
                 }
 
                 Section {
@@ -220,8 +305,11 @@ struct MealFormView: View {
             .navigationTitle(meal == nil ? "New Meal" : "Edit Meal")
             .navigationBarTitleDisplayMode(.inline)
             // System search, matching Foods and the Log sheet (bottom
-            // placement on iOS 26).
-            .searchable(text: $foodFilter, prompt: "Search foods")
+            // placement on iOS 26). The prompt names both jobs: the same
+            // field filters the library and describes a meal — the
+            // one-field decision from PLAN-unified-search, not a second
+            // door (2026-07-29).
+            .searchable(text: $foodFilter, prompt: "Search foods or describe a meal")
             .onDisappear { suggestTask?.cancel() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -295,6 +383,96 @@ struct MealFormView: View {
         }
     }
 
+    /// The described meal's parts, awaiting review. Every component shows
+    /// with a quantity stepper, its estimated portion, and whether Save
+    /// will link an existing food (✓) or mint a new one (✨) — the numbers
+    /// are estimates and the section says so, once, in its footer.
+    private var pendingSection: some View {
+        Section {
+            ForEach($pending) { $component in
+                Stepper(value: $component.quantity, in: 0...20, step: 0.25) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 4) {
+                                Text(component.name)
+                                if component.matchID == nil {
+                                    Text("✨")
+                                        .font(.caption2)
+                                        .accessibilityLabel("AI estimate")
+                                }
+                            }
+                            Text(pendingCaption(component))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        TextField("—", value: $component.quantity,
+                                  format: .number.precision(.fractionLength(0...2)))
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 56)
+                            .monospacedDigit()
+                            .focused($quantityFocused)
+                            .accessibilityLabel("Servings of \(component.name)")
+                    }
+                    .padding(.trailing, 8)
+                }
+            }
+            .onDelete { offsets in
+                pending.remove(atOffsets: offsets)
+            }
+        } header: {
+            Text("From your description")
+        } footer: {
+            let minted = pending.count { $0.matchID == nil && $0.quantity > 0 }
+            Text(minted == 0
+                 ? AIProviderSettings.selected.estimateCaption
+                 : "\(AIProviderSettings.selected.estimateCaption) Saving adds \(minted == 1 ? "1 food" : "\(minted) foods") to your library.")
+        }
+    }
+
+    /// A matched row says so (and shows the LIBRARY food's calories, which
+    /// is what will be logged); a new one shows the estimated portion.
+    private func pendingCaption(_ component: PendingComponent) -> String {
+        let kcalText = "\(kcal(of: component).formatted(.number.precision(.fractionLength(0)))) kcal"
+        if matchedFood(component) != nil {
+            return "\(kcalText) • in your library"
+        }
+        return component.portion.isEmpty ? kcalText : "\(kcalText) • \(component.portion)"
+    }
+
+    /// A described meal lands here: its parts become review rows, matched
+    /// against the library first so an existing food is reused rather than
+    /// twinned. Nothing is written yet — Save does that.
+    private func apply(_ meal: FoodIntelligence.DescribedMeal) {
+        // The estimate names the meal too; a name already typed WINS (the
+        // suggestName rule — the user's words outrank the model's).
+        if name.trimmingCharacters(in: .whitespaces).isEmpty {
+            suggestTask?.cancel()
+            isSuggestingName = false
+            name = meal.name
+            suggestedName = meal.name
+        }
+        let names = foods.map(\.name)
+        pending = meal.components.map { component in
+            var row = PendingComponent(
+                name: component.name, portion: component.portion,
+                kcal: component.kcal, sodiumMg: component.sodiumMg,
+                nutrients: component.nutrients)
+            if let index = ComponentMatch.index(of: component.name, in: names) {
+                let food = foods[index]
+                row.matchID = food.persistentModelID
+                // The review row now owns this food's quantity — leaving
+                // a picked quantity behind would count it twice.
+                quantities[food.persistentModelID] = 0
+            }
+            return row
+        }
+        // The estimate answered the query; leaving it in the field would
+        // keep the row (and the filtered food list) up over the review.
+        foodFilter = ""
+    }
+
     /// Fills the name field with the model's suggestion — unless the
     /// user typed their own while inference ran (theirs wins), and
     /// never silently: a declined model gets a toast, not a dead
@@ -303,6 +481,9 @@ struct MealFormView: View {
         let members = foods
             .filter { (quantities[$0.persistentModelID] ?? 0) > 0 }
             .map(\.name)
+            // A described meal's parts are named too — without them the
+            // suggestion would be built from an empty list.
+            + pending.filter { $0.quantity > 0 }.map(\.name)
         guard !members.isEmpty, !isSuggestingName else { return }
         isSuggestingName = true
         let nameWhenAsked = name
@@ -318,6 +499,45 @@ struct MealFormView: View {
             name = suggestion
             suggestedName = suggestion
         }
+    }
+
+    /// Turns the reviewed components into meal items — the ONLY place a
+    /// described meal writes to the library, and only from Save.
+    ///
+    /// Two SwiftData disciplines, both load-bearing:
+    /// - the food is inserted BEFORE it's linked (`MealItem(food:)` traps
+    ///   on a never-inserted food);
+    /// - matching is re-run against the CURRENT library, because it can
+    ///   change while this sheet is open (a food added on another screen,
+    ///   or one deleted out from under a match).
+    private func mealItemsFromPending() -> [MealItem] {
+        let live = foods
+        let names = live.map(\.name)
+        var items: [MealItem] = []
+        for component in pending where component.quantity > 0 {
+            let match = component.matchID.flatMap { id in
+                live.first { $0.persistentModelID == id }
+            } ?? ComponentMatch.index(of: component.name, in: names).map { live[$0] }
+            if let match {
+                items.append(MealItem(food: match, quantity: component.quantity))
+                continue
+            }
+            let food = Food(
+                name: component.name,
+                kcal: component.kcal,
+                sodiumMg: component.sodiumMg,
+                servingDescription: component.portion,
+                barcode: nil,
+                nutrients: component.nutrients,
+                isFavorite: false,
+                category: nil,
+                // Provenance: these numbers are estimates, and the ✨ on
+                // the food's library row is how that stays visible.
+                aiGenerated: true)
+            context.insert(food)
+            items.append(MealItem(food: food, quantity: component.quantity))
+        }
+        return items
     }
 
     private func binding(for food: Food) -> Binding<Double> {
@@ -363,22 +583,34 @@ struct MealFormView: View {
         // clears the mark.
         let aiNamed = if let suggestedName { trimmed == suggestedName }
                       else { wasAINamed && trimmed == originalName }
-        let items = foods.compactMap { food -> MealItem? in
+        var items = foods.compactMap { food -> MealItem? in
             let quantity = quantities[food.persistentModelID] ?? 0
             return quantity > 0 ? MealItem(food: food, quantity: quantity) : nil
         }
+        items += mealItemsFromPending()
+        // ...OR any member food is itself an AI estimate (the user,
+        // 2026-07-29). The mark answers for the meal's NUMBERS as well as
+        // its name now, so hand-rewriting the name of a described meal no
+        // longer clears it while every value in it is still an estimate —
+        // provenance sticks, exactly as it does on a food. Two accepted
+        // consequences: a hand-BUILT meal made of estimated foods carries
+        // the mark too (its numbers are estimates regardless of who
+        // assembled it), and rename-clears-the-mark now applies only to
+        // meals whose foods were all entered by hand — the case that rule
+        // was written for.
+        let aiComposed = items.contains { $0.food?.aiGenerated == true }
         if let meal {
             meal.name = trimmed
             meal.category = category
             meal.isFavorite = isFavorite
-            meal.aiGenerated = aiNamed
+            meal.aiGenerated = aiNamed || aiComposed
             // Unlink before deleting: deleting items the meal still
             // references is the dangling-reference crash class.
             let oldItems = meal.items
             meal.items = items
             oldItems.forEach(context.delete)
         } else {
-            context.insert(Meal(name: trimmed, items: items, isFavorite: isFavorite, category: category, aiGenerated: aiNamed))
+            context.insert(Meal(name: trimmed, items: items, isFavorite: isFavorite, category: category, aiGenerated: aiNamed || aiComposed))
         }
         // Explicit save (GoalUpsert's discipline) — see FoodFormView.
         try? context.save()

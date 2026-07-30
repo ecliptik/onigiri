@@ -479,13 +479,29 @@ public final class HealthKitService {
         let (start, end) = Self.dayRange(for: date, now: now)
         async let rateRead = restingHourlyRate(now: now)
         async let coverageRead = restingCoveredHours(start: start, end: end)
+        // BURN COMES FROM THE DAY-BUCKETED COLLECTION, not daySummary's
+        // sum. They disagree, and it isn't rounding: `sum` matches whole
+        // samples that OVERLAP the day, so a basal row running 23:30→00:30
+        // lands in full on both adjacent days, while the collection query
+        // apportions it across the boundary. That difference was the
+        // Today-vs-calendar burn gap (2,809 vs 2,759 for one day), and
+        // filling resting on both paths didn't close it — it preserved it.
+        // The apportioned figure is the correct one, and it's what every
+        // badge, streak, and calendar verdict already reads.
+        async let activeRead = dailyTotals(.activeEnergyBurned, start: start, end: end)
+        async let basalRead = dailyTotals(.basalEnergyBurned, start: start, end: end)
         let rate = await rateRead
         let covered = ((try? await coverageRead) ?? [:]).values.reduce(0, +)
+        let dayStart = calendar.startOfDay(for: date)
+        // A missing key means a genuine zero; only a FAILED read falls
+        // back to the sum, so the two paths can't quietly diverge again.
+        let active = (try? await activeRead).map { $0[dayStart] ?? 0 } ?? summary.activeBurnKcal
+        let recordedResting = (try? await basalRead).map { $0[dayStart] ?? 0 } ?? summary.restingBurnKcal
         return DailyEnergySummary(
             intakeKcal: summary.intakeKcal,
-            activeBurnKcal: summary.activeBurnKcal,
+            activeBurnKcal: active,
             restingBurnKcal: RestingBurnFill.filled(
-                recordedRestingKcal: summary.restingBurnKcal,
+                recordedRestingKcal: recordedResting,
                 coveredHours: covered,
                 hourlyRate: rate),
             sodiumMg: summary.sodiumMg,

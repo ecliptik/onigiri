@@ -281,6 +281,19 @@ struct TodayView: View {
         .onChange(of: toastCenter.mutationVersion) { _, _ in
             Task { await model.refresh() }
         }
+        // The same, for a log this app never made: the watch, a widget
+        // button, Siri, another Health app. mutationVersion covers only
+        // in-app writes, and healthWriteVersion was consumed ONLY by the
+        // foreground gate below — so a watch log landing while Today was
+        // already on screen reloaded the widgets and stamped the watch
+        // but left the visible list stale until the app was force-quit
+        // (field report 2026-07-30). Arriving-while-watching is the
+        // normal case for a watch log: HealthKit delivers the sample a
+        // moment AFTER the phone comes forward, so the foreground read
+        // has already run by the time it lands.
+        .onChange(of: toastCenter.healthWriteVersion) { _, _ in
+            Task { await model.refresh() }
+        }
         // A slot's nutrient changed in Settings: its day total needs a
         // fresh Health query.
         .onChange(of: trackedMetric1) { _, _ in

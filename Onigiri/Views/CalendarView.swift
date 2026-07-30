@@ -119,6 +119,17 @@ struct CalendarView: View {
                 Task { await refresh() }
             }
         }
+        // A log arriving from outside the app (watch, widget button, Siri)
+        // while it's ALREADY running — the foreground gate above never
+        // fires for that, so these day summaries went stale exactly like
+        // Today's log did (2026-07-30). Routed through the same staleness
+        // check so it also records the version it judged, and the next
+        // foreground doesn't repeat the work.
+        .onChange(of: ToastCenter.shared.healthWriteVersion) { _, version in
+            if model.shouldForegroundRefresh(healthWriteVersion: version) {
+                Task { await refresh() }
+            }
+        }
     }
 
     private func refresh(forceWeights: Bool = false) async {

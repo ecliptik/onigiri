@@ -57,9 +57,11 @@ struct GoalTrendStatsTests {
             targetWeightLb: 190, isMaintenance: false,
             calendar: Self.cal, now: Self.now
         )
-        let projected = try #require(stats.projectedDate)
-        let days = Self.cal.dateComponents([.day], from: Self.now, to: projected).day!
-        #expect((45...55).contains(days))
+        let window = try #require(stats.projectedWindow)
+        let from = Self.cal.dateComponents([.day], from: Self.now, to: window.lowerBound).day!
+        let to = Self.cal.dateComponents([.day], from: Self.now, to: window.upperBound).day!
+        #expect(to - from == GoalTrendStats.projectionWindowDays)
+        #expect(from <= 55 && to >= 45)
     }
 
     @Test func flatTrendProjectsNothing() {
@@ -69,7 +71,7 @@ struct GoalTrendStatsTests {
             targetWeightLb: 190, isMaintenance: false,
             calendar: Self.cal, now: Self.now
         )
-        #expect(stats.projectedDate == nil)
+        #expect(stats.projectedWindow == nil)
     }
 
     @Test func projectionsPastThreeYearsAreNoise() {
@@ -80,7 +82,7 @@ struct GoalTrendStatsTests {
             targetWeightLb: 190, isMaintenance: false,
             calendar: Self.cal, now: Self.now
         )
-        #expect(stats.projectedDate == nil)
+        #expect(stats.projectedWindow == nil)
     }
 
     @Test func freshDietOutweighsAFlatPriorWeek() throws {
@@ -109,9 +111,10 @@ struct GoalTrendStatsTests {
             targetWeightLb: 210, isMaintenance: false,
             calendar: Self.cal, now: Self.now
         )
-        let projected = try #require(stats.projectedDate)
-        let days = Self.cal.dateComponents([.day], from: Self.now, to: projected).day!
-        #expect((37...44).contains(days))
+        let window = try #require(stats.projectedWindow)
+        let from = Self.cal.dateComponents([.day], from: Self.now, to: window.lowerBound).day!
+        let to = Self.cal.dateComponents([.day], from: Self.now, to: window.upperBound).day!
+        #expect(from <= 44 && to >= 37)
     }
 
     @Test func sparseWeeklyWeighInsStillProject() throws {
@@ -124,9 +127,10 @@ struct GoalTrendStatsTests {
             targetWeightLb: 210, isMaintenance: false,
             calendar: Self.cal, now: Self.now
         )
-        let projected = try #require(stats.projectedDate)
-        let days = Self.cal.dateComponents([.day], from: Self.now, to: projected).day!
-        #expect((54...58).contains(days))
+        let window = try #require(stats.projectedWindow)
+        let from = Self.cal.dateComponents([.day], from: Self.now, to: window.lowerBound).day!
+        let to = Self.cal.dateComponents([.day], from: Self.now, to: window.upperBound).day!
+        #expect(from <= 58 && to >= 54)
     }
 
     @Test func aWeekendOfWeighInsProjectsNothing() {
@@ -142,7 +146,7 @@ struct GoalTrendStatsTests {
             targetWeightLb: 210, isMaintenance: false,
             calendar: Self.cal, now: Self.now
         )
-        #expect(stats.projectedDate == nil)
+        #expect(stats.projectedWindow == nil)
     }
 
     @Test func sixDailyWeighInsAreTooYoungToProject() {
@@ -156,7 +160,7 @@ struct GoalTrendStatsTests {
             targetWeightLb: 210, isMaintenance: false,
             calendar: Self.cal, now: Self.now
         )
-        #expect(stats.projectedDate == nil)
+        #expect(stats.projectedWindow == nil)
     }
 
     @Test func domainPadsWeighInsAndTargetWhenLosing() {
@@ -198,7 +202,7 @@ struct GoalTrendStatsTests {
             targetWeightLb: 190, isMaintenance: true,
             calendar: Self.cal, now: Self.now
         )
-        #expect(stats.projectedDate == nil)
+        #expect(stats.projectedWindow == nil)
         let drift = try #require(stats.driftLbPerWeek)
         #expect(abs(drift - (-1.4)) < 0.05)
     }
@@ -245,5 +249,52 @@ struct GoalTrendStatsTests {
         )
         #expect(stats.chartYDomain == 0...1)
         #expect(stats == GoalTrendStats.empty)
+    }
+
+    // MARK: The window's whole job
+
+    /// Estimates that wander within a bucket must not move the screen.
+    /// This is the point of the change — "that date can seem to change
+    /// widely depending on the day" (the user, 2026-07-31).
+    @Test func nearbyEstimatesShareOneWindow() throws {
+        let a = try #require(GoalTrendStats.projectionWindow(
+            daysOut: 46, from: Self.now, calendar: Self.cal))
+        let b = try #require(GoalTrendStats.projectionWindow(
+            daysOut: 49.4, from: Self.now, calendar: Self.cal))
+        #expect(a == b)
+    }
+
+    /// …but a real move still moves it.
+    @Test func aBucketApartReadsDifferently() throws {
+        let a = try #require(GoalTrendStats.projectionWindow(
+            daysOut: 46, from: Self.now, calendar: Self.cal))
+        let b = try #require(GoalTrendStats.projectionWindow(
+            daysOut: 53, from: Self.now, calendar: Self.cal))
+        #expect(a != b)
+    }
+
+    @Test func theWindowIsFiveDaysWideAndContainsTheEstimate() throws {
+        for estimate in [3.0, 17.2, 46.0, 128.9] {
+            let window = try #require(GoalTrendStats.projectionWindow(
+                daysOut: estimate, from: Self.now, calendar: Self.cal))
+            // Width measured between the bounds themselves: both are
+            // start-of-day, so this survives a DST change inside the
+            // window (measuring from a midday `now` truncated to 4).
+            let width = Self.cal.dateComponents(
+                [.day], from: window.lowerBound, to: window.upperBound).day!
+            #expect(width == GoalTrendStats.projectionWindowDays)
+            let midnight = Self.cal.startOfDay(for: Self.now)
+            let from = Self.cal.dateComponents([.day], from: midnight, to: window.lowerBound).day!
+            let to = Self.cal.dateComponents([.day], from: midnight, to: window.upperBound).day!
+            #expect(Double(from) <= estimate.rounded())
+            #expect(Double(to) >= estimate.rounded())
+        }
+    }
+
+    /// A target already reached can't project into the past.
+    @Test func aNegativeEstimateClampsToNow() throws {
+        let window = try #require(GoalTrendStats.projectionWindow(
+            daysOut: -12, from: Self.now, calendar: Self.cal))
+        #expect(window.lowerBound >= Self.cal.startOfDay(for: Self.now))
     }
 }

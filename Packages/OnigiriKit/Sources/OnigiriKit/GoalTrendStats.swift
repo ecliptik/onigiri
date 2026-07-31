@@ -11,8 +11,8 @@ public struct GoalTrendStats: Equatable, Sendable {
     public let predicted30Lb: Double?
     /// Smoothed scale movement over the same window.
     public let actual30Lb: Double?
-    /// Date the target is reached at the recent trend — recency-weighted
-    /// least-squares fit over the last three weeks of RAW weigh-ins
+    /// When the target is reached at the recent trend — a recency-weighted
+    /// least-squares fit over the last three weeks of weigh-ins
     /// (`WeightTrend.recencyWeightedFit`), so a diet started last week
     /// outweighs the flat weeks before it and twice-a-day weighers get
     /// the same window as once-a-day ones. nil in maintenance, without
@@ -20,7 +20,17 @@ public struct GoalTrendStats: Equatable, Sendable {
     /// downward slope, weigh-ins on 3+ days spanning a full week, or
     /// when the answer is over three years out (a projection that far
     /// is noise, not motivation).
-    public let projectedDate: Date?
+    ///
+    /// A WINDOW, not a day. The fit divides remaining pounds by a small
+    /// noisy slope, so a single heavy morning moved the answer by a week
+    /// — "that date can seem to change widely depending on the day" (the
+    /// user, 2026-07-31). Two things settle it: the fit runs on the
+    /// SMOOTHED series rather than raw weigh-ins, and the result is
+    /// quantized to a 5-day grid, so ordinary scale noise doesn't move
+    /// the dates on screen at all. Five days is deliberately narrow —
+    /// wide enough to stop the flapping, tight enough to still answer
+    /// the question.
+    public let projectedWindow: ClosedRange<Date>?
     /// Maintenance's counterpart to the projection: the same fit's
     /// slope as lb/week, signed (negative = losing). nil outside
     /// maintenance or under the same weigh-in-span gate.
@@ -34,18 +44,18 @@ public struct GoalTrendStats: Equatable, Sendable {
     public static let steadyDriftThresholdLbPerWeek = 0.15
 
     public static let empty = GoalTrendStats(
-        predicted30Lb: nil, actual30Lb: nil, projectedDate: nil,
+        predicted30Lb: nil, actual30Lb: nil, projectedWindow: nil,
         driftLbPerWeek: nil, chartYDomain: 0...1
     )
 
     public init(
         predicted30Lb: Double?, actual30Lb: Double?,
-        projectedDate: Date?, driftLbPerWeek: Double?,
+        projectedWindow: ClosedRange<Date>?, driftLbPerWeek: Double?,
         chartYDomain: ClosedRange<Double>
     ) {
         self.predicted30Lb = predicted30Lb
         self.actual30Lb = actual30Lb
-        self.projectedDate = projectedDate
+        self.projectedWindow = projectedWindow
         self.driftLbPerWeek = driftLbPerWeek
         self.chartYDomain = chartYDomain
     }
@@ -68,15 +78,23 @@ public struct GoalTrendStats: Equatable, Sendable {
             : WeightTrend.Change.predictedLb(totalDeficitKcal: deficits.reduce(0, +))
         let actual = WeightTrend.Change.actualLb(history: weightHistory, from: thirtyDaysAgo, to: now)
 
-        // One fit powers both modes: lose projects a finish date from
+        // One fit powers both modes: lose projects a finish window from
         // it, maintenance reads it as drift.
+        //
+        // Fitting the SMOOTHED series was tried and REJECTED (2026-07-31):
+        // it steadies the answer but erases real trend changes with it —
+        // the fresh-diet fixture (a flat week, then a week of losing)
+        // went from a 37–44 day answer to 59–64, because a trailing
+        // average drags the plateau into the slope. Damping noise is
+        // worth doing; damping the signal is not. Stability comes from
+        // the window instead.
         let trendStart = calendar.date(byAdding: .day, value: -21, to: now)
         let recent = trendStart.map { start in weightHistory.filter { $0.date >= start } } ?? []
         let trendFit = hasProjectableSpan(recent, calendar: calendar)
             ? WeightTrend.recencyWeightedFit(recent, reference: now)
             : nil
 
-        var projected: Date?
+        var projected: ClosedRange<Date>?
         var drift: Double?
         if isMaintenance {
             drift = trendFit.map { $0.slopeLbPerDay * 7 }
@@ -84,7 +102,7 @@ public struct GoalTrendStats: Equatable, Sendable {
                   fit.currentLb > target, fit.slopeLbPerDay < -0.01 {
             let days = (fit.currentLb - target) / -fit.slopeLbPerDay
             if days < 365 * 3 {
-                projected = calendar.date(byAdding: .day, value: Int(days.rounded(.up)), to: now)
+                projected = projectionWindow(daysOut: days, from: now, calendar: calendar)
             }
         }
 
@@ -100,8 +118,28 @@ public struct GoalTrendStats: Equatable, Sendable {
         }
         return GoalTrendStats(
             predicted30Lb: predicted, actual30Lb: actual,
-            projectedDate: projected, driftLbPerWeek: drift, chartYDomain: domain
+            projectedWindow: projected, driftLbPerWeek: drift, chartYDomain: domain
         )
+    }
+
+    /// How wide the finish window is, and the grid it snaps to.
+    public static let projectionWindowDays = 5
+
+    /// The finish window containing `daysOut`, snapped to a fixed grid.
+    /// Snapping is what makes it hold still: an estimate that wanders
+    /// from 8 days to 9 to 7 stays inside one bucket and the screen
+    /// never changes. Only a real move crosses a boundary.
+    static func projectionWindow(
+        daysOut: Double, from now: Date, calendar: Calendar
+    ) -> ClosedRange<Date>? {
+        let day = max(0, Int(daysOut.rounded()))
+        let bucket = (day / projectionWindowDays) * projectionWindowDays
+        guard let start = calendar.date(
+                byAdding: .day, value: bucket, to: calendar.startOfDay(for: now)),
+              let end = calendar.date(
+                byAdding: .day, value: projectionWindowDays, to: start)
+        else { return nil }
+        return start...end
     }
 
     /// A projection needs a real base under it: weigh-ins on at least

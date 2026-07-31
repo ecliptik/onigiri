@@ -526,9 +526,9 @@ struct GoalView: View {
                     if let drift = model.trend.driftLbPerWeek {
                         driftLabel(drift)
                     }
-                } else if let projectedDate = model.trend.projectedDate {
+                } else if let window = model.trend.projectedWindow {
                     Label {
-                        Text("On this trend, you'll hit your target around \(projectedDate, format: .dateTime.month(.wide).day())")
+                        Text("On this trend, you'll hit your target between \(window.lowerBound, format: .dateTime.month(.abbreviated).day()) and \(window.upperBound, format: .dateTime.month(.abbreviated).day())")
                     } icon: {
                         Image(systemName: "chart.line.downtrend.xyaxis")
                             .foregroundStyle(.green)

@@ -1,78 +1,70 @@
 import Foundation
 
-/// Whether being more active than planned earns more food.
-///
-/// Neither answer is more correct — it's how you want the app to behave,
-/// so it's a setting rather than a decision baked into the math.
-public enum ActivityCredit: String, CaseIterable, Sendable {
-    /// Burn beyond the plan raises the day's budget; burn below it never
-    /// lowers it. An active day earns a treat, and an unworn watch still
-    /// costs nothing. The default.
-    case earned
-    /// The budget is the plan's number, full stop. Nothing measured moves
-    /// it in either direction — the same figure all day, every day.
+/// How the day's calorie budget behaves. ONE choice, because the two it
+/// replaced ("expected burn" and "active days") were never independent in
+/// practice — you either want the app to follow your body, or you want a
+/// number that sits still (the user, 2026-07-30).
+public enum BudgetStyle: String, CaseIterable, Sendable {
+    /// Follows your recent burn, and burning more than planned adds to
+    /// the day's budget. The historical behavior, and the default.
+    case automatic
+    /// The same budget every day. Nothing measured moves it in either
+    /// direction — which is what makes taking the watch off free.
     case fixed
 
     public var label: String {
         switch self {
-        case .earned: "Earn extra"
+        case .automatic: "Automatic"
         case .fixed: "Fixed"
         }
     }
 
+    /// Shown under the picker for whichever one is selected, so the
+    /// choice explains itself instead of needing the wiki.
     public var explanation: String {
         switch self {
-        case .earned: "Burning more than planned adds to the day's budget. Burning less never takes any away."
-        case .fixed: "The day's budget is always your plan's number, whatever you burn."
+        case .automatic:
+            "Your budget follows your recent daily burn, and burning more than planned adds to it — an active day earns extra room."
+        case .fixed:
+            "The same budget every day. Nothing you burn moves it, so taking your watch off never changes what's left to eat."
         }
     }
 
-    public static func resolve(_ raw: String?) -> ActivityCredit {
-        raw.flatMap(ActivityCredit.init(rawValue:)) ?? .earned
-    }
-}
+    /// Whether measured burn is allowed to raise the day's budget.
+    public var creditsActivity: Bool { self == .automatic }
 
-/// Where the plan's expected daily burn comes from.
-public enum ExpectedBurnSource: String, CaseIterable, Sendable {
-    /// Your own recent burn, recomputed as you go. The default.
-    case automatic
-    /// A number you set and the app leaves alone.
-    case custom
-
-    public var label: String {
-        switch self {
-        case .automatic: "Automatic"
-        case .custom: "Custom"
-        }
-    }
-
-    public static func resolve(_ raw: String?) -> ExpectedBurnSource {
-        raw.flatMap(ExpectedBurnSource.init(rawValue:)) ?? .automatic
+    public static func resolve(_ raw: String?) -> BudgetStyle {
+        if let style = raw.flatMap(BudgetStyle.init(rawValue:)) { return style }
+        // Continuity for the short-lived two-picker version: its
+        // "activityCredit" key carried the same distinction under other
+        // names, and silently reverting someone's Fixed to Automatic
+        // would look like the setting didn't stick.
+        return SharedStore.defaults.string(forKey: SharedStore.legacyActivityCreditKey) == "fixed"
+            ? .fixed : .automatic
     }
 }
 
 public extension SharedStore {
-    static let activityCreditKey = "activityCredit"
-    static let expectedBurnSourceKey = "expectedBurnSource"
+    static let budgetStyleKey = "budgetStyle"
+    /// Retired 2026-07-30; still read once, by BudgetStyle.resolve.
+    static let legacyActivityCreditKey = "activityCredit"
+    /// Only meaningful under `.fixed`, and only when set.
     static let customExpectedBurnKey = "customExpectedBurnKcal"
 
-    static var activityCredit: ActivityCredit {
-        ActivityCredit.resolve(defaults.string(forKey: activityCreditKey))
+    static var budgetStyle: BudgetStyle {
+        BudgetStyle.resolve(defaults.string(forKey: budgetStyleKey))
     }
 
-    static var expectedBurnSource: ExpectedBurnSource {
-        ExpectedBurnSource.resolve(defaults.string(forKey: expectedBurnSourceKey))
-    }
-
-    /// nil unless a custom burn is both selected AND set to something
-    /// usable — a half-filled setting must never produce a 0 budget.
+    /// The pinned burn, when there is one. A blank field under Fixed is
+    /// not an error — the plan just keeps using your recent average, so a
+    /// half-finished setting can never produce a zero budget.
     static var customExpectedBurnKcal: Double? {
-        guard expectedBurnSource == .custom else { return nil }
+        guard budgetStyle == .fixed else { return nil }
         let value = defaults.double(forKey: customExpectedBurnKey)
         return value > 0 ? value : nil
     }
 
-    /// The average the plan should build on: the custom number when set,
+    /// The average the plan should build on: the pinned number when set,
     /// otherwise whatever the trailing Health read produced.
     static func planAverageBurn(measuredAverageKcal: Double?) -> Double? {
         customExpectedBurnKcal ?? measuredAverageKcal

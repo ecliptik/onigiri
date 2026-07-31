@@ -60,11 +60,12 @@ public enum CalorieBudget {
         averageKcal: Double?,
         todayActualKcal: Double = 0
     ) -> Double {
-        // A custom expected burn replaces the trailing average; activity
-        // credit decides whether today's own burn is allowed to raise it
-        // (Settings, 2026-07-30). Both default to today's behavior.
+        // Budget style decides both halves: a pinned burn replaces the
+        // trailing average, and Fixed stops today's own burn from raising
+        // the budget (Goal tab, 2026-07-30). Defaults to the historical
+        // behavior.
         let planned = SharedStore.planAverageBurn(measuredAverageKcal: averageKcal)
-        let actual = SharedStore.activityCredit == .fixed ? 0 : todayActualKcal
+        let actual = SharedStore.budgetStyle.creditsActivity ? todayActualKcal : 0
         return max(planned ?? 0, actual, 2000)
     }
 

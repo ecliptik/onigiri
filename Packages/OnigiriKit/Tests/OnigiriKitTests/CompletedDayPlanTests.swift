@@ -66,7 +66,7 @@ struct CompletedDayPlanTests {
         let intake = 1_619.0, target = 621.0
         let measuredOnly = 1_562.0 + 397          // what Health recorded
         let effective = DayBudget.effectiveBurn(
-            measuredKcal: measuredOnly, expectedKcal: 2_722, credit: .earned)
+            measuredKcal: measuredOnly, expectedKcal: 2_722, style: .automatic)
 
         #expect(measuredOnly - intake < target)   // judged short on wear time
         let plan = CalorieBudget.completedDayPlan(

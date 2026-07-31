@@ -24,15 +24,15 @@ struct GoalView: View {
     private enum WeightField: Hashable { case target, current, customBurn }
     @FocusState private var focusedField: WeightField?
 
-    /// How the day's budget is shaped — the two answers that used to be
-    /// baked into the math (2026-07-30). Both default to the previous
-    /// behavior, so an untouched install changes nothing.
-    @AppStorage(SharedStore.activityCreditKey, store: SharedStore.defaults)
-    private var activityCredit = ActivityCredit.earned.rawValue
-    @AppStorage(SharedStore.expectedBurnSourceKey, store: SharedStore.defaults)
-    private var expectedBurnSource = ExpectedBurnSource.automatic.rawValue
+    /// How the day's budget behaves — the answer that used to be baked
+    /// into the math (2026-07-30). Defaults to the previous behavior, so
+    /// an untouched install changes nothing.
+    @AppStorage(SharedStore.budgetStyleKey, store: SharedStore.defaults)
+    private var budgetStyle = BudgetStyle.automatic.rawValue
     @AppStorage(SharedStore.customExpectedBurnKey, store: SharedStore.defaults)
     private var customExpectedBurnRaw = 0.0
+
+    private var style: BudgetStyle { BudgetStyle.resolve(budgetStyle) }
 
     /// The stored double as an optional, so an unset custom burn shows a
     /// placeholder instead of a misleading 0.
@@ -227,26 +227,39 @@ struct GoalView: View {
                 // reached, target cleared, custom burn left blank.
                 // Otherwise the knob that fixes it disappears exactly
                 // when it's needed.
-                Section("Budget style") {
-                    // Where the budget's burn comes from. Automatic
-                    // follows your recent days; Custom pins a number
-                    // the app leaves alone.
-                    Picker("Expected burn", selection: $expectedBurnSource) {
-                        ForEach(ExpectedBurnSource.allCases, id: \.rawValue) { source in
-                            Text(source.label).tag(source.rawValue)
+                Section("Calorie budget") {
+                    // ONE choice, segmented so both options are visible at
+                    // once — the two pickers this replaced ("expected
+                    // burn" and "active days") were never really
+                    // independent (the user, 2026-07-30).
+                    Picker("Budget", selection: $budgetStyle) {
+                        ForEach(BudgetStyle.allCases, id: \.rawValue) { style in
+                            Text(style.label).tag(style.rawValue)
                         }
                     }
-                    if ExpectedBurnSource.resolve(expectedBurnSource) == .custom {
+                    .pickerStyle(.segmented)
+                    // What the selected one actually does, in a sentence.
+                    Text(style.explanation)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if style == .fixed {
+                        // Optional under Fixed: pin the number, or leave
+                        // it blank and keep using your own average.
                         LabeledContent("Burn per day") {
-                            TextField("0", value: customExpectedBurn, format: .number)
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .focused($focusedField, equals: .customBurn)
+                            TextField(
+                                model.averageBurnKcal.map {
+                                    $0.formatted(.number.precision(.fractionLength(0)))
+                                } ?? "2000",
+                                value: customExpectedBurn, format: .number
+                            )
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .focused($focusedField, equals: .customBurn)
                         }
                         if customExpectedBurnRaw <= 0 {
-                            Text("Set a number, or the plan falls back to your recent average.")
+                            Text("Leave blank to hold your recent average steady instead.")
                                 .font(.caption)
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(.secondary)
                         }
                     } else {
                         LabeledContent("Average burn") {
@@ -262,17 +275,6 @@ struct GoalView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    // Whether an active day earns more food. Neither
-                    // answer is more correct — it's how you want the
-                    // app to behave (the user, 2026-07-30).
-                    Picker("Active days", selection: $activityCredit) {
-                        ForEach(ActivityCredit.allCases, id: \.rawValue) { credit in
-                            Text(credit.label).tag(credit.rawValue)
-                        }
-                    }
-                    Text(ActivityCredit.resolve(activityCredit).explanation)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
                 // Goals used to be edit-only: hitting the target (or
                 // quitting the diet) left the deficit budget and streak

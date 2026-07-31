@@ -93,9 +93,11 @@ struct PreferenceSnapshotTests {
         #expect(keys.contains(SharedStore.appearanceKey))
         // Budget style (2026-07-30) — set in the Goal tab, but the same
         // rule applies: outside this list they'd escape Cancel and Reset.
-        #expect(keys.contains(SharedStore.activityCreditKey))
-        #expect(keys.contains(SharedStore.expectedBurnSourceKey))
+        #expect(keys.contains(SharedStore.budgetStyleKey))
         #expect(keys.contains(SharedStore.customExpectedBurnKey))
+        // The retired key stays swept: it still feeds BudgetStyle.resolve,
+        // so a reset that left it behind would resurrect an old choice.
+        #expect(keys.contains(SharedStore.legacyActivityCreditKey))
         // Onboarding deliberately stays OUT (reset must not replay it).
         #expect(!keys.contains(SharedStore.hasOnboardedKey))
         #expect(keys.count == 47)

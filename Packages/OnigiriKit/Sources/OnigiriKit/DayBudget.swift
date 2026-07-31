@@ -31,12 +31,12 @@ public enum DayBudget {
     public static func effectiveBurn(
         measuredKcal: Double,
         expectedKcal: Double?,
-        credit: ActivityCredit = SharedStore.activityCredit
+        style: BudgetStyle = SharedStore.budgetStyle
     ) -> Double {
         // Fixed: the plan's number and nothing else — but a day with no
         // snapshot still has to fall back to what was measured, or it
         // would have no burn at all.
-        if credit == .fixed, let expectedKcal { return expectedKcal }
+        if !style.creditsActivity, let expectedKcal { return expectedKcal }
         return max(measuredKcal, expectedKcal ?? 0)
     }
 

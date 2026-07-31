@@ -24,10 +24,10 @@ struct DayBudgetTests {
     @Test func measuredBurnRaisesTheBudgetButNeverLowersIt() {
         // Burned more than planned: the extra is yours to eat.
         #expect(DayBudget.effectiveBurn(
-            measuredKcal: 2_900, expectedKcal: 2_500, credit: .earned) == 2_900)
+            measuredKcal: 2_900, expectedKcal: 2_500, style: .automatic) == 2_900)
         // Watch off at 6pm, only 1,900 recorded — costs nothing.
         #expect(DayBudget.effectiveBurn(
-            measuredKcal: 1_900, expectedKcal: 2_500, credit: .earned) == 2_500)
+            measuredKcal: 1_900, expectedKcal: 2_500, style: .automatic) == 2_500)
     }
 
     /// The reported day: 2,000 budget, 1,700 eaten, watch off — still 300
@@ -36,11 +36,11 @@ struct DayBudgetTests {
         let expected = 2_500.0, target = 500.0, intake = 1_700.0
         let wornAllDay = DayBudget.budget(
             effectiveBurnKcal: DayBudget.effectiveBurn(
-                measuredKcal: 2_500, expectedKcal: expected, credit: .earned),
+                measuredKcal: 2_500, expectedKcal: expected, style: .automatic),
             requiredDeficitKcal: target)
         let offAtSix = DayBudget.budget(
             effectiveBurnKcal: DayBudget.effectiveBurn(
-                measuredKcal: 1_450, expectedKcal: expected, credit: .earned),
+                measuredKcal: 1_450, expectedKcal: expected, style: .automatic),
             requiredDeficitKcal: target)
         #expect(wornAllDay == offAtSix)
         #expect(wornAllDay - intake == 300)
@@ -51,9 +51,9 @@ struct DayBudgetTests {
 
     @Test func fixedIgnoresMeasuredBurnInBothDirections() {
         #expect(DayBudget.effectiveBurn(
-            measuredKcal: 2_900, expectedKcal: 2_500, credit: .fixed) == 2_500)
+            measuredKcal: 2_900, expectedKcal: 2_500, style: .fixed) == 2_500)
         #expect(DayBudget.effectiveBurn(
-            measuredKcal: 1_400, expectedKcal: 2_500, credit: .fixed) == 2_500)
+            measuredKcal: 1_400, expectedKcal: 2_500, style: .fixed) == 2_500)
     }
 
     /// Even on Fixed, a day with no snapshot has to fall back to what was
@@ -61,9 +61,9 @@ struct DayBudgetTests {
     /// catastrophic overage.
     @Test func withoutASnapshotBothStylesUseWhatWasMeasured() {
         #expect(DayBudget.effectiveBurn(
-            measuredKcal: 2_100, expectedKcal: nil, credit: .fixed) == 2_100)
+            measuredKcal: 2_100, expectedKcal: nil, style: .fixed) == 2_100)
         #expect(DayBudget.effectiveBurn(
-            measuredKcal: 2_100, expectedKcal: nil, credit: .earned) == 2_100)
+            measuredKcal: 2_100, expectedKcal: nil, style: .automatic) == 2_100)
     }
 
     // MARK: Guards
@@ -80,10 +80,14 @@ struct DayBudgetTests {
     // MARK: Settings resolve to today's behavior when unset
 
     @Test func defaultsMatchThePreviousBehavior() {
-        #expect(ActivityCredit.resolve(nil) == .earned)
-        #expect(ActivityCredit.resolve("nonsense") == .earned)
-        #expect(ExpectedBurnSource.resolve(nil) == .automatic)
-        #expect(ExpectedBurnSource.resolve("nonsense") == .automatic)
+        #expect(BudgetStyle.resolve(nil) == .automatic)
+        #expect(BudgetStyle.resolve("nonsense") == .automatic)
+        #expect(BudgetStyle.resolve("fixed") == .fixed)
+        // Each option explains itself under the picker.
+        #expect(!BudgetStyle.automatic.explanation.isEmpty)
+        #expect(!BudgetStyle.fixed.explanation.isEmpty)
+        #expect(BudgetStyle.automatic.creditsActivity)
+        #expect(!BudgetStyle.fixed.creditsActivity)
     }
 
     // MARK: Headline wording

@@ -21,12 +21,18 @@ public enum BudgetStyle: String, CaseIterable, Sendable {
 
     /// Shown under the picker for whichever one is selected, so the
     /// choice explains itself instead of needing the wiki.
+    ///
+    /// Both open with the same four words on purpose. The question being
+    /// asked is only ever "does what I can eat move?", and the first
+    /// wording answered it in the app's vocabulary — budget, burn,
+    /// planned — which is exactly the vocabulary someone reading a
+    /// settings screen hasn't learned yet (the user, 2026-07-30).
     public var explanation: String {
         switch self {
         case .automatic:
-            "Your budget follows your recent daily burn, and burning more than planned adds to it — an active day earns extra room."
+            "What you can eat goes up on active days. It starts from your recent average burn."
         case .fixed:
-            "The same budget every day. Nothing you burn moves it, so taking your watch off never changes what's left to eat."
+            "What you can eat is the same every day. Moving more won't add to it, and a day without your watch won't take from it."
         }
     }
 

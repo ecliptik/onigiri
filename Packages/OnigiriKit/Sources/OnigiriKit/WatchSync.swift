@@ -211,6 +211,17 @@ public enum WatchSync {
         SharedStore.weightUnitKey, SharedStore.waterUnitKey, SharedStore.sodiumUnitKey,
     ] }
 
+    /// Budget style rides the same always-send rule, for the same reason
+    /// and one more: the watch DERIVES its own budget from the plan
+    /// inputs, so a watch left on Automatic would quietly compute a
+    /// different allowance than the phone it's mirroring — the exact
+    /// two-answers-to-one-question bug this model was built to end
+    /// (2026-07-30). The pinned burn ships as a string like the rest of
+    /// this dict; "0" means "no pinned number", never a zero budget.
+    public static var budgetStyleKeys: [String] { [
+        SharedStore.budgetStyleKey, SharedStore.customExpectedBurnKey,
+    ] }
+
     // MARK: Phone side
 
     public static func makeContext(
@@ -346,7 +357,12 @@ public enum WatchSync {
         }
         if let tracked = payload.trackedMetricSettings {
             for (key, value) in tracked {
-                if trackedNumericKeys.contains(key) {
+                // The pinned burn rides this dict as a string like
+                // everything else, but it is READ with double(forKey:) —
+                // stored as a string it would come back 0, i.e. "no pinned
+                // number", and the watch would quietly budget off the
+                // average while the phone used the pin.
+                if trackedNumericKeys.contains(key) || key == SharedStore.customExpectedBurnKey {
                     defaults.set(Double(value) ?? 0, forKey: key)
                 } else {
                     defaults.set(value, forKey: key)

@@ -59,16 +59,18 @@ struct CompletedDayPlanTests {
         #expect(!plan.isAggressive)
     }
 
-    /// The whole point of filling: a watch taken off early must not read
-    /// as a failed day. Same intake, same target — only wear time differs.
+    /// A watch taken off early must not read as a failed day. The plan's
+    /// expected burn covers the unworn hours — no estimating required,
+    /// because a snapshot is a recorded fact rather than a guess.
     @Test func unwornHoursDoNotManufactureAMissedDay() {
-        let rate = RestingBurnFill.hourlyRate(totalRestingKcal: 2_100, totalCoveredHours: 24)
-        let measuredOnly = 1_562.0 + 397          // what Health recorded
-        let filled = RestingBurnFill.filled(
-            recordedRestingKcal: 1_562, coveredHours: 18, hourlyRate: rate) + 397
         let intake = 1_619.0, target = 621.0
+        let measuredOnly = 1_562.0 + 397          // what Health recorded
+        let effective = DayBudget.effectiveBurn(
+            measuredKcal: measuredOnly, expectedKcal: 2_722, credit: .earned)
 
         #expect(measuredOnly - intake < target)   // judged short on wear time
-        #expect(filled - intake >= target)        // judged on the day itself
+        let plan = CalorieBudget.completedDayPlan(
+            dayBurnKcal: effective, requiredDailyDeficit: target)
+        #expect(DayBudget.met(intakeKcal: intake, budgetKcal: plan.dailyBudget))
     }
 }

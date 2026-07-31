@@ -595,9 +595,16 @@ struct TodayView: View {
         // target, and its own burn (resting already filled for unworn
         // hours by filledDaySummary).
         if !model.isToday {
-            let dayBurn = model.summary.totalBurnKcal
-            // No burn recorded at all: nothing to judge the day by, and a
-            // budget of "0 minus the target" would invent a huge overage.
+            // The burn the PLAN expected that day, raised by what was
+            // measured (unless activity credit is off) — never lowered,
+            // so an unworn watch can't cost the day anything. That's what
+            // makes the budget solid: nothing about wearing a watch after
+            // 6pm changes what you had left to eat.
+            let dayBurn = DayBudget.effectiveBurn(
+                measuredKcal: model.summary.totalBurnKcal,
+                expectedKcal: PlanBurnHistory.expectedBurn(on: model.selectedDate))
+            // Nothing to judge the day by, and a budget of "0 minus the
+            // target" would invent a huge overage.
             guard dayBurn > 0 else { return nil }
             return CalorieBudget.completedDayPlan(
                 dayBurnKcal: dayBurn,

@@ -21,8 +21,27 @@ struct GoalView: View {
     /// Which weight field is editing — an enum (not a Bool) so moving
     /// directly between the two fields still fires the select-all
     /// onChange below.
-    private enum WeightField: Hashable { case target, current }
+    private enum WeightField: Hashable { case target, current, customBurn }
     @FocusState private var focusedField: WeightField?
+
+    /// How the day's budget is shaped — the two answers that used to be
+    /// baked into the math (2026-07-30). Both default to the previous
+    /// behavior, so an untouched install changes nothing.
+    @AppStorage(SharedStore.activityCreditKey, store: SharedStore.defaults)
+    private var activityCredit = ActivityCredit.earned.rawValue
+    @AppStorage(SharedStore.expectedBurnSourceKey, store: SharedStore.defaults)
+    private var expectedBurnSource = ExpectedBurnSource.automatic.rawValue
+    @AppStorage(SharedStore.customExpectedBurnKey, store: SharedStore.defaults)
+    private var customExpectedBurnRaw = 0.0
+
+    /// The stored double as an optional, so an unset custom burn shows a
+    /// placeholder instead of a misleading 0.
+    private var customExpectedBurn: Binding<Double?> {
+        Binding(
+            get: { customExpectedBurnRaw > 0 ? customExpectedBurnRaw : nil },
+            set: { customExpectedBurnRaw = $0 ?? 0 }
+        )
+    }
 
     /// HealthKit reads and derived chart stats live in the model (the
     /// TodayModel shape) — the view keeps only form state.
@@ -180,18 +199,51 @@ struct GoalView: View {
                         LabeledContent("Calorie budget") {
                             Text("≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
                         }
-                        LabeledContent("Average burn") {
-                            // The fallback used to present as fact — the
-                            // whole budget inherits this guess.
-                            Text(model.averageBurnKcal.map {
-                                "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
-                            } ?? "≈ 2000 kcal/day (assumed)")
+                        // Where the budget's burn comes from. Automatic
+                        // follows your recent days; Custom pins a number
+                        // the app leaves alone.
+                        Picker("Expected burn", selection: $expectedBurnSource) {
+                            ForEach(ExpectedBurnSource.allCases, id: \.rawValue) { source in
+                                Text(source.label).tag(source.rawValue)
+                            }
                         }
-                        if model.averageBurnKcal == nil {
-                            Text("No activity data in Health yet — the plan assumes 2000 kcal/day until burn history exists.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        if ExpectedBurnSource.resolve(expectedBurnSource) == .custom {
+                            LabeledContent("Burn per day") {
+                                TextField("0", value: customExpectedBurn, format: .number)
+                                    .keyboardType(.decimalPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .focused($focusedField, equals: .customBurn)
+                            }
+                            if customExpectedBurnRaw <= 0 {
+                                Text("Set a number, or the plan falls back to your recent average.")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
+                        } else {
+                            LabeledContent("Average burn") {
+                                // The fallback used to present as fact — the
+                                // whole budget inherits this guess.
+                                Text(model.averageBurnKcal.map {
+                                    "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
+                                } ?? "≈ 2000 kcal/day (assumed)")
+                            }
+                            if model.averageBurnKcal == nil {
+                                Text("No activity data in Health yet — the plan assumes 2000 kcal/day until burn history exists.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
+                        // Whether an active day earns more food. Neither
+                        // answer is more correct — it's how you want the
+                        // app to behave (the user, 2026-07-30).
+                        Picker("Active days", selection: $activityCredit) {
+                            ForEach(ActivityCredit.allCases, id: \.rawValue) { credit in
+                                Text(credit.label).tag(credit.rawValue)
+                            }
+                        }
+                        Text(ActivityCredit.resolve(activityCredit).explanation)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         // Is the math showing up on the scale? Trailing 30
                         // days of deficit vs the smoothed weigh-in change.
                         if let predicted = model.trend.predicted30Lb, let actual = model.trend.actual30Lb {

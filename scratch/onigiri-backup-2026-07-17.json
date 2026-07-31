@@ -1,0 +1,1074 @@
+{
+  "exportedAt" : "2026-07-17T01:24:46Z",
+  "foods" : [
+    {
+      "barcode" : "0078929454822",
+      "category" : "Dinner",
+      "kcal" : 190,
+      "name" : "Babyback Pork Ribs (Lloyds)",
+      "nutrients" : {
+        "carbsG" : 3,
+        "cholesterolMg" : 69.7,
+        "fatG" : 12,
+        "fiberG" : 0,
+        "micros" : {
+          "iron" : 0.722
+        },
+        "proteinG" : 18,
+        "saturatedFatG" : 4,
+        "sugarG" : 3,
+        "transFatG" : 0
+      },
+      "servingDescription" : "3 ONZ (84 g)",
+      "sodiumMg" : 460
+    },
+    {
+      "barcode" : "0013409352311",
+      "category" : "Dinner",
+      "kcal" : 70,
+      "lastUsedAt" : "2026-07-16T03:19:11Z",
+      "name" : "Barbecue Sauce (Sweet Baby Ray's)",
+      "nutrients" : {
+        "caffeineMg" : 0,
+        "carbsG" : 18,
+        "fatG" : 0,
+        "proteinG" : 0,
+        "sugarG" : 17
+      },
+      "servingDescription" : "2 tbsp (36 g)",
+      "sodiumMg" : 290
+    },
+    {
+      "barcode" : "fdc:2710616",
+      "category" : "Snack",
+      "isFavorite" : true,
+      "kcal" : 12.9,
+      "lastUsedAt" : "2026-07-16T03:11:20Z",
+      "name" : "Beer",
+      "nutrients" : {
+        "caffeineMg" : 0,
+        "carbsG" : 1.065,
+        "cholesterolMg" : 0,
+        "fatG" : 0,
+        "fiberG" : 0,
+        "micros" : {
+          "calcium" : 1.2,
+          "copper" : 0.0015,
+          "folate" : 1.7999999999999998,
+          "iron" : 0.006,
+          "magnesium" : 1.7999999999999998,
+          "niacin" : 0.1539,
+          "phosphorus" : 4.2,
+          "potassium" : 8.1,
+          "riboflavin" : 0.0075,
+          "selenium" : 0.18,
+          "thiamin" : 0.0015,
+          "vitaminB12" : 0.006,
+          "vitaminB6" : 0.0138,
+          "zinc" : 0.003
+        },
+        "monounsaturatedFatG" : 0,
+        "polyunsaturatedFatG" : 0,
+        "proteinG" : 0.138,
+        "saturatedFatG" : 0,
+        "sugarG" : 0
+      },
+      "servingDescription" : "1 fl oz (30 g)",
+      "sodiumMg" : 1.2
+    },
+    {
+      "barcode" : "0812049006604",
+      "kcal" : 123.076923076923,
+      "name" : "Blueberries bleuets (naturipe)",
+      "nutrients" : {
+        "carbsG" : 30.7692307692308,
+        "cholesterolMg" : 0,
+        "fatG" : 0,
+        "fiberG" : 4.61538461538461,
+        "micros" : {
+          "calcium" : 15.3846153846154,
+          "iron" : 0.615384615384615,
+          "potassium" : 169.230769230769
+        },
+        "proteinG" : 1.53846153846154,
+        "saturatedFatG" : 0,
+        "sugarG" : 21.5384615384615,
+        "transFatG" : 0
+      },
+      "servingDescription" : "per 100 g",
+      "sodiumMg" : 0
+    },
+    {
+      "barcode" : "2000000126259",
+      "category" : "Snack",
+      "kcal" : 21.4,
+      "name" : "Blueberries, Fresh",
+      "nutrients" : {
+        "carbsG" : 21.4,
+        "fatG" : 0.5,
+        "fiberG" : 3.6,
+        "proteinG" : 1.1,
+        "sugarG" : 14.7
+      },
+      "servingDescription" : "1 cup (148g)",
+      "sodiumMg" : 1.5
+    },
+    {
+      "barcode" : "0632432000688",
+      "category" : "Breakfast",
+      "isFavorite" : true,
+      "kcal" : 15,
+      "name" : "Bravo Mango Yerba Mate",
+      "nutrients" : {
+        "caffeineMg" : 150,
+        "carbsG" : 4,
+        "fatG" : 0,
+        "proteinG" : 0,
+        "sugarG" : 2
+      },
+      "servingDescription" : "458ml",
+      "sodiumMg" : 0
+    },
+    {
+      "barcode" : "0017400140014",
+      "category" : "Dinner",
+      "kcal" : 210,
+      "name" : "BROWN RICE (Minute)",
+      "nutrients" : {
+        "carbsG" : 39,
+        "fatG" : 4.5,
+        "fiberG" : 2,
+        "micros" : {
+          "calcium" : 10,
+          "iron" : 1.7,
+          "niacin" : 2.4,
+          "potassium" : 150
+        },
+        "proteinG" : 5,
+        "saturatedFatG" : 0.5,
+        "sugarG" : 1
+      },
+      "servingDescription" : "1 cup (125 g)",
+      "sodiumMg" : 160
+    },
+    {
+      "barcode" : "0081652106159",
+      "category" : "Snack",
+      "kcal" : 280,
+      "name" : "Bubble milk tea",
+      "nutrients" : {
+        "carbsG" : 54,
+        "cholesterolMg" : 0,
+        "fatG" : 4,
+        "proteinG" : 5,
+        "saturatedFatG" : 2,
+        "sugarG" : 40,
+        "transFatG" : 0
+      },
+      "servingDescription" : "1 container (480 ml)",
+      "sodiumMg" : 130
+    },
+    {
+      "barcode" : "0854693000447",
+      "category" : "Lunch",
+      "kcal" : 35,
+      "name" : "Cherry Tomatoes",
+      "nutrients" : {
+        "carbsG" : 6,
+        "fatG" : 0,
+        "fiberG" : 2,
+        "micros" : {
+          "potassium" : 340,
+          "vitaminA" : 150,
+          "vitaminC" : 9
+        },
+        "proteinG" : 1,
+        "sugarG" : 4
+      },
+      "servingDescription" : "0.5 cup (126 g)",
+      "sodiumMg" : 5
+    },
+    {
+      "barcode" : "0021130066865",
+      "category" : "Dinner",
+      "kcal" : 300,
+      "name" : "Classic Macaroni Salad (Signature Cafe)",
+      "nutrients" : {
+        "carbsG" : 23,
+        "cholesterolMg" : 15,
+        "fatG" : 21,
+        "fiberG" : 2,
+        "micros" : {
+          "iron" : 0.001
+        },
+        "proteinG" : 5,
+        "saturatedFatG" : 3.5,
+        "sugarG" : 5
+      },
+      "servingDescription" : "1 serving (140 g)",
+      "sodiumMg" : 770
+    },
+    {
+      "barcode" : "fdc:2709783",
+      "category" : "Dinner",
+      "kcal" : 90.3,
+      "name" : "Corn, raw",
+      "nutrients" : {
+        "caffeineMg" : 0,
+        "carbsG" : 19.635,
+        "cholesterolMg" : 0,
+        "fatG" : 1.4175000000000002,
+        "fiberG" : 2.1,
+        "micros" : {
+          "calcium" : 2.1,
+          "copper" : 0.0567,
+          "folate" : 44.1,
+          "iron" : 0.546,
+          "magnesium" : 38.85,
+          "niacin" : 1.8585,
+          "phosphorus" : 93.45,
+          "potassium" : 283.5,
+          "riboflavin" : 0.05775,
+          "selenium" : 0.63,
+          "thiamin" : 0.16275,
+          "vitaminA" : 9.450000000000001,
+          "vitaminB6" : 0.09765,
+          "vitaminC" : 7.14,
+          "vitaminE" : 0.07350000000000001,
+          "vitaminK" : 0.315,
+          "zinc" : 0.48300000000000004
+        },
+        "monounsaturatedFatG" : 0.4536,
+        "polyunsaturatedFatG" : 0.51135,
+        "proteinG" : 3.4335,
+        "saturatedFatG" : 0.34125000000000005,
+        "sugarG" : 6.573
+      },
+      "servingDescription" : "1 regular ear (105 g)",
+      "sodiumMg" : 15.75
+    },
+    {
+      "barcode" : "0096619416073",
+      "category" : "Breakfast",
+      "kcal" : 0,
+      "name" : "Daily Multi (Kirkland Signature)",
+      "nutrients" : {
+        "carbsG" : 0,
+        "fatG" : 0,
+        "micros" : {
+          "biotin" : 30,
+          "calcium" : 200,
+          "chloride" : 72,
+          "chromium" : 35,
+          "copper" : 0.9,
+          "folate" : 833,
+          "iodine" : 150,
+          "iron" : 18,
+          "magnesium" : 100,
+          "manganese" : 2.3,
+          "molybdenum" : 45,
+          "niacin" : 20,
+          "pantothenicAcid" : 10,
+          "phosphorus" : 109,
+          "potassium" : 80,
+          "riboflavin" : 1.7,
+          "selenium" : 55,
+          "thiamin" : 1.5,
+          "vitaminA" : 1050,
+          "vitaminB12" : 6,
+          "vitaminB6" : 2,
+          "vitaminC" : 90,
+          "vitaminD" : 10,
+          "vitaminE" : 1305,
+          "vitaminK" : 25,
+          "zinc" : 11
+        },
+        "proteinG" : 0
+      },
+      "servingDescription" : "1 g",
+      "sodiumMg" : 0
+    },
+    {
+      "barcode" : "0035046132408",
+      "isFavorite" : true,
+      "kcal" : 15,
+      "lastUsedAt" : "2026-07-16T20:37:55Z",
+      "name" : "Fiber Gummies",
+      "nutrients" : {
+        "carbsG" : 7,
+        "fatG" : 0,
+        "fiberG" : 6,
+        "proteinG" : 0
+      },
+      "servingDescription" : "1 serving (9 g)",
+      "sodiumMg" : 6
+    },
+    {
+      "barcode" : "0850002075250",
+      "kcal" : 333.33333333333,
+      "name" : "Fried Chicken Skin Snack",
+      "nutrients" : {
+        "carbsG" : 0,
+        "fatG" : 28.070175438596,
+        "proteinG" : 19.298245614035,
+        "saturatedFatG" : 5.2631578947368,
+        "sugarG" : 0
+      },
+      "servingDescription" : "per 100 g",
+      "sodiumMg" : 149.12280701754
+    },
+    {
+      "category" : "Dinner",
+      "kcal" : 600,
+      "name" : "Fried Fish",
+      "servingDescription" : "20oz",
+      "sodiumMg" : 0
+    },
+    {
+      "barcode" : "0041483037701",
+      "isFavorite" : true,
+      "kcal" : 110,
+      "lastUsedAt" : "2026-07-13T23:21:21Z",
+      "name" : "Frozen Yogurt",
+      "nutrients" : {
+        "carbsG" : 19,
+        "cholesterolMg" : 9.75,
+        "fatG" : 3,
+        "fiberG" : 0,
+        "micros" : {
+          "calcium" : 79.9,
+          "vitaminA" : 90.1
+        },
+        "proteinG" : 3,
+        "saturatedFatG" : 1,
+        "sugarG" : 14,
+        "transFatG" : 0
+      },
+      "servingDescription" : "0.5 cup (65 g)",
+      "sodiumMg" : 66
+    },
+    {
+      "barcode" : "0070162958693",
+      "kcal" : 100,
+      "name" : "Golden Wheat Bread (Artesano)",
+      "nutrients" : {
+        "carbsG" : 18,
+        "cholesterolMg" : 0,
+        "fatG" : 15,
+        "fiberG" : 2,
+        "micros" : {
+          "calcium" : 8,
+          "folate" : 60,
+          "iron" : 1.4,
+          "potassium" : 45,
+          "thiamin" : 0.12999999999999998
+        },
+        "monounsaturatedFatG" : 0,
+        "polyunsaturatedFatG" : 0.5,
+        "proteinG" : 4,
+        "saturatedFatG" : 0,
+        "sugarG" : 3,
+        "transFatG" : 0
+      },
+      "servingDescription" : "38g",
+      "sodiumMg" : 160
+    },
+    {
+      "barcode" : "fdc:2709237",
+      "category" : "Snack",
+      "kcal" : 124.5,
+      "lastUsedAt" : "2026-07-16T20:38:11Z",
+      "name" : "Grapes",
+      "nutrients" : {
+        "caffeineMg" : 0,
+        "carbsG" : 29.099999999999998,
+        "cholesterolMg" : 0,
+        "fatG" : 0.30000000000000004,
+        "fiberG" : 1.35,
+        "micros" : {
+          "calcium" : 15,
+          "copper" : 0.10649999999999998,
+          "folate" : 3,
+          "iron" : 0.27,
+          "magnesium" : 12,
+          "niacin" : 0.28200000000000003,
+          "phosphorus" : 36,
+          "potassium" : 336,
+          "riboflavin" : 0.10500000000000001,
+          "selenium" : 0.15000000000000002,
+          "thiamin" : 0.10350000000000001,
+          "vitaminA" : 4.5,
+          "vitaminB6" : 0.129,
+          "vitaminC" : 4.800000000000001,
+          "vitaminE" : 0.28500000000000003,
+          "vitaminK" : 21.9,
+          "zinc" : 0.06
+        },
+        "monounsaturatedFatG" : 0.0105,
+        "polyunsaturatedFatG" : 0.07200000000000001,
+        "proteinG" : 1.35,
+        "saturatedFatG" : 0.081,
+        "sugarG" : 25.11
+      },
+      "servingDescription" : "1 cup (150 g)",
+      "sodiumMg" : 7.5
+    },
+    {
+      "category" : "Snack",
+      "kcal" : 0,
+      "name" : "Hiball Energy",
+      "nutrients" : {
+        "caffeineMg" : 160,
+        "carbsG" : 0.5,
+        "fatG" : 0,
+        "proteinG" : 0,
+        "sugarG" : 0
+      },
+      "servingDescription" : "1 serving",
+      "sodiumMg" : 0
+    },
+    {
+      "barcode" : "0037600107433",
+      "category" : "Dinner",
+      "kcal" : 260,
+      "name" : "Hormel Chili Turkey with Beans",
+      "nutrients" : {
+        "caffeineMg" : 0,
+        "carbsG" : 29,
+        "cholesterolMg" : 45,
+        "fatG" : 8,
+        "fiberG" : 6,
+        "proteinG" : 14,
+        "saturatedFatG" : 2.5,
+        "sugarG" : 6,
+        "transFatG" : 0
+      },
+      "servingDescription" : "1 portion (247 g)",
+      "sodiumMg" : 990
+    },
+    {
+      "barcode" : "0033357051258",
+      "category" : "Lunch",
+      "kcal" : 100,
+      "name" : "Kewpie Mayonnaise",
+      "nutrients" : {
+        "carbsG" : 0,
+        "cholesterolMg" : 20,
+        "fatG" : 12,
+        "fiberG" : 0,
+        "proteinG" : 0,
+        "saturatedFatG" : 2,
+        "sugarG" : 0,
+        "transFatG" : 0
+      },
+      "servingDescription" : "15 g",
+      "sodiumMg" : 115
+    },
+    {
+      "barcode" : "0196633906687",
+      "category" : "Breakfast",
+      "kcal" : 5,
+      "name" : "Krill Oil (Kirkland Signature)",
+      "nutrients" : {
+        "carbsG" : 0,
+        "cholesterolMg" : 10,
+        "fatG" : 0.21,
+        "fiberG" : 0,
+        "proteinG" : 0,
+        "saturatedFatG" : 0,
+        "sugarG" : 0
+      },
+      "servingDescription" : "500 g",
+      "sodiumMg" : 0
+    },
+    {
+      "barcode" : "03424005",
+      "category" : "Snack",
+      "kcal" : 210,
+      "name" : "milk chocolate (Hershey's)",
+      "nutrients" : {
+        "caffeineMg" : 0,
+        "carbsG" : 11.2,
+        "cholesterolMg" : 4.3,
+        "fatG" : 5.59,
+        "micros" : {
+          "iron" : 0.7
+        },
+        "proteinG" : 1.29,
+        "sugarG" : 10.8,
+        "transFatG" : 0
+      },
+      "servingDescription" : "1 bar (43 g)",
+      "sodiumMg" : 0
+    },
+    {
+      "barcode" : "0850003994185",
+      "category" : "Breakfast",
+      "isFavorite" : true,
+      "kcal" : 220,
+      "name" : "MUSH Dark Chocolate",
+      "nutrients" : {
+        "carbsG" : 33,
+        "fatG" : 7,
+        "fiberG" : 5,
+        "micros" : {
+          "calcium" : 40,
+          "iron" : 3.6,
+          "potassium" : 210
+        },
+        "proteinG" : 7,
+        "saturatedFatG" : 1,
+        "sugarG" : 10
+      },
+      "servingDescription" : "1 container (141 g)",
+      "sodiumMg" : 115
+    },
+    {
+      "barcode" : "958831802486069172",
+      "category" : "Dinner",
+      "kcal" : 318,
+      "name" : "On The Border, Cabo Grilled Shrimp Tacos",
+      "nutrients" : {
+        "carbsG" : 31,
+        "fatG" : 14,
+        "fiberG" : 5,
+        "proteinG" : 17,
+        "saturatedFatG" : 1.5
+      },
+      "servingDescription" : "100g",
+      "sodiumMg" : 910
+    },
+    {
+      "kcal" : 60,
+      "name" : "Oven Roasted Turkey Breast (Kirkland)",
+      "nutrients" : {
+        "carbsG" : 1,
+        "cholesterolMg" : 20,
+        "fatG" : 1,
+        "fiberG" : 0,
+        "micros" : {
+          "calcium" : 3,
+          "iron" : 0
+        },
+        "proteinG" : 119,
+        "saturatedFatG" : 0,
+        "sugarG" : 0,
+        "transFatG" : 0
+      },
+      "servingDescription" : "2 Slices (56g) LESS OF",
+      "sodiumMg" : 370
+    },
+    {
+      "barcode" : "0011110587206",
+      "category" : "Snack",
+      "kcal" : 80,
+      "name" : "PEPPER JACK CHEESE SLICES (Kroger)",
+      "nutrients" : {
+        "caffeineMg" : 0,
+        "fatG" : 7,
+        "proteinG" : 5
+      },
+      "servingDescription" : "21g",
+      "sodiumMg" : 0
+    },
+    {
+      "barcode" : "0037600762007",
+      "kcal" : 150,
+      "name" : "PEPPERONI (Hormel)",
+      "nutrients" : {
+        "carbsG" : 0,
+        "cholesterolMg" : 30,
+        "fatG" : 14,
+        "micros" : {
+          "iron" : 0.4
+        },
+        "proteinG" : 5,
+        "saturatedFatG" : 6
+      },
+      "servingDescription" : "15 slices (30 g)",
+      "sodiumMg" : 520
+    },
+    {
+      "barcode" : "0011110663498",
+      "category" : "Dinner",
+      "kcal" : 267,
+      "name" : "Pork Chop (Kroger)",
+      "nutrients" : {
+        "carbsG" : 66.7,
+        "cholesterolMg" : 0,
+        "fatG" : 0,
+        "micros" : {
+          "vitaminA" : 0.001
+        },
+        "proteinG" : 0,
+        "sugarG" : 16.7
+      },
+      "servingDescription" : "6g",
+      "sodiumMg" : 8.83
+    },
+    {
+      "barcode" : "00559690",
+      "category" : "Dinner",
+      "kcal" : 170,
+      "name" : "Roasted potatoes",
+      "nutrients" : {
+        "caffeineMg" : 0,
+        "carbsG" : 25,
+        "fatG" : 11.2,
+        "fiberG" : 2.5,
+        "micros" : {
+          "calcium" : 25,
+          "iron" : 0.8,
+          "potassium" : 662
+        },
+        "proteinG" : 2.5,
+        "saturatedFatG" : 1.25,
+        "sugarG" : 2.5
+      },
+      "servingDescription" : "1 serving (125 g)",
+      "sodiumMg" : 388
+    },
+    {
+      "barcode" : "00040877",
+      "kcal" : 20.9,
+      "name" : "Roma Tomato",
+      "nutrients" : {
+        "caffeineMg" : 0,
+        "carbsG" : 3.89,
+        "fatG" : 0.2,
+        "fiberG" : 1.2,
+        "micros" : {
+          "calcium" : 10,
+          "copper" : 0.059,
+          "iron" : 0.27,
+          "magnesium" : 11,
+          "manganese" : 0.114,
+          "niacin" : 0.594,
+          "pantothenicAcid" : 0.089,
+          "phosphorus" : 24,
+          "potassium" : 237,
+          "vitaminA" : 42,
+          "vitaminC" : 13.700000000000001,
+          "vitaminE" : 0.67,
+          "vitaminK" : 7.9,
+          "zinc" : 0.17
+        },
+        "monounsaturatedFatG" : 0.031,
+        "polyunsaturatedFatG" : 0.083,
+        "proteinG" : 0.88,
+        "saturatedFatG" : 0.028,
+        "sugarG" : 2.63
+      },
+      "servingDescription" : "123g",
+      "sodiumMg" : 5
+    },
+    {
+      "barcode" : "0060556900001",
+      "kcal" : 15,
+      "name" : "Romaine Lettuce",
+      "nutrients" : {
+        "caffeineMg" : 0,
+        "carbsG" : 3,
+        "fatG" : 0.3,
+        "fiberG" : 2,
+        "micros" : {
+          "calcium" : 30,
+          "iron" : 0.882,
+          "potassium" : 200,
+          "vitaminA" : 471,
+          "vitaminC" : 4.12
+        },
+        "proteinG" : 1,
+        "sugarG" : 1
+      },
+      "servingDescription" : "6 leaves (85 g)",
+      "sodiumMg" : 5
+    },
+    {
+      "barcode" : "0810028970120",
+      "category" : "Breakfast",
+      "isFavorite" : true,
+      "kcal" : 400,
+      "name" : "Soylent Drink Banana",
+      "nutrients" : {
+        "carbsG" : 37,
+        "cholesterolMg" : 0,
+        "fatG" : 24,
+        "fiberG" : 3,
+        "micros" : {
+          "biotin" : 60,
+          "calcium" : 200,
+          "chloride" : 680,
+          "chromium" : 24,
+          "copper" : 0.4,
+          "folate" : 80,
+          "iodine" : 30,
+          "iron" : 4,
+          "magnesium" : 80,
+          "manganese" : 0.4,
+          "molybdenum" : 15,
+          "niacin" : 4,
+          "pantothenicAcid" : 2,
+          "phosphorus" : 200,
+          "potassium" : 800,
+          "selenium" : 14,
+          "vitaminA" : 300,
+          "vitaminC" : 12,
+          "vitaminD" : 4,
+          "vitaminE" : 4,
+          "vitaminK" : 16,
+          "zinc" : 3
+        },
+        "monounsaturatedFatG" : 18,
+        "polyunsaturatedFatG" : 3,
+        "proteinG" : 20,
+        "saturatedFatG" : 2.5,
+        "sugarG" : 1,
+        "transFatG" : 0
+      },
+      "servingDescription" : "414g",
+      "sodiumMg" : 300
+    },
+    {
+      "barcode" : "0074030661364",
+      "category" : "Snack",
+      "kcal" : 80,
+      "name" : "String Cheese",
+      "nutrients" : {
+        "caffeineMg" : 0,
+        "carbsG" : 0,
+        "cholesterolMg" : 20,
+        "fatG" : 6,
+        "micros" : {
+          "calcium" : 185,
+          "potassium" : 24
+        },
+        "proteinG" : 7,
+        "saturatedFatG" : 3.5
+      },
+      "servingDescription" : "1 string (28 g)",
+      "sodiumMg" : 170
+    },
+    {
+      "barcode" : "0011110865786",
+      "category" : "Dinner",
+      "kcal" : 90,
+      "name" : "Super sweet corn, traditional favorites",
+      "nutrients" : {
+        "carbsG" : 16,
+        "cholesterolMg" : 0,
+        "fatG" : 1.5,
+        "fiberG" : 3.96,
+        "micros" : {
+          "iron" : 0.504,
+          "potassium" : 190
+        },
+        "proteinG" : 3,
+        "saturatedFatG" : 0,
+        "sugarG" : 7,
+        "transFatG" : 0
+      },
+      "servingDescription" : "2\/3 cup (90 g)",
+      "sodiumMg" : 0
+    },
+    {
+      "barcode" : "0028400047937",
+      "category" : "Snack",
+      "kcal" : 160,
+      "name" : "The Original Corn Chips (Fritos)",
+      "nutrients" : {
+        "caffeineMg" : 0,
+        "carbsG" : 16,
+        "cholesterolMg" : 0,
+        "fatG" : 10,
+        "fiberG" : 1.01,
+        "micros" : {
+          "calcium" : 26.9,
+          "iron" : 1,
+          "potassium" : 35
+        },
+        "proteinG" : 2,
+        "saturatedFatG" : 1.5,
+        "sugarG" : 0,
+        "transFatG" : 0
+      },
+      "servingDescription" : "about 32 chips (28 g) (28 g)",
+      "sodiumMg" : 170
+    },
+    {
+      "kcal" : 120,
+      "name" : "Tortilla (Fresca)",
+      "nutrients" : {
+        "carbsG" : 19,
+        "cholesterolMg" : 0,
+        "fatG" : 4,
+        "fiberG" : 0.5,
+        "proteinG" : 3,
+        "saturatedFatG" : 0,
+        "sugarG" : 0,
+        "transFatG" : 0
+      },
+      "servingDescription" : "1 Tortilla (43 g)",
+      "sodiumMg" : 210
+    },
+    {
+      "barcode" : "0853922004003",
+      "category" : "Lunch",
+      "isFavorite" : true,
+      "kcal" : 400,
+      "name" : "Turkey Sandwich",
+      "nutrients" : {
+        "carbsG" : 45,
+        "cholesterolMg" : 65,
+        "fatG" : 11,
+        "fiberG" : 2,
+        "micros" : {
+          "calcium" : 130,
+          "iron" : 1.8,
+          "potassium" : 1410
+        },
+        "proteinG" : 24,
+        "saturatedFatG" : 5,
+        "sugarG" : 6,
+        "transFatG" : 0
+      },
+      "servingDescription" : "8.3 oz (235g)",
+      "sodiumMg" : 600
+    },
+    {
+      "barcode" : "0096619879526",
+      "category" : "Breakfast",
+      "kcal" : 0,
+      "name" : "Vitamin B12 (Kirkland Signature)",
+      "nutrients" : {
+        "micros" : {
+          "vitaminB12" : 5000
+        },
+        "saturatedFatG" : 0,
+        "sugarG" : 0
+      },
+      "servingDescription" : "per 100 g",
+      "sodiumMg" : 0
+    },
+    {
+      "barcode" : "0096619393916",
+      "kcal" : 0,
+      "name" : "Vitamin D3 (Kirkland Signature)",
+      "nutrients" : {
+        "micros" : {
+          "vitaminD" : 50
+        }
+      },
+      "servingDescription" : "per 100 g",
+      "sodiumMg" : 0
+    },
+    {
+      "barcode" : "fdc:2710700",
+      "category" : "Snack",
+      "isFavorite" : true,
+      "kcal" : 145.53,
+      "name" : "Whiskey",
+      "nutrients" : {
+        "caffeineMg" : 0,
+        "carbsG" : 0,
+        "cholesterolMg" : 0,
+        "fatG" : 0,
+        "fiberG" : 0,
+        "micros" : {
+          "copper" : 0.01323,
+          "iron" : 0.0252,
+          "niacin" : 0.00819,
+          "phosphorus" : 2.52,
+          "potassium" : 1.26,
+          "riboflavin" : 0.00252,
+          "thiamin" : 0.00378,
+          "vitaminB6" : 0.00063,
+          "zinc" : 0.0252
+        },
+        "monounsaturatedFatG" : 0,
+        "polyunsaturatedFatG" : 0,
+        "proteinG" : 0,
+        "saturatedFatG" : 0,
+        "sugarG" : 0
+      },
+      "servingDescription" : "1 drink (63 g)",
+      "sodiumMg" : 0.63
+    },
+    {
+      "barcode" : "0015292700187",
+      "category" : "Dinner",
+      "kcal" : 391,
+      "name" : "Wild Alaskan Salmon Seasoned Grill (Morey's)",
+      "nutrients" : {
+        "carbsG" : 2,
+        "cholesterolMg" : 30,
+        "fatG" : 14,
+        "fiberG" : 1,
+        "micros" : {
+          "calcium" : 80,
+          "iron" : 0.9,
+          "potassium" : 990
+        },
+        "proteinG" : 33,
+        "saturatedFatG" : 1.5,
+        "sugarG" : 0,
+        "transFatG" : 0
+      },
+      "servingDescription" : "60 z (170 g)",
+      "sodiumMg" : 420
+    },
+    {
+      "barcode" : "0031146055814",
+      "kcal" : 410,
+      "name" : "Zoey Shin Ramyun Burger Hero (Nongshim)",
+      "nutrients" : {
+        "carbsG" : 66,
+        "cholesterolMg" : 0,
+        "fatG" : 13,
+        "fiberG" : 1,
+        "micros" : {
+          "calcium" : 20,
+          "iron" : 2.7,
+          "potassium" : 290
+        },
+        "proteinG" : 7,
+        "saturatedFatG" : 6,
+        "sugarG" : 3,
+        "transFatG" : 0
+      },
+      "servingDescription" : "1 unit (95 g)",
+      "sodiumMg" : 1530
+    }
+  ],
+  "goal" : {
+    "targetDate" : "2026-09-02T04:51:00Z",
+    "targetWeightLb" : 210
+  },
+  "meals" : [
+    {
+      "category" : "Breakfast",
+      "isFavorite" : true,
+      "items" : [
+        {
+          "foodName" : "Fiber Gummies",
+          "quantity" : 1
+        },
+        {
+          "foodName" : "Vitamin D3 (Kirkland Signature)",
+          "quantity" : 1
+        },
+        {
+          "foodName" : "Daily Multi (Kirkland Signature)",
+          "quantity" : 1
+        },
+        {
+          "foodName" : "Vitamin B12 (Kirkland Signature)",
+          "quantity" : 1
+        },
+        {
+          "foodName" : "Krill Oil (Kirkland Signature)",
+          "quantity" : 1
+        },
+        {
+          "foodName" : "Bravo Mango Yerba Mate",
+          "quantity" : 1
+        },
+        {
+          "foodName" : "MUSH Dark Chocolate",
+          "quantity" : 1
+        }
+      ],
+      "lastUsedAt" : "2026-07-13T15:57:58Z",
+      "name" : "MUSH Breakfast",
+      "uuid" : "D2DC7F76-3E9B-4DB5-B108-1BD5E319227E"
+    },
+    {
+      "category" : "Lunch",
+      "isFavorite" : true,
+      "items" : [
+        {
+          "foodName" : "Tortilla (Fresca)",
+          "quantity" : 2
+        },
+        {
+          "foodName" : "PEPPER JACK CHEESE SLICES (Kroger)",
+          "quantity" : 2
+        },
+        {
+          "foodName" : "PEPPERONI (Hormel)",
+          "quantity" : 1
+        }
+      ],
+      "lastUsedAt" : "2026-07-16T20:37:20Z",
+      "name" : "Pizza Quesidilla",
+      "uuid" : "20E4FCAA-CE15-4290-B4F0-406B6BFEFD29"
+    },
+    {
+      "category" : "Breakfast",
+      "isFavorite" : true,
+      "items" : [
+        {
+          "foodName" : "Vitamin D3 (Kirkland Signature)",
+          "quantity" : 1
+        },
+        {
+          "foodName" : "Soylent Drink Banana",
+          "quantity" : 0.5
+        },
+        {
+          "foodName" : "Krill Oil (Kirkland Signature)",
+          "quantity" : 1
+        },
+        {
+          "foodName" : "Bravo Mango Yerba Mate",
+          "quantity" : 1
+        },
+        {
+          "foodName" : "Vitamin B12 (Kirkland Signature)",
+          "quantity" : 1
+        },
+        {
+          "foodName" : "Fiber Gummies",
+          "quantity" : 1
+        },
+        {
+          "foodName" : "Daily Multi (Kirkland Signature)",
+          "quantity" : 1
+        }
+      ],
+      "lastUsedAt" : "2026-07-16T15:08:48Z",
+      "name" : "Soylent Breakfast",
+      "uuid" : "F7635D6D-9EF0-438F-ADDE-A71C6C3C9F65"
+    },
+    {
+      "category" : "Lunch",
+      "isFavorite" : true,
+      "items" : [
+        {
+          "foodName" : "Golden Wheat Bread (Artesano)",
+          "quantity" : 2
+        },
+        {
+          "foodName" : "Roma Tomato",
+          "quantity" : 1
+        },
+        {
+          "foodName" : "Oven Roasted Turkey Breast (Kirkland)",
+          "quantity" : 4
+        },
+        {
+          "foodName" : "Fiber Gummies",
+          "quantity" : 1
+        }
+      ],
+      "lastUsedAt" : "2026-07-14T19:23:33Z",
+      "name" : "Turkey Sandwich",
+      "uuid" : "3BDA1880-F717-4709-89CC-E759D40E0FBB"
+    }
+  ],
+  "version" : 1,
+  "water" : {
+    "goalOz" : 72,
+    "servingOz" : 12
+  }
+}

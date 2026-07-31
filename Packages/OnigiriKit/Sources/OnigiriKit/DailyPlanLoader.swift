@@ -148,6 +148,14 @@ public extension DailyPlanLoader {
             targetKcal: state.deficitTargetKcal,
             isMaintenance: goal?.isMaintenance ?? false
         )
+        // The other half of the day's budget. The target alone can't pin
+        // it — expected burn drifts with the trailing average, so without
+        // this a past day gets re-judged by today's activity level.
+        // budget = expectedBurn − deficit, so the burn is recoverable
+        // without widening State's public shape (the watch and every
+        // widget provider decode it).
+        PlanBurnHistory.recordToday(
+            expectedBurnKcal: state.dailyBudgetKcal.map { $0 + (state.deficitTargetKcal ?? 0) })
         return state
     }
 

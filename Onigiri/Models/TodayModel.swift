@@ -177,11 +177,10 @@ final class TodayModel {
         refreshGeneration += 1
         let generation = refreshGeneration
         do {
-            // Filled: a COMPLETED day gets its resting burn topped up for
-            // hours the watch wasn't worn, so this screen's cards, its
-            // headline, and the calendar's verdict all describe the same
-            // day. Today comes back untouched — still accumulating.
-            async let summary = health.filledDaySummary(for: selectedDate)
+            // Aligned: burn read from the same day-bucketed source the
+            // calendar and badges use, so the two screens can't disagree
+            // about the same day.
+            async let summary = health.alignedDaySummary(for: selectedDate)
             async let foodLog = health.foodEntries(on: selectedDate)
             async let waterLog = health.waterEntries(on: selectedDate)
             async let tracked1 = trackedTotal(slot: 1)

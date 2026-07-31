@@ -91,8 +91,13 @@ struct PreferenceSnapshotTests {
         #expect(keys.contains(SharedStore.mealIconKey))
         // Theme (2026-07-29) — an Appearance subscreen key like the icons.
         #expect(keys.contains(SharedStore.appearanceKey))
+        // Budget style (2026-07-30) — set in the Goal tab, but the same
+        // rule applies: outside this list they'd escape Cancel and Reset.
+        #expect(keys.contains(SharedStore.activityCreditKey))
+        #expect(keys.contains(SharedStore.expectedBurnSourceKey))
+        #expect(keys.contains(SharedStore.customExpectedBurnKey))
         // Onboarding deliberately stays OUT (reset must not replay it).
         #expect(!keys.contains(SharedStore.hasOnboardedKey))
-        #expect(keys.count == 44)
+        #expect(keys.count == 47)
     }
 }

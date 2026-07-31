@@ -54,6 +54,7 @@ public extension SharedStore {
     /// whole domain instead.
     static let settingsSweepKeys: [String] = [
         appearanceKey,
+        activityCreditKey, expectedBurnSourceKey, customExpectedBurnKey,
         waterServingKey, waterGoalKey,
         waterIconKey, foodIconKey, rewardIconKey, mealIconKey,
         sodiumLimitKey, balanceStyleKey,

@@ -60,7 +60,12 @@ public enum CalorieBudget {
         averageKcal: Double?,
         todayActualKcal: Double = 0
     ) -> Double {
-        max(averageKcal ?? 0, todayActualKcal, 2000)
+        // A custom expected burn replaces the trailing average; activity
+        // credit decides whether today's own burn is allowed to raise it
+        // (Settings, 2026-07-30). Both default to today's behavior.
+        let planned = SharedStore.planAverageBurn(measuredAverageKcal: averageKcal)
+        let actual = SharedStore.activityCredit == .fixed ? 0 : todayActualKcal
+        return max(planned ?? 0, actual, 2000)
     }
 
     /// The one shared answer to "what plan does this goal imply right

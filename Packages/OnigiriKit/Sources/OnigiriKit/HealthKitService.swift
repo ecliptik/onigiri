@@ -413,132 +413,62 @@ public final class HealthKitService {
     /// card, and (for completed days) the Today screen all read it, so
     /// they can't disagree about whether a day earned its badge.
     ///
-    /// Completed days have their resting burn filled for hours the watch
-    /// wasn't worn (`RestingBurnFill`). Today is left raw — it's still
-    /// accumulating, and its budget path forecasts from the trailing
-    /// average instead.
+    /// Each day's burn is `DayBudget.effectiveBurn` — the plan's
+    /// expectation for that day, raised by what was actually measured.
     public func dailyEnergyTotals(from start: Date, to end: Date) async throws -> [DayEnergyTotals] {
         async let intakeTotals = dailyTotals(.dietaryEnergyConsumed, start: start, end: end)
         async let activeTotals = dailyTotals(.activeEnergyBurned, start: start, end: end)
         async let basalTotals = dailyTotals(.basalEnergyBurned, start: start, end: end)
-        async let coverageRead = restingCoveredHours(start: start, end: end)
-        async let rateRead = restingHourlyRate()
         let (intake, active, basal) = try await (intakeTotals, activeTotals, basalTotals)
-        let coverage = (try? await coverageRead) ?? [:]
-        let rate = await rateRead
-        let today = Calendar.current.startOfDay(for: Date.now)
+        // Each day's burn is the one the PLAN used that day, raised if the
+        // day actually burned more — never lowered. An unworn watch is
+        // missing data, not a smaller day, so taking it off can't cost
+        // anything (the user's rule, 2026-07-30). This is also why unworn
+        // hours need no estimating: the plan's expectation already covers
+        // them, and a snapshot is a recorded fact rather than a guess.
+        let expectedByDay = PlanBurnHistory.burnsByDay()
         let allDays = Set(intake.keys).union(active.keys).union(basal.keys)
         return allDays.sorted().map { day in
-            let recordedBasal = basal[day] ?? 0
-            let basalKcal = day < today
-                ? RestingBurnFill.filled(
-                    recordedRestingKcal: recordedBasal,
-                    coveredHours: coverage[day] ?? 0,
-                    hourlyRate: rate)
-                : recordedBasal
+            let measured = (active[day] ?? 0) + (basal[day] ?? 0)
             return DayEnergyTotals(
                 day: day,
                 intakeKcal: intake[day] ?? 0,
-                burnKcal: (active[day] ?? 0) + basalKcal
+                burnKcal: DayBudget.effectiveBurn(
+                    measuredKcal: measured, expectedKcal: expectedByDay[day])
             )
         }
     }
 
-    /// The window every resting rate is derived from — ALWAYS this one,
-    /// whatever range is being displayed. A rate computed per-range would
-    /// give the Today screen and a browsed month different fills for the
-    /// same day, which is the disagreement this whole change exists to
-    /// end. One rate, one answer, everywhere.
-    private static let restingRateWindowDays = 92
-
-    /// Resting kcal per worn hour over the standard window. nil when
-    /// there's nothing to learn from, which leaves every day unfilled.
-    func restingHourlyRate(now: Date = .now) async -> Double? {
-        let calendar = Calendar.current
-        guard let start = calendar.date(
-            byAdding: .day, value: -Self.restingRateWindowDays,
-            to: calendar.startOfDay(for: now)
-        ) else { return nil }
-        async let basalRead = dailyTotals(.basalEnergyBurned, start: start, end: now)
-        async let hoursRead = restingCoveredHours(start: start, end: now)
-        guard let basal = try? await basalRead, let hours = try? await hoursRead
-        else { return nil }
-        return RestingBurnFill.hourlyRate(
-            totalRestingKcal: basal.values.reduce(0, +),
-            totalCoveredHours: hours.values.reduce(0, +))
-    }
-
-    /// A day's summary with resting filled for unworn hours — what the
-    /// Today screen shows for a COMPLETED day, so its cards, its headline,
-    /// and the calendar's verdict all describe the same day. Today itself
-    /// comes back untouched: it's still accumulating.
-    public func filledDaySummary(for date: Date, now: Date = .now) async throws -> DailyEnergySummary {
+    /// A day's summary sourced so it can't disagree with the calendar:
+    /// burn comes from the SAME day-bucketed collection every badge,
+    /// streak, and calendar verdict reads.
+    ///
+    /// `daySummary`'s plain `sum` matches whole samples that OVERLAP the
+    /// day, so a basal row running 23:30→00:30 lands in full on BOTH
+    /// adjacent days; the collection query apportions it across the
+    /// boundary instead. That was the Today-vs-calendar burn gap (2,809
+    /// against 2,759 for one day, 2026-07-30). Intake, sodium and water
+    /// stay on `daySummary`: those samples are instantaneous and strict,
+    /// which is why they always agreed.
+    public func alignedDaySummary(for date: Date, now: Date = .now) async throws -> DailyEnergySummary {
         let summary = try await daySummary(for: date, now: now)
-        let calendar = Calendar.current
-        guard date < calendar.startOfDay(for: now) else { return summary }
         let (start, end) = Self.dayRange(for: date, now: now)
-        async let rateRead = restingHourlyRate(now: now)
-        async let coverageRead = restingCoveredHours(start: start, end: end)
-        // BURN COMES FROM THE DAY-BUCKETED COLLECTION, not daySummary's
-        // sum. They disagree, and it isn't rounding: `sum` matches whole
-        // samples that OVERLAP the day, so a basal row running 23:30→00:30
-        // lands in full on both adjacent days, while the collection query
-        // apportions it across the boundary. That difference was the
-        // Today-vs-calendar burn gap (2,809 vs 2,759 for one day), and
-        // filling resting on both paths didn't close it — it preserved it.
-        // The apportioned figure is the correct one, and it's what every
-        // badge, streak, and calendar verdict already reads.
         async let activeRead = dailyTotals(.activeEnergyBurned, start: start, end: end)
         async let basalRead = dailyTotals(.basalEnergyBurned, start: start, end: end)
-        let rate = await rateRead
-        let covered = ((try? await coverageRead) ?? [:]).values.reduce(0, +)
-        let dayStart = calendar.startOfDay(for: date)
-        // A missing key means a genuine zero; only a FAILED read falls
-        // back to the sum, so the two paths can't quietly diverge again.
+        let dayStart = Calendar.current.startOfDay(for: date)
+        // A missing bucket is a genuine zero; only a FAILED read falls
+        // back to the sum, so the paths can't quietly diverge again.
         let active = (try? await activeRead).map { $0[dayStart] ?? 0 } ?? summary.activeBurnKcal
-        let recordedResting = (try? await basalRead).map { $0[dayStart] ?? 0 } ?? summary.restingBurnKcal
+        let resting = (try? await basalRead).map { $0[dayStart] ?? 0 } ?? summary.restingBurnKcal
         return DailyEnergySummary(
             intakeKcal: summary.intakeKcal,
             activeBurnKcal: active,
-            restingBurnKcal: RestingBurnFill.filled(
-                recordedRestingKcal: recordedResting,
-                coveredHours: covered,
-                hourlyRate: rate),
+            restingBurnKcal: resting,
             sodiumMg: summary.sodiumMg,
             waterOz: summary.waterOz
         )
     }
 
-    /// How many hours of each day carry any resting-energy sample — the
-    /// watch's wear time, near enough. An hourly statistics collection
-    /// answers this without pulling every basal sample into memory.
-    private func restingCoveredHours(start: Date, end: Date) async throws -> [Date: Int] {
-        let calendar = Calendar.current
-        let inRange = HKQuery.predicateForSamples(
-            withStart: start, end: end,
-            options: Self.dayPredicateOptions(for: .basalEnergyBurned)
-        )
-        let descriptor = HKStatisticsCollectionQueryDescriptor(
-            predicate: .quantitySample(type: HKQuantityType(.basalEnergyBurned), predicate: inRange),
-            options: .cumulativeSum,
-            anchorDate: start,
-            intervalComponents: DateComponents(hour: 1)
-        )
-        let collection: HKStatisticsCollection
-        do {
-            collection = try await descriptor.result(for: store)
-        } catch let error as HKError where error.code == .errorAuthorizationNotDetermined {
-            return [:]
-        }
-        var hours: [Date: Int] = [:]
-        collection.enumerateStatistics(from: start, to: end) { statistics, _ in
-            guard let sum = statistics.sumQuantity()?.doubleValue(for: .kilocalorie()), sum > 0
-            else { return }
-            let day = calendar.startOfDay(for: statistics.startDate)
-            hours[day, default: 0] += 1
-        }
-        return hours
-    }
 
     // MARK: - Water log
 

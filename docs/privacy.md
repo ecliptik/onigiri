@@ -24,7 +24,9 @@ and Apple Watch. It is built so that your data stays yours.
 
 With your permission, Onigiri reads and writes Apple Health (HealthKit)
 data: dietary energy, nutrients, sodium, water, body weight, and energy
-burned. This data is stored by Apple Health on your device and synced
+burned. It also **reads, but never writes**, your height, date of birth,
+and biological sex — used only to estimate a daily calorie burn for the
+Fixed budget option, and only on your device. This data is stored by Apple Health on your device and synced
 between your devices by Apple, under Apple's protections. Onigiri never
 transmits Health data anywhere, never shares it with third parties, and
 never uses it for advertising or research. Deleting the app leaves your

@@ -180,7 +180,12 @@ struct TodayView: View {
                 switch route {
                 case .nutrition: DayNutritionView(
                     model: model,
-                    dailyBudget: model.isToday ? goals.first.flatMap { plan(for: $0) }?.dailyBudget : nil
+                    // Past days now carry a real budget of their own (the
+                    // snapshotted burn and target), so they get the same
+                    // rows today does instead of a blank where the day's
+                    // aim should be.
+                    dailyBudget: goals.first.flatMap { plan(for: $0) }?.dailyBudget,
+                    deficitGoal: goals.first.flatMap { plan(for: $0) }?.requiredDailyDeficit
                 )
                 }
             }

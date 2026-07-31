@@ -85,4 +85,28 @@ struct DayBudgetTests {
         #expect(ExpectedBurnSource.resolve(nil) == .automatic)
         #expect(ExpectedBurnSource.resolve("nonsense") == .automatic)
     }
+
+    // MARK: Headline wording
+
+    /// "Over" meant two different things and told them as one: the
+    /// reported day banked a 445 kcal deficit and still said "246 kcal
+    /// over", which reads as a gain.
+    @Test func pastTheBudgetButUnderYourBurnReadsAsShortNotOver() {
+        let short = CalorieBudget.remainingHeadline(-246, deficitKcal: 445)
+        #expect(short.value == 246)
+        #expect(short.caption == "kcal short")
+
+        // Ate more than burned — genuinely over.
+        let over = CalorieBudget.remainingHeadline(-208, deficitKcal: -27)
+        #expect(over.caption == "kcal over")
+
+        // Room left is unchanged either way.
+        #expect(CalorieBudget.remainingHeadline(300, deficitKcal: 800).caption == "kcal left")
+        #expect(CalorieBudget.remainingHeadline(300, deficitKcal: -50).caption == "kcal left")
+    }
+
+    /// Exactly break-even is not a deficit, so it can't be "short".
+    @Test func breakEvenReadsAsOver() {
+        #expect(CalorieBudget.remainingHeadline(-100, deficitKcal: 0).caption == "kcal over")
+    }
 }

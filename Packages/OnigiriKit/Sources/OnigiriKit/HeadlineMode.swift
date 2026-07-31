@@ -63,7 +63,7 @@ public extension CalorieBudget {
         switch mode.resolved(hasBudget: dailyBudgetKcal != nil) {
         case .remaining:
             let remaining = (dailyBudgetKcal ?? 0) - summary.intakeKcal
-            let headline = remainingHeadline(remaining)
+            let headline = remainingHeadline(remaining, deficitKcal: -summary.balanceKcal)
             return HeadlineReadout(
                 value: headline.value, caption: headline.caption, signed: false,
                 tint: .remainingStatus(kcal: remaining),

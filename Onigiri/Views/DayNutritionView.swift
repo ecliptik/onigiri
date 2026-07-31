@@ -8,11 +8,17 @@ import OnigiriKit
 /// in the breakdown.
 struct DayNutritionView: View {
     let model: TodayModel
-    /// Calories available to eat today to stay on the goal
-    /// (`CalorieBudget.Plan.dailyBudget`). nil hides the row — the caller
-    /// only supplies it for today with a goal set, since the budget math is
-    /// anchored to today and would mislead on a past day.
+    /// Calories available to eat that day and stay on the goal
+    /// (`CalorieBudget.Plan.dailyBudget`). nil hides the row (no goal set).
+    ///
+    /// Past days used to be excluded here because the budget was anchored
+    /// to TODAY and would have misled. It isn't any more: a completed day
+    /// is built from the burn and target snapshotted when it happened, so
+    /// the budget it shows is the one it actually had (2026-07-30).
     var dailyBudget: Double? = nil
+    /// The deficit the day was aiming for — shown beside the net so the
+    /// day's result has something to be measured against.
+    var deficitGoal: Double? = nil
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
@@ -124,6 +130,16 @@ struct DayNutritionView: View {
                     : "\(-deficit, format: .number.precision(.fractionLength(0))) kcal surplus")
                     .foregroundStyle(deficit >= 0 ? Color.green : Color.orange)
                     .monospacedDigit()
+            }
+            // What the day was actually aiming at, next to what it hit —
+            // "445 deficit" means nothing without the 691 beside it (the
+            // user, 2026-07-30). Past days show the target recorded THAT
+            // day, not today's.
+            if let deficitGoal, deficitGoal > 0 {
+                iconRow("Deficit goal", icon: { Image(systemName: "flag.fill").foregroundStyle(Color.riceToast) }) {
+                    Text("\(deficitGoal, format: .number.precision(.fractionLength(0))) kcal")
+                        .monospacedDigit()
+                }
             }
             // Both rows carry a VoiceOver twin of their status colors —
             // near/over limit and goal-met are otherwise color-only.

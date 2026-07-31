@@ -87,7 +87,10 @@ final class GoalModel {
             weightHistory: weightHistory,
             dailyTotals: dailyTotals,
             targetWeightLb: targetWeightLb,
-            isMaintenance: isMaintenance
+            isMaintenance: isMaintenance,
+            // The same threshold the calendar judges tracked days by, so
+            // "banked" counts exactly the days that earned badges.
+            untrackedBelowKcal: SharedStore.untrackedBelowKcal
         )
     }
 }

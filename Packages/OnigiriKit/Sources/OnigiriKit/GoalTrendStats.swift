@@ -35,6 +35,17 @@ public struct GoalTrendStats: Equatable, Sendable {
     /// slope as lb/week, signed (negative = losing). nil outside
     /// maintenance or under the same weigh-in-span gate.
     public let driftLbPerWeek: Double?
+    /// Net deficit actually banked across the TRACKED days on record,
+    /// and the weight it implies. The number the scale can't argue with:
+    /// a morning of water weight moves the chart, never this. Surplus
+    /// days subtract — banked means net, or it's a scoreboard rather
+    /// than a measure.
+    ///
+    /// Untracked days are excluded, and that exclusion is load-bearing:
+    /// a day with burn and no logged food reads as a ~2,500 kcal deficit
+    /// and would silently inflate this into fiction.
+    public let bankedKcal: Double
+    public let bankedLb: Double
     /// Weigh-ins (and the target/anchor line, when one is set) padded
     /// by 2 lb.
     public let chartYDomain: ClosedRange<Double>
@@ -45,18 +56,21 @@ public struct GoalTrendStats: Equatable, Sendable {
 
     public static let empty = GoalTrendStats(
         predicted30Lb: nil, actual30Lb: nil, projectedWindow: nil,
-        driftLbPerWeek: nil, chartYDomain: 0...1
+        driftLbPerWeek: nil, bankedKcal: 0, bankedLb: 0, chartYDomain: 0...1
     )
 
     public init(
         predicted30Lb: Double?, actual30Lb: Double?,
         projectedWindow: ClosedRange<Date>?, driftLbPerWeek: Double?,
+        bankedKcal: Double = 0, bankedLb: Double = 0,
         chartYDomain: ClosedRange<Double>
     ) {
         self.predicted30Lb = predicted30Lb
         self.actual30Lb = actual30Lb
         self.projectedWindow = projectedWindow
         self.driftLbPerWeek = driftLbPerWeek
+        self.bankedKcal = bankedKcal
+        self.bankedLb = bankedLb
         self.chartYDomain = chartYDomain
     }
 
@@ -65,9 +79,14 @@ public struct GoalTrendStats: Equatable, Sendable {
         dailyTotals: [DayEnergyTotals],
         targetWeightLb: Double?,
         isMaintenance: Bool,
+        untrackedBelowKcal: Double = 0,
         calendar: Calendar = .current,
         now: Date = .now
     ) -> GoalTrendStats {
+        // Tracked days only — see bankedKcal.
+        let banked = dailyTotals
+            .filter { StreakCalendar.isTracked($0, untrackedBelowKcal: untrackedBelowKcal) }
+            .reduce(0) { $0 + $1.deficitKcal }
         let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) ?? now
         // Nil until the window has logged days — no data, no claim.
         let deficits = dailyTotals
@@ -118,7 +137,9 @@ public struct GoalTrendStats: Equatable, Sendable {
         }
         return GoalTrendStats(
             predicted30Lb: predicted, actual30Lb: actual,
-            projectedWindow: projected, driftLbPerWeek: drift, chartYDomain: domain
+            projectedWindow: projected, driftLbPerWeek: drift,
+            bankedKcal: banked, bankedLb: -WeightTrend.Change.predictedLb(totalDeficitKcal: banked),
+            chartYDomain: domain
         )
     }
 

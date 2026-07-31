@@ -417,11 +417,25 @@ struct CalendarView: View {
                             : "in \(displayedMonth.formatted(.dateTime.month(.wide)))"
                     )
                     Divider().frame(height: 36)
-                    stat(
-                        "\(model.streak) \(model.streak == 1 ? "day" : "days")",
-                        caption: "current streak",
-                        color: model.streak > 0 ? .green : .secondary
-                    )
+                    // A broken streak reads as a zero next to a month of
+                    // earned days — sixteen of them, the morning after one
+                    // miss (the user's own calendar, 2026-07-30). That
+                    // reports a good month as a failure. The best run
+                    // stands beside it: the part a single day can't take
+                    // away. Shown only once there IS one, so a first week
+                    // doesn't carry a second zero.
+                    if model.streak == 0, model.bestStreak > 0 {
+                        stat(
+                            "\(model.bestStreak) \(model.bestStreak == 1 ? "day" : "days")",
+                            caption: "best streak"
+                        )
+                    } else {
+                        stat(
+                            "\(model.streak) \(model.streak == 1 ? "day" : "days")",
+                            caption: "current streak",
+                            color: model.streak > 0 ? .green : .secondary
+                        )
+                    }
                 }
                 DetailsCaption()
             }

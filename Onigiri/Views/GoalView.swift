@@ -201,6 +201,16 @@ struct GoalView: View {
                         LabeledContent("Calorie budget") {
                             Text("≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
                         }
+                        // What the effort adds up to, independent of what
+                        // the scale did this morning — the number a bad
+                        // weigh-in can't take away (the user wanted
+                        // something motivating that doesn't swing).
+                        if model.trend.bankedLb > 0 {
+                            LabeledContent("Banked so far") {
+                                Text("\(model.trend.bankedKcal, format: .number.precision(.fractionLength(0))) kcal ≈ \(unit.fromLb(model.trend.bankedLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
+                                    .monospacedDigit()
+                            }
+                        }
                         // Is the math showing up on the scale? Trailing 30
                         // days of deficit vs the smoothed weigh-in change.
                         if let predicted = model.trend.predicted30Lb, let actual = model.trend.actual30Lb {

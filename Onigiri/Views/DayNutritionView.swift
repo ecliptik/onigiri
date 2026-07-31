@@ -33,6 +33,26 @@ struct DayNutritionView: View {
 
     private var totals: NutrientValues { model.foodLog.totalNutrients }
 
+    /// Green once the day has banked its goal, orange when it went the
+    /// wrong way, plain while it's still short — a deficit that hasn't
+    /// reached the target isn't a success to paint green, and it isn't a
+    /// failure either.
+    private var netTint: Color {
+        let deficit = -model.summary.balanceKcal
+        if deficit < 0 { return .orange }
+        guard let deficitGoal, deficitGoal > 0 else { return .green }
+        return deficit >= deficitGoal ? .green : .primary
+    }
+
+    /// The colors above are the only signal otherwise (the sodium row's
+    /// rule — status must never be color-only).
+    private var netStatusLabel: String {
+        let deficit = -model.summary.balanceKcal
+        if deficit < 0 { return "surplus" }
+        guard let deficitGoal, deficitGoal > 0 else { return "deficit" }
+        return deficit >= deficitGoal ? "goal met" : "short of goal"
+    }
+
     var body: some View {
         List {
             summarySection
@@ -123,23 +143,26 @@ struct DayNutritionView: View {
             // deficit (good), negative a surplus. "Net", not "Deficit" —
             // a row labeled Deficit reading "surplus" flipped signs on
             // the reader. The ± glyph says "signed balance".
-            iconRow("Net", icon: { Image(systemName: "plusminus").foregroundStyle(-model.summary.balanceKcal >= 0 ? Color.green : Color.orange) }) {
+            // Banked over goal, on ONE line in the sodium/water grammar —
+            // "1,517 / 633" says on-track at a glance, where two separate
+            // rows made the reader do the comparison (the user,
+            // 2026-07-30). A surplus drops the goal: you aren't partway to
+            // a deficit, you're the wrong side of zero, and "-27 / 633"
+            // reads like arithmetic nobody asked for.
+            iconRow("Net", icon: { Image(systemName: "plusminus").foregroundStyle(netTint) }) {
                 let deficit = -model.summary.balanceKcal
-                Text(deficit >= 0
-                    ? "\(deficit, format: .number.precision(.fractionLength(0))) kcal deficit"
-                    : "\(-deficit, format: .number.precision(.fractionLength(0))) kcal surplus")
-                    .foregroundStyle(deficit >= 0 ? Color.green : Color.orange)
-                    .monospacedDigit()
-            }
-            // What the day was actually aiming at, next to what it hit —
-            // "445 deficit" means nothing without the 691 beside it (the
-            // user, 2026-07-30). Past days show the target recorded THAT
-            // day, not today's.
-            if let deficitGoal, deficitGoal > 0 {
-                iconRow("Deficit goal", icon: { Image(systemName: "flag.fill").foregroundStyle(Color.riceToast) }) {
-                    Text("\(deficitGoal, format: .number.precision(.fractionLength(0))) kcal")
-                        .monospacedDigit()
+                Group {
+                    if deficit < 0 {
+                        Text("\(-deficit, format: .number.precision(.fractionLength(0))) kcal surplus")
+                    } else if let deficitGoal, deficitGoal > 0 {
+                        Text("\(deficit, format: .number.precision(.fractionLength(0))) / \(deficitGoal, format: .number.precision(.fractionLength(0))) kcal deficit")
+                    } else {
+                        Text("\(deficit, format: .number.precision(.fractionLength(0))) kcal deficit")
+                    }
                 }
+                .foregroundStyle(netTint)
+                .monospacedDigit()
+                .accessibilityValue(netStatusLabel)
             }
             // Both rows carry a VoiceOver twin of their status colors —
             // near/over limit and goal-met are otherwise color-only.

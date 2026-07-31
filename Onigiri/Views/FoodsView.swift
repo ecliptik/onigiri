@@ -33,7 +33,9 @@ struct FoodsView: View {
         case editFood(Food)
         case editMeal(Meal)
         case portion(PortionTarget)
-        case scanner
+        /// The notice rides the case so a re-presented scanner can say
+        /// why it's back (a barcode the database didn't have).
+        case scanner(notice: String?)
 
         var id: String {
             switch self {
@@ -43,7 +45,7 @@ struct FoodsView: View {
             case .editFood(let food): "editFood-\(food.persistentModelID.hashValue)"
             case .editMeal(let meal): "editMeal-\(meal.uuid.uuidString)"
             case .portion(let target): "portion-\(target.name)"
-            case .scanner: "scanner"
+            case .scanner(let notice): "scanner-\(notice ?? "")"
             }
         }
     }
@@ -181,7 +183,7 @@ struct FoodsView: View {
                     // the food form (PLAN-entry-doors / unified-search).
                     EntryDoorsSection(
                         scanBusy: isLookingUpBarcode,
-                        onScan: { activeSheet = .scanner },
+                        onScan: { activeSheet = .scanner(notice: nil) },
                         // Same routes the scanner's outcomes take —
                         // a pasted screenshot is a label like any other.
                         onLabel: { parsed in
@@ -407,7 +409,7 @@ struct FoodsView: View {
                         mealItems: target.mealItems)
                 }
                 .presentationDetents([.medium, .large])
-            case .scanner:
+            case .scanner(let notice):
                 // A parsed label takes the unknown-barcode route: the
                 // single sheet slot re-presents as the prefilled food
                 // form. Deferred one turn — the sheet dismisses itself
@@ -423,7 +425,7 @@ struct FoodsView: View {
                     // like a label — name and totals instead of a panel.
                     let prefill = ProductPrefill(product: product)
                     Task { activeSheet = .form(prefill) }
-                })
+                }, notice: notice)
             }
         }
     }
@@ -667,7 +669,12 @@ struct FoodsView: View {
             },
             isLookingUp: $isLookingUpBarcode,
             presentPortion: { activeSheet = .portion($0) },
-            presentForm: { activeSheet = .form($0) }
+            presentForm: { activeSheet = .form($0) },
+            // Straight back to the camera, saying why — the panel is in
+            // their hand and the scanner already reads labels.
+            presentLabelScan: {
+                activeSheet = .scanner(notice: BarcodeRouter.missNotice)
+            }
         )
     }
 

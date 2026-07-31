@@ -9,12 +9,24 @@ import OnigiriKit
 /// in-flight flag, and the error toast.
 @MainActor
 enum BarcodeRouter {
+    /// A barcode the database doesn't have is not a failure, it's the
+    /// next step: the nutrition panel is physically in the user's hand.
+    /// Saying "that barcode isn't in OpenFoodFacts" and stopping put the
+    /// work back on them at the exact moment the camera was already open
+    /// and already able to read the label.
+    static let missNotice = "Not in the database — scan the nutrition label instead."
+
     static func lookUp(
         _ code: String,
         savedTarget: (String) -> PortionTarget?,
         isLookingUp: Binding<Bool>,
         presentPortion: @escaping (PortionTarget) -> Void,
-        presentForm: @escaping (ProductPrefill) -> Void
+        presentForm: @escaping (ProductPrefill) -> Void,
+        /// Reopen the scanner on the label path. Only for `.notFound` —
+        /// a throttled or offline lookup might well succeed on a retry,
+        /// and sending someone to photograph a label instead would be
+        /// worse advice than saying "try again in a minute".
+        presentLabelScan: (() -> Void)? = nil
     ) {
         if let target = savedTarget(code) {
             // One-turn deferral, the label handoff's pattern: the
@@ -33,6 +45,13 @@ enum BarcodeRouter {
             do {
                 let product = try await OpenFoodFactsClient().product(barcode: code)
                 presentForm(ProductPrefill(product: product))
+            } catch OpenFoodFactsError.notFound where presentLabelScan != nil {
+                // Straight back to the camera, on the label path. One
+                // turn later: the scanner that delivered this code is
+                // still dismissing, and re-presenting into that same
+                // slot mid-dismissal is the swap that dies silently
+                // (the 2026-07-22 landmine, above).
+                presentLabelScan?()
             } catch {
                 // Transient failures toast, like everything else.
                 ToastCenter.shared.show(error.localizedDescription)

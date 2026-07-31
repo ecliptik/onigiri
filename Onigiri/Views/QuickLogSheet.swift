@@ -50,7 +50,9 @@ struct QuickLogSheet: View {
 
     private enum ActiveSheet: Identifiable {
         case portion(PortionTarget)
-        case scanner
+        /// The notice rides the case so a re-presented scanner can say
+        /// why it's back (a barcode the database didn't have).
+        case scanner(notice: String?)
         case form(ProductPrefill)
         case editFood(Food)
         case editMeal(Meal)
@@ -58,7 +60,7 @@ struct QuickLogSheet: View {
         var id: String {
             switch self {
             case .portion(let target): "portion-\(target.name)"
-            case .scanner: "scanner"
+            case .scanner(let notice): "scanner-\(notice ?? "")"
             case .form(let prefill): "form-\(prefill.id)"
             case .editFood(let food): "editFood-\(food.persistentModelID.hashValue)"
             case .editMeal(let meal): "editMeal-\(meal.uuid.uuidString)"
@@ -219,7 +221,7 @@ struct QuickLogSheet: View {
                     // form (PLAN-entry-doors / PLAN-unified-search).
                     EntryDoorsSection(
                         scanBusy: isLookingUpBarcode,
-                        onScan: { activeSheet = .scanner },
+                        onScan: { activeSheet = .scanner(notice: nil) },
                         // Same routes the scanner's outcomes take — the
                         // prefilled form, whose Log action returns here
                         // with logDate intact.
@@ -433,7 +435,7 @@ struct QuickLogSheet: View {
                     switch initialKind {
                     case .scan:
                         kind = .favorites
-                        activeSheet = .scanner
+                        activeSheet = .scanner(notice: nil)
                     case .all:
                         kind = .favorites
                     default:
@@ -479,7 +481,7 @@ struct QuickLogSheet: View {
                         )
                     }
                     .presentationDetents([.medium, .large])
-                case .scanner:
+                case .scanner(let notice):
                     // A parsed label takes the unknown-barcode route: the
                     // single sheet slot re-presents as the prefilled food
                     // form, whose Log action returns here with logDate
@@ -497,7 +499,7 @@ struct QuickLogSheet: View {
                         // here with logDate intact.
                         let prefill = ProductPrefill(product: product)
                         Task { activeSheet = .form(prefill) }
-                    })
+                    }, notice: notice)
                 case .form(let prefill):
                     // New foods go through the full form — reviewable, complete,
                     // and saved to the library. Its Log action returns here
@@ -628,7 +630,12 @@ struct QuickLogSheet: View {
             savedTarget: { libraryTarget(forBarcode: $0) },
             isLookingUp: $isLookingUpBarcode,
             presentPortion: { activeSheet = .portion($0) },
-            presentForm: { activeSheet = .form($0) }
+            presentForm: { activeSheet = .form($0) },
+            // Straight back to the camera, saying why — the panel is in
+            // their hand and the scanner already reads labels.
+            presentLabelScan: {
+                activeSheet = .scanner(notice: BarcodeRouter.missNotice)
+            }
         )
     }
 

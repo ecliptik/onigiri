@@ -23,6 +23,10 @@ struct ScanSheet: View {
     let onLabel: (ParsedLabel) -> Void
     /// An identified food photo, prefill-shaped like the label path.
     let onFood: (ScannedProduct) -> Void
+    /// Why the camera is back. Set when a scan found a barcode the
+    /// database doesn't have — the sheet reopens on the label path and
+    /// has to say so, or it just looks like the scan didn't take.
+    var notice: String?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
@@ -106,7 +110,13 @@ struct ScanSheet: View {
                     await read(image, source: .imported)
                 }
             }
-            .onAppear { refreshCameraAuth() }
+            .onAppear {
+                refreshCameraAuth()
+                // Reuses the failure capsule over the viewfinder: same
+                // place the reader's own messages appear, and it clears
+                // itself the moment the shutter is pressed.
+                if failureMessage == nil { failureMessage = notice }
+            }
             // A library pick here can be a menu screenshot too, so this
             // sheet raises the same chooser the entry doors do.
             .screenshotCandidates($candidates) { picked in

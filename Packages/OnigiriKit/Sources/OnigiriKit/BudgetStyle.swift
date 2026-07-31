@@ -29,10 +29,8 @@ public enum BudgetStyle: String, CaseIterable, Sendable {
     /// settings screen hasn't learned yet (the user, 2026-07-30).
     public var explanation: String {
         switch self {
-        case .automatic:
-            "What you can eat goes up on active days. It starts from your recent average burn."
-        case .fixed:
-            "What you can eat is the same every day. Moving more won't add to it, and a day without your watch won't take from it."
+        case .automatic: "Your daily calorie budget goes up when you're active."
+        case .fixed: "Your daily calorie budget stays the same."
         }
     }
 

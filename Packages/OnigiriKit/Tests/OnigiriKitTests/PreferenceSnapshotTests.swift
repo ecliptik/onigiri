@@ -100,6 +100,6 @@ struct PreferenceSnapshotTests {
         #expect(keys.contains(SharedStore.legacyActivityCreditKey))
         // Onboarding deliberately stays OUT (reset must not replay it).
         #expect(!keys.contains(SharedStore.hasOnboardedKey))
-        #expect(keys.count == 47)
+        #expect(keys.count == 48)
     }
 }

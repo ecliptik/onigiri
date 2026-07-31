@@ -31,6 +31,8 @@ struct GoalView: View {
     private var budgetStyle = BudgetStyle.automatic.rawValue
     @AppStorage(SharedStore.customExpectedBurnKey, store: SharedStore.defaults)
     private var customExpectedBurnRaw = 0.0
+    @AppStorage(SharedStore.activityLevelKey, store: SharedStore.defaults)
+    private var activityLevel = ActivityLevel.light.rawValue
 
     private var style: BudgetStyle { BudgetStyle.resolve(budgetStyle) }
 
@@ -255,6 +257,39 @@ struct GoalView: View {
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                             .focused($focusedField, equals: .customBurn)
+                        }
+                        // How much of a typical week is spent moving. Asked
+                        // rather than measured on purpose: it describes the
+                        // routine, which is what a steady number wants.
+                        Picker("Activity level", selection: $activityLevel) {
+                            ForEach(ActivityLevel.allCases, id: \.rawValue) { level in
+                                Text(level.label).tag(level.rawValue)
+                            }
+                        }
+                        .pickerStyle(.navigationLink)
+                        Text(ActivityLevel.resolve(activityLevel).detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        // One tap to fill the field from the body Health
+                        // already knows, instead of inventing a number.
+                        if let suggestion = model.suggestedDailyBurnKcal {
+                            Button {
+                                customExpectedBurnRaw = suggestion
+                                focusedField = nil
+                            } label: {
+                                HStack {
+                                    Text("Use estimate")
+                                    Spacer()
+                                    Text("≈ \(suggestion, format: .number.precision(.fractionLength(0))) kcal/day")
+                                        .foregroundStyle(.secondary)
+                                        .monospacedDigit()
+                                }
+                            }
+                            .disabled(customExpectedBurnRaw == suggestion)
+                        } else {
+                            Text("Add your height and date of birth in Health for an estimate.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                         if customExpectedBurnRaw <= 0 {
                             Text("Leave blank to hold your recent average steady instead.")

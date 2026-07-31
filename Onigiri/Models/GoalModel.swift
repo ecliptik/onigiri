@@ -12,6 +12,11 @@ final class GoalModel {
     /// shared clamp — without it the preview lags Today on active days).
     private(set) var todayBurnKcal: Double = 0
     private(set) var weightHistory: [WeightTrend.Point] = []
+    /// Height/age/sex from Health, for the resting-burn estimate. Read
+    /// once per load and only used to fill the Fixed budget's number.
+    private(set) var bodyHeightCm: Double?
+    private(set) var bodyAgeYears: Int?
+    private(set) var bodySex = BasalEstimate.Sex.unspecified
     private(set) var dailyTotals: [DayEnergyTotals] = []
     /// Cached 7-day smoothing of weightHistory — smoothed once per
     /// load, not per keystroke (typing a target re-evaluates the view
@@ -56,7 +61,23 @@ final class GoalModel {
         dailyTotals = (try? await totalsRead) ?? []
         todayBurnKcal = ((try? await todayRead) ?? .zero).totalBurnKcal
         smoothedHistory = WeightTrend.movingAverage(weightHistory, windowDays: 7)
+        let body = await health.bodyProfile()
+        bodyHeightCm = body.heightCm
+        bodyAgeYears = body.ageYears
+        bodySex = body.sex
         lastLoaded = .now
+    }
+
+    /// A steady daily burn estimated from the body and the stated
+    /// activity level — what the Fixed budget offers instead of asking
+    /// for a number out of thin air. nil when Health doesn't know enough
+    /// (no height or no date of birth).
+    var suggestedDailyBurnKcal: Double? {
+        guard let weight = healthWeightLb, let heightCm = bodyHeightCm, let age = bodyAgeYears
+        else { return nil }
+        return BasalEstimate.dailyBurnKcal(
+            weightLb: weight, heightCm: heightCm, ageYears: age, sex: bodySex,
+            level: SharedStore.activityLevel)
     }
 
     /// Recompute the cached chart stats — when the HealthKit reads land

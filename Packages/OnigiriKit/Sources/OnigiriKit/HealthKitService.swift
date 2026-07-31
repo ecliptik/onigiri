@@ -48,6 +48,13 @@ public final class HealthKitService {
             HKQuantityType(.activeEnergyBurned),
             HKQuantityType(.basalEnergyBurned),
             HKQuantityType(.bodyMass),
+            // Read ONLY to estimate a resting burn for the Fixed budget
+            // (BasalEstimate), so the suggestion comes from Health instead
+            // of asking someone to type their body into a form. Never
+            // written, never logged, never leaves the device.
+            HKQuantityType(.height),
+            HKCharacteristicType(.dateOfBirth),
+            HKCharacteristicType(.biologicalSex),
         ]
         for sample in shareTypes {
             types.insert(sample)
@@ -371,6 +378,43 @@ public final class HealthKitService {
             }
         }
         return totals
+    }
+
+    /// Height, age, and sex — the inputs a resting-burn estimate needs
+    /// beyond weight. Any of them missing returns nil for that piece;
+    /// height comes from the most recent sample, since it's the only one
+    /// of the three that's a measurement rather than a characteristic.
+    ///
+    /// Characteristic reads throw when unauthorized rather than returning
+    /// empty, so each is caught separately: a missing date of birth must
+    /// not also cost us the height.
+    public func bodyProfile() async -> (heightCm: Double?, ageYears: Int?, sex: BasalEstimate.Sex) {
+        let height = try? await latestQuantity(
+            .height, unit: .meterUnit(with: .centi))
+        var age: Int?
+        if let components = try? store.dateOfBirthComponents(),
+           let birthday = Calendar.current.date(from: components) {
+            age = Calendar.current.dateComponents([.year], from: birthday, to: .now).year
+        }
+        let sex: BasalEstimate.Sex = switch try? store.biologicalSex().biologicalSex {
+        case .male: .male
+        case .female: .female
+        default: .unspecified
+        }
+        return (height, age, sex)
+    }
+
+    /// The most recent sample of a quantity type, in the given unit.
+    private func latestQuantity(
+        _ identifier: HKQuantityTypeIdentifier, unit: HKUnit
+    ) async throws -> Double? {
+        let descriptor = HKSampleQueryDescriptor(
+            predicates: [.quantitySample(type: HKQuantityType(identifier))],
+            sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)],
+            limit: 1
+        )
+        return try await descriptor.result(for: store)
+            .first?.quantity.doubleValue(for: unit)
     }
 
     /// Weigh-ins over the trailing `days`, date-ascending, in pounds.

@@ -16,6 +16,12 @@ struct GoalView: View {
     @State private var targetDate = Calendar.current.date(byAdding: .day, value: 90, to: .now) ?? .now
     @State private var mode: String = GoalMode.lose
     @State private var manualWeightLb: Double?
+    /// The "Progress since" override. Automatic (the earliest weigh-in
+    /// on record) is the default and the way back; touching the date
+    /// picker flips this off, exactly like leaving the custom burn field
+    /// blank falls back to the recent average.
+    @State private var startIsAutomatic = true
+    @State private var startDate = Date.now
     @State private var loaded = false
     @State private var confirmingGoalRemoval = false
     /// Which weight field is editing — an enum (not a Bool) so moving
@@ -74,15 +80,51 @@ struct GoalView: View {
     /// Two weigh-ins is the least that draws a line.
     private var hasChart: Bool { model.weightHistory.count >= 2 }
 
-    /// Start → now → target, against the LIVE target field so an edited
-    /// goal previews its own bar. The start is the stored stamp, or the
-    /// earliest weigh-in on record for goals set before the stamp
-    /// existed (kit rules, tested there). Milestones step in the display
-    /// unit's round number — 5 lb, or 2 kg.
+    /// The automatic start — the earliest weigh-in on record, and the
+    /// floor of the date picker.
+    private var automaticStart: WeightTrend.Point? {
+        GoalProgress.automaticStart(in: model.weightHistory)
+    }
+
+    /// The explicit start the form currently describes, or nil for
+    /// automatic. Note the unmoved case: while the picker still sits on
+    /// the STORED date, the stored weight is the answer — looking it up
+    /// again would quietly replace a stamped weight (which can come from
+    /// a manual entry, with no weigh-in behind it) with whatever the
+    /// scale happened to say nearest that day.
+    private var formStart: (date: Date, weightLb: Double, manual: Bool)? {
+        guard !startIsAutomatic else { return nil }
+        if let goal = goals.first, let storedAt = goal.startedAt,
+           let storedLb = goal.startWeightLb,
+           Calendar.current.isDate(storedAt, inSameDayAs: startDate) {
+            return (storedAt, storedLb, goal.startIsManual == true)
+        }
+        guard let weightLb = GoalProgress.startWeightLb(on: startDate, in: model.weightHistory)
+        else { return nil }
+        return (startDate, weightLb, true)
+    }
+
+    /// The form's start differs from the stored one — what makes Save
+    /// light up for a start-only edit, and what tells GoalUpsert to
+    /// write it.
+    private var startEdited: Bool {
+        let storedIsAutomatic = goals.first?.startedAt == nil
+        if startIsAutomatic != storedIsAutomatic { return true }
+        guard !startIsAutomatic, let storedAt = goals.first?.startedAt else { return false }
+        return !Calendar.current.isDate(storedAt, inSameDayAs: startDate)
+    }
+
+    /// Start → now → target, against the LIVE form so an edited goal
+    /// previews its own bar — target, start date and all. The start is
+    /// what the form says, the stored stamp, or the earliest weigh-in on
+    /// record for goals set before the stamp existed (kit rules, tested
+    /// there). Milestones step in the display unit's round number —
+    /// 5 lb, or 2 kg.
     private var progress: GoalProgress? {
         GoalProgress.resolve(
-            startWeightLb: goals.first?.startWeightLb,
-            startedAt: goals.first?.startedAt,
+            startWeightLb: formStart?.weightLb,
+            startedAt: formStart?.date,
+            startIsManual: formStart?.manual ?? false,
             weightHistory: model.weightHistory,
             currentWeightLb: currentWeightLb,
             targetWeightLb: targetWeightLb,
@@ -115,6 +157,7 @@ struct GoalView: View {
         return goal.targetWeightLb != targetWeightLb
             || !Calendar.current.isDate(goal.targetDate, inSameDayAs: targetDate)
             || (model.healthWeightLb == nil && goal.fallbackCurrentWeightLb != manualWeightLb)
+            || startEdited
     }
 
     /// The form differs from the stored goal at all, validity aside —
@@ -132,6 +175,7 @@ struct GoalView: View {
         return storedTarget != targetWeightLb
             || !Calendar.current.isDate(goal.targetDate, inSameDayAs: targetDate)
             || (model.healthWeightLb == nil && goal.fallbackCurrentWeightLb != manualWeightLb)
+            || startEdited
     }
 
     /// The saved lose goal is met: the scale reached the stored target,
@@ -183,7 +227,7 @@ struct GoalView: View {
                     .listRowInsets(EdgeInsets())
                 } footer: {
                     if isMaintenance {
-                        Text("To hold steady, eat close to your average daily burn. Landing within \(StreakCalendar.maintenanceBandKcal, format: .number.precision(.fractionLength(0))) kcal of even earns the day's badge.")
+                        Text("To hold steady, eat close to what you burn in a day. Landing within \(StreakCalendar.maintenanceBandKcal, format: .number.precision(.fractionLength(0))) kcal of even earns the day's badge.")
                     }
                 }
 
@@ -209,6 +253,7 @@ struct GoalView: View {
 
                 if !isMaintenance {
                     targetSection
+                    startSection
                 } else {
                     holdNearSection
                 }
@@ -231,7 +276,7 @@ struct GoalView: View {
                         // weigh-in can't take away (the user wanted
                         // something motivating that doesn't swing).
                         if model.trend.bankedLb > 0 {
-                            LabeledContent("Banked so far") {
+                            LabeledContent("Total deficit") {
                                 Text("\(model.trend.bankedKcal, format: .number.precision(.fractionLength(0))) kcal ≈ \(unit.fromLb(model.trend.bankedLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
                                     .monospacedDigit()
                             }
@@ -282,7 +327,7 @@ struct GoalView: View {
                     if style == .fixed {
                         // Optional under Fixed: pin the number, or leave
                         // it blank and keep using your own average.
-                        LabeledContent("Burn per day") {
+                        LabeledContent("Energy per day") {
                             TextField(
                                 model.averageBurnKcal.map {
                                     $0.formatted(.number.precision(.fractionLength(0)))
@@ -332,7 +377,7 @@ struct GoalView: View {
                                 .foregroundStyle(.secondary)
                         }
                     } else {
-                        LabeledContent("Average burn") {
+                        LabeledContent("Average energy") {
                             // The fallback used to present as fact — the
                             // whole budget inherits this guess.
                             Text(model.averageBurnKcal.map {
@@ -340,7 +385,7 @@ struct GoalView: View {
                             } ?? "≈ 2000 kcal/day (assumed)")
                         }
                         if model.averageBurnKcal == nil {
-                            Text("No activity data in Health yet — the plan assumes 2000 kcal/day until burn history exists.")
+                            Text("No activity data in Health yet — the plan assumes 2000 kcal/day until energy history exists.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -500,13 +545,71 @@ struct GoalView: View {
         }
     }
 
+    // MARK: - Progress since
+
+    /// Where the progress bar and the chart's milestones measure from.
+    /// Automatic by default and shown as such; moving the picker is the
+    /// override, and the button is the way back — the same
+    /// automatic-with-an-override shape as the units and the custom burn.
+    ///
+    /// Only rendered with weigh-ins on record: with none there is no
+    /// date worth offering and nothing for a chosen one to measure.
+    @ViewBuilder
+    private var startSection: some View {
+        if !isMaintenance, let earliest = automaticStart {
+            Section {
+                DatePicker(
+                    "Date",
+                    selection: startDateBinding,
+                    in: startDateRange,
+                    displayedComponents: .date
+                )
+                LabeledContent("Weight then") {
+                    Text("\(unit.fromLb(formStart?.weightLb ?? earliest.weightLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
+                }
+                if !startIsAutomatic {
+                    Button("Use earliest weigh-in") { startIsAutomatic = true }
+                }
+            } header: {
+                Text("Progress since")
+            } footer: {
+                Text(startIsAutomatic
+                     ? "Automatic: your earliest weigh-in on record. Pick a date to measure from instead."
+                     : "The progress bar and the chart's milestones measure from here. The weight is your weigh-in nearest this date.")
+            }
+        }
+    }
+
+    /// Reading it shows whatever start is in force; writing it IS the
+    /// override, so picking a date needs no separate switch.
+    private var startDateBinding: Binding<Date> {
+        Binding(
+            get: { startIsAutomatic ? (automaticStart?.date ?? startDate) : startDate },
+            set: {
+                startDate = $0
+                startIsAutomatic = false
+            }
+        )
+    }
+
+    /// Earliest weigh-in through today. A stored start can predate the
+    /// loaded history (Health is read 90 days back), so it widens the
+    /// floor rather than sitting outside the picker's own range.
+    private var startDateRange: ClosedRange<Date> {
+        let now = Date.now
+        let floor = [automaticStart?.date, goals.first?.startedAt]
+            .compactMap(\.self)
+            .min() ?? now
+        return min(floor, now)...now
+    }
+
     private var holdNearSection: some View {
         Section {
             targetWeightField
         } header: {
             Text("Hold near")
         } footer: {
-            Text("The chart's reference line. The badge judges eating within your burn, not the scale.")
+            Text("The chart's reference line. The badge judges eating within what you burn, not the scale.")
         }
     }
 
@@ -641,14 +744,23 @@ struct GoalView: View {
             .font(.subheadline)
             ProgressView(value: progress.fraction)
                 .tint(.green)
-            // A derived start says so. It's the earliest weigh-in on
-            // record, not the day the goal was set, and quoting the date
-            // is what keeps the number honest for goals that predate the
-            // stamp.
-            if progress.isDerivedStart {
+            // Where the bar measures from. An inferred start names its
+            // source — it's the earliest weigh-in on record, not the day
+            // the goal was set, and saying so is what keeps the number
+            // honest for goals that predate the stamp. A chosen start
+            // just names the date; the control that set it is right
+            // below. A stamp says nothing: it IS the starting day.
+            switch progress.origin {
+            case .earliestWeighIn:
                 Text("Since \(progress.startedAt, format: .dateTime.month(.abbreviated).day()), your earliest weigh-in.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            case .chosen:
+                Text("Since \(progress.startedAt, format: .dateTime.month(.abbreviated).day()).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            case .stamped:
+                EmptyView()
             }
         }
         .padding(.vertical, 2)
@@ -674,7 +786,7 @@ struct GoalView: View {
         let total = unit.fromLb(progress.totalLb)
             .formatted(.number.precision(.fractionLength(0...1)))
         var summary = "\(lost) of \(total) \(unit.spoken) lost, \(percent) percent"
-        if progress.isDerivedStart {
+        if progress.origin != .stamped {
             summary += ", since \(progress.startedAt.formatted(.dateTime.month(.wide).day()))"
         }
         return summary
@@ -689,11 +801,15 @@ struct GoalView: View {
             targetDate = goal.targetDate
             manualWeightLb = goal.fallbackCurrentWeightLb
             mode = goal.mode ?? GoalMode.lose
+            startIsAutomatic = goal.startedAt == nil
+            startDate = goal.startedAt ?? automaticStart?.date ?? .now
         } else {
             targetWeightLb = nil
             manualWeightLb = nil
             mode = GoalMode.lose
             targetDate = Calendar.current.date(byAdding: .day, value: 90, to: .now) ?? .now
+            startIsAutomatic = true
+            startDate = automaticStart?.date ?? .now
         }
     }
 
@@ -734,12 +850,19 @@ struct GoalView: View {
         guard let target = targetWeightLb
             ?? (isMaintenance ? (currentWeightLb ?? goals.first?.targetWeightLb ?? 0) : nil)
         else { return }
+        // Only an actual start edit is sent — otherwise the stamp rule
+        // stays in charge, and an untouched auto-stamped goal doesn't
+        // quietly promote itself to a manual one.
+        let startChange: GoalUpsert.StartChange? = startEdited
+            ? formStart.map { .manual(at: $0.date, weightLb: $0.weightLb) } ?? .automatic
+            : nil
         GoalUpsert.save(
             targetLb: target,
             targetDate: targetDate,
             healthWeightLb: model.healthWeightLb,
             manualWeightLb: manualWeightLb,
             mode: mode == GoalMode.lose ? nil : mode,
+            startChange: startChange,
             goals: goals,
             context: context
         )

@@ -15,15 +15,30 @@ public struct GoalProgress: Equatable, Sendable {
     public let startedAt: Date
     public let currentLb: Double
     public let targetLb: Double
-    /// The start was recovered from the earliest weigh-in on record
-    /// rather than stamped when the goal was set. Existing goals have no
-    /// stamp and can't be given one honestly: writing today's weight in
-    /// would tell someone forty pounds down that they're at 0%. Deriving
-    /// it understates a long journey (Health history is read 90 days
-    /// back) but never overstates it, and the UI says which date it's
-    /// counting from. It stops being a fallback the next time the goal
-    /// is edited.
-    public let isDerivedStart: Bool
+    /// Where the start came from — the UI says so, because a number
+    /// this load-bearing shouldn't be silent about its source.
+    public let origin: StartOrigin
+
+    /// The three ways a journey can acquire a beginning, in precedence
+    /// order: what the user said, what was recorded, what can be
+    /// inferred.
+    public enum StartOrigin: Equatable, Sendable {
+        /// The user picked this start date themselves. It outranks the
+        /// others and survives a target change — a deliberate choice
+        /// that re-stamped itself would be a silent field failure.
+        case chosen
+        /// Recorded when the goal was set, or when its target last
+        /// changed. Needs no explanation on screen: it IS the day the
+        /// journey started.
+        case stamped
+        /// Nothing on record, so: the earliest weigh-in in Health.
+        /// Existing goals have no stamp and can't be given one honestly
+        /// — writing today's weight in would tell someone forty pounds
+        /// down that they're at 0%. Inferring understates a long journey
+        /// (Health history is read 90 days back) but never overstates
+        /// it, and the UI names the date it's counting from.
+        case earliestWeighIn
+    }
     /// Marks between start and target, nearest first. The target itself
     /// is NOT among them — the chart already draws that line, and a
     /// milestone on top of it would only thicken it.
@@ -73,6 +88,28 @@ public struct GoalProgress: Equatable, Sendable {
         unit == .pounds ? 5 : unit.toLb(2)
     }
 
+    /// The automatic start: the earliest weigh-in on record. Also the
+    /// floor for a start-date picker — before it there is no weight to
+    /// measure from, so a date there could only mint fiction.
+    ///
+    /// `.first` because Health hands weigh-ins back date-ascending, the
+    /// same assumption every other reader of this array makes.
+    public static func automaticStart(in history: [WeightTrend.Point]) -> WeightTrend.Point? {
+        history.first
+    }
+
+    /// What the scale said around a chosen start date: the reading
+    /// nearest it. Nearest rather than on-the-day because scales skip
+    /// days, and a date someone picked deliberately shouldn't be refused
+    /// for landing on one of them.
+    public static func startWeightLb(
+        on date: Date, in history: [WeightTrend.Point]
+    ) -> Double? {
+        history.min {
+            abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
+        }?.weightLb
+    }
+
     /// Resolve the journey, or nil when there isn't one to show.
     ///
     /// nil in maintenance (no journey — the anchor isn't a destination),
@@ -81,6 +118,7 @@ public struct GoalProgress: Equatable, Sendable {
     public static func resolve(
         startWeightLb: Double?,
         startedAt: Date?,
+        startIsManual: Bool = false,
         weightHistory: [WeightTrend.Point],
         currentWeightLb: Double?,
         targetWeightLb: Double?,
@@ -92,14 +130,14 @@ public struct GoalProgress: Equatable, Sendable {
               let target = targetWeightLb, target > 0
         else { return nil }
 
-        // The stamp wins; the earliest weigh-in on record is the
+        // An explicit start wins; the earliest weigh-in on record is the
         // fallback. Both halves are required — a start weight without a
         // date can't say what it's measuring from.
-        let start: (lb: Double, at: Date, derived: Bool)
+        let start: (lb: Double, at: Date, origin: StartOrigin)
         if let startWeightLb, let startedAt {
-            start = (startWeightLb, startedAt, false)
-        } else if let earliest = weightHistory.first {
-            start = (earliest.weightLb, earliest.date, true)
+            start = (startWeightLb, startedAt, startIsManual ? .chosen : .stamped)
+        } else if let earliest = automaticStart(in: weightHistory) {
+            start = (earliest.weightLb, earliest.date, .earliestWeighIn)
         } else {
             return nil
         }
@@ -110,7 +148,7 @@ public struct GoalProgress: Equatable, Sendable {
             startedAt: start.at,
             currentLb: current,
             targetLb: target,
-            isDerivedStart: start.derived,
+            origin: start.origin,
             milestones: milestones(
                 startLb: start.lb, targetLb: target,
                 currentLb: current, stepLb: milestoneStepLb

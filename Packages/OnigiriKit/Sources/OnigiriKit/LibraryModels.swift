@@ -200,6 +200,12 @@ public final class GoalSettings {
     /// <date>" so the number is honest about where it came from.
     public var startWeightLb: Double?
     public var startedAt: Date?
+    /// The user picked this start themselves (Goal → Progress since),
+    /// rather than it being stamped. A chosen start SURVIVES a target
+    /// change: re-stamping a deliberate choice would be exactly the
+    /// silent field failure the stamp rule exists to avoid. nil/false =
+    /// stamped. Clearing all three returns the start to automatic.
+    public var startIsManual: Bool?
 
     public init(
         targetWeightLb: Double,
@@ -207,7 +213,8 @@ public final class GoalSettings {
         fallbackCurrentWeightLb: Double? = nil,
         mode: String? = nil,
         startWeightLb: Double? = nil,
-        startedAt: Date? = nil
+        startedAt: Date? = nil,
+        startIsManual: Bool? = nil
     ) {
         self.targetWeightLb = targetWeightLb
         self.targetDate = targetDate
@@ -215,6 +222,7 @@ public final class GoalSettings {
         self.mode = mode
         self.startWeightLb = startWeightLb
         self.startedAt = startedAt
+        self.startIsManual = startIsManual
     }
 
     public var isMaintenance: Bool { mode == GoalMode.maintain }

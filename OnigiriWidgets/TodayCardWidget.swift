@@ -96,7 +96,7 @@ struct TodayCardView: View {
                 header
                 Spacer(minLength: 0)
                 HStack(spacing: 12) {
-                    energyFlank(summary.totalBurnKcal, "Burned")
+                    energyFlank(summary.totalBurnKcal, "Used")
                     ringedHeadline
                     energyFlank(summary.intakeKcal, "Eaten")
                 }
@@ -111,7 +111,7 @@ struct TodayCardView: View {
                     ringedHeadline
                     VStack(spacing: 6) {
                         HStack(spacing: 12) {
-                            miniFlank(summary.totalBurnKcal, "Burned")
+                            miniFlank(summary.totalBurnKcal, "Used")
                             miniFlank(summary.intakeKcal, "Eaten")
                         }
                         trackedMetricsRow
@@ -238,12 +238,12 @@ struct TodayCardView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
-        // One VoiceOver stop ("1,505, Burned"), not two — mirrors the
+        // One VoiceOver stop ("1,505, Used"), not two — mirrors the
         // app-side energyFlank grouping.
         .accessibilityElement(children: .combine)
     }
 
-    /// The medium family's one-line flank: "1,505 Burned".
+    /// The medium family's one-line flank: "1,505 Used".
     private func miniFlank(_ value: Double, _ label: String) -> some View {
         HStack(spacing: 3) {
             Text(value, format: .number.precision(.fractionLength(0)))

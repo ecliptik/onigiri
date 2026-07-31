@@ -35,7 +35,8 @@ enum LibraryTransfer {
                 .init(targetWeightLb: $0.targetWeightLb, targetDate: $0.targetDate,
                       fallbackCurrentWeightLb: $0.fallbackCurrentWeightLb,
                       mode: $0.mode,
-                      startWeightLb: $0.startWeightLb, startedAt: $0.startedAt)
+                      startWeightLb: $0.startWeightLb, startedAt: $0.startedAt,
+                      startIsManual: $0.startIsManual)
             },
             water: .init(servingOz: SharedStore.waterServingOz, goalOz: SharedStore.waterGoalOz)
         )
@@ -106,6 +107,7 @@ enum LibraryTransfer {
                 existing.mode = goalDef.mode
                 existing.startWeightLb = goalDef.startWeightLb
                 existing.startedAt = goalDef.startedAt
+                existing.startIsManual = goalDef.startIsManual
             } else {
                 context.insert(GoalSettings(
                     targetWeightLb: goalDef.targetWeightLb,
@@ -113,7 +115,8 @@ enum LibraryTransfer {
                     fallbackCurrentWeightLb: goalDef.fallbackCurrentWeightLb,
                     mode: goalDef.mode,
                     startWeightLb: goalDef.startWeightLb,
-                    startedAt: goalDef.startedAt
+                    startedAt: goalDef.startedAt,
+                    startIsManual: goalDef.startIsManual
                 ))
             }
         }

@@ -15,6 +15,7 @@ struct GoalProgressTests {
     private static func resolve(
         startWeightLb: Double? = nil,
         startedAt: Date? = nil,
+        startIsManual: Bool = false,
         history: [WeightTrend.Point] = [],
         currentWeightLb: Double? = 205,
         targetWeightLb: Double? = 190,
@@ -23,6 +24,7 @@ struct GoalProgressTests {
     ) -> GoalProgress? {
         GoalProgress.resolve(
             startWeightLb: startWeightLb, startedAt: startedAt,
+            startIsManual: startIsManual,
             weightHistory: history, currentWeightLb: currentWeightLb,
             targetWeightLb: targetWeightLb, isMaintenance: isMaintenance,
             milestoneStepLb: stepLb
@@ -40,7 +42,7 @@ struct GoalProgressTests {
         ))
         #expect(progress.startLb == 215)
         #expect(progress.startedAt == stampedAt)
-        #expect(progress.isDerivedStart == false)
+        #expect(progress.origin == .stamped)
     }
 
     @Test func anUnstampedGoalDerivesFromTheEarliestWeighIn() throws {
@@ -53,7 +55,7 @@ struct GoalProgressTests {
         #expect(progress.startedAt == Self.day(-60))
         // The UI leans on this to say "since Jun 1" instead of implying
         // the goal was set then.
-        #expect(progress.isDerivedStart)
+        #expect(progress.origin == .earliestWeighIn)
     }
 
     /// The trap the plan calls out: a mid-journey goal must NOT be
@@ -78,6 +80,46 @@ struct GoalProgressTests {
 
     @Test func noStartAtAllMeansNoProgress() {
         #expect(Self.resolve(history: []) == nil)
+    }
+
+    /// A start the user picked is reported as theirs, so the caption can
+    /// stop explaining where the date came from.
+    @Test func aChosenStartSaysSo() throws {
+        let progress = try #require(Self.resolve(
+            startWeightLb: 215, startedAt: Self.day(-40), startIsManual: true))
+        #expect(progress.origin == .chosen)
+    }
+
+    // MARK: Picking a start date
+
+    @Test func theAutomaticStartIsTheEarliestWeighIn() throws {
+        let history = [
+            WeightTrend.Point(date: Self.day(-60), weightLb: 215),
+            WeightTrend.Point(date: Self.day(-30), weightLb: 210),
+        ]
+        let earliest = try #require(GoalProgress.automaticStart(in: history))
+        #expect(earliest.date == Self.day(-60))
+        #expect(earliest.weightLb == 215)
+        #expect(GoalProgress.automaticStart(in: []) == nil)
+    }
+
+    /// A chosen date takes the weigh-in NEAREST it — scales skip days,
+    /// and a date picked deliberately shouldn't be refused for landing
+    /// on one of them.
+    @Test func aChosenDateTakesTheNearestWeighIn() {
+        let history = [
+            WeightTrend.Point(date: Self.day(-60), weightLb: 215),
+            WeightTrend.Point(date: Self.day(-30), weightLb: 210),
+            WeightTrend.Point(date: Self.day(0), weightLb: 205),
+        ]
+        // Exactly on a reading.
+        #expect(GoalProgress.startWeightLb(on: Self.day(-30), in: history) == 210)
+        // Between two: the closer one wins, on both sides of the midpoint.
+        #expect(GoalProgress.startWeightLb(on: Self.day(-35), in: history) == 210)
+        #expect(GoalProgress.startWeightLb(on: Self.day(-52), in: history) == 215)
+        // Outside the history entirely: the nearest end.
+        #expect(GoalProgress.startWeightLb(on: Self.day(-500), in: history) == 215)
+        #expect(GoalProgress.startWeightLb(on: Self.day(0), in: []) == nil)
     }
 
     // MARK: What there's nothing to show for

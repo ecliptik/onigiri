@@ -57,6 +57,26 @@ doesn't exist), and the stamp needs BOTH halves — a weight with no date
 can't say what it measures from, so a half-stamp falls through to
 derivation.
 
+### The start is also a CHOICE (added same day, the user)
+
+Goal → "Progress since": a date picker seeded with whatever start is in
+force, bounded to [earliest weigh-in, today]. Moving it IS the override
+(no separate switch); "Use earliest weigh-in" is the way back. The start
+weight follows the chosen date — the weigh-in NEAREST it, since scales
+skip days — and is shown, not hidden, so a wrong one is visible.
+
+`startIsManual` is the third additive optional, and it earns its keep:
+a chosen start must SURVIVE a target change, or the stamp rule would
+silently discard a deliberate choice. Two rules keep the stamp honest:
+it skips a goal whose start is manual, and it skips any save that
+carried a start edit (someone who asked for automatic in that save
+shouldn't be handed today's date back).
+
+One subtlety worth keeping: while the picker still sits on the STORED
+date, the STORED weight is the answer — re-looking it up would quietly
+replace a stamped weight (which can come from a manual entry, with no
+weigh-in behind it) with whatever the scale said nearest that day.
+
 ### 3. Milestones on the chart
 
 Marks every 5 lb from start toward target, plus the target itself. Quiet

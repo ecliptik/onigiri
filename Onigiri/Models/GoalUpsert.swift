@@ -27,6 +27,17 @@ enum GoalUpsert {
         return target < current ? .valid : .targetNotBelowCurrent
     }
 
+    /// What this save does to the journey's start point. `nil` (the
+    /// default) leaves the stored start alone — most saves are about the
+    /// target, and only the stamp rule below may touch it.
+    enum StartChange {
+        /// The user picked a start themselves. Sticky: no later target
+        /// change re-stamps over it.
+        case manual(at: Date, weightLb: Double)
+        /// Back to inferring it from the earliest weigh-in on record.
+        case automatic
+    }
+
     /// Update the existing goal or insert one, then push sync (which
     /// reloads widgets) and replan reminders. Call after `.valid`.
     static func save(
@@ -35,6 +46,7 @@ enum GoalUpsert {
         healthWeightLb: Double?,
         manualWeightLb: Double?,
         mode: String? = nil,
+        startChange: StartChange? = nil,
         goals: [GoalSettings],
         context: ModelContext
     ) {
@@ -54,21 +66,48 @@ enum GoalUpsert {
             goal.targetDate = targetDate
             goal.fallbackCurrentWeightLb = fallback
             goal.mode = mode
-            if targetChanged, mode != GoalMode.maintain, let currentLb {
+            switch startChange {
+            case .manual(let at, let weightLb):
+                goal.startWeightLb = weightLb
+                goal.startedAt = at
+                goal.startIsManual = true
+            case .automatic:
+                goal.startWeightLb = nil
+                goal.startedAt = nil
+                goal.startIsManual = nil
+            case nil:
+                break
+            }
+            // The stamp is for goals whose start nobody is steering: a
+            // start the user just set, or set earlier and never
+            // revoked, outranks it. `startChange == nil` matters as much
+            // as the flag — someone who asked for automatic IN THIS SAVE
+            // shouldn't be handed today's date back.
+            if targetChanged, startChange == nil, goal.startIsManual != true,
+               mode != GoalMode.maintain, let currentLb {
                 goal.startWeightLb = currentLb
                 goal.startedAt = .now
             }
         } else {
+            // Maintenance has no journey to measure; its "target" is a
+            // hold-near anchor, and stamping one would mint a start the
+            // moment someone nudged the anchor.
+            let stamped: (lb: Double, at: Date)? = mode == GoalMode.maintain
+                ? nil
+                : currentLb.map { ($0, .now) }
+            let start: (lb: Double, at: Date, manual: Bool)? = switch startChange {
+            case .manual(let at, let weightLb): (weightLb, at, true)
+            case .automatic: nil
+            case nil: stamped.map { ($0.lb, $0.at, false) }
+            }
             context.insert(GoalSettings(
                 targetWeightLb: targetLb,
                 targetDate: targetDate,
                 fallbackCurrentWeightLb: fallback,
                 mode: mode,
-                // Maintenance has no journey to measure; its "target" is
-                // a hold-near anchor, and stamping one would mint a
-                // start the moment someone nudged the anchor.
-                startWeightLb: mode == GoalMode.maintain ? nil : currentLb,
-                startedAt: mode == GoalMode.maintain || currentLb == nil ? nil : .now
+                startWeightLb: start?.lb,
+                startedAt: start?.at,
+                startIsManual: start?.manual == true ? true : nil
             ))
         }
         try? context.save()

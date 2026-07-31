@@ -109,11 +109,16 @@ public struct LibraryExport: Codable, Sendable, Equatable {
         /// live without it.
         public var startWeightLb: Double?
         public var startedAt: Date?
+        /// Whether that start was the user's own choice — restoring it
+        /// as a stamp would let the next target change quietly discard
+        /// it.
+        public var startIsManual: Bool?
 
         public init(
             targetWeightLb: Double, targetDate: Date,
             fallbackCurrentWeightLb: Double?, mode: String? = nil,
-            startWeightLb: Double? = nil, startedAt: Date? = nil
+            startWeightLb: Double? = nil, startedAt: Date? = nil,
+            startIsManual: Bool? = nil
         ) {
             self.targetWeightLb = targetWeightLb
             self.targetDate = targetDate
@@ -121,6 +126,7 @@ public struct LibraryExport: Codable, Sendable, Equatable {
             self.mode = mode
             self.startWeightLb = startWeightLb
             self.startedAt = startedAt
+            self.startIsManual = startIsManual
         }
     }
 

@@ -299,3 +299,17 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   `.searchable` (bottom placement) everywhere — the user vetoed custom
   bars and auto-focus; the scanner is a labeled list row (ScanRowLabel),
   never a toolbar icon.
+- Copy: "burn" is a VERB in flowing sentences, never a noun in a label
+  (2026-07-31, the user). Terse labels for the active+resting TOTAL say
+  "Used" (Today/widget flanks, opposite "Eaten") or "energy" in noun
+  slots ("Total energy", "Average energy", "Energy per day"); the
+  breakdown rows use Health's own "Active energy"/"Resting energy".
+  Prose keeps the idiom — Siri says "burned 1,505 today", the site says
+  "what you burn in a day" — because it reads naturally aloud where a
+  label doesn't, and the metaphor overstates agency on a number that is
+  ~70% resting metabolism. "Banked" is retired from user copy entirely
+  ("Total deficit", "the deficit counts"). Identifiers are exempt and
+  stay `burnKcal`/`bankedKcal`: they mirror HealthKit's own
+  `activeEnergyBurned`. `docs/privacy.md` keeps "energy burned" where it
+  NAMES the HealthKit category — precision outranks voice there, and
+  that file has a wiki twin that must be edited by hand to match.

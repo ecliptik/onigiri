@@ -199,51 +199,6 @@ struct GoalView: View {
                         LabeledContent("Calorie budget") {
                             Text("≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
                         }
-                        // Where the budget's burn comes from. Automatic
-                        // follows your recent days; Custom pins a number
-                        // the app leaves alone.
-                        Picker("Expected burn", selection: $expectedBurnSource) {
-                            ForEach(ExpectedBurnSource.allCases, id: \.rawValue) { source in
-                                Text(source.label).tag(source.rawValue)
-                            }
-                        }
-                        if ExpectedBurnSource.resolve(expectedBurnSource) == .custom {
-                            LabeledContent("Burn per day") {
-                                TextField("0", value: customExpectedBurn, format: .number)
-                                    .keyboardType(.decimalPad)
-                                    .multilineTextAlignment(.trailing)
-                                    .focused($focusedField, equals: .customBurn)
-                            }
-                            if customExpectedBurnRaw <= 0 {
-                                Text("Set a number, or the plan falls back to your recent average.")
-                                    .font(.caption)
-                                    .foregroundStyle(.orange)
-                            }
-                        } else {
-                            LabeledContent("Average burn") {
-                                // The fallback used to present as fact — the
-                                // whole budget inherits this guess.
-                                Text(model.averageBurnKcal.map {
-                                    "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
-                                } ?? "≈ 2000 kcal/day (assumed)")
-                            }
-                            if model.averageBurnKcal == nil {
-                                Text("No activity data in Health yet — the plan assumes 2000 kcal/day until burn history exists.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        // Whether an active day earns more food. Neither
-                        // answer is more correct — it's how you want the
-                        // app to behave (the user, 2026-07-30).
-                        Picker("Active days", selection: $activityCredit) {
-                            ForEach(ActivityCredit.allCases, id: \.rawValue) { credit in
-                                Text(credit.label).tag(credit.rawValue)
-                            }
-                        }
-                        Text(ActivityCredit.resolve(activityCredit).explanation)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                         // Is the math showing up on the scale? Trailing 30
                         // days of deficit vs the smoothed weigh-in change.
                         if let predicted = model.trend.predicted30Lb, let actual = model.trend.actual30Lb {
@@ -266,6 +221,59 @@ struct GoalView: View {
                     }
                 }
 
+                // Its OWN section, deliberately outside `if let plan`:
+                // these two SHAPE the plan, so they have to stay
+                // reachable when the plan can't be computed — goal
+                // reached, target cleared, custom burn left blank.
+                // Otherwise the knob that fixes it disappears exactly
+                // when it's needed.
+                Section("Budget style") {
+                    // Where the budget's burn comes from. Automatic
+                    // follows your recent days; Custom pins a number
+                    // the app leaves alone.
+                    Picker("Expected burn", selection: $expectedBurnSource) {
+                        ForEach(ExpectedBurnSource.allCases, id: \.rawValue) { source in
+                            Text(source.label).tag(source.rawValue)
+                        }
+                    }
+                    if ExpectedBurnSource.resolve(expectedBurnSource) == .custom {
+                        LabeledContent("Burn per day") {
+                            TextField("0", value: customExpectedBurn, format: .number)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .focused($focusedField, equals: .customBurn)
+                        }
+                        if customExpectedBurnRaw <= 0 {
+                            Text("Set a number, or the plan falls back to your recent average.")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    } else {
+                        LabeledContent("Average burn") {
+                            // The fallback used to present as fact — the
+                            // whole budget inherits this guess.
+                            Text(model.averageBurnKcal.map {
+                                "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
+                            } ?? "≈ 2000 kcal/day (assumed)")
+                        }
+                        if model.averageBurnKcal == nil {
+                            Text("No activity data in Health yet — the plan assumes 2000 kcal/day until burn history exists.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    // Whether an active day earns more food. Neither
+                    // answer is more correct — it's how you want the
+                    // app to behave (the user, 2026-07-30).
+                    Picker("Active days", selection: $activityCredit) {
+                        ForEach(ActivityCredit.allCases, id: \.rawValue) { credit in
+                            Text(credit.label).tag(credit.rawValue)
+                        }
+                    }
+                    Text(ActivityCredit.resolve(activityCredit).explanation)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 // Goals used to be edit-only: hitting the target (or
                 // quitting the diet) left the deficit budget and streak
                 // judging on forever.

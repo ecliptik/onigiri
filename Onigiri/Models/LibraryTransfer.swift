@@ -34,7 +34,8 @@ enum LibraryTransfer {
             goal: goal.map {
                 .init(targetWeightLb: $0.targetWeightLb, targetDate: $0.targetDate,
                       fallbackCurrentWeightLb: $0.fallbackCurrentWeightLb,
-                      mode: $0.mode)
+                      mode: $0.mode,
+                      startWeightLb: $0.startWeightLb, startedAt: $0.startedAt)
             },
             water: .init(servingOz: SharedStore.waterServingOz, goalOz: SharedStore.waterGoalOz)
         )
@@ -103,12 +104,16 @@ enum LibraryTransfer {
                 existing.fallbackCurrentWeightLb = goalDef.fallbackCurrentWeightLb
                 // nil (old exports) means .lose — GoalSettings' own rule.
                 existing.mode = goalDef.mode
+                existing.startWeightLb = goalDef.startWeightLb
+                existing.startedAt = goalDef.startedAt
             } else {
                 context.insert(GoalSettings(
                     targetWeightLb: goalDef.targetWeightLb,
                     targetDate: goalDef.targetDate,
                     fallbackCurrentWeightLb: goalDef.fallbackCurrentWeightLb,
-                    mode: goalDef.mode
+                    mode: goalDef.mode,
+                    startWeightLb: goalDef.startWeightLb,
+                    startedAt: goalDef.startedAt
                 ))
             }
         }

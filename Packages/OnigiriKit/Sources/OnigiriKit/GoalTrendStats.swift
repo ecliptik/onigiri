@@ -31,6 +31,13 @@ public struct GoalTrendStats: Equatable, Sendable {
     /// wide enough to stop the flapping, tight enough to still answer
     /// the question.
     public let projectedWindow: ClosedRange<Date>?
+    /// The same projection with `paceBoostKcalPerDay` more deficit a day
+    /// — the finish date as a CHOICE rather than a forecast to watch.
+    /// Same fit, same grid, same three-year cutoff; only the slope
+    /// changes. nil without a base projection, and nil when the boost
+    /// doesn't move the answer off its bucket — an identical pair of
+    /// dates offered as an incentive is worse than saying nothing.
+    public let fasterWindow: ClosedRange<Date>?
     /// Maintenance's counterpart to the projection: the same fit's
     /// slope as lb/week, signed (negative = losing). nil outside
     /// maintenance or under the same weigh-in-span gate.
@@ -54,20 +61,29 @@ public struct GoalTrendStats: Equatable, Sendable {
     /// under the scale's own noise floor for a week-scale readout.
     public static let steadyDriftThresholdLbPerWeek = 0.15
 
+    /// How much more daily deficit the "or you could" line offers. Small
+    /// on purpose: a hundred kcal is one snack, an answer someone can
+    /// act on tonight, where 500 would just restate the diet.
+    public static let paceBoostKcalPerDay = 100.0
+
     public static let empty = GoalTrendStats(
         predicted30Lb: nil, actual30Lb: nil, projectedWindow: nil,
+        fasterWindow: nil,
         driftLbPerWeek: nil, bankedKcal: 0, bankedLb: 0, chartYDomain: 0...1
     )
 
     public init(
         predicted30Lb: Double?, actual30Lb: Double?,
-        projectedWindow: ClosedRange<Date>?, driftLbPerWeek: Double?,
+        projectedWindow: ClosedRange<Date>?,
+        fasterWindow: ClosedRange<Date>? = nil,
+        driftLbPerWeek: Double?,
         bankedKcal: Double = 0, bankedLb: Double = 0,
         chartYDomain: ClosedRange<Double>
     ) {
         self.predicted30Lb = predicted30Lb
         self.actual30Lb = actual30Lb
         self.projectedWindow = projectedWindow
+        self.fasterWindow = fasterWindow
         self.driftLbPerWeek = driftLbPerWeek
         self.bankedKcal = bankedKcal
         self.bankedLb = bankedLb
@@ -114,14 +130,25 @@ public struct GoalTrendStats: Equatable, Sendable {
             : nil
 
         var projected: ClosedRange<Date>?
+        var faster: ClosedRange<Date>?
         var drift: Double?
         if isMaintenance {
             drift = trendFit.map { $0.slopeLbPerDay * 7 }
-        } else if let target = targetWeightLb, let fit = trendFit,
-                  fit.currentLb > target, fit.slopeLbPerDay < -0.01 {
-            let days = (fit.currentLb - target) / -fit.slopeLbPerDay
-            if days < 365 * 3 {
-                projected = projectionWindow(daysOut: days, from: now, calendar: calendar)
+        } else if let target = targetWeightLb, let fit = trendFit {
+            projected = finishWindow(
+                fit: fit, slopeLbPerDay: fit.slopeLbPerDay, target: target,
+                from: now, calendar: calendar)
+            // Pace as a choice. One more kcal/day of deficit is one more
+            // lb/day off the slope, divided by the 3,500 the rest of the
+            // app converts with — no new math, and the answer lands on
+            // the same grid so it reads like its neighbour.
+            if let projected {
+                let boost = paceBoostKcalPerDay / WeightTrend.Change.kcalPerLb
+                let sooner = finishWindow(
+                    fit: fit, slopeLbPerDay: fit.slopeLbPerDay - boost, target: target,
+                    from: now, calendar: calendar)
+                // Only when it actually buys a different bucket.
+                if let sooner, sooner.lowerBound < projected.lowerBound { faster = sooner }
             }
         }
 
@@ -137,10 +164,25 @@ public struct GoalTrendStats: Equatable, Sendable {
         }
         return GoalTrendStats(
             predicted30Lb: predicted, actual30Lb: actual,
-            projectedWindow: projected, driftLbPerWeek: drift,
+            projectedWindow: projected, fasterWindow: faster, driftLbPerWeek: drift,
             bankedKcal: banked, bankedLb: -WeightTrend.Change.predictedLb(totalDeficitKcal: banked),
             chartYDomain: domain
         )
+    }
+
+    /// When a given slope reaches the target, gated. Extracted so the
+    /// trend answer and the with-more-deficit answer can't drift apart:
+    /// both need the same "still above target", "actually descending"
+    /// and "not past three years" rules to be comparable at all.
+    private static func finishWindow(
+        fit: WeightTrend.LinearFit, slopeLbPerDay: Double, target: Double,
+        from now: Date, calendar: Calendar
+    ) -> ClosedRange<Date>? {
+        guard fit.currentLb > target, slopeLbPerDay < -0.01 else { return nil }
+        let days = (fit.currentLb - target) / -slopeLbPerDay
+        // A projection three years out is noise, not motivation.
+        guard days < 365 * 3 else { return nil }
+        return projectionWindow(daysOut: days, from: now, calendar: calendar)
     }
 
     /// How wide the finish window is, and the grid it snaps to.

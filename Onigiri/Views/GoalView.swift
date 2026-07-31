@@ -71,6 +71,31 @@ struct GoalView: View {
 
     private var isMaintenance: Bool { mode == GoalMode.maintain }
 
+    /// Two weigh-ins is the least that draws a line.
+    private var hasChart: Bool { model.weightHistory.count >= 2 }
+
+    /// Start → now → target, against the LIVE target field so an edited
+    /// goal previews its own bar. The start is the stored stamp, or the
+    /// earliest weigh-in on record for goals set before the stamp
+    /// existed (kit rules, tested there). Milestones step in the display
+    /// unit's round number — 5 lb, or 2 kg.
+    private var progress: GoalProgress? {
+        GoalProgress.resolve(
+            startWeightLb: goals.first?.startWeightLb,
+            startedAt: goals.first?.startedAt,
+            weightHistory: model.weightHistory,
+            currentWeightLb: currentWeightLb,
+            targetWeightLb: targetWeightLb,
+            isMaintenance: isMaintenance,
+            milestoneStepLb: GoalProgress.milestoneStepLb(for: unit)
+        )
+    }
+
+    /// The mark being worked toward — the only one the chart labels.
+    private var nextMilestone: GoalProgress.Milestone? {
+        progress?.milestones.first { !$0.isReached }
+    }
+
     private var validation: GoalUpsert.Validation {
         GoalUpsert.validate(targetLb: targetWeightLb, currentLb: currentWeightLb, mode: mode)
     }
@@ -419,6 +444,11 @@ struct GoalView: View {
         if !isMaintenance, let target = targetWeightLb {
             parts.append("target \(unit.fromLb(target).formatted(.number.precision(.fractionLength(targetDigits)))) \(unit.spoken)")
         }
+        // The milestone rungs are drawn, so they have to be spoken —
+        // the one being worked toward is the one that means anything.
+        if let next = nextMilestone {
+            parts.append("next milestone \(unit.fromLb(next.lostLb).formatted(.number.precision(.fractionLength(0...1)))) \(unit.spoken) down")
+        }
         return parts.isEmpty ? "No weigh-ins yet" : parts.joined(separator: ", ")
     }
 
@@ -488,7 +518,7 @@ struct GoalView: View {
         // No header: it leads the screen now, and the chart speaks for
         // itself.
         Section {
-            if model.weightHistory.count >= 2 {
+            if hasChart {
                 // Plotted in the display unit (not just relabeled) so
                 // the y-axis ticks read as real kg/lb values.
                 Chart {
@@ -508,6 +538,24 @@ struct GoalView: View {
                         )
                         .foregroundStyle(.blue)
                         .interpolationMethod(.catmullRom)
+                    }
+                    // Ground covered, as a faint ladder between the
+                    // start and the target line. Quiet on purpose: the
+                    // chart is already dense, so only the mark being
+                    // worked toward carries a label — the rest read as
+                    // rungs the line has crossed.
+                    ForEach(Array((progress?.milestones ?? []).enumerated()), id: \.offset) { _, milestone in
+                        RuleMark(y: .value("Milestone", unit.fromLb(milestone.weightLb)))
+                            .foregroundStyle(.secondary)
+                            .opacity(milestone.isReached ? 0.25 : 0.5)
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 5]))
+                            .annotation(position: .top, alignment: .trailing) {
+                                if milestone.lostLb == nextMilestone?.lostLb {
+                                    Text("\(unit.fromLb(milestone.lostLb), format: .number.precision(.fractionLength(0...1))) \(unit.symbol) down")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                     }
                     // The lose target or the maintenance hold-near
                     // anchor — same line, different name.
@@ -530,6 +578,22 @@ struct GoalView: View {
                 .frame(height: chartHeight)
                 .padding(.vertical, 4)
 
+            } else {
+                Text("Weigh-ins from your scale will chart here once Apple Health has a few days of data.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            // Between the chart and the projection: how far along, in
+            // one glance, from a start the scale can't revise. Outside
+            // the chart gate on purpose — a stamped start and a manual
+            // weight are enough to answer this, and that combination
+            // never draws a chart.
+            if let progress {
+                progressRow(progress)
+            }
+
+            if hasChart {
                 if isMaintenance {
                     // Maintenance's counterpart to the projection line:
                     // is the scale holding?
@@ -537,24 +601,83 @@ struct GoalView: View {
                         driftLabel(drift)
                     }
                 } else if let window = model.trend.projectedWindow {
-                    Label {
-                        Text("On this trend, you'll hit your target between \(window.lowerBound, format: .dateTime.month(.abbreviated).day()) and \(window.upperBound, format: .dateTime.month(.abbreviated).day())")
-                    } icon: {
-                        Image(systemName: "chart.line.downtrend.xyaxis")
-                            .foregroundStyle(.green)
+                    // The forecast, then the same question asked as a
+                    // choice — one row, because the second line is only
+                    // meaningful against the first.
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label {
+                            Text("On this trend, you'll hit your target between \(window.lowerBound, format: .dateTime.month(.abbreviated).day()) and \(window.upperBound, format: .dateTime.month(.abbreviated).day())")
+                        } icon: {
+                            Image(systemName: "chart.line.downtrend.xyaxis")
+                                .foregroundStyle(.green)
+                        }
+                        .font(.subheadline)
+                        if let faster = model.trend.fasterWindow {
+                            Text("With \(GoalTrendStats.paceBoostKcalPerDay, format: .number.precision(.fractionLength(0))) kcal/day more, between \(faster.lowerBound, format: .dateTime.month(.abbreviated).day()) and \(faster.upperBound, format: .dateTime.month(.abbreviated).day()).")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    .font(.subheadline)
                 } else if targetWeightLb != nil, !goalReached {
                     Text("No steady downward trend yet — a projection appears after a week of weigh-ins trending down.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-            } else {
-                Text("Weigh-ins from your scale will chart here once Apple Health has a few days of data.")
-                    .font(.footnote)
+            }
+        }
+    }
+
+    /// Start → now → target. The bar answers "how far have I come",
+    /// which a morning of water weight can't spoil the way it spoils the
+    /// chart above it.
+    private func progressRow(_ progress: GoalProgress) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Progress")
+                Spacer()
+                Text(progressAmount(progress))
+                    .monospacedDigit()
+            }
+            .font(.subheadline)
+            ProgressView(value: progress.fraction)
+                .tint(.green)
+            // A derived start says so. It's the earliest weigh-in on
+            // record, not the day the goal was set, and quoting the date
+            // is what keeps the number honest for goals that predate the
+            // stamp.
+            if progress.isDerivedStart {
+                Text("Since \(progress.startedAt, format: .dateTime.month(.abbreviated).day()), your earliest weigh-in.")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
+        .padding(.vertical, 2)
+        // One spoken sentence instead of a label, a bar, and a caption.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Progress")
+        .accessibilityValue(progressSummary(progress))
+    }
+
+    /// "8.4 of 25 lb" — both numbers in the display unit.
+    private func progressAmount(_ progress: GoalProgress) -> String {
+        let lost = unit.fromLb(progress.lostLb)
+            .formatted(.number.precision(.fractionLength(0...1)))
+        let total = unit.fromLb(progress.totalLb)
+            .formatted(.number.precision(.fractionLength(0...1)))
+        return "\(lost) of \(total) \(unit.symbol)"
+    }
+
+    private func progressSummary(_ progress: GoalProgress) -> String {
+        let percent = (progress.fraction * 100).formatted(.number.precision(.fractionLength(0)))
+        let lost = unit.fromLb(progress.lostLb)
+            .formatted(.number.precision(.fractionLength(0...1)))
+        let total = unit.fromLb(progress.totalLb)
+            .formatted(.number.precision(.fractionLength(0...1)))
+        var summary = "\(lost) of \(total) \(unit.spoken) lost, \(percent) percent"
+        if progress.isDerivedStart {
+            summary += ", since \(progress.startedAt.formatted(.dateTime.month(.wide).day()))"
+        }
+        return summary
     }
 
     /// Copy the stored goal (or a blank slate) into the form fields.

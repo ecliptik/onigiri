@@ -13,13 +13,26 @@ framing. Goal tab is the right home; nothing needs to move to Today.
   37–44 days to 59–64, erasing signal with the noise. If the range still
   flaps, widen the bucket or require two consecutive estimates in a new
   bucket — do NOT reach for smoothing again.
-- **Banked so far** + **best streak** (deployed, commit pending gpg).
+- **Banked so far** + **best streak** (`14f6d81`).
   Net deficit over TRACKED days only, and the header shows the best run
   when the current streak is 0.
+- **Milestones**, **progress bar**, **pace as a choice** — all three,
+  on one start point (below). Kit: `GoalProgress` (start resolution,
+  the of-total numbers, the marks) and `GoalTrendStats.fasterWindow`.
+  Notes worth keeping:
+  - Milestones are named by PROGRESS ("15 lb down"), not by weight.
+    Anchored to the start, a 213.4 lb journey would otherwise post
+    marks at 208.4 and 203.4. The chart draws every rung and labels
+    only the next unreached one — four dashed lines with four labels
+    was the confetti the plan warned about.
+  - `fasterWindow` is nil when the boost doesn't cross a bucket
+    boundary. Two identical date ranges offered as an incentive read
+    as a broken promise.
+  - The kilogram step is 2 kg, not 5 lb converted.
 
-## Remaining: 3, 4, 5
+## The start point (built)
 
-All three need a start point, which is the only real work here.
+All three needed one, and it was the only real work here.
 
 ### The start-weight snapshot
 
@@ -37,6 +50,12 @@ as the start — that tells someone mid-journey they're at 0%. Derive the
 fallback from the earliest weigh-in on record and label the progress
 "since <that date>". Honest, immediately useful, and it stops being a
 fallback the moment a goal is next edited.
+
+Two carve-outs found while building it: maintenance never stamps (its
+"target" is a hold-near anchor, so nudging it would mint a journey that
+doesn't exist), and the stamp needs BOTH halves — a weight with no date
+can't say what it measures from, so a half-stamp falls through to
+derivation.
 
 ### 3. Milestones on the chart
 

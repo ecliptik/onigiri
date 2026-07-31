@@ -103,15 +103,24 @@ public struct LibraryExport: Codable, Sendable, Equatable {
         /// maintenance mode (≤ v1.7.0) decode — nil means .lose, same
         /// as GoalSettings.mode itself.
         public var mode: String?
+        /// The journey's start point, carried so a restore doesn't reset
+        /// progress to zero. Optional for the same reason `mode` is:
+        /// older exports predate it, and the app already knows how to
+        /// live without it.
+        public var startWeightLb: Double?
+        public var startedAt: Date?
 
         public init(
             targetWeightLb: Double, targetDate: Date,
-            fallbackCurrentWeightLb: Double?, mode: String? = nil
+            fallbackCurrentWeightLb: Double?, mode: String? = nil,
+            startWeightLb: Double? = nil, startedAt: Date? = nil
         ) {
             self.targetWeightLb = targetWeightLb
             self.targetDate = targetDate
             self.fallbackCurrentWeightLb = fallbackCurrentWeightLb
             self.mode = mode
+            self.startWeightLb = startWeightLb
+            self.startedAt = startedAt
         }
     }
 

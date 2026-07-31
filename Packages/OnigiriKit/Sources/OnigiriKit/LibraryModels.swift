@@ -187,17 +187,34 @@ public final class GoalSettings {
     /// GoalMode.lose (nil, the historical default) or .maintain — in
     /// maintenance the target/date are ignored and the budget is TDEE.
     public var mode: String?
+    /// Where this journey started, so progress has something to measure
+    /// from. Stamped by `GoalUpsert` when a goal is created and when the
+    /// TARGET changes (a new target is a new journey; a nudged date
+    /// isn't) — never edited afterwards, or the bar would re-zero itself
+    /// every time the scale moved.
+    ///
+    /// Both are ADDITIVE OPTIONALS, which is what keeps them inside
+    /// `OnigiriSchemaV1` (see the schema's note). Goals saved before this
+    /// existed have neither and can't: `GoalProgress` derives the start
+    /// from the earliest weigh-in on record instead, and says "since
+    /// <date>" so the number is honest about where it came from.
+    public var startWeightLb: Double?
+    public var startedAt: Date?
 
     public init(
         targetWeightLb: Double,
         targetDate: Date,
         fallbackCurrentWeightLb: Double? = nil,
-        mode: String? = nil
+        mode: String? = nil,
+        startWeightLb: Double? = nil,
+        startedAt: Date? = nil
     ) {
         self.targetWeightLb = targetWeightLb
         self.targetDate = targetDate
         self.fallbackCurrentWeightLb = fallbackCurrentWeightLb
         self.mode = mode
+        self.startWeightLb = startWeightLb
+        self.startedAt = startedAt
     }
 
     public var isMaintenance: Bool { mode == GoalMode.maintain }

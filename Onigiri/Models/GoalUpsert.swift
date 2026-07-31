@@ -40,17 +40,35 @@ enum GoalUpsert {
     ) {
         // The manual weight is only a fallback while Health has none.
         let fallback = healthWeightLb == nil ? manualWeightLb : nil
+        // Where today's weight sits, for the start-point stamp below.
+        let currentLb = healthWeightLb ?? manualWeightLb
         if let goal = goals.first {
+            // Read before the write: a new TARGET is a new journey, so
+            // it re-stamps the start. A nudged date, a switched mode, or
+            // a corrected fallback weight is the same journey and must
+            // leave the start alone — re-stamping on every save would
+            // walk the start down behind the scale and pin progress at
+            // ~0 forever.
+            let targetChanged = goal.targetWeightLb != targetLb
             goal.targetWeightLb = targetLb
             goal.targetDate = targetDate
             goal.fallbackCurrentWeightLb = fallback
             goal.mode = mode
+            if targetChanged, mode != GoalMode.maintain, let currentLb {
+                goal.startWeightLb = currentLb
+                goal.startedAt = .now
+            }
         } else {
             context.insert(GoalSettings(
                 targetWeightLb: targetLb,
                 targetDate: targetDate,
                 fallbackCurrentWeightLb: fallback,
-                mode: mode
+                mode: mode,
+                // Maintenance has no journey to measure; its "target" is
+                // a hold-near anchor, and stamping one would mint a
+                // start the moment someone nudged the anchor.
+                startWeightLb: mode == GoalMode.maintain ? nil : currentLb,
+                startedAt: mode == GoalMode.maintain || currentLb == nil ? nil : .now
             ))
         }
         try? context.save()

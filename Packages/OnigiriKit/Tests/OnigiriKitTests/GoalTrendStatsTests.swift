@@ -251,6 +251,70 @@ struct GoalTrendStatsTests {
         #expect(stats == GoalTrendStats.empty)
     }
 
+    // MARK: Pace as a choice
+
+    @Test func moreDeficitProjectsASoonerWindow() throws {
+        // 0.2 lb/day down from ~205.8, target 190 ≈ 50 days out. Another
+        // 100 kcal/day is 0.0286 lb/day, ~14% faster — a real bucket or
+        // three sooner.
+        let history = Self.history(days: 30, startLb: 205.8, slope: -0.2)
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: 190, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        let base = try #require(stats.projectedWindow)
+        let faster = try #require(stats.fasterWindow)
+        #expect(faster.lowerBound < base.lowerBound)
+        // It's a WINDOW like everything else, on the same grid.
+        let width = Self.cal.dateComponents(
+            [.day], from: faster.lowerBound, to: faster.upperBound).day!
+        #expect(width == GoalTrendStats.projectionWindowDays)
+        let midnight = Self.cal.startOfDay(for: Self.now)
+        let from = Self.cal.dateComponents([.day], from: midnight, to: faster.lowerBound).day!
+        #expect(from % GoalTrendStats.projectionWindowDays == 0)
+    }
+
+    @Test func noProjectionMeansNoFasterOffer() {
+        // Flat: nothing to be faster THAN. Offering a date here would
+        // invent the trend the base projection just refused to claim.
+        let flat = GoalTrendStats.derive(
+            weightHistory: Self.history(days: 30, startLb: 200, slope: 0),
+            dailyTotals: [], targetWeightLb: 190, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(flat.projectedWindow == nil)
+        #expect(flat.fasterWindow == nil)
+        // Same in maintenance, which projects nothing by design.
+        let maintaining = GoalTrendStats.derive(
+            weightHistory: Self.history(days: 30, startLb: 205.8, slope: -0.2),
+            dailyTotals: [], targetWeightLb: 190, isMaintenance: true,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(maintaining.fasterWindow == nil)
+    }
+
+    /// Close enough to the target that the boost can't buy a bucket —
+    /// two identical date ranges read as a broken promise, so there's no
+    /// offer at all.
+    @Test func aBoostThatChangesNothingIsNotOffered() throws {
+        // ~0.5 lb to go at 0.2 lb/day: both answers land in days 0–5.
+        let history = Self.history(days: 30, startLb: 196.3, slope: -0.2)
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: 190, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        let base = try #require(stats.projectedWindow)
+        let midnight = Self.cal.startOfDay(for: Self.now)
+        #expect(base.lowerBound == midnight)
+        #expect(stats.fasterWindow == nil)
+    }
+
+    @Test func theEmptyStatsOfferNothing() {
+        #expect(GoalTrendStats.empty.fasterWindow == nil)
+    }
+
     // MARK: The window's whole job
 
     /// Estimates that wander within a bucket must not move the screen.

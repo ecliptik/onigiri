@@ -101,18 +101,42 @@ DONE and green (app + watch build, 354 kit tests pass):
 - Tests rewritten to assert the reversed rule
   (`unwornHoursCostActivityButNeverTheBaseline`).
 
-NOT DONE — the reason this isn't deployed:
-- **`DailyPlanLoader` still derives from `averageDailyBurnKcal`** (lines
-  ~62/81). It feeds the WIDGETS and the WATCH, so those two surfaces
-  would keep quoting the old average-based budget while the phone quotes
-  the earned one — the exact disagreement this plan exists to kill.
-  Migrate it to `DayBudget.dayBurn` before shipping. It needs the same
-  resting estimate, so it needs the body profile too.
-- `PlanBurnHistory.recordToday` (DailyPlanLoader:157) still writes
-  snapshots nothing reads for burn any more. Harmless, but dead —
-  remove once the loader is migrated and nothing else wants it.
+Also done (2026-08-02, second pass — 358 kit tests, app + watch build):
+- **`DailyPlanLoader` migrated.** `makeState` takes
+  `estimatedRestingKcal` instead of `averageBurnKcal` and rides
+  `DayBudget.dayBurn` + `completedDayPlan`, so the widgets and the watch
+  quote the same budget the phone does. The fetch layer reads
+  `bodyProfile()` (new `HealthPlanReading` requirement) and reads weight
+  even in maintenance — not a plan input there, but the resting estimate
+  is built from it. `TodayBurnFloor` now ratchets the DAY burn.
+- `CalorieBudget.requiredDailyDeficit` extracted: the deficit is pure
+  weight-and-calendar arithmetic with no burn in it, which is what lets
+  the budget ride the day's own burn while the target stays put. Both
+  the loader and `TodayView.currentRequiredDeficit` call it, instead of
+  reaching through `derivePlan` for one field and discarding a
+  trailing-average budget alongside it.
+- `PlanBurnHistory` DELETED (nothing read its snapshots).
+  `DeficitTargetHistory` stays — still live, still the thing that keeps
+  a past day judged by the goal it was actually held to.
+- `resolvedBurn`/`HealthPlanReading.averageDailyBurnKcal` removed with
+  it. `WatchSync`'s plan-burn key still rides the sync (the phone sends
+  it, the receiver hashes it); harmless, and untangling it is a separate
+  change.
+
+NOT DONE:
 - Goal's "Average burn"/"Burn per day" rows and the whole `BudgetStyle`
-  Fixed option still describe the OLD inputs. Fixed may no longer have a
-  coherent meaning now that the budget is always the day's own burn.
+  Fixed option still describe the OLD inputs. **Fixed is now inert on
+  every surface that matters**: Today, the calendar, the badges, the
+  widgets and the watch all derive from measured burn, so the pinned
+  "Burn per day" only moves the Goal tab's own preview and onboarding's.
+  Decide with the user: remove it, or make it a real override the
+  earned-budget path honors.
+- Details' Net row (`DayNutritionView`, `-summary.balanceKcal`) and the
+  goal card's banked figure still read RAW `activeBurn + restingBurn`,
+  not `dayBurn`. End of day the two agree (measured resting has passed
+  the estimate), so the original "695 left / 197 surplus" pairing can't
+  recur — but mid-morning they can still differ in sign, because the
+  budget already holds the whole day's resting and Net holds only what
+  has accrued. Same family as this fix; not folded in.
 - The morning acceptance test is unrun: at 8am the ring must read
   ~`restingFullDay + smallActive − deficit − breakfast`, NOT near zero.

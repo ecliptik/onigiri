@@ -638,13 +638,11 @@ struct TodayView: View {
     /// day with no snapshot (pre-feature history, or a day the app never
     /// ran), which is exactly what StreakCalendar falls back to.
     private func currentRequiredDeficit(for goal: GoalSettings) -> Double? {
-        CalorieBudget.derivePlan(
-            isMaintenance: goal.isMaintenance,
+        CalorieBudget.requiredDailyDeficit(
             currentWeightLb: model.currentWeightLb ?? goal.fallbackCurrentWeightLb,
             targetWeightLb: goal.targetWeightLb,
-            targetDate: goal.targetDate,
-            averageDailyBurnKcal: model.averageBurnKcal
-        )?.requiredDailyDeficit
+            targetDate: goal.targetDate
+        )
     }
 
     /// Push to the day's full nutrient breakdown (value-routed so the

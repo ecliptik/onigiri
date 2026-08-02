@@ -11,7 +11,7 @@ public enum DailyPlanLoader {
         public let deficitTargetKcal: Double?
         /// 0...1 fill of the onigiri gauge (banked deficit / daily target).
         public let gaugeProgress: Double
-        /// Intake budget for the day (average burn − required deficit).
+        /// Intake budget for the day (the day's own burn − required deficit).
         public let dailyBudgetKcal: Double?
 
         public init(
@@ -38,17 +38,28 @@ public enum DailyPlanLoader {
     /// Maintenance: eat what you burn — deficitTarget stays nil (the
     /// any-deficit badge rule, no "% of goal" captions) and the gauge
     /// shows budget left. A weight goal banks deficit toward the target;
-    /// without a current weight anywhere there is no plan. Both modes
-    /// ride the shared clamped-burn derivation.
+    /// without a current weight anywhere there is no plan.
+    ///
+    /// Both modes ride the SAME burn figure the phone does
+    /// (`DayBudget.dayBurn`): resting credited up front — measured,
+    /// floored by the body-metric estimate — plus the active energy
+    /// actually earned. The trailing-average forecast is gone. It lived
+    /// here longer than on the phone, which is precisely why this had to
+    /// move before shipping: the widgets and the watch would have gone on
+    /// quoting an average-based budget while Today quoted the earned one.
     public static func makeState(
         goal: SyncedGoal?,
         summary: DailyEnergySummary,
-        averageBurnKcal: Double?,
+        /// Full-day resting from body metrics (`BasalEstimate.restingKcal`),
+        /// the floor under the day's resting credit. nil when Health can't
+        /// describe the body well enough — measured resting then stands
+        /// alone, which is a documented shortfall, not an error.
+        estimatedRestingKcal: Double?,
         healthWeightLb: Double?,
-        /// The day-ratcheted burn (TodayBurnFloor) when the caller has
+        /// The day-ratcheted day burn (TodayBurnFloor) when the caller has
         /// one — the budget derives from it while the summary keeps the
-        /// honest display numbers. nil = today's raw burn, the pure
-        /// pre-ratchet behavior the tests pin.
+        /// honest display numbers. nil = derive straight from the summary,
+        /// the pure pre-ratchet behavior the tests pin.
         todayBurnFloorKcal: Double? = nil,
         calendar: Calendar = .current,
         now: Date = .now
@@ -56,12 +67,20 @@ public enum DailyPlanLoader {
         guard let goal else {
             return State(summary: summary, deficitTargetKcal: nil, gaugeProgress: 0)
         }
+        let dayBurn = todayBurnFloorKcal ?? DayBudget.dayBurn(
+            activeKcal: summary.activeBurnKcal,
+            restingKcal: summary.restingBurnKcal,
+            estimatedRestingKcal: estimatedRestingKcal
+        )
+        // Nothing measured and no estimate to floor it with: a budget of
+        // "0 minus the target" would invent a huge overage, so the
+        // budget-shaped UI stands down (TodayView's guard). The deficit
+        // target still stamps history — the goal was in force either way.
+        let hasBurn = dayBurn > 0
         if goal.isMaintenance {
-            let burn = CalorieBudget.expectedDailyBurn(
-                averageKcal: averageBurnKcal,
-                todayActualKcal: todayBurnFloorKcal ?? summary.totalBurnKcal
+            let plan = CalorieBudget.completedDayPlan(
+                dayBurnKcal: dayBurn, requiredDailyDeficit: 0
             )
-            let plan = CalorieBudget.maintenancePlan(averageDailyBurn: burn)
             let progress = plan.dailyBudget > 0
                 ? max(0, min(1, 1 - summary.intakeKcal / plan.dailyBudget))
                 : 0
@@ -69,21 +88,21 @@ public enum DailyPlanLoader {
                 summary: summary,
                 deficitTargetKcal: nil,
                 gaugeProgress: progress,
-                dailyBudgetKcal: plan.dailyBudget
+                dailyBudgetKcal: hasBurn ? plan.dailyBudget : nil
             )
         }
-        guard let plan = CalorieBudget.derivePlan(
-            isMaintenance: false,
+        guard let deficit = CalorieBudget.requiredDailyDeficit(
             currentWeightLb: healthWeightLb ?? goal.fallbackCurrentWeightLb,
             targetWeightLb: goal.targetWeightLb,
             targetDate: goal.targetDate,
-            averageDailyBurnKcal: averageBurnKcal,
-            todayActualBurnKcal: todayBurnFloorKcal ?? summary.totalBurnKcal,
             calendar: calendar,
             now: now
         ) else {
             return State(summary: summary, deficitTargetKcal: nil, gaugeProgress: 0)
         }
+        let plan = CalorieBudget.completedDayPlan(
+            dayBurnKcal: dayBurn, requiredDailyDeficit: deficit
+        )
         let progress = plan.requiredDailyDeficit > 0
             ? max(0, min(1, -summary.balanceKcal / plan.requiredDailyDeficit))
             : 1
@@ -91,15 +110,15 @@ public enum DailyPlanLoader {
             summary: summary,
             deficitTargetKcal: plan.requiredDailyDeficit,
             gaugeProgress: progress,
-            dailyBudgetKcal: plan.dailyBudget
+            dailyBudgetKcal: hasBurn ? plan.dailyBudget : nil
         )
     }
 
     /// One plan input resolved between the phone's synced copy and the
     /// local Health read. The synced value wins while its day stamp is
     /// today or yesterday: the phone's store holds full history, while
-    /// watchOS purges old samples — a watch-local 14-day average runs
-    /// over a shorter window and the two devices' budgets drift apart.
+    /// watchOS purges old samples — a weigh-in older than the watch's
+    /// window is invisible there, and the two devices' plans drift apart.
     nonisolated static func planInput(
         synced: (value: Double, day: String)?,
         local: Double?,
@@ -119,19 +138,18 @@ public enum DailyPlanLoader {
 @MainActor
 public protocol HealthPlanReading: Sendable {
     func todaySummary() async throws -> DailyEnergySummary
-    func averageDailyBurnKcal() async throws -> Double?
     func latestBodyMassLb() async throws -> Double?
+    /// Height/age/sex — with weight, the inputs the resting estimate
+    /// needs. The trailing burn average it replaced is no longer a plan
+    /// input on any surface.
+    func bodyProfile() async -> (heightCm: Double?, ageYears: Int?, sex: BasalEstimate.Sex)
 }
 
 extension HealthKitService: HealthPlanReading {
     // Defaulted-parameter methods can't witness protocol requirements;
-    // these forward to the real implementations.
+    // this forwards to the real implementation.
     public func todaySummary() async throws -> DailyEnergySummary {
         try await todaySummary(now: .now)
-    }
-
-    public func averageDailyBurnKcal() async throws -> Double? {
-        try await averageDailyBurnKcal(days: 14, now: .now)
     }
 }
 
@@ -148,14 +166,6 @@ public extension DailyPlanLoader {
             targetKcal: state.deficitTargetKcal,
             isMaintenance: goal?.isMaintenance ?? false
         )
-        // The other half of the day's budget. The target alone can't pin
-        // it — expected burn drifts with the trailing average, so without
-        // this a past day gets re-judged by today's activity level.
-        // budget = expectedBurn − deficit, so the burn is recoverable
-        // without widening State's public shape (the watch and every
-        // widget provider decode it).
-        PlanBurnHistory.recordToday(
-            expectedBurnKcal: state.dailyBudgetKcal.map { $0 + (state.deficitTargetKcal ?? 0) })
         return state
     }
 
@@ -165,46 +175,47 @@ public extension DailyPlanLoader {
     ) async -> State {
         guard let goal else {
             let summary = (try? await health.todaySummary()) ?? .zero
-            return makeState(goal: nil, summary: summary, averageBurnKcal: nil, healthWeightLb: nil)
-        }
-        // The reads are independent — run them concurrently; this path
-        // is complication/widget refresh latency.
-        async let summaryRead = health.todaySummary()
-        async let burnRead = health.averageDailyBurnKcal()
-        if goal.isMaintenance {
-            // The current weight plays no part — don't query it.
-            let summary = (try? await summaryRead) ?? .zero
             return makeState(
-                goal: goal,
-                summary: summary,
-                averageBurnKcal: resolvedBurn((try? await burnRead) ?? nil),
-                healthWeightLb: nil,
-                todayBurnFloorKcal: TodayBurnFloor.ratcheted(summary.totalBurnKcal)
+                goal: nil, summary: summary,
+                estimatedRestingKcal: nil, healthWeightLb: nil
             )
         }
+        // The reads are independent — run them concurrently; this path
+        // is complication/widget refresh latency. Weight is read even in
+        // maintenance now: it isn't a plan input there, but the resting
+        // estimate that floors the day's burn is built from it.
+        async let summaryRead = health.todaySummary()
         async let weightRead = health.latestBodyMassLb()
+        async let profileRead = health.bodyProfile()
         let summary = (try? await summaryRead) ?? .zero
+        let weightLb = resolvedWeight((try? await weightRead) ?? nil)
+        let profile = await profileRead
+        let estimatedResting: Double? = {
+            guard let heightCm = profile.heightCm, let age = profile.ageYears,
+                  let weightLb else { return nil }
+            return BasalEstimate.restingKcal(
+                weightLb: weightLb, heightCm: heightCm,
+                ageYears: age, sex: profile.sex)
+        }()
+        // Ratchet the DAY burn, not the raw total: under measured-only
+        // active energy the guard against Health revising burn downward
+        // mid-day matters more, not less.
+        let dayBurn = DayBudget.dayBurn(
+            activeKcal: summary.activeBurnKcal,
+            restingKcal: summary.restingBurnKcal,
+            estimatedRestingKcal: estimatedResting
+        )
         return makeState(
             goal: goal,
             summary: summary,
-            averageBurnKcal: resolvedBurn((try? await burnRead) ?? nil),
-            healthWeightLb: resolvedWeight((try? await weightRead) ?? nil),
-            todayBurnFloorKcal: TodayBurnFloor.ratcheted(summary.totalBurnKcal)
+            estimatedRestingKcal: estimatedResting,
+            healthWeightLb: weightLb,
+            todayBurnFloorKcal: TodayBurnFloor.ratcheted(dayBurn)
         )
     }
 
-    /// On the watch, prefer the phone's synced plan inputs while fresh
-    /// (see `planInput`); everywhere else the local store IS the phone's.
-    private static func resolvedBurn(_ local: Double?) -> Double? {
-        #if os(watchOS)
-        return planInput(
-            synced: WatchSync.syncedPlanBurn().map { ($0.kcal, $0.day) }, local: local
-        )
-        #else
-        return local
-        #endif
-    }
-
+    /// On the watch, prefer the phone's synced weight while fresh (see
+    /// `planInput`); everywhere else the local store IS the phone's.
     private static func resolvedWeight(_ local: Double?) -> Double? {
         #if os(watchOS)
         return planInput(

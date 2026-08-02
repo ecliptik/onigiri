@@ -28,16 +28,20 @@ public enum CalorieBudget {
         Plan(requiredDailyDeficit: 0, dailyBudget: averageDailyBurn, isAggressive: false)
     }
 
-    /// A COMPLETED day, judged by what actually happened on it: the day's
-    /// own burn (resting already filled for unworn hours) against the
-    /// deficit target recorded THAT day.
+    /// ANY day — today included — judged by what actually happened on it:
+    /// the day's own burn (`DayBudget.dayBurn`: resting up front, active
+    /// earned) against the deficit target in force that day.
     ///
     /// Deliberately not `derivePlan`: that one forecasts, flooring burn
     /// with the trailing average so an in-progress day doesn't read
-    /// "over budget" at 9am. Applied to a finished day the same floor
-    /// keeps quoting a burn that never happened — a day that ended 29 kcal
-    /// over break-even still showed "67 kcal left" (2026-07-30). Once the
-    /// day is over there is nothing left to forecast.
+    /// "over budget" at 9am. But the trailing average promises calories
+    /// the day never goes on to earn — a finished day still quoted a burn
+    /// that never happened ("67 kcal left" on a day that ended 29 over
+    /// break-even, 2026-07-30), and an in-progress one kept the promise
+    /// right up to bedtime ("695 kcal left" beside "197 kcal surplus",
+    /// 2026-08-02). Crediting resting up front is what makes the forecast
+    /// unnecessary: the predictable part of the day is already in hand at
+    /// breakfast, so there is nothing left to guess at.
     public static func completedDayPlan(
         dayBurnKcal: Double, requiredDailyDeficit: Double
     ) -> Plan {
@@ -101,15 +105,46 @@ public enum CalorieBudget {
         )
     }
 
+    /// The deficit the goal asks for, with no burn in it at all: pounds
+    /// to lose, spread over the days left. Burn decides only what's left
+    /// to EAT once the deficit is taken out, which is why the budget can
+    /// ride the day's own burn (`completedDayPlan`) while the target it
+    /// subtracts stays put. nil when the goal lacks a current weight, a
+    /// target, or a date.
+    public static func requiredDailyDeficit(
+        currentWeightLb: Double?,
+        targetWeightLb: Double?,
+        targetDate: Date?,
+        calendar: Calendar = .current,
+        now: Date = .now
+    ) -> Double? {
+        guard let current = currentWeightLb, let target = targetWeightLb, let targetDate
+        else { return nil }
+        let days = calendar.dateComponents(
+            [.day], from: calendar.startOfDay(for: now), to: targetDate
+        ).day ?? 0
+        return requiredDailyDeficit(
+            currentWeightLb: current, targetWeightLb: target, daysRemaining: days
+        )
+    }
+
+    public static func requiredDailyDeficit(
+        currentWeightLb: Double, targetWeightLb: Double, daysRemaining: Int
+    ) -> Double {
+        max(0, currentWeightLb - targetWeightLb) * kcalPerPound / Double(max(1, daysRemaining))
+    }
+
     public static func plan(
         currentWeightLb: Double,
         targetWeightLb: Double,
         daysRemaining: Int,
         averageDailyBurn: Double
     ) -> Plan {
-        let remainingLb = max(0, currentWeightLb - targetWeightLb)
-        let days = Double(max(1, daysRemaining))
-        let deficit = remainingLb * kcalPerPound / days
+        let deficit = requiredDailyDeficit(
+            currentWeightLb: currentWeightLb,
+            targetWeightLb: targetWeightLb,
+            daysRemaining: daysRemaining
+        )
         let budget = averageDailyBurn - deficit
         return Plan(
             requiredDailyDeficit: deficit,

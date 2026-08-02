@@ -98,19 +98,18 @@ struct WatchSyncTests {
         #expect(payload.goal == .keep)
     }
 
-    // The phone's plan inputs (day-stamped burn/weight) and log stamp
-    // ride the context so the watch's budget matches the phone's and a
-    // phone log wakes the complications.
+    // The phone's day-stamped weigh-in and log stamp ride the context so
+    // the watch's deficit target matches the phone's and a phone log
+    // wakes the complications. (A trailing-average burn rode here until
+    // 2026-08-02; both devices now derive the budget from the day's own
+    // Health channels, which they already share.)
     @Test func planInputsAndLogStampRoundTrip() {
         let context = WatchSync.makeContext(
             meals: [], goal: nil, waterServingOz: 12, waterGoalOz: 64,
-            planBurnKcal: 2750, planBurnDay: "2026-07-20",
             planWeightLb: 185.4, planWeightDay: "2026-07-20",
             lastLogAt: 1_784_500_000
         )
         let payload = WatchSync.parse(context)
-        #expect(payload.planBurnKcal == 2750)
-        #expect(payload.planBurnDay == "2026-07-20")
         #expect(payload.planWeightLb == 185.4)
         #expect(payload.planWeightDay == "2026-07-20")
         #expect(payload.lastLogAt == 1_784_500_000)
@@ -121,8 +120,6 @@ struct WatchSyncTests {
     @Test func missingPlanInputsStayNil() {
         let context = WatchSync.makeContext(meals: [], goal: nil, waterServingOz: 12, waterGoalOz: 64)
         let payload = WatchSync.parse(context)
-        #expect(payload.planBurnKcal == nil)
-        #expect(payload.planBurnDay == nil)
         #expect(payload.planWeightLb == nil)
         #expect(payload.planWeightDay == nil)
         #expect(payload.lastLogAt == nil)
@@ -133,11 +130,10 @@ struct WatchSyncTests {
     @Test func planValueWithoutItsDayIsDropped() {
         let context = WatchSync.makeContext(
             meals: [], goal: nil, waterServingOz: 12, waterGoalOz: 64,
-            planBurnKcal: 2750, planBurnDay: nil,
-            planWeightLb: nil, planWeightDay: "2026-07-20"
+            planWeightLb: 185.4, planWeightDay: nil
         )
         let payload = WatchSync.parse(context)
-        #expect(payload.planBurnKcal == nil)
+        #expect(payload.planWeightLb == nil)
         #expect(payload.planWeightDay == nil)
     }
 

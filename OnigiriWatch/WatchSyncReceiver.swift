@@ -74,8 +74,8 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
 
     /// Everything the complications render out of the synced context: the
     /// goal, the water goal, the calorie-display style, the badge emoji,
-    /// the tracked-metric slots, the sodium limit, the phone's plan
-    /// inputs (they move the budget), and the phone's log stamp (a moved
+    /// the tracked-metric slots, the sodium limit, the phone's weigh-in
+    /// (it moves the deficit target), and the phone's log stamp (a moved
     /// stamp means the totals changed — this is what makes a phone log
     /// reload the complications instead of waiting out the hourly
     /// HealthKit delivery). Meal/food lists deliberately excluded — no
@@ -89,7 +89,6 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         hasher.combine(defaults.string(forKey: SharedStore.balanceStyleKey))
         hasher.combine(defaults.string(forKey: SharedStore.rewardIconKey))
         hasher.combine(SharedStore.sodiumLimitMg)
-        hasher.combine(WatchSync.syncedPlanBurn().map { [$0.kcal.description, $0.day] })
         hasher.combine(WatchSync.syncedPlanWeight().map { [$0.lb.description, $0.day] })
         hasher.combine(WatchSync.lastPhoneLogAt())
         for key in WatchSync.trackedMetricKeys {

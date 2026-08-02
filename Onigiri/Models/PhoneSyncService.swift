@@ -143,11 +143,14 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
                 (key, SharedStore.defaults.string(forKey: key) ?? SharedStore.unitAutomatic)
             }
         )
-        // The phone's plan inputs ride along so the watch computes the
-        // SAME budget: its purged Health history skews a locally computed
-        // 14-day average. Cached reads (day-stamped, hash-stable within a
-        // day) — this path must stay synchronous for flushNow.
-        let planBurn = HealthKitService.cachedAverageDailyBurnKcal()
+        // The phone's weigh-in rides along: the watch's Health store
+        // purges old samples, so one older than that window is invisible
+        // there and the two devices' plans drift. A cached read
+        // (day-stamped, hash-stable within a day) — this path must stay
+        // synchronous for flushNow. The trailing-average burn that used
+        // to travel beside it went with the average-based budget
+        // (2026-08-02): both devices read the day's own Health channels
+        // now, and those already agree.
         let planWeight = HealthKitService.cachedLatestBodyMassLb()
         // The last observed Health log write: its change is what wakes
         // the watch complications (HealthKit's own sync carries the
@@ -172,8 +175,6 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
             rewardIcon: rewardIcon,
             trackedMetricSettings: trackedSettings,
             sodiumLimitMg: SharedStore.sodiumLimitMg,
-            planBurnKcal: planBurn?.kcal,
-            planBurnDay: planBurn?.day,
             planWeightLb: planWeight?.lb,
             planWeightDay: planWeight?.day,
             lastLogAt: lastLogAt
@@ -193,7 +194,7 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         settingsHasher.combine(mirrorPayload.rewardIcon)
         settingsHasher.combine(mirrorPayload.trackedMetricSettings)
         settingsHasher.combine(mirrorPayload.sodiumLimitMg)
-        // planBurn/planWeight/lastLogAt deliberately excluded: the phone's
+        // planWeight/lastLogAt deliberately excluded: the phone's
         // widgets never read them (they're the watch's inputs), and their
         // daily day-stamp turnover would fire a full reloadAll for nothing.
         let settingsFingerprint = settingsHasher.finalize()
@@ -247,8 +248,6 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
                 rewardIcon: rewardIcon,
                 trackedMetricSettings: trackedSettings,
                 sodiumLimitMg: SharedStore.sodiumLimitMg,
-                planBurnKcal: planBurn?.kcal,
-                planBurnDay: planBurn?.day,
                 planWeightLb: planWeight?.lb,
                 planWeightDay: planWeight?.day,
                 lastLogAt: lastLogAt

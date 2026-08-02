@@ -48,10 +48,11 @@ public final class HealthKitService {
             HKQuantityType(.activeEnergyBurned),
             HKQuantityType(.basalEnergyBurned),
             HKQuantityType(.bodyMass),
-            // Read ONLY to estimate a resting burn for the Fixed budget
-            // (BasalEstimate), so the suggestion comes from Health instead
-            // of asking someone to type their body into a form. Never
-            // written, never logged, never leaves the device.
+            // Read ONLY to estimate resting burn (BasalEstimate) — the
+            // baseline every day's budget is built on, credited from
+            // midnight — so it comes from Health instead of asking
+            // someone to type their body into a form. Never written,
+            // never logged, never leaves the device.
             HKQuantityType(.height),
             HKCharacteristicType(.dateOfBirth),
             HKCharacteristicType(.biologicalSex),
@@ -308,16 +309,6 @@ public final class HealthKitService {
     private static let weightCacheKey = "latestBodyMassLb"
 
     static func burnCacheKey(days: Int) -> String { "averageDailyBurnKcal.\(days)" }
-
-    /// The last computed trailing burn average with the day it was
-    /// computed — no store access, no TTL judgment (the watch applies its
-    /// own freshness window to the day stamp).
-    public static func cachedAverageDailyBurnKcal(days: Int = 14) -> (kcal: Double, day: String)? {
-        guard let cached = SharedStore.defaults.dictionary(forKey: burnCacheKey(days: days)),
-              let value = cached["value"] as? Double,
-              let day = cached["day"] as? String else { return nil }
-        return (value, day)
-    }
 
     /// The last weight read's write-through, same shape as the burn cache.
     public static func cachedLatestBodyMassLb() -> (lb: Double, day: String)? {

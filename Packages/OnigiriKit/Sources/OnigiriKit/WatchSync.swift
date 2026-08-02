@@ -95,14 +95,17 @@ public struct SyncPayload: Sendable, Hashable {
     /// Keyed by the SharedStore key, stored verbatim.
     public let trackedMetricSettings: [String: String]?
     public let sodiumLimitMg: Double?
-    /// The phone's plan inputs: its 14-day average burn and latest weight.
-    /// The watch prefers these while fresh — its own Health store purges
-    /// old samples, so a locally computed average runs over a shorter
-    /// window and the two devices' budgets drift. Day-stamped (not
-    /// time-stamped) so an unchanged value hashes identically and the
-    /// phone's send-skip fingerprint still works. nil = keep.
-    public let planBurnKcal: Double?
-    public let planBurnDay: String?
+    /// The phone's latest weigh-in. The watch prefers it while fresh —
+    /// its own Health store purges old samples, so a weigh-in older than
+    /// that window is invisible there and the two devices' plans drift.
+    /// Day-stamped (not time-stamped) so an unchanged value hashes
+    /// identically and the phone's send-skip fingerprint still works.
+    /// nil = keep.
+    ///
+    /// A trailing-average BURN used to ride here too. It went with the
+    /// average-based budget (2026-08-02): both devices now derive the
+    /// day's budget from that day's own Health channels, which they
+    /// already share, so there is nothing left to reconcile.
     public let planWeightLb: Double?
     public let planWeightDay: String?
     /// When the phone last saw a Health log write (epoch seconds). Rides
@@ -124,8 +127,6 @@ public struct SyncPayload: Sendable, Hashable {
         rewardIcon: String? = nil,
         trackedMetricSettings: [String: String]? = nil,
         sodiumLimitMg: Double? = nil,
-        planBurnKcal: Double? = nil,
-        planBurnDay: String? = nil,
         planWeightLb: Double? = nil,
         planWeightDay: String? = nil,
         lastLogAt: Double? = nil
@@ -142,8 +143,6 @@ public struct SyncPayload: Sendable, Hashable {
         self.rewardIcon = rewardIcon
         self.trackedMetricSettings = trackedMetricSettings
         self.sodiumLimitMg = sodiumLimitMg
-        self.planBurnKcal = planBurnKcal
-        self.planBurnDay = planBurnDay
         self.planWeightLb = planWeightLb
         self.planWeightDay = planWeightDay
         self.lastLogAt = lastLogAt
@@ -158,8 +157,6 @@ public enum WatchSync {
     static let favoritesKey = "sync.favorites"
     static let goalKey = "sync.goal"
     static let trackedKey = "sync.trackedMetrics"
-    static let planBurnKey = "sync.planBurnKcal"
-    static let planBurnDayKey = "sync.planBurnDay"
     static let planWeightKey = "sync.planWeightLb"
     static let planWeightDayKey = "sync.planWeightDay"
     /// On the phone this is the stamp's origin (set on every observed
@@ -232,8 +229,6 @@ public enum WatchSync {
         rewardIcon: String = "onigiri",
         trackedMetricSettings: [String: String] = [:],
         sodiumLimitMg: Double = 2300,
-        planBurnKcal: Double? = nil,
-        planBurnDay: String? = nil,
         planWeightLb: Double? = nil,
         planWeightDay: String? = nil,
         lastLogAt: Double? = nil
@@ -248,10 +243,6 @@ public enum WatchSync {
             trackedKey: trackedMetricSettings,
             SharedStore.sodiumLimitKey: sodiumLimitMg,
         ]
-        if let planBurnKcal, let planBurnDay {
-            context[planBurnKey] = planBurnKcal
-            context[planBurnDayKey] = planBurnDay
-        }
         if let planWeightLb, let planWeightDay {
             context[planWeightKey] = planWeightLb
             context[planWeightDayKey] = planWeightDay
@@ -303,8 +294,6 @@ public enum WatchSync {
             rewardIcon: context[SharedStore.rewardIconKey] as? String,
             trackedMetricSettings: context[trackedKey] as? [String: String],
             sodiumLimitMg: context[SharedStore.sodiumLimitKey] as? Double,
-            planBurnKcal: context[planBurnKey] as? Double,
-            planBurnDay: context[planBurnDayKey] as? String,
             planWeightLb: context[planWeightKey] as? Double,
             planWeightDay: context[planWeightDayKey] as? String,
             lastLogAt: context[lastLogAtKey] as? Double
@@ -364,10 +353,6 @@ public enum WatchSync {
         }
         // Value and day land together (makeContext pairs them) — a value
         // without its day would look eternally fresh or eternally stale.
-        if let burn = payload.planBurnKcal, let day = payload.planBurnDay {
-            defaults.set(burn, forKey: planBurnKey)
-            defaults.set(day, forKey: planBurnDayKey)
-        }
         if let weight = payload.planWeightLb, let day = payload.planWeightDay {
             defaults.set(weight, forKey: planWeightKey)
             defaults.set(day, forKey: planWeightDayKey)
@@ -397,15 +382,8 @@ public enum WatchSync {
         return try? decoder.decode(SyncedGoal.self, from: data)
     }
 
-    /// The phone's synced plan inputs, day stamps included — the loader
+    /// The phone's synced weigh-in, day stamp included — the loader
     /// judges freshness through `isRecentDay`.
-    public static func syncedPlanBurn() -> (kcal: Double, day: String)? {
-        let defaults = SharedStore.defaults
-        guard let kcal = defaults.object(forKey: planBurnKey) as? Double,
-              let day = defaults.string(forKey: planBurnDayKey) else { return nil }
-        return (kcal, day)
-    }
-
     public static func syncedPlanWeight() -> (lb: Double, day: String)? {
         let defaults = SharedStore.defaults
         guard let lb = defaults.object(forKey: planWeightKey) as? Double,

@@ -51,7 +51,16 @@ public enum StreakCalendar {
     /// and excluded from the month's totals (sparse early-adoption days
     /// were skewing them). 0 disables the threshold — any logging counts.
     public static func isTracked(_ day: DayEnergyTotals, untrackedBelowKcal: Double) -> Bool {
-        day.intakeKcal > 0 && day.intakeKcal >= untrackedBelowKcal
+        isTracked(intakeKcal: day.intakeKcal, untrackedBelowKcal: untrackedBelowKcal)
+    }
+
+    /// The same rule from an intake figure alone — Today's goal card has
+    /// no `DayEnergyTotals`, and reimplementing the threshold there is
+    /// how it came to not implement it at all: July 30 logged 934 kcal
+    /// against a 1,000 threshold, so the calendar left it blank while
+    /// Today called it earned (the user, 2026-08-02).
+    public static func isTracked(intakeKcal: Double, untrackedBelowKcal: Double) -> Bool {
+        intakeKcal > 0 && intakeKcal >= untrackedBelowKcal
     }
 
     /// A day earns an onigiri when it was tracked and its `DayBadgeRule`

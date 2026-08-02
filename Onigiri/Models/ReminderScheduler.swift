@@ -115,10 +115,14 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
         // earnedDays excludes today by design (badges award only when
         // the day completes) — judge today live by the same rules, or
         // the 8 PM streak warning fires with the day already banked.
+        // The day's OWN burn, the same figure earnedDays judges every
+        // other day by. On raw measured burn this understates the
+        // deficit by the whole un-accrued resting balance, so the 8 PM
+        // warning could fire on a day already banked.
         let todayTotals = DayEnergyTotals(
             day: .now,
             intakeKcal: plan.summary.intakeKcal,
-            burnKcal: plan.summary.totalBurnKcal
+            burnKcal: plan.dayBurnKcal ?? plan.summary.totalBurnKcal
         )
         let todayGoalMet = StreakCalendar.isTracked(
             todayTotals, untrackedBelowKcal: SharedStore.untrackedBelowKcal

@@ -627,9 +627,17 @@ struct FoodFormView: View {
     /// actually read land (never guessed, per the parser's contract).
     private func applyLabel(_ parsed: ParsedLabel) {
         apply(parsed.scannedProduct(name: name, fallbackServing: serving))
-        lookupMessage = parsed.kcal == nil
+        guard parsed.kcal == nil else {
+            lookupMessage = nil
+            return
+        }
+        // A NAME with no numbers didn't come from a panel — it came off
+        // a sign or a package front that never printed nutrition
+        // (SignText, the no-model floor). Saying "read the label" there
+        // describes something that didn't happen.
+        lookupMessage = parsed.name == nil
             ? "Read the label, but not the calories — check the fields."
-            : nil
+            : "Read the name, but no nutrition was printed — add the calories."
     }
 
     private func apply(_ product: ScannedProduct) {

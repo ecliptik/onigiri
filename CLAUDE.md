@@ -260,6 +260,12 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   apart at lunchtime, 2026-08-02). Don't re-add a today-floor to the
   projection to close the gap: that was tried, it made the average
   neither one thing nor the other, and it didn't close it.
+- A day's VERDICT has two gates, and both live in `StreakCalendar`:
+  `isTracked` (intake ≥ `untrackedBelowKcal`, default 1000 — too little
+  logged to trust the numbers) AND the `DayBadgeRule`. Any surface that
+  says "earned" must run BOTH. Today's goal card ran only the second and
+  called a 934-kcal day with a 1,702 deficit "earned" while the calendar
+  left it blank (2026-08-02). Never reimplement either rule locally.
 - Unit preferences (Settings → Units): display/entry-only. Storage is ALWAYS
   canonical — lb, US fl oz, sodium mg — in HealthKit, SwiftData, WatchSync,
   and backups; `WeightUnit`/`WaterUnit`/`SodiumUnit` (kit, UnitPreferences.swift)

@@ -67,6 +67,9 @@ enum FoodImageReader {
         // words Vision DID read are the next-best signal, and they have
         // to survive to the identify stage below.
         var transcript: [LabelObservation] = []
+        // Likewise: a parse that found something but no CALORIES is the
+        // last-resort payload at the very bottom of this function.
+        var parsed = ParsedLabel()
         do {
             let result = try await LabelScan.scan(cgImage, orientation: orientation)
             transcript = result.transcript
@@ -74,7 +77,7 @@ enum FoodImageReader {
             // iOS 26 + Apple Intelligence: the model fills whatever the
             // deterministic parse left blank — invisible, and every
             // model failure keeps the deterministic result.
-            var parsed = await FoodIntelligence.refine(result.parsed, transcript: result.transcript)
+            parsed = await FoodIntelligence.refine(result.parsed, transcript: result.transcript)
             guard !Task.isCancelled else { return .cancelled }
             // An imported image is usually a screenshot of a published
             // nutrition page, which carries the one thing a
@@ -107,11 +110,20 @@ enum FoodImageReader {
                     parsed = merged(parsed, filling: only)
                 }
             }
-            if !parsed.isEmpty {
+            // CALORIES, not "anything at all". The old gate was
+            // `!parsed.isEmpty`, and a single stray value satisfied it —
+            // including the 0.0-where-it-meant-null that refine()'s own
+            // comments describe as a known flake. On a bakery sign with
+            // no panel that was enough to call it a label read, which
+            // short-circuited every identification step below and opened
+            // the form saying "Read the label, but not the calories"
+            // (the user, 2026-08-02, on the very photo the sign read was
+            // built for). A panel without calories isn't a panel.
+            if parsed.kcal != nil {
                 imageLog.notice("Label parsed: kcal \(parsed.kcal.map(String.init(describing:)) ?? "nil"), \(result.transcript.count) observations")
                 return .label(parsed)
             }
-            imageLog.notice("Label parse empty from \(result.transcript.count) observations")
+            imageLog.notice("No calories parsed from \(result.transcript.count) observations — trying identification")
         } catch {
             imageLog.error("Label OCR failed: \(String(describing: error))")
             return .nothing(message: "Couldn't read that photo — try another.")
@@ -156,6 +168,14 @@ enum FoodImageReader {
         if let named = SignText.namedFood(in: transcript) {
             imageLog.notice("Sign text named: \(named.name ?? "-")")
             return .label(named)
+        }
+        // Nothing identified it, but the parser did pull SOMETHING off
+        // the image. Hand that over rather than nothing — the behavior
+        // before the calorie gate above, now reached only as a last
+        // resort instead of pre-empting identification.
+        if !parsed.isEmpty {
+            imageLog.notice("Partial label parse, nothing identified")
+            return .label(parsed)
         }
         return .nothing(
             message: FoodIntelligence.isAvailable

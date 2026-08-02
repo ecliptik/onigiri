@@ -96,7 +96,7 @@ struct TodayCardView: View {
                 header
                 Spacer(minLength: 0)
                 HStack(spacing: 12) {
-                    energyFlank(summary.totalBurnKcal, "Burned")
+                    energyFlank(burnedKcal, "Burned")
                     ringedHeadline
                     energyFlank(summary.intakeKcal, "Eaten")
                 }
@@ -111,7 +111,7 @@ struct TodayCardView: View {
                     ringedHeadline
                     VStack(spacing: 6) {
                         HStack(spacing: 12) {
-                            miniFlank(summary.totalBurnKcal, "Burned")
+                            miniFlank(burnedKcal, "Burned")
                             miniFlank(summary.intakeKcal, "Eaten")
                         }
                         trackedMetricsRow
@@ -190,6 +190,13 @@ struct TodayCardView: View {
 
     /// The headline in the user's chosen "Calorie display" mode (all four),
     /// through the one shared readout the app and watch use.
+    /// The day's own burn — the figure the ring beside it is cut from.
+    /// Today's flank shows the same one, and CLAUDE.md's rule is that
+    /// these two move together or the surfaces disagree.
+    private var burnedKcal: Double {
+        snapshot.planState.dayBurnKcal ?? summary.totalBurnKcal
+    }
+
     private var headlineReadout: CalorieBudget.HeadlineReadout {
         CalorieBudget.headlineReadout(
             mode: SharedStore.headlineMode,

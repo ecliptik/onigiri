@@ -439,7 +439,10 @@ struct TodayView: View {
             // one row less between the user and the log.
             HStack(spacing: 12) {
                 if energyStatsStyle == "compact" {
-                    energyFlank(model.summary.totalBurnKcal, "Burned")
+                    // The day's own burn, the figure the headline beside
+                    // it is cut from — not the raw Health total, which
+                    // is smaller until measured resting catches up.
+                    energyFlank(model.dayBurnKcal, "Burned")
                 }
                 if progressGauges {
                     gaugedHeadline
@@ -674,7 +677,11 @@ struct TodayView: View {
                 MeterCell(label: "Active", value: model.summary.activeBurnKcal) {
                     Image(systemName: "flame.fill").foregroundStyle(.red)
                 }
-                MeterCell(label: "Resting", value: model.summary.restingBurnKcal) {
+                // CREDITED resting, like Details and the calendar's
+                // "out" — the raw measurement made this row disagree
+                // with the deficit printed above it (July 27: 397 + 1,487
+                // shown against a 607 deficit that was cut from 2,227).
+                MeterCell(label: "Resting", value: model.creditedRestingKcal) {
                     Image(systemName: "bed.double.fill").foregroundStyle(.indigo)
                 }
             }
@@ -1722,11 +1729,23 @@ struct DailyGoalCard: View, Equatable {
     /// `max(0, -0.0)` keeps IEEE negative zero, which formats as "-0".
     private var displayBankedKcal: Double { bankedKcal == 0 ? 0 : bankedKcal }
 
+    /// Too little food logged to trust the day's numbers — the calendar's
+    /// rule, and the one this card used to skip. THAT is how a day could
+    /// read "1,702 of 633 kcal deficit — earned" on Today while the
+    /// calendar left it blank: 934 kcal logged against a 1,000 threshold
+    /// (the user, 2026-08-02).
+    private var isTrackedDay: Bool {
+        StreakCalendar.isTracked(
+            intakeKcal: intakeKcal, untrackedBelowKcal: SharedStore.untrackedBelowKcal)
+    }
+
     /// The past-day earned look, matching StreakCalendar's judgment:
-    /// maintenance runs the band rule on the signed deficit; a met lose
-    /// goal (deficit target 0, snapshot 0) stays any-deficit; a live
-    /// lose goal wants the full target banked.
+    /// an untracked day earns nothing whatever its deficit; maintenance
+    /// runs the band rule on the signed deficit; a met lose goal (deficit
+    /// target 0, snapshot 0) stays any-deficit; a live lose goal wants
+    /// the full target banked.
     private var dayEarnedLook: Bool {
+        guard isTrackedDay else { return false }
         if isMaintenanceMode { return abs(deficitKcal) <= StreakCalendar.maintenanceBandKcal }
         if plan.requiredDailyDeficit <= 0 { return deficitKcal > 0 }
         return progress >= 1
@@ -1743,7 +1762,13 @@ struct DailyGoalCard: View, Equatable {
                         .font(.headline)
                     Text("\(((max(0, min(1, progress))) * 100).formatted(.number.precision(.fractionLength(0))))%")
                         .font(.headline)
-                        .foregroundStyle(progress >= 1 ? Color.green : Color.secondary)
+                        // Green is the "you did it" signal, so it must
+                        // agree with the verdict below: a finished day
+                        // that logged too little to count showed a green
+                        // 100% over "not tracked" (2026-08-02).
+                        .foregroundStyle(
+                            progress >= 1 && (showsRemaining || isTrackedDay)
+                                ? Color.green : Color.secondary)
                 }
                 if isMaintenance {
                     Text("\(intakeKcal, format: .number.precision(.fractionLength(0))) of \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal eaten")
@@ -1770,11 +1795,21 @@ struct DailyGoalCard: View, Equatable {
                     Text("\(SharedStore.rewardEmoji(for: rewardIcon)) earned")
                         .font(.subheadline)
                         .foregroundStyle(.green)
-                } else {
+                } else if intakeKcal == 0 {
                     // An untracked day isn't a failed day.
-                    Text(intakeKcal == 0
-                         ? "nothing logged"
-                         : (isMaintenanceMode ? "off budget" : "goal not met"))
+                    Text("nothing logged")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else if !isTrackedDay {
+                    // Name the threshold. A day showing a 1,702 kcal
+                    // deficit against a 633 target and then quietly not
+                    // earning is unexplainable otherwise — it's the
+                    // report that found this bug.
+                    Text("not tracked — under \(SharedStore.untrackedBelowKcal, format: .number.precision(.fractionLength(0))) kcal logged")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(isMaintenanceMode ? "off budget" : "goal not met")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

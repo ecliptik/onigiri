@@ -28,6 +28,16 @@ public struct DailyEnergySummary: Sendable, Equatable, Codable {
 
     public var totalBurnKcal: Double { activeBurnKcal + restingBurnKcal }
 
-    /// The home-screen meter: intake − (active + resting). Negative is a deficit.
+    /// Intake − raw measured burn. Negative is a deficit.
+    ///
+    /// **Not a verdict.** Use `DayBudget.deficit(intakeKcal:dayBurnKcal:)`
+    /// for anything a user reads as a judgment — banked, Net, the gauge,
+    /// the balance headline, "did this day earn its badge". This one
+    /// subtracts only the resting Health has RECORDED, while every
+    /// budget in the app is cut from the whole day's resting credited up
+    /// front, so the two disagree by the un-accrued balance: at 9am
+    /// that's over a thousand kcal, and it read as the app contradicting
+    /// itself on three separate screens (2026-08-02). It survives for
+    /// the one honest use — reporting what Health measured.
     public var balanceKcal: Double { intakeKcal - totalBurnKcal }
 }

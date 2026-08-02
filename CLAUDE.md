@@ -299,17 +299,28 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   `.searchable` (bottom placement) everywhere — the user vetoed custom
   bars and auto-focus; the scanner is a labeled list row (ScanRowLabel),
   never a toolbar icon.
-- Copy: "burn" is a VERB in flowing sentences, never a noun in a label
-  (2026-07-31, the user). Terse labels for the active+resting TOTAL say
-  "Used" (Today/widget flanks, opposite "Eaten") or "energy" in noun
-  slots ("Total energy", "Average energy", "Energy per day"); the
-  breakdown rows use Health's own "Active energy"/"Resting energy".
-  Prose keeps the idiom — Siri says "burned 1,505 today", the site says
-  "what you burn in a day" — because it reads naturally aloud where a
-  label doesn't, and the metaphor overstates agency on a number that is
-  ~70% resting metabolism. "Banked" is retired from user copy entirely
-  ("Total deficit", "the deficit counts"). Identifiers are exempt and
-  stay `burnKcal`/`bankedKcal`: they mirror HealthKit's own
+- Copy: "burn" stays a VERB, and stays out of NOUN slots (2026-07-31 →
+  2026-08-02, the user). Three rules, settled by trying the alternatives:
+  - The Today/widget flank opposite "Eaten" is **"Burned"**. "Used" was
+    shipped there and REVERTED the same week — it reads as vague next to
+    a hard number, and "used" doubles as budget-spend in a budget-framed
+    app. Today and the widget carry the same label on the same
+    `totalBurnKcal`; change them TOGETHER or the two surfaces disagree.
+  - Noun slots take "energy": "Total energy" (Calendar), "Average
+    energy"/"Energy per day" (Goal), and Health's own "Active
+    energy"/"Resting energy" (Day detail). "Average burn" is the gym
+    register, and the metaphor overstates agency on a number that's ~70%
+    resting metabolism.
+  - Prose keeps the idiom, because it reads naturally aloud where a
+    label doesn't: Siri says "burned 1,505 today", Goal says "eat close
+    to what you burn in a day", the site says "You burn ~2,800 kcal/day
+    on average". Rewrite a noun phrase into the verb rather than
+    reaching for "energy use".
+
+  "Banked" is retired from user copy entirely ("Total deficit", "the
+  deficit counts"). Identifiers are exempt and stay
+  `burnKcal`/`bankedKcal`: they mirror HealthKit's own
   `activeEnergyBurned`. `docs/privacy.md` keeps "energy burned" where it
-  NAMES the HealthKit category — precision outranks voice there, and
-  that file has a wiki twin that must be edited by hand to match.
+  NAMES the HealthKit category — precision outranks voice there — and
+  its "daily energy use" clause has a wiki twin needing the same edit
+  by hand.

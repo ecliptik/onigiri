@@ -439,7 +439,7 @@ struct TodayView: View {
             // one row less between the user and the log.
             HStack(spacing: 12) {
                 if energyStatsStyle == "compact" {
-                    energyFlank(model.summary.totalBurnKcal, "Used")
+                    energyFlank(model.summary.totalBurnKcal, "Burned")
                 }
                 if progressGauges {
                     gaugedHeadline
@@ -675,7 +675,7 @@ struct TodayView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
-        // One VoiceOver stop ("1,505, Used"), not two — the
+        // One VoiceOver stop ("1,505, Burned"), not two — the
         // CalendarView.slotMetric grouping discipline.
         .accessibilityElement(children: .combine)
     }

@@ -87,7 +87,7 @@ enum FoodImageReader {
             // for. Printed values always win over the model's
             // (PLAN-screenshot-nutrition Part B).
             if source == .imported, FoodIntelligence.isAvailable {
-                status("Reading screenshot…")
+                status("Analyzing screenshot…")
                 let foods = await FoodIntelligence.readNutritionScreenshot(
                     transcript: result.transcript)
                 guard !Task.isCancelled else { return .cancelled }

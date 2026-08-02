@@ -156,7 +156,24 @@ Third pass (2026-08-02, both decided with the user):
     pre-existing last-good blob still decodes.
 
 NOT DONE:
+- **Two rows called "Calorie budget", 726 kcal apart** (the user,
+  2026-08-02, on the first deployed build). Goal showed ≈2,293 kcal/day
+  while Details showed 1,567. Both are right and that is the problem:
+  Goal is `projectedDailyBurn (2,706 average) − 413`, Details is
+  `dayBurn (1,980 so far today) − 413`. At 1:43pm resting is fully
+  credited but only 150 active has been EARNED, so today's figure is
+  below a typical day's and climbs all afternoon — by bedtime with a
+  normal ~700 active it lands back near 2,293.
+  The split was kept on purpose (a plan preview that reads low while
+  you're setting a target undersells it), but the two rows share a
+  label and nothing says one means "a typical day" and the other
+  "right now". Same failure shape as the original report. Fix is
+  naming, not math: relabel Goal's row, and probably show today's
+  live budget beside it so the pair reads as a comparison instead of
+  a contradiction.
 - The morning acceptance test is unrun: at 8am the ring must read
   ~`restingFullDay + smallActive − deficit − breakfast`, NOT near zero.
+  (Partly evidenced already: at 1:43pm the budget was 1,567 against
+  1,302 kcal of measured burn, so the estimate IS flooring resting.)
 - The Goal tab's motivation UI (milestone rungs, progress bar, "Progress
   since" picker) has still never been visually verified.

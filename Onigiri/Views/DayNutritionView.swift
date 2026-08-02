@@ -96,28 +96,21 @@ struct DayNutritionView: View {
 
     private var summarySection: some View {
         Section(dayLabel) {
-            // The day's allowance to stay on the goal, up top. Budget and
-            // remaining are present only for today with a goal (the caller
-            // gates dailyBudget).
-            if let dailyBudget {
-                iconRow("Calorie budget", icon: { Image(systemName: "target").foregroundStyle(Color.riceToast) }) {
-                    Text("\(dailyBudget, format: .number.precision(.fractionLength(0))) kcal")
-                        .monospacedDigit()
-                }
-            }
-            // The same icon this number wears on Today.
-            iconRow("Calories logged", icon: { FoodIconView(raw: foodIcon) }) {
-                Text("\(model.summary.intakeKcal, format: .number.precision(.fractionLength(0))) kcal")
-                    .monospacedDigit()
-            }
-            // Budget minus what's logged — the Today headline's "kcal
-            // left", right under the two numbers it's from, tinted
-            // green/amber/orange as it nears and passes the budget.
+            // THE question this screen answers, first: how much can I
+            // still eat today and meet the goal (the user, 2026-08-02).
+            // It used to sit third, behind the two numbers it's derived
+            // from — reading the derivation before the answer. Budget
+            // and logged follow as the working, which is the order
+            // they're wanted in once the answer is in hand. Both are
+            // present only for a day with a goal (the caller gates
+            // dailyBudget). Tinted green/amber/orange as it nears and
+            // passes the budget.
             if let dailyBudget {
                 let remaining = dailyBudget - model.summary.intakeKcal
                 iconRow("Calories remaining", icon: { Image(systemName: "chart.pie.fill").foregroundStyle(Color.remainingStatus(kcal: remaining)) }) {
                     HStack(spacing: 4) {
                         Text("\(remaining, format: .number.precision(.fractionLength(0))) kcal")
+                            .font(.body.weight(.semibold))
                             .foregroundStyle(Color.remainingStatus(kcal: remaining))
                             .monospacedDigit()
                             .accessibilityValue(Color.remainingStatusLabel(kcal: remaining) ?? "")
@@ -130,6 +123,15 @@ struct DayNutritionView: View {
                         }
                     }
                 }
+                iconRow("Calorie budget", icon: { Image(systemName: "target").foregroundStyle(Color.riceToast) }) {
+                    Text("\(dailyBudget, format: .number.precision(.fractionLength(0))) kcal")
+                        .monospacedDigit()
+                }
+            }
+            // The same icon this number wears on Today.
+            iconRow("Calories logged", icon: { FoodIconView(raw: foodIcon) }) {
+                Text("\(model.summary.intakeKcal, format: .number.precision(.fractionLength(0))) kcal")
+                    .monospacedDigit()
             }
             iconRow("Active burn", icon: { Image(systemName: "flame.fill").foregroundStyle(.red) }) {
                 Text("\(model.summary.activeBurnKcal, format: .number.precision(.fractionLength(0))) kcal")

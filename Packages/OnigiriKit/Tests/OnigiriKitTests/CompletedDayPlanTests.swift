@@ -59,18 +59,31 @@ struct CompletedDayPlanTests {
         #expect(!plan.isAggressive)
     }
 
-    /// A watch taken off early must not read as a failed day. The plan's
-    /// expected burn covers the unworn hours — no estimating required,
-    /// because a snapshot is a recorded fact rather than a guess.
-    @Test func unwornHoursDoNotManufactureAMissedDay() {
-        let intake = 1_619.0, target = 621.0
-        let measuredOnly = 1_562.0 + 397          // what Health recorded
-        let effective = DayBudget.effectiveBurn(
-            measuredKcal: measuredOnly, expectedKcal: 2_722, style: .automatic)
-
-        #expect(measuredOnly - intake < target)   // judged short on wear time
+    /// The rule REVERSED on 2026-08-02: unworn hours cost you the active
+    /// energy you didn't earn, because earning it is the whole reason to
+    /// wear the watch. What they must NOT cost is the baseline — resting
+    /// is floored by the body-metric estimate, so a day in the drawer
+    /// keeps its ~1,900 kcal of just-being-alive.
+    @Test func unwornHoursCostActivityButNeverTheBaseline() {
+        let intake = 1_619.0, target = 621.0, estimatedResting = 1_900.0
+        // Health recorded a partial day: resting short, some activity.
+        let burn = DayBudget.dayBurn(
+            activeKcal: 397, restingKcal: 1_562,
+            estimatedRestingKcal: estimatedResting)
+        // The baseline is restored, so the day isn't judged on 1,562.
+        #expect(burn == 397 + estimatedResting)
         let plan = CalorieBudget.completedDayPlan(
-            dayBurnKcal: effective, requiredDailyDeficit: target)
+            dayBurnKcal: burn, requiredDailyDeficit: target)
         #expect(DayBudget.met(intakeKcal: intake, budgetKcal: plan.dailyBudget))
+
+        // The same day with the watch never on: the 397 is simply gone,
+        // and that is allowed to flip the verdict.
+        let noWatch = DayBudget.dayBurn(
+            activeKcal: 0, restingKcal: 1_562,
+            estimatedRestingKcal: estimatedResting)
+        #expect(noWatch == estimatedResting)
+        let stricter = CalorieBudget.completedDayPlan(
+            dayBurnKcal: noWatch, requiredDailyDeficit: target)
+        #expect(!DayBudget.met(intakeKcal: intake, budgetKcal: stricter.dailyBudget))
     }
 }

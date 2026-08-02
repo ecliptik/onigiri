@@ -1,49 +1,62 @@
 import Foundation
 
-/// The day's eating budget — ONE number, decided by the plan, that
-/// measured burn can raise but never lower.
+/// The day's eating budget — ONE number, from the day's own burn.
 ///
 /// This replaces judging a day by its measured deficit. The two are the
 /// same question asked differently, and asking it two ways is what broke:
 /// the budget forecast burn from the trailing average while the verdict
 /// used what the watch happened to record, so a screen could show room
-/// left on a day another screen called a miss (2026-07-30).
+/// left on a day another screen called a miss (2026-07-30), and Details
+/// could show "695 kcal left" two rows above "197 kcal surplus"
+/// (2026-08-02).
 ///
-///     budget = effectiveBurn − requiredDeficit
+///     budget = dayBurn − requiredDeficit
 ///     met    = intake ≤ budget
 ///
-/// which is algebraically the old deficit rule — `effectiveBurn − intake
-/// ≥ requiredDeficit` — provided BOTH use `effectiveBurn`. That is the
-/// whole fix: one burn figure, everywhere, for a given day.
+/// which is algebraically the deficit rule — `dayBurn − intake ≥
+/// requiredDeficit` — provided BOTH use `dayBurn`. That is the whole
+/// fix: one burn figure, everywhere, for a given day.
 ///
-/// Taking the watch off cannot cost you anything, because measured burn
-/// only ever raises the figure. That also makes estimating unworn hours
-/// unnecessary: the plan's expected burn already covers them.
+/// The burn is the day's OWN — resting credited up front, active earned
+/// by moving (2026-08-02, the user). The trailing-average expectation
+/// this used to fall back on is gone: it promised calories the day never
+/// went on to earn, so a below-average day quoted an above-average
+/// allowance right up to bedtime.
 public enum DayBudget {
-    /// The burn a day is judged against: the plan's expectation for that
-    /// day, raised if the day actually burned more. Never lowered — an
-    /// unworn watch is missing data, not a smaller day.
+    /// The burn a day is judged against, from that day's own two
+    /// channels. HealthKit's split maps onto the model exactly:
+    /// `basalEnergyBurned` is the baseline, and `activeEnergyBurned` is
+    /// DEFINED as energy above resting, so adding them double-counts
+    /// nothing.
     ///
-    /// `expectedKcal` is the value snapshotted when the day happened
-    /// (`PlanBurnHistory`), so history is judged by the plan it was living
-    /// under. Days with no snapshot fall back to the caller's current
-    /// expectation, matching how a missing deficit target behaves.
-    public static func effectiveBurn(
-        measuredKcal: Double,
-        expectedKcal: Double?,
-        style: BudgetStyle = SharedStore.budgetStyle
+    /// **Resting is credited up front** — the whole day's worth, from
+    /// midnight. It's the predictable part and happens whether or not
+    /// you move, so `max` against the estimate covers all three cases in
+    /// one expression: today before it has accrued (the estimate wins),
+    /// a finished day (they agree), a day the phone/watch was off (the
+    /// estimate floors it, so resting never reads as zero).
+    ///
+    /// **Active is earned** — raw measured, never filled, never
+    /// estimated. No watch, no active credit, smaller budget. That is
+    /// the incentive, and it's why the old expected-burn substitution
+    /// had to go: its entire job was protecting unworn days, which is
+    /// precisely what we now decline to do.
+    ///
+    /// `estimatedRestingKcal` is `BasalEstimate.restingKcal` from Health's
+    /// body metrics; nil when the body isn't described well enough, in
+    /// which case measured resting stands alone.
+    public static func dayBurn(
+        activeKcal: Double,
+        restingKcal: Double,
+        estimatedRestingKcal: Double?
     ) -> Double {
-        // Fixed: the plan's number and nothing else — but a day with no
-        // snapshot still has to fall back to what was measured, or it
-        // would have no burn at all.
-        if !style.creditsActivity, let expectedKcal { return expectedKcal }
-        return max(measuredKcal, expectedKcal ?? 0)
+        activeKcal + max(restingKcal, estimatedRestingKcal ?? 0)
     }
 
     /// Calories available to eat. Can go negative on a punishing target;
     /// callers show that as "over", never as a negative allowance.
-    public static func budget(effectiveBurnKcal: Double, requiredDeficitKcal: Double) -> Double {
-        effectiveBurnKcal - max(0, requiredDeficitKcal)
+    public static func budget(dayBurnKcal: Double, requiredDeficitKcal: Double) -> Double {
+        dayBurnKcal - max(0, requiredDeficitKcal)
     }
 
     /// Did the day land inside its budget? The single verdict every

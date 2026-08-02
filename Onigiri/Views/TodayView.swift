@@ -599,44 +599,38 @@ struct TodayView: View {
         // For a past day both come from the day itself: its recorded
         // target, and its own burn (resting already filled for unworn
         // hours by filledDaySummary).
-        if !model.isToday {
-            // The burn the PLAN expected that day, raised by what was
-            // measured (unless activity credit is off) — never lowered,
-            // so an unworn watch can't cost the day anything. That's what
-            // makes the budget solid: nothing about wearing a watch after
-            // 6pm changes what you had left to eat.
-            let dayBurn = DayBudget.effectiveBurn(
-                measuredKcal: model.summary.totalBurnKcal,
-                expectedKcal: PlanBurnHistory.expectedBurn(on: model.selectedDate))
-            // Nothing to judge the day by, and a budget of "0 minus the
-            // target" would invent a huge overage.
-            guard dayBurn > 0 else { return nil }
-            return CalorieBudget.completedDayPlan(
-                dayBurnKcal: dayBurn,
-                // Maintenance has no deficit target; a lose day uses the
-                // target snapshotted then, falling back to the current one
-                // for days that predate snapshots (StreakCalendar's rule).
-                requiredDailyDeficit: goal.isMaintenance
-                    ? 0
-                    : (DeficitTargetHistory.target(on: model.selectedDate)
-                        ?? currentRequiredDeficit(for: goal) ?? 0)
-            )
-        }
-        // The shared kit derivation — one clamp, one days-to-target rule
-        // for Today, Goal, onboarding, the widgets, and the watch.
-        return CalorieBudget.derivePlan(
-            isMaintenance: goal.isMaintenance,
-            currentWeightLb: model.currentWeightLb ?? goal.fallbackCurrentWeightLb,
-            targetWeightLb: goal.targetWeightLb,
-            targetDate: goal.targetDate,
-            averageDailyBurnKcal: model.averageBurnKcal,
-            // Day-ratcheted: Health revising burn down (watch↔phone
-            // sample reconciliation) must not move the budget against
-            // the user mid-day. Display totals stay raw. ONLY for today —
-            // the floor's stored mark is keyed to today, so feeding it a
-            // browsed day's burn wrote that day's number into today's
-            // floor and inflated today's budget (same-day bug, 2026-07-30).
-            todayActualBurnKcal: TodayBurnFloor.ratcheted(model.summary.totalBurnKcal)
+        // ONE burn figure for every day, today included: resting
+        // credited up front (measured, floored by the body-metric
+        // estimate) plus the active energy actually earned. Today used
+        // to forecast from the trailing average, which promised
+        // calories the day never went on to earn — a below-average day
+        // quoted an above-average allowance right to bedtime, and
+        // Details showed "695 kcal left" two rows above "197 kcal
+        // surplus" (2026-08-02).
+        let measuredBurn = DayBudget.dayBurn(
+            activeKcal: model.summary.activeBurnKcal,
+            restingKcal: model.summary.restingBurnKcal,
+            estimatedRestingKcal: model.estimatedRestingKcal)
+        // Day-ratcheted for TODAY only: Health revising burn down
+        // (watch↔phone sample reconciliation) must not move the budget
+        // against the user mid-day. The floor's mark is keyed to today,
+        // so feeding it a browsed day's burn wrote that day's number
+        // into today's floor (same-day bug, 2026-07-30).
+        let dayBurn = model.isToday
+            ? TodayBurnFloor.ratcheted(measuredBurn)
+            : measuredBurn
+        // Nothing to judge the day by, and a budget of "0 minus the
+        // target" would invent a huge overage.
+        guard dayBurn > 0 else { return nil }
+        return CalorieBudget.completedDayPlan(
+            dayBurnKcal: dayBurn,
+            // Maintenance has no deficit target; a day uses the target
+            // snapshotted then, falling back to the current one for days
+            // that predate snapshots (StreakCalendar's rule).
+            requiredDailyDeficit: goal.isMaintenance
+                ? 0
+                : (DeficitTargetHistory.target(on: model.selectedDate)
+                    ?? currentRequiredDeficit(for: goal) ?? 0)
         )
     }
 

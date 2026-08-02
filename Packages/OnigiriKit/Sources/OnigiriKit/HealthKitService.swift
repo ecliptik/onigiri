@@ -457,28 +457,39 @@ public final class HealthKitService {
     /// card, and (for completed days) the Today screen all read it, so
     /// they can't disagree about whether a day earned its badge.
     ///
-    /// Each day's burn is `DayBudget.effectiveBurn` — the plan's
-    /// expectation for that day, raised by what was actually measured.
+    /// Each day's burn is `DayBudget.dayBurn` — resting credited up
+    /// front (measured, floored by the body-metric estimate), plus
+    /// whatever active energy was actually earned.
     public func dailyEnergyTotals(from start: Date, to end: Date) async throws -> [DayEnergyTotals] {
         async let intakeTotals = dailyTotals(.dietaryEnergyConsumed, start: start, end: end)
         async let activeTotals = dailyTotals(.activeEnergyBurned, start: start, end: end)
         async let basalTotals = dailyTotals(.basalEnergyBurned, start: start, end: end)
         let (intake, active, basal) = try await (intakeTotals, activeTotals, basalTotals)
-        // Each day's burn is the one the PLAN used that day, raised if the
-        // day actually burned more — never lowered. An unworn watch is
-        // missing data, not a smaller day, so taking it off can't cost
-        // anything (the user's rule, 2026-07-30). This is also why unworn
-        // hours need no estimating: the plan's expectation already covers
-        // them, and a snapshot is a recorded fact rather than a guess.
-        let expectedByDay = PlanBurnHistory.burnsByDay()
+        let latestWeightLb = try? await latestBodyMassLb()
+        // Resting up front, active earned (the user's rule, 2026-08-02).
+        // The estimate floors RESTING only, so an unworn day still gets
+        // its baseline but earns no activity — which is the point: the
+        // watch is how active energy is earned. One profile read covers
+        // every day in the range; body metrics don't move day to day at
+        // a resolution this equation can see.
+        let profile = await bodyProfile()
+        let estimatedResting: Double? = {
+            guard let heightCm = profile.heightCm, let age = profile.ageYears,
+                  let weightLb = latestWeightLb
+            else { return nil }
+            return BasalEstimate.restingKcal(
+                weightLb: weightLb, heightCm: heightCm,
+                ageYears: age, sex: profile.sex)
+        }()
         let allDays = Set(intake.keys).union(active.keys).union(basal.keys)
         return allDays.sorted().map { day in
-            let measured = (active[day] ?? 0) + (basal[day] ?? 0)
             return DayEnergyTotals(
                 day: day,
                 intakeKcal: intake[day] ?? 0,
-                burnKcal: DayBudget.effectiveBurn(
-                    measuredKcal: measured, expectedKcal: expectedByDay[day])
+                burnKcal: DayBudget.dayBurn(
+                    activeKcal: active[day] ?? 0,
+                    restingKcal: basal[day] ?? 0,
+                    estimatedRestingKcal: estimatedResting)
             )
         }
     }

@@ -10,7 +10,7 @@ struct DayBudgetTests {
     /// what let one screen say earned and another say missed.
     @Test func stayingInBudgetIsExactlyBankingTheDeficit() {
         let burn = 2_700.0, target = 500.0
-        let budget = DayBudget.budget(effectiveBurnKcal: burn, requiredDeficitKcal: target)
+        let budget = DayBudget.budget(dayBurnKcal: burn, requiredDeficitKcal: target)
         #expect(budget == 2_200)
         for intake in [1_700.0, 2_199.0, 2_200.0, 2_201.0, 2_600.0] {
             let inBudget = DayBudget.met(intakeKcal: intake, budgetKcal: budget)
@@ -19,57 +19,52 @@ struct DayBudgetTests {
         }
     }
 
-    // MARK: Earn extra (the default)
+    // MARK: Resting up front, active earned
 
-    @Test func measuredBurnRaisesTheBudgetButNeverLowersIt() {
-        // Burned more than planned: the extra is yours to eat.
-        #expect(DayBudget.effectiveBurn(
-            measuredKcal: 2_900, expectedKcal: 2_500, style: .automatic) == 2_900)
-        // Watch off at 6pm, only 1,900 recorded — costs nothing.
-        #expect(DayBudget.effectiveBurn(
-            measuredKcal: 1_900, expectedKcal: 2_500, style: .automatic) == 2_500)
+    /// Resting is credited for the WHOLE day from midnight — the estimate
+    /// floors it — so the morning doesn't read as a near-zero budget.
+    @Test func restingIsCreditedUpFront() {
+        // 8am: only 610 of the day's ~1,831 resting has accrued.
+        #expect(DayBudget.dayBurn(
+            activeKcal: 50, restingKcal: 610, estimatedRestingKcal: 1_831) == 1_881)
+        // Same day at bedtime: measured has caught up, answer is stable
+        // in the only way that matters — active is what moved it.
+        #expect(DayBudget.dayBurn(
+            activeKcal: 327, restingKcal: 1_831, estimatedRestingKcal: 1_831) == 2_158)
     }
 
-    /// The reported day: 2,000 budget, 1,700 eaten, watch off — still 300
-    /// left, and still a met day. Nothing about the watch changes it.
-    @Test func takingTheWatchOffChangesNothing() {
-        let expected = 2_500.0, target = 500.0, intake = 1_700.0
-        let wornAllDay = DayBudget.budget(
-            effectiveBurnKcal: DayBudget.effectiveBurn(
-                measuredKcal: 2_500, expectedKcal: expected, style: .automatic),
-            requiredDeficitKcal: target)
-        let offAtSix = DayBudget.budget(
-            effectiveBurnKcal: DayBudget.effectiveBurn(
-                measuredKcal: 1_450, expectedKcal: expected, style: .automatic),
-            requiredDeficitKcal: target)
-        #expect(wornAllDay == offAtSix)
-        #expect(wornAllDay - intake == 300)
-        #expect(DayBudget.met(intakeKcal: intake, budgetKcal: offAtSix))
+    /// A real resting measurement above the estimate wins — the estimate
+    /// is a floor, not a cap.
+    @Test func measuredRestingAboveTheEstimateWins() {
+        #expect(DayBudget.dayBurn(
+            activeKcal: 0, restingKcal: 2_000, estimatedRestingKcal: 1_831) == 2_000)
     }
 
-    // MARK: Fixed
-
-    @Test func fixedIgnoresMeasuredBurnInBothDirections() {
-        #expect(DayBudget.effectiveBurn(
-            measuredKcal: 2_900, expectedKcal: 2_500, style: .fixed) == 2_500)
-        #expect(DayBudget.effectiveBurn(
-            measuredKcal: 1_400, expectedKcal: 2_500, style: .fixed) == 2_500)
+    /// No body metrics, no estimate: measured resting stands alone rather
+    /// than the day losing its baseline.
+    @Test func withoutBodyMetricsMeasuredRestingStandsAlone() {
+        #expect(DayBudget.dayBurn(
+            activeKcal: 300, restingKcal: 1_500, estimatedRestingKcal: nil) == 1_800)
     }
 
-    /// Even on Fixed, a day with no snapshot has to fall back to what was
-    /// measured — otherwise it would have no burn at all and read as a
-    /// catastrophic overage.
-    @Test func withoutASnapshotBothStylesUseWhatWasMeasured() {
-        #expect(DayBudget.effectiveBurn(
-            measuredKcal: 2_100, expectedKcal: nil, style: .fixed) == 2_100)
-        #expect(DayBudget.effectiveBurn(
-            measuredKcal: 2_100, expectedKcal: nil, style: .automatic) == 2_100)
+    /// The incentive, and the deliberate reversal of the old rule: active
+    /// energy is EARNED. No watch, no active credit, smaller budget —
+    /// where `effectiveBurn` used to backfill it from the plan so taking
+    /// the watch off cost nothing (2026-08-02, the user).
+    @Test func activeEnergyIsEarnedNotBackfilled() {
+        let worn = DayBudget.dayBurn(
+            activeKcal: 327, restingKcal: 1_831, estimatedRestingKcal: 1_831)
+        let watchInADrawer = DayBudget.dayBurn(
+            activeKcal: 0, restingKcal: 1_831, estimatedRestingKcal: 1_831)
+        #expect(worn - watchInADrawer == 327)
+        // Resting still survives the drawer — only activity is at stake.
+        #expect(watchInADrawer == 1_831)
     }
 
     // MARK: Guards
 
     @Test func aNegativeTargetCannotInflateTheBudget() {
-        #expect(DayBudget.budget(effectiveBurnKcal: 2_400, requiredDeficitKcal: -300) == 2_400)
+        #expect(DayBudget.budget(dayBurnKcal: 2_400, requiredDeficitKcal: -300) == 2_400)
     }
 
     @Test func eatingExactlyTheBudgetCounts() {

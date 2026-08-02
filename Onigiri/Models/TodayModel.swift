@@ -16,6 +16,11 @@ final class TodayModel {
     private(set) var trackedTotals: [Double] = [0, 0]
     private(set) var currentWeightLb: Double?
     private(set) var averageBurnKcal: Double?
+    /// Full-day resting energy from body metrics — the floor under the
+    /// day's resting credit, so resting is available UP FRONT instead of
+    /// dripping in hourly (2026-08-02). nil when Health lacks height or
+    /// date of birth, in which case measured resting stands alone.
+    private(set) var estimatedRestingKcal: Double?
     /// Smoothed scale movement over the past 7 days (negative = down);
     /// nil until Health holds enough weigh-ins to say.
     private(set) var weeklyTrendLb: Double?
@@ -152,6 +157,14 @@ final class TodayModel {
         async let historyRead = health.bodyMassHistory(days: 7)
         currentWeightLb = (try? await weightRead) ?? currentWeightLb
         averageBurnKcal = (try? await burnRead) ?? averageBurnKcal
+        let body = await health.bodyProfile()
+        estimatedRestingKcal = {
+            guard let heightCm = body.heightCm, let age = body.ageYears,
+                  let weightLb = currentWeightLb else { return nil }
+            return BasalEstimate.restingKcal(
+                weightLb: weightLb, heightCm: heightCm,
+                ageYears: age, sex: body.sex)
+        }()
         // The week's change comes from a linear fit over the raw
         // weigh-ins in the window — no smoothing, so no extra runway.
         if let history = try? await historyRead {

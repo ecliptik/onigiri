@@ -52,7 +52,7 @@ enum FoodImageReader {
         source: FoodImageSource = .camera,
         status: @MainActor (String) -> Void = { _ in }
     ) async -> FoodImageOutcome {
-        status("Reading photo…")
+        status("Analyzing photo…")
         // Vision needs legible text, not sensor resolution: a 48 MP
         // library pick decoded at full size spikes memory across the
         // whole cascade (stacked against the model's own footprint —

@@ -45,7 +45,7 @@ struct ScanSheet: View {
     /// "no camera hardware", which shares the same fallback layout.
     @State private var cameraAuthDenied = false
     /// What the progress capsule says — the cascade's second leg takes
-    /// long enough that "Reading photo…" would read as a hang.
+    /// long enough that "Analyzing photo…" would read as a hang.
     @State private var readingStatus = ""
     @State private var failureMessage: String?
     /// Reaches the live scanner for capturePhoto() — the representable
@@ -220,7 +220,7 @@ struct ScanSheet: View {
                     Button {
                         guard !isReading else { return }
                         isReading = true
-                        readingStatus = "Reading photo…"
+                        readingStatus = "Analyzing photo…"
                         failureMessage = nil
                         readTask = Task { await captureLabel() }
                     } label: {

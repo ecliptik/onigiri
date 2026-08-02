@@ -183,7 +183,7 @@ enum FoodImageReader {
         return .nothing(
             message: FoodIntelligence.isAvailable
                 ? "Couldn't read a nutrition label, a name, or identify a food — try a closer, straighter shot."
-                : "Couldn't read a nutrition label there — try a closer, straighter shot with the whole panel in frame. Turn on AI in Settings to estimate from a photo of the food or its sign.")
+                : "Couldn't read a nutrition label — try a closer, straighter shot. Turn on AI in Settings to identify food from a photo.")
     }
 }
 

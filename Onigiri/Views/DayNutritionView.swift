@@ -135,9 +135,24 @@ struct DayNutritionView: View {
                 Text("\(model.summary.activeBurnKcal, format: .number.precision(.fractionLength(0))) kcal")
                     .monospacedDigit()
             }
+            // The CREDITED resting — what the budget above was built
+            // from — with what Health has actually recorded underneath
+            // when the estimate is flooring it. Both, because either
+            // alone lies: the measured figure can't explain the budget,
+            // and the credited one alone wouldn't match the Health app.
             iconRow("Resting burn", icon: { Image(systemName: "bed.double.fill").foregroundStyle(.indigo) }) {
-                Text("\(model.summary.restingBurnKcal, format: .number.precision(.fractionLength(0))) kcal")
-                    .monospacedDigit()
+                let credited = model.creditedRestingKcal
+                let measured = model.summary.restingBurnKcal
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(credited, format: .number.precision(.fractionLength(0))) kcal")
+                        .monospacedDigit()
+                    if credited - measured >= 1 {
+                        Text("\(measured, format: .number.precision(.fractionLength(0))) \(model.isToday ? "so far" : "recorded")")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
             }
             // Same vocabulary as the calendar day card: positive is a
             // deficit (good), negative a surplus. "Net", not "Deficit" —

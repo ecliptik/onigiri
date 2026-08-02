@@ -340,7 +340,13 @@ struct GoalView: View {
                 // with the model change rather than sitting beside it
                 // meaning nothing.
                 Section("Calorie budget") {
-                    LabeledContent("Resting burn") {
+                    // "Resting burn, FULL DAY" — the bare label collided
+                    // with Details', which shows what Health has
+                    // recorded so far, and the two read as the app
+                    // contradicting itself: 1,830 here against 1,272
+                    // there (the user, 2026-08-02, one screen after the
+                    // same mistake with "Calorie budget").
+                    LabeledContent("Resting burn, full day") {
                         Text(model.estimatedRestingKcal.map {
                             "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
                         } ?? "Not estimated")

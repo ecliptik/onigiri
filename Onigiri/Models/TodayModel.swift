@@ -31,6 +31,15 @@ final class TodayModel {
     var deficitKcal: Double {
         DayBudget.deficit(intakeKcal: summary.intakeKcal, dayBurnKcal: dayBurnKcal)
     }
+    /// The resting the day was CREDITED — measured, floored by the
+    /// body-metric estimate. This is the number inside the budget, and
+    /// printing the measured one beside it was what made Details
+    /// impossible to reconcile: a budget of 1,585 over a resting row
+    /// reading 1,272, with the 1,830 it was actually built on nowhere on
+    /// the screen (the user, 2026-08-02).
+    var creditedRestingKcal: Double {
+        max(summary.restingBurnKcal, estimatedRestingKcal ?? 0)
+    }
     /// Smoothed scale movement over the past 7 days (negative = down);
     /// nil until Health holds enough weigh-ins to say.
     private(set) var weeklyTrendLb: Double?

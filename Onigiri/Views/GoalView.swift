@@ -234,8 +234,12 @@ struct GoalView: View {
         } header: {
             Text("Daily plan")
         } footer: {
+            // Only the DIFFERENCE between the two rows. The section
+            // below already explains what a budget is made of, and on
+            // screen the two captions sit a thumb apart — both opening
+            // "the day's own burn minus the deficit" read as a stutter.
             if todayBudget != nil {
-                Text("Today's budget is this day's own burn minus the deficit, so it starts at your resting burn and grows as you earn active burn. The average day uses your recent burn instead.")
+                Text("Today's budget grows as you earn active burn. The average day uses your recent burn instead.")
             }
         }
     }

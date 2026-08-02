@@ -113,6 +113,15 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
 - Pass env vars to UI tests via `TEST_RUNNER_<NAME>=… xcodebuild test …`.
 - `testAddWidgetToHomeScreen` (opt-in via `TEST_RUNNER_ADD_WIDGET=1`) installs the
   widget on the simulator home screen.
+- The seeder DOES write body mass and active/basal energy (it always
+  has). What made the earned-budget model invisible on a simulator was
+  the resting ESTIMATE: `BasalEstimate` needs height and an AGE, and
+  date of birth is a HealthKit CHARACTERISTIC no app can write. Fixed
+  2026-08-02 — the seeder writes a height sample and stamps
+  `HealthKitService.debugSeededAgeKey`, which `bodyProfile()` reads in
+  DEBUG only when Health itself has no birthday. Goal now shows
+  "Resting burn ≈ 1,743 kcal/day" on a seeded sim. Sex stays
+  unspecified; BasalEstimate's midpoint constant covers it.
 - The iPhone and Watch sims are PAIRED and share Health data — erase BOTH before
   running the flow test, or seeded totals will be off (`simctl erase <both udids>`).
   Same for the iPad sim: every `--seed-sample-data` launch ADDS samples, so after

@@ -162,7 +162,22 @@ public final class HealthKitService {
         HKQuantityType(.activeEnergyBurned),
         HKQuantityType(.basalEnergyBurned),
         HKQuantityType(.bodyMass),
+        HKQuantityType(.height),
     ]
+
+    /// The seeder's stand-in age, in years.
+    ///
+    /// Why this exists: the resting ESTIMATE is what credits resting up
+    /// front, and `BasalEstimate` needs weight, height, and an age.
+    /// Weight and height are samples the seeder writes. Date of birth
+    /// is a HealthKit CHARACTERISTIC — no app can write one, only the
+    /// person can, in the Health app — so a fresh simulator has none,
+    /// the estimate refuses, and the whole earned-budget model silently
+    /// degrades to measured-only. That, not "the seeder writes no burn
+    /// samples" (it always has), is why none of it rendered on a
+    /// simulator. DEBUG-only, read only when Health itself has no
+    /// birthday, so it can never mask a real one.
+    static let debugSeededAgeKey = "debug.seededAgeYears"
 
     /// Debug builds that seed sample data need write access to burn/weight
     /// types the real app never writes. Requesting everything in one shot
@@ -396,6 +411,15 @@ public final class HealthKitService {
            let birthday = Calendar.current.date(from: components) {
             age = Calendar.current.dateComponents([.year], from: birthday, to: .now).year
         }
+        #if DEBUG
+        // Simulator seeding only, and only as a fallback — a real
+        // birthday always wins. See debugSeededAgeKey for why an app
+        // can't just write one.
+        if age == nil {
+            let seeded = SharedStore.defaults.integer(forKey: Self.debugSeededAgeKey)
+            if seeded > 0 { age = seeded }
+        }
+        #endif
         let sex: BasalEstimate.Sex = switch try? store.biologicalSex().biologicalSex {
         case .male: .male
         case .female: .female
@@ -855,7 +879,18 @@ public final class HealthKitService {
             )
         }
 
+        // The body the resting estimate is computed from. Height is the
+        // one of the three inputs that is a SAMPLE (weight is seeded
+        // below; age can't be written at all — debugSeededAgeKey).
+        // 178 cm against the seeded ~200 lb and 40 years gives a
+        // resting estimate near 1,740 kcal, comfortably above the 1,120
+        // of basal seeded for today — which is the point: it makes the
+        // estimate visibly FLOOR a partial day's resting, the behavior
+        // the whole model turns on and that no simulator could show.
+        SharedStore.defaults.set(40, forKey: Self.debugSeededAgeKey)
         var samples = [
+            sample(.height, .meterUnit(with: .centi), 178,
+                   start: todayStart, end: todayStart),
             // energy burn accrued so far today
             sample(.activeEnergyBurned, .kilocalorie(), 385, start: todayAt(0.1), end: todayAt(0.6)),
             sample(.basalEnergyBurned, .kilocalorie(), 1120, start: todayAt(0), end: todayAt(0.95)),

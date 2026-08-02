@@ -170,14 +170,26 @@ Details is `dayBurn − deficit` on a day that at 1:43pm had earned only
   it was there for. With Today shown as its own row the average is free
   to be a true average, and `derivePlan` loses its `todayDayBurnKcal`
   parameter along with onboarding's whole today-burn read.
-- NOT verified on screen. The simulator seeder writes no body-mass or
-  burn samples, so `todayBudget` is nil there and the new row does not
-  render at all; the Health permission sheet also can't be driven from
-  osascript (CLAUDE.md's rule — it needs XCUITest). Device only.
-  **Worth fixing properly: teach `DebugSeeder` to write body mass +
-  active/basal energy.** It would make this row, the morning
-  acceptance test, and every future budget change checkable without a
-  device.
+- VERIFIED on the simulator, after fixing why it couldn't be. The
+  standing note that "the seeder writes no body-mass or burn samples"
+  was WRONG — it writes all three, and always did. What was missing is
+  the resting ESTIMATE: `BasalEstimate` needs height and an age, the
+  seeder never wrote a height sample, and date of birth is a HealthKit
+  CHARACTERISTIC no app can write at all. So every simulator ran the
+  model with `estimatedRestingKcal == nil`, i.e. measured-only, which
+  is precisely the behavior the change replaced.
+  Fixed: the seeder writes height (178 cm, chosen so the estimate
+  lands ~1,743 against a seeded 1,120 of basal and therefore visibly
+  FLOORS a partial day) and stamps `debugSeededAgeKey`, which
+  `bodyProfile()` consults in DEBUG only when Health has no birthday.
+  Goal now renders "Resting burn ≈ 1,743 kcal/day", "Average day"
+  and "Today" on a seeded sim — captured via `testHeaderShots` plus a
+  throwaway scroll test, since the Health sheet needs XCUITest and
+  can't be driven from osascript.
+  Watch the double-seed artifact when reading those numbers: every
+  `--seed-sample-data` launch ADDS samples, so a second run doubles
+  today's burn (385/1,120 became 770/2,240, and "Today" read 2,412
+  against an "Average day" of 1,702). Erase the sim first.
 - The morning acceptance test is unrun: at 8am the ring must read
   ~`restingFullDay + smallActive − deficit − breakfast`, NOT near zero.
   (Partly evidenced already: at 1:43pm the budget was 1,567 against

@@ -6,8 +6,10 @@ import OnigiriKit
 /// The library: saved foods and one-tap meals. Rows tap to edit; the +
 /// capsule logs (foods through the portion sheet, meals one-tap).
 /// Structured like the Log sheet (1.8.1): a Foods/Meals/Favorites scope
-/// bar on top, a Scan Barcode row beneath it, search at the bottom on
-/// iOS 26, filterable by category, favorites floating to the top.
+/// bar on top, search at the bottom on iOS 26, filterable by category,
+/// favorites floating to the top. The entry doors that used to sit
+/// under the scope bar moved out entirely (2026-08-02) — see the note
+/// in `body`.
 struct FoodsView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Meal.name) private var meals: [Meal]
@@ -23,9 +25,9 @@ struct FoodsView: View {
 
     /// One sheet slot (the QuickLogSheet pattern): the six chained
     /// .sheet modifiers this view used to carry compete with each
-    /// other, and the scanner→portion handoff sets the next sheet
-    /// while the scanner is still dismissing — with separate slots
-    /// that presentation could silently fail, eating the scan.
+    /// other, and a handoff that sets the next sheet while the current
+    /// one is still dismissing could silently fail with separate slots,
+    /// eating the pick.
     private enum ActiveSheet: Identifiable {
         case newFood
         case newMeal
@@ -33,9 +35,6 @@ struct FoodsView: View {
         case editFood(Food)
         case editMeal(Meal)
         case portion(PortionTarget)
-        /// The notice rides the case so a re-presented scanner can say
-        /// why it's back (a barcode the database didn't have).
-        case scanner(notice: String?)
 
         var id: String {
             switch self {
@@ -45,7 +44,6 @@ struct FoodsView: View {
             case .editFood(let food): "editFood-\(food.persistentModelID.hashValue)"
             case .editMeal(let meal): "editMeal-\(meal.uuid.uuidString)"
             case .portion(let target): "portion-\(target.name)"
-            case .scanner(let notice): "scanner-\(notice ?? "")"
             }
         }
     }
@@ -82,7 +80,6 @@ struct FoodsView: View {
     @State private var activeSheet: ActiveSheet?
     @State private var quickActions = QuickActions.shared
     @State private var isLogging = false
-    @State private var isLookingUpBarcode = false
     @State private var pendingMealDeletes: [Meal] = []
     @State private var pendingFoodDeletes: [Food] = []
     @State private var searchText = ""
@@ -173,29 +170,18 @@ struct FoodsView: View {
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets())
                 }
-                // The scan entry, a labeled row like the new-food form's
-                // (not a toolbar icon — roadmap 1.8.1). Hidden while
-                // searching so results lead, and on the Meals scope —
-                // scanning adds a FOOD; meals are built from foods
-                // already added (the user).
-                if searchText.isEmpty, scope != .meals {
-                    // The shared scan door, same as the Log sheet and
-                    // the food form (PLAN-entry-doors / unified-search).
-                    EntryDoorsSection(
-                        scanBusy: isLookingUpBarcode,
-                        onScan: { activeSheet = .scanner(notice: nil) },
-                        // Same routes the scanner's outcomes take —
-                        // a pasted screenshot is a label like any other.
-                        onLabel: { parsed in
-                            let prefill = ProductPrefill(product: parsed.scannedProduct())
-                            Task { activeSheet = .form(prefill) }
-                        },
-                        onFood: { product in
-                            let prefill = ProductPrefill(product: product)
-                            Task { activeSheet = .form(prefill) }
-                        }
-                    )
-                }
+                // The entry doors used to lead this list. They're gone
+                // (the user, 2026-08-02): this is the LIBRARY screen,
+                // and the + already opens an Add Food form that carries
+                // the very same two doors — so the screen shipped two
+                // add paths competing for the same job, with the actual
+                // library pushed below them. The doors now live only
+                // where adding is what you came to do: Add Food, and
+                // the Log sheet (which keeps the scan → known barcode →
+                // portion shortcut, since logging is that path's point).
+                // Scanning a new food is one tap longer and the library
+                // leads with the library.
+                //
                 // Search leads with the tap-to-estimate row (AI →
                 // library → online). Foods is the library screen, so an
                 // estimate ADDS: the prefilled form opens for review,
@@ -409,23 +395,6 @@ struct FoodsView: View {
                         mealItems: target.mealItems)
                 }
                 .presentationDetents([.medium, .large])
-            case .scanner(let notice):
-                // A parsed label takes the unknown-barcode route: the
-                // single sheet slot re-presents as the prefilled food
-                // form. Deferred one turn — the sheet dismisses itself
-                // right after this closure, and a synchronous swap
-                // gets torn down by that dismissal.
-                ScanSheet(onCode: { code in
-                    lookUpBarcode(code)
-                }, onLabel: { parsed in
-                    let prefill = ProductPrefill(product: parsed.scannedProduct())
-                    Task { activeSheet = .form(prefill) }
-                }, onFood: { product in
-                    // An identified food photo prefills the form exactly
-                    // like a label — name and totals instead of a panel.
-                    let prefill = ProductPrefill(product: product)
-                    Task { activeSheet = .form(prefill) }
-                }, notice: notice)
             }
         }
     }
@@ -650,34 +619,6 @@ struct FoodsView: View {
         activeSheet = kind == .food ? .newFood : .newMeal
     }
 
-    /// Scan → library check → fetch the product if it's new. Routing
-    /// matches this screen's online-search picks: a known barcode opens
-    /// the fast portion sheet, a new one the prefilled food form. The
-    /// single sheet slot re-presents on the item change, so the handoff
-    /// from the dismissing scanner can't be eaten.
-    private func lookUpBarcode(_ code: String) {
-        guard SharedStore.onlineLookups else {
-            ToastCenter.shared.show("Online lookups are off — enable in Settings to look up barcodes")
-            return
-        }
-        BarcodeRouter.lookUp(
-            code,
-            savedTarget: { code in
-                guard let existing = foods.first(where: { $0.barcode == code }) else { return nil }
-                markUsed(existing)
-                return makePortionTarget(for: existing)
-            },
-            isLookingUp: $isLookingUpBarcode,
-            presentPortion: { activeSheet = .portion($0) },
-            presentForm: { activeSheet = .form($0) },
-            // Straight back to the camera, saying why — the panel is in
-            // their hand and the scanner already reads labels.
-            presentLabelScan: {
-                activeSheet = .scanner(notice: BarcodeRouter.missNotice)
-            }
-        )
-    }
-
     private var deleteMealsTitle: String {
         pendingMealDeletes.count == 1
             ? "Delete “\(pendingMealDeletes[0].name)”?"
@@ -794,7 +735,12 @@ struct ScanRowLabel: View {
             title: FoodIntelligence.isAvailable
                 ? "Scan Barcode, Label, or Food"
                 : "Scan Barcode or Nutrition Label",
-            systemImage: "barcode.viewfinder")
+            // A CAMERA, not a barcode (the user, 2026-08-02): the row
+            // has read labels and identified food for two releases, and
+            // the barcode glyph kept promising only the first of the
+            // three. Still a viewfinder, so it reads as a sibling of
+            // the paste door beside it.
+            systemImage: "camera.viewfinder")
     }
 }
 
@@ -813,7 +759,7 @@ struct DoorRowLabel: View {
             Image(systemName: systemImage)
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(Color.riceToast)
-                // FIXED frame, not padding: the barcode glyph is wider
+                // FIXED frame, not padding: a viewfinder glyph is wider
                 // than the plus, so equal padding drew a bigger circle.
                 // 35pt matches LogButton's RENDERED circle (the plus
                 // glyph is narrower than its font's full height, so its

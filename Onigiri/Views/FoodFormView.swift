@@ -631,13 +631,19 @@ struct FoodFormView: View {
             lookupMessage = nil
             return
         }
-        // A NAME with no numbers didn't come from a panel — it came off
-        // a sign or a package front that never printed nutrition
-        // (SignText, the no-model floor). Saying "read the label" there
-        // describes something that didn't happen.
-        lookupMessage = parsed.name == nil
-            ? "Read the label, but not the calories — check the fields."
-            : "Read the name, but no nutrition was printed — add the calories."
+        // A NAME with no numbers came off a sign or a package front, not
+        // a panel (SignText, the no-model floor) — so "read the label"
+        // describes something that didn't happen. Nor is "no nutrition
+        // was printed" the point: a sign never prints any, and reading
+        // one is supposed to end in an ESTIMATE. Say which half of the
+        // job got done and what would finish it (the user, 2026-08-02).
+        guard parsed.name != nil else {
+            lookupMessage = "Read the label, but not the calories — check the fields."
+            return
+        }
+        lookupMessage = FoodIntelligence.isAvailable
+            ? "Got the name, but couldn't estimate the nutrition — add the calories."
+            : "Got the name. Turn on AI in Settings to estimate nutrition from a photo."
     }
 
     private func apply(_ product: ScannedProduct) {

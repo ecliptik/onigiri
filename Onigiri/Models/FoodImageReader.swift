@@ -52,7 +52,7 @@ enum FoodImageReader {
         source: FoodImageSource = .camera,
         status: @MainActor (String) -> Void = { _ in }
     ) async -> FoodImageOutcome {
-        status("Reading label…")
+        status("Reading photo…")
         // Vision needs legible text, not sensor resolution: a 48 MP
         // library pick decoded at full size spikes memory across the
         // whole cascade (stacked against the model's own footprint —
@@ -177,10 +177,13 @@ enum FoodImageReader {
             imageLog.notice("Partial label parse, nothing identified")
             return .label(parsed)
         }
+        // Name the three things this camera actually does, so a failure
+        // says which one to retry rather than implying it only reads
+        // panels (the user, 2026-08-02).
         return .nothing(
             message: FoodIntelligence.isAvailable
-                ? "Couldn't read a nutrition panel or recognize a food there — try a closer shot."
-                : "Couldn't read a nutrition panel there — try a closer, straighter shot with the whole panel in frame.")
+                ? "Couldn't read a nutrition label, a name, or the food itself there — try a closer, straighter shot."
+                : "Couldn't read a nutrition label there — try a closer, straighter shot with the whole panel in frame. Turn on AI in Settings to estimate from a photo of the food or its sign.")
     }
 }
 

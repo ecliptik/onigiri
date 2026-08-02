@@ -28,7 +28,8 @@ public struct BalanceAccessoryView: View {
     /// readout the phone and watch use.
     private var readout: CalorieBudget.HeadlineReadout {
         CalorieBudget.headlineReadout(
-            mode: mode, summary: state.summary, dailyBudgetKcal: state.dailyBudgetKcal
+            mode: mode, summary: state.summary,
+            dailyBudgetKcal: state.dailyBudgetKcal, dayBurnKcal: state.dayBurnKcal
         )
     }
 

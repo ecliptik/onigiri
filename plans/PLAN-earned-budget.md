@@ -123,20 +123,40 @@ Also done (2026-08-02, second pass — 358 kit tests, app + watch build):
   it, the receiver hashes it); harmless, and untangling it is a separate
   change.
 
+Third pass (2026-08-02, both decided with the user):
+- **`BudgetStyle` REMOVED**, with `customExpectedBurn` and
+  `ActivityLevel`. Fixed had gone inert everywhere that matters — Today,
+  the calendar, the badges, the widgets and the watch all derive from
+  measured burn — so the pinned "Burn per day" was only moving the Goal
+  tab's own preview. And a budget that stays put no matter what you
+  measure is the opposite of one you earn: keeping it would have meant
+  maintaining a second burn basis alongside the first, which is the
+  shape of the bug this plan exists to fix. The keys stay named in
+  `PreferenceSnapshot` as `retired*` so Reset Settings still clears a
+  value written before the setting went away.
+  - Goal's budget section is now informational: "Resting burn" (the
+    estimate, newly surfaced — it is half of what the budget is made
+    of) over "Average burn" (the projection basis), and a sentence
+    saying resting counts from midnight while active is earned.
+  - `expectedDailyBurn` → `projectedDailyBurn`, with the SharedStore
+    reads gone. It survives for one job: the Goal/onboarding PREVIEW,
+    where the question is "a typical day". No specific day is ever
+    judged by it.
+- **Net moved onto `dayBurn`.** `DayBudget.deficit(intakeKcal:
+  dayBurnKcal:)` is the one entry point; `TodayModel.dayBurnKcal` (one
+  ratcheted computation per refresh, not per view body) and
+  `DailyPlanLoader.State.dayBurnKcal` carry it to the phone and the
+  watch/widgets respectively. Moved: Details' Net row and its tint,
+  the goal card's banked figure, the watch's goal line, the shared
+  `headlineReadout` balance mode, and the loader's gauge progress.
+  NOT moved, deliberately: the Burned flank and the Active/Resting
+  rows. Those report a measurement; these reach a verdict.
+  - The widget snapshot reconstructs `dayBurnKcal` as
+    `budget + deficitTarget` rather than growing a stored field, so a
+    pre-existing last-good blob still decodes.
+
 NOT DONE:
-- Goal's "Average burn"/"Burn per day" rows and the whole `BudgetStyle`
-  Fixed option still describe the OLD inputs. **Fixed is now inert on
-  every surface that matters**: Today, the calendar, the badges, the
-  widgets and the watch all derive from measured burn, so the pinned
-  "Burn per day" only moves the Goal tab's own preview and onboarding's.
-  Decide with the user: remove it, or make it a real override the
-  earned-budget path honors.
-- Details' Net row (`DayNutritionView`, `-summary.balanceKcal`) and the
-  goal card's banked figure still read RAW `activeBurn + restingBurn`,
-  not `dayBurn`. End of day the two agree (measured resting has passed
-  the estimate), so the original "695 left / 197 surplus" pairing can't
-  recur — but mid-morning they can still differ in sign, because the
-  budget already holds the whole day's resting and Net holds only what
-  has accrued. Same family as this fix; not folded in.
 - The morning acceptance test is unrun: at 8am the ring must read
   ~`restingFullDay + smallActive − deficit − breakfast`, NOT near zero.
+- The Goal tab's motivation UI (milestone rungs, progress bar, "Progress
+  since" picker) has still never been visually verified.

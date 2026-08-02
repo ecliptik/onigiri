@@ -54,42 +54,42 @@ public enum CalorieBudget {
         )
     }
 
-    /// The burn figure every plan derivation must use: the historical
-    /// average, floored by today's actual burn and the 2000 kcal
-    /// cold-start default. Once today's burn tops the average, the
-    /// budget must follow or surfaces read "0 left"/"over" while
-    /// reality has room (the 2.1.4 fix). Colocated here so Today, Goal,
-    /// onboarding, the widgets, and the watch can't drift apart again.
-    public static func expectedDailyBurn(
+    /// The burn a PROJECTION rides — the Goal tab's plan preview and
+    /// onboarding's, where the question is "a typical day", not "today".
+    /// Your measured trailing average, floored by the day's own burn so
+    /// the preview can't lag Today on an active day, and by a 2000 kcal
+    /// cold start until Health has any history to average.
+    ///
+    /// A SPECIFIC day's budget never comes from here — that is
+    /// `DayBudget.dayBurn` fed to `completedDayPlan`. The Fixed budget
+    /// style that used to substitute a pinned number for the average is
+    /// gone with the setting: a budget that stays put no matter what you
+    /// measure is the opposite of one you earn (2026-08-02).
+    public static func projectedDailyBurn(
         averageKcal: Double?,
-        todayActualKcal: Double = 0
+        todayDayBurnKcal: Double = 0
     ) -> Double {
-        // Budget style decides both halves: a pinned burn replaces the
-        // trailing average, and Fixed stops today's own burn from raising
-        // the budget (Goal tab, 2026-07-30). Defaults to the historical
-        // behavior.
-        let planned = SharedStore.planAverageBurn(measuredAverageKcal: averageKcal)
-        let actual = SharedStore.budgetStyle.creditsActivity ? todayActualKcal : 0
-        return max(planned ?? 0, actual, 2000)
+        max(averageKcal ?? 0, todayDayBurnKcal, 2000)
     }
 
-    /// The one shared answer to "what plan does this goal imply right
-    /// now": maintenance eats what you burn; a weight goal spreads the
-    /// remaining pounds over the days to the target date. nil when a
-    /// weight goal lacks a current weight, target, or date. Both modes
-    /// ride the `expectedDailyBurn` clamp.
+    /// The one shared answer to "what plan does this goal imply for a
+    /// typical day": maintenance eats what you burn; a weight goal
+    /// spreads the remaining pounds over the days to the target date.
+    /// nil when a weight goal lacks a current weight, target, or date.
+    /// Both modes ride the `projectedDailyBurn` clamp — which is why
+    /// this is the PREVIEW path, not the one any day is judged by.
     public static func derivePlan(
         isMaintenance: Bool,
         currentWeightLb: Double? = nil,
         targetWeightLb: Double? = nil,
         targetDate: Date? = nil,
         averageDailyBurnKcal: Double?,
-        todayActualBurnKcal: Double = 0,
+        todayDayBurnKcal: Double = 0,
         calendar: Calendar = .current,
         now: Date = .now
     ) -> Plan? {
-        let burn = expectedDailyBurn(
-            averageKcal: averageDailyBurnKcal, todayActualKcal: todayActualBurnKcal
+        let burn = projectedDailyBurn(
+            averageKcal: averageDailyBurnKcal, todayDayBurnKcal: todayDayBurnKcal
         )
         if isMaintenance { return maintenancePlan(averageDailyBurn: burn) }
         guard let current = currentWeightLb, let target = targetWeightLb, let targetDate

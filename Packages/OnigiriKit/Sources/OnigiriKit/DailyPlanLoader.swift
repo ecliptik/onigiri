@@ -13,22 +13,39 @@ public enum DailyPlanLoader {
         public let gaugeProgress: Double
         /// Intake budget for the day (the day's own burn − required deficit).
         public let dailyBudgetKcal: Double?
+        /// The burn the budget was cut from (`DayBudget.dayBurn`) — the
+        /// figure every verdict-shaped number on this state must read,
+        /// so the gauge, the goal line and the headline can't answer the
+        /// same question differently. nil when there's no plan.
+        public let dayBurnKcal: Double?
 
         public init(
             summary: DailyEnergySummary,
             deficitTargetKcal: Double?,
             gaugeProgress: Double,
-            dailyBudgetKcal: Double? = nil
+            dailyBudgetKcal: Double? = nil,
+            dayBurnKcal: Double? = nil
         ) {
             self.summary = summary
             self.deficitTargetKcal = deficitTargetKcal
             self.gaugeProgress = gaugeProgress
             self.dailyBudgetKcal = dailyBudgetKcal
+            self.dayBurnKcal = dayBurnKcal
         }
 
         /// kcal still available to eat today, when a plan exists.
         public var remainingKcal: Double? {
             dailyBudgetKcal.map { $0 - summary.intakeKcal }
+        }
+
+        /// The day's deficit on the budget's own burn, positive for a
+        /// deficit. Falls back to the raw measured balance only where
+        /// there is no plan to disagree with.
+        public var deficitKcal: Double {
+            DayBudget.deficit(
+                intakeKcal: summary.intakeKcal,
+                dayBurnKcal: dayBurnKcal ?? summary.totalBurnKcal
+            )
         }
 
         public static let empty = State(summary: .zero, deficitTargetKcal: nil, gaugeProgress: 0)
@@ -88,7 +105,8 @@ public enum DailyPlanLoader {
                 summary: summary,
                 deficitTargetKcal: nil,
                 gaugeProgress: progress,
-                dailyBudgetKcal: hasBurn ? plan.dailyBudget : nil
+                dailyBudgetKcal: hasBurn ? plan.dailyBudget : nil,
+                dayBurnKcal: hasBurn ? dayBurn : nil
             )
         }
         guard let deficit = CalorieBudget.requiredDailyDeficit(
@@ -103,14 +121,19 @@ public enum DailyPlanLoader {
         let plan = CalorieBudget.completedDayPlan(
             dayBurnKcal: dayBurn, requiredDailyDeficit: deficit
         )
+        // Banked on the SAME burn the budget was cut from, so the gauge
+        // can't sit part-full while the number beside it says the day is
+        // already inside its budget.
+        let banked = DayBudget.deficit(intakeKcal: summary.intakeKcal, dayBurnKcal: dayBurn)
         let progress = plan.requiredDailyDeficit > 0
-            ? max(0, min(1, -summary.balanceKcal / plan.requiredDailyDeficit))
+            ? max(0, min(1, banked / plan.requiredDailyDeficit))
             : 1
         return State(
             summary: summary,
             deficitTargetKcal: plan.requiredDailyDeficit,
             gaugeProgress: progress,
-            dailyBudgetKcal: hasBurn ? plan.dailyBudget : nil
+            dailyBudgetKcal: hasBurn ? plan.dailyBudget : nil,
+            dayBurnKcal: hasBurn ? dayBurn : nil
         )
     }
 

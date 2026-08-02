@@ -64,4 +64,17 @@ public enum DayBudget {
     public static func met(intakeKcal: Double, budgetKcal: Double) -> Bool {
         intakeKcal <= budgetKcal
     }
+
+    /// The day's net, positive for a deficit. Deliberately NOT
+    /// `DailyEnergySummary.balanceKcal`, which subtracts raw measured
+    /// burn: the budget above it already holds the whole day's resting,
+    /// so at 9am the raw figure calls a breakfast a surplus while the
+    /// ring in the same screen says there's room left. Same day, same
+    /// question, two answers — the pairing this whole model exists to
+    /// end. Verdict-shaped numbers come through here; the Burned flank
+    /// and the Active/Resting rows stay on Health's raw totals, because
+    /// those report a measurement rather than reach a judgment.
+    public static func deficit(intakeKcal: Double, dayBurnKcal: Double) -> Double {
+        dayBurnKcal - intakeKcal
+    }
 }

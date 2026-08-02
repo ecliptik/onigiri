@@ -45,6 +45,17 @@ public enum PreferenceSnapshot {
 }
 
 public extension SharedStore {
+    /// Keys no code path writes any more. They stay named here for one
+    /// reason: a device that used the setting before it was removed is
+    /// still carrying the value, and the sweep below is what clears it.
+    /// The Fixed budget style went away when the budget became the day's
+    /// own burn — a number that stays put no matter what you measure is
+    /// the opposite of one you earn (2026-08-02).
+    static let retiredBudgetStyleKey = "budgetStyle"
+    static let retiredActivityCreditKey = "activityCredit"
+    static let retiredCustomExpectedBurnKey = "customExpectedBurnKcal"
+    static let retiredActivityLevelKey = "activityLevel"
+
     /// Every preference key the Settings sheet's Cancel rewinds and the
     /// settings reset returns to defaults. ANY new @AppStorage key a
     /// Settings subscreen writes MUST join this list, or its edits
@@ -54,7 +65,11 @@ public extension SharedStore {
     /// whole domain instead.
     static let settingsSweepKeys: [String] = [
         appearanceKey,
-        budgetStyleKey, legacyActivityCreditKey, customExpectedBurnKey, activityLevelKey,
+        // Retired with the Fixed budget style (2026-08-02) — kept in the
+        // sweep so Reset Settings still clears a value written before
+        // the setting went away. Nothing reads them.
+        retiredBudgetStyleKey, retiredActivityCreditKey,
+        retiredCustomExpectedBurnKey, retiredActivityLevelKey,
         waterServingKey, waterGoalKey,
         waterIconKey, foodIconKey, rewardIconKey, mealIconKey,
         sodiumLimitKey, balanceStyleKey,

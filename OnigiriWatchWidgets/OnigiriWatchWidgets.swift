@@ -378,7 +378,8 @@ struct SummaryComplicationView: View {
         } else {
             let readout = CalorieBudget.headlineReadout(
                 mode: entry.mode, summary: entry.state.summary,
-                dailyBudgetKcal: entry.state.dailyBudgetKcal
+                dailyBudgetKcal: entry.state.dailyBudgetKcal,
+                dayBurnKcal: entry.state.dayBurnKcal
             )
             let valueFormat: FloatingPointFormatStyle<Double> = readout.signed
                 ? .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))

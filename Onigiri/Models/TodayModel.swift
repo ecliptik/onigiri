@@ -21,6 +21,16 @@ final class TodayModel {
     /// dripping in hourly (2026-08-02). nil when Health lacks height or
     /// date of birth, in which case measured resting stands alone.
     private(set) var estimatedRestingKcal: Double?
+    /// The burn the whole screen judges this day by (`DayBudget.dayBurn`,
+    /// day-ratcheted for today) — the budget, the Net row, the goal
+    /// card. Health's raw `summary.totalBurnKcal` stays what the Burned
+    /// flank and the Active/Resting rows report: those state a
+    /// measurement, this one reaches a verdict.
+    private(set) var dayBurnKcal: Double = 0
+    /// The day's deficit on that figure, positive for a deficit.
+    var deficitKcal: Double {
+        DayBudget.deficit(intakeKcal: summary.intakeKcal, dayBurnKcal: dayBurnKcal)
+    }
     /// Smoothed scale movement over the past 7 days (negative = down);
     /// nil until Health holds enough weigh-ins to say.
     private(set) var weeklyTrendLb: Double?
@@ -77,9 +87,6 @@ final class TodayModel {
         await refresh()
     }
 
-    // Expected full-day burn (14-day average floored by today's actual
-    // burn) moved to CalorieBudget.expectedDailyBurn — TodayView's plan
-    // now comes from the shared derivePlan, same as every other surface.
 
     /// One-time startup: prompt for HealthKit access if never asked, then load.
     /// The view's .task can re-fire on tab switches — only run once.
@@ -211,6 +218,20 @@ final class TodayModel {
                 loaded1 ?? slotSummaryValue(slot: 1, from: loadedSummary),
                 loaded2 ?? slotSummaryValue(slot: 2, from: loadedSummary),
             ]
+            // ONE burn figure for the whole screen, computed once here
+            // rather than per view body: TodayBurnFloor WRITES as it
+            // reads, and a body re-runs on every unrelated state change.
+            let measured = DayBudget.dayBurn(
+                activeKcal: loadedSummary.activeBurnKcal,
+                restingKcal: loadedSummary.restingBurnKcal,
+                estimatedRestingKcal: estimatedRestingKcal
+            )
+            // Ratcheted for TODAY only: Health revising burn down
+            // (watch↔phone sample reconciliation) must not move the
+            // budget against the user mid-day, and the floor's mark is
+            // keyed to today — feeding it a browsed day's burn wrote
+            // that day's number into today's floor (2026-07-30).
+            dayBurnKcal = isToday ? TodayBurnFloor.ratcheted(measured) : measured
             lastRefreshed = .now
         } catch {
             guard generation == refreshGeneration else { return }

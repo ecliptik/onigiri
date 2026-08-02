@@ -8,15 +8,16 @@ import OnigiriKit
 final class GoalModel {
     private(set) var healthWeightLb: Double?
     private(set) var averageBurnKcal: Double?
-    /// Today's actual burn, floor for the plan's expected burn (the
-    /// shared clamp — without it the preview lags Today on active days).
-    private(set) var todayBurnKcal: Double = 0
+    /// Today's own burn (`DayBudget.dayBurn`, day-ratcheted), floor for
+    /// the projection — without it the preview lags Today on an active
+    /// day. Ratcheted HERE, once per load, not in the view body: the
+    /// floor writes as it reads, and a view body re-runs per keystroke.
+    private(set) var todayDayBurnKcal: Double = 0
     private(set) var weightHistory: [WeightTrend.Point] = []
-    /// Height/age/sex from Health, for the resting-burn estimate. Read
-    /// once per load and only used to fill the Fixed budget's number.
-    private(set) var bodyHeightCm: Double?
-    private(set) var bodyAgeYears: Int?
-    private(set) var bodySex = BasalEstimate.Sex.unspecified
+    /// Full-day resting from Health's body metrics — the floor under
+    /// every day's resting credit, shown on the Goal screen because it
+    /// is now half of what the budget is made of.
+    private(set) var estimatedRestingKcal: Double?
     private(set) var dailyTotals: [DayEnergyTotals] = []
     /// Cached 7-day smoothing of weightHistory — smoothed once per
     /// load, not per keystroke (typing a target re-evaluates the view
@@ -59,25 +60,23 @@ final class GoalModel {
         averageBurnKcal = (try? await burnRead) ?? nil
         weightHistory = (try? await historyRead) ?? []
         dailyTotals = (try? await totalsRead) ?? []
-        todayBurnKcal = ((try? await todayRead) ?? .zero).totalBurnKcal
+        let today = (try? await todayRead) ?? .zero
         smoothedHistory = WeightTrend.movingAverage(weightHistory, windowDays: 7)
         let body = await health.bodyProfile()
-        bodyHeightCm = body.heightCm
-        bodyAgeYears = body.ageYears
-        bodySex = body.sex
+        estimatedRestingKcal = {
+            guard let heightCm = body.heightCm, let age = body.ageYears,
+                  let weightLb = healthWeightLb else { return nil }
+            return BasalEstimate.restingKcal(
+                weightLb: weightLb, heightCm: heightCm, ageYears: age, sex: body.sex)
+        }()
+        todayDayBurnKcal = TodayBurnFloor.ratcheted(
+            DayBudget.dayBurn(
+                activeKcal: today.activeBurnKcal,
+                restingKcal: today.restingBurnKcal,
+                estimatedRestingKcal: estimatedRestingKcal
+            )
+        )
         lastLoaded = .now
-    }
-
-    /// A steady daily burn estimated from the body and the stated
-    /// activity level — what the Fixed budget offers instead of asking
-    /// for a number out of thin air. nil when Health doesn't know enough
-    /// (no height or no date of birth).
-    var suggestedDailyBurnKcal: Double? {
-        guard let weight = healthWeightLb, let heightCm = bodyHeightCm, let age = bodyAgeYears
-        else { return nil }
-        return BasalEstimate.dailyBurnKcal(
-            weightLb: weight, heightCm: heightCm, ageYears: age, sex: bodySex,
-            level: SharedStore.activityLevel)
     }
 
     /// Recompute the cached chart stats — when the HealthKit reads land

@@ -142,14 +142,6 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
             + WatchSync.unitPreferenceKeys.map { key in
                 (key, SharedStore.defaults.string(forKey: key) ?? SharedStore.unitAutomatic)
             }
-            // Budget style, always sent for the same reason: the watch
-            // derives its own budget, so without this it would compute a
-            // different allowance than the phone.
-            + [
-                (SharedStore.budgetStyleKey, SharedStore.budgetStyle.rawValue),
-                (SharedStore.customExpectedBurnKey,
-                 String(SharedStore.defaults.double(forKey: SharedStore.customExpectedBurnKey))),
-            ]
         )
         // The phone's plan inputs ride along so the watch computes the
         // SAME budget: its purged Health history skews a locally computed

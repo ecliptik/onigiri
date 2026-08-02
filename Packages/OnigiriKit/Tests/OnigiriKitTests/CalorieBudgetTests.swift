@@ -58,21 +58,21 @@ struct CalorieBudgetTests {
         #expect(CalorieBudget.remainingHeadline(0).caption == "kcal left")
     }
 
-    // MARK: - expectedDailyBurn (the 2.1.4 clamp, shared by every surface)
+    // MARK: - projectedDailyBurn (the Goal/onboarding preview basis)
 
     @Test func expectedBurnColdStartsAt2000() {
-        #expect(CalorieBudget.expectedDailyBurn(averageKcal: nil) == 2000)
-        #expect(CalorieBudget.expectedDailyBurn(averageKcal: 1500) == 2000)
+        #expect(CalorieBudget.projectedDailyBurn(averageKcal: nil) == 2000)
+        #expect(CalorieBudget.projectedDailyBurn(averageKcal: 1500) == 2000)
     }
 
     @Test func expectedBurnUsesTheAverageWithRoomLeftInTheDay() {
-        #expect(CalorieBudget.expectedDailyBurn(averageKcal: 2800, todayActualKcal: 1900) == 2800)
+        #expect(CalorieBudget.projectedDailyBurn(averageKcal: 2800, todayDayBurnKcal: 1900) == 2800)
     }
 
     @Test func expectedBurnFollowsTodayOnceItTopsTheAverage() {
         // The fix behind "phone reads 150 left, widget reads 0 over" on
         // active days: today's actual burn outranks the average.
-        #expect(CalorieBudget.expectedDailyBurn(averageKcal: 2800, todayActualKcal: 3100) == 3100)
+        #expect(CalorieBudget.projectedDailyBurn(averageKcal: 2800, todayDayBurnKcal: 3100) == 3100)
     }
 
     // MARK: - derivePlan (one derivation for Today/Goal/onboarding/watch)
@@ -100,7 +100,7 @@ struct CalorieBudgetTests {
         let plan = try #require(CalorieBudget.derivePlan(
             isMaintenance: false,
             currentWeightLb: 200, targetWeightLb: 190, targetDate: target,
-            averageDailyBurnKcal: 2800, todayActualBurnKcal: 3100,
+            averageDailyBurnKcal: 2800, todayDayBurnKcal: 3100,
             calendar: Self.cal, now: Self.now
         ))
         #expect(abs(plan.requiredDailyDeficit - 350) < 0.01)
@@ -110,7 +110,7 @@ struct CalorieBudgetTests {
     @Test func derivedMaintenancePlanEatsTheClampedBurn() throws {
         let plan = try #require(CalorieBudget.derivePlan(
             isMaintenance: true,
-            averageDailyBurnKcal: 2800, todayActualBurnKcal: 3100
+            averageDailyBurnKcal: 2800, todayDayBurnKcal: 3100
         ))
         #expect(plan.requiredDailyDeficit == 0)
         #expect(plan.dailyBudget == 3100)

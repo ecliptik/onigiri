@@ -98,7 +98,8 @@ struct GaugeWidgetView: View {
         let readout = CalorieBudget.headlineReadout(
             mode: SharedStore.headlineMode,
             summary: entry.snapshot.summary,
-            dailyBudgetKcal: entry.snapshot.planState.dailyBudgetKcal
+            dailyBudgetKcal: entry.snapshot.planState.dailyBudgetKcal,
+            dayBurnKcal: entry.snapshot.planState.dayBurnKcal
         )
         let valueFormat: FloatingPointFormatStyle<Double> = readout.signed
             ? .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))

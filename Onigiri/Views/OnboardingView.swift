@@ -34,7 +34,10 @@ struct OnboardingView: View {
     }
     @State private var averageBurnKcal: Double?
     /// Today's actual burn — the shared clamp's floor, same as Goal/Today.
-    @State private var todayBurnKcal: Double = 0
+    /// Today's own burn (`DayBudget.dayBurn`, day-ratcheted) — the
+    /// floor under the preview's projection, so the number here can't
+    /// undershoot what Today will quote a minute later.
+    @State private var todayDayBurnKcal: Double = 0
     @State private var targetDate = Calendar.current.date(byAdding: .day, value: 90, to: .now) ?? .now
     @FocusState private var weightFieldFocused: Bool
 
@@ -197,7 +200,21 @@ struct OnboardingView: View {
         healthRequested = true
         healthWeightLb = try? await health.latestBodyMassLb()
         averageBurnKcal = (try? await health.averageDailyBurnKcal()) ?? nil
-        todayBurnKcal = ((try? await health.todaySummary()) ?? .zero).totalBurnKcal
+        let today = (try? await health.todaySummary()) ?? .zero
+        let body = await health.bodyProfile()
+        let estimatedResting: Double? = {
+            guard let heightCm = body.heightCm, let age = body.ageYears,
+                  let weightLb = healthWeightLb else { return nil }
+            return BasalEstimate.restingKcal(
+                weightLb: weightLb, heightCm: heightCm, ageYears: age, sex: body.sex)
+        }()
+        todayDayBurnKcal = TodayBurnFloor.ratcheted(
+            DayBudget.dayBurn(
+                activeKcal: today.activeBurnKcal,
+                restingKcal: today.restingBurnKcal,
+                estimatedRestingKcal: estimatedResting
+            )
+        )
         if advance, selection == 1 {
             withAnimation(reduceMotion ? nil : .default) { selection = 2 }
         }
@@ -374,7 +391,7 @@ struct OnboardingView: View {
             targetWeightLb: targetWeightLb,
             targetDate: targetDate,
             averageDailyBurnKcal: averageBurnKcal,
-            todayActualBurnKcal: TodayBurnFloor.ratcheted(todayBurnKcal)
+            todayDayBurnKcal: todayDayBurnKcal
         )
     }
 

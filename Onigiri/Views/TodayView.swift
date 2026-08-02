@@ -508,7 +508,8 @@ struct TodayView: View {
     /// persists on `balanceStyle` and drives the watch and widgets too.
     private var balanceHeadline: some View {
         let readout = CalorieBudget.headlineReadout(
-            mode: headlineMode, summary: model.summary, dailyBudgetKcal: dailyBudgetKcal
+            mode: headlineMode, summary: model.summary,
+            dailyBudgetKcal: dailyBudgetKcal, dayBurnKcal: model.dayBurnKcal
         )
         let valueFormat: FloatingPointFormatStyle<Double> = readout.signed
             ? .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))
@@ -560,8 +561,8 @@ struct TodayView: View {
         } label: {
             if let goal = goals.first, let plan = plan(for: goal) {
                 DailyGoalCard(
-                    bankedKcal: max(0, -model.summary.balanceKcal),
-                    deficitKcal: -model.summary.balanceKcal,
+                    bankedKcal: max(0, model.deficitKcal),
+                    deficitKcal: model.deficitKcal,
                     intakeKcal: model.summary.intakeKcal,
                     plan: plan,
                     isMaintenanceMode: goal.isMaintenance,
@@ -606,19 +607,9 @@ struct TodayView: View {
         // calories the day never went on to earn — a below-average day
         // quoted an above-average allowance right to bedtime, and
         // Details showed "695 kcal left" two rows above "197 kcal
-        // surplus" (2026-08-02).
-        let measuredBurn = DayBudget.dayBurn(
-            activeKcal: model.summary.activeBurnKcal,
-            restingKcal: model.summary.restingBurnKcal,
-            estimatedRestingKcal: model.estimatedRestingKcal)
-        // Day-ratcheted for TODAY only: Health revising burn down
-        // (watch↔phone sample reconciliation) must not move the budget
-        // against the user mid-day. The floor's mark is keyed to today,
-        // so feeding it a browsed day's burn wrote that day's number
-        // into today's floor (same-day bug, 2026-07-30).
-        let dayBurn = model.isToday
-            ? TodayBurnFloor.ratcheted(measuredBurn)
-            : measuredBurn
+        // surplus" (2026-08-02). The model computes it once per refresh
+        // so the Net row and the goal card read the same number.
+        let dayBurn = model.dayBurnKcal
         // Nothing to judge the day by, and a budget of "0 minus the
         // target" would invent a huge overage.
         guard dayBurn > 0 else { return nil }

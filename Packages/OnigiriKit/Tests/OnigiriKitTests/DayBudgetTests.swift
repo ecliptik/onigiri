@@ -72,17 +72,23 @@ struct DayBudgetTests {
         #expect(!DayBudget.met(intakeKcal: 2_200.5, budgetKcal: 2_200))
     }
 
-    // MARK: Settings resolve to today's behavior when unset
+    // MARK: The net every verdict reads
 
-    @Test func defaultsMatchThePreviousBehavior() {
-        #expect(BudgetStyle.resolve(nil) == .automatic)
-        #expect(BudgetStyle.resolve("nonsense") == .automatic)
-        #expect(BudgetStyle.resolve("fixed") == .fixed)
-        // Each option explains itself under the picker.
-        #expect(!BudgetStyle.automatic.explanation.isEmpty)
-        #expect(!BudgetStyle.fixed.explanation.isEmpty)
-        #expect(BudgetStyle.automatic.creditsActivity)
-        #expect(!BudgetStyle.fixed.creditsActivity)
+    /// Net comes off the SAME burn the budget was cut from. On the raw
+    /// measured total this morning reads as a surplus while the budget
+    /// beside it still shows room — one day, one question, two answers.
+    @Test func netReadsTheBudgetsOwnBurn() {
+        let dayBurn = DayBudget.dayBurn(
+            activeKcal: 50, restingKcal: 610, estimatedRestingKcal: 1_831)
+        let budget = DayBudget.budget(dayBurnKcal: dayBurn, requiredDeficitKcal: 350)
+        let intake = 800.0
+        #expect(budget - intake == 731)
+        #expect(DayBudget.deficit(intakeKcal: intake, dayBurnKcal: dayBurn) == 1_081)
+        // The raw measured balance is what used to contradict it.
+        let raw = DailyEnergySummary(
+            intakeKcal: intake, activeBurnKcal: 50, restingBurnKcal: 610,
+            sodiumMg: 0, waterOz: 0)
+        #expect(raw.balanceKcal == 140) // a "surplus", beside 731 kcal left
     }
 
     // MARK: Headline wording

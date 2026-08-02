@@ -58,12 +58,21 @@ public extension CalorieBudget {
     static func headlineReadout(
         mode: HeadlineMode,
         summary: DailyEnergySummary,
-        dailyBudgetKcal: Double?
+        dailyBudgetKcal: Double?,
+        /// The burn the budget was cut from. Balance reads against THIS,
+        /// not the raw measured total, or the same screen shows room left
+        /// above a surplus. nil (no plan) falls back to the raw balance,
+        /// where there is no budget to contradict.
+        dayBurnKcal: Double? = nil
     ) -> HeadlineReadout {
+        let deficit = DayBudget.deficit(
+            intakeKcal: summary.intakeKcal,
+            dayBurnKcal: dayBurnKcal ?? summary.totalBurnKcal
+        )
         switch mode.resolved(hasBudget: dailyBudgetKcal != nil) {
         case .remaining:
             let remaining = (dailyBudgetKcal ?? 0) - summary.intakeKcal
-            let headline = remainingHeadline(remaining, deficitKcal: -summary.balanceKcal)
+            let headline = remainingHeadline(remaining, deficitKcal: deficit)
             return HeadlineReadout(
                 value: headline.value, caption: headline.caption, signed: false,
                 tint: .remainingStatus(kcal: remaining),
@@ -71,7 +80,7 @@ public extension CalorieBudget {
                 statusSymbol: Color.remainingStatusSymbol(kcal: remaining)
             )
         case .balance:
-            let balance = summary.balanceKcal
+            let balance = -deficit
             return HeadlineReadout(
                 value: balance, caption: "kcal balance", signed: true,
                 tint: balance <= 0 ? .green : .orange,

@@ -27,29 +27,8 @@ struct GoalView: View {
     /// Which weight field is editing — an enum (not a Bool) so moving
     /// directly between the two fields still fires the select-all
     /// onChange below.
-    private enum WeightField: Hashable { case target, current, customBurn }
+    private enum WeightField: Hashable { case target, current }
     @FocusState private var focusedField: WeightField?
-
-    /// How the day's budget behaves — the answer that used to be baked
-    /// into the math (2026-07-30). Defaults to the previous behavior, so
-    /// an untouched install changes nothing.
-    @AppStorage(SharedStore.budgetStyleKey, store: SharedStore.defaults)
-    private var budgetStyle = BudgetStyle.automatic.rawValue
-    @AppStorage(SharedStore.customExpectedBurnKey, store: SharedStore.defaults)
-    private var customExpectedBurnRaw = 0.0
-    @AppStorage(SharedStore.activityLevelKey, store: SharedStore.defaults)
-    private var activityLevel = ActivityLevel.light.rawValue
-
-    private var style: BudgetStyle { BudgetStyle.resolve(budgetStyle) }
-
-    /// The stored double as an optional, so an unset custom burn shows a
-    /// placeholder instead of a misleading 0.
-    private var customExpectedBurn: Binding<Double?> {
-        Binding(
-            get: { customExpectedBurnRaw > 0 ? customExpectedBurnRaw : nil },
-            set: { customExpectedBurnRaw = $0 ?? 0 }
-        )
-    }
 
     /// HealthKit reads and derived chart stats live in the model (the
     /// TodayModel shape) — the view keeps only form state.
@@ -205,7 +184,7 @@ struct GoalView: View {
             targetWeightLb: targetWeightLb,
             targetDate: targetDate,
             averageDailyBurnKcal: model.averageBurnKcal,
-            todayActualBurnKcal: TodayBurnFloor.ratcheted(model.todayBurnKcal)
+            todayDayBurnKcal: model.todayDayBurnKcal
         )
     }
 
@@ -304,91 +283,43 @@ struct GoalView: View {
                 }
 
                 // Its OWN section, deliberately outside `if let plan`:
-                // these two SHAPE the plan, so they have to stay
-                // reachable when the plan can't be computed — goal
-                // reached, target cleared, custom burn left blank.
-                // Otherwise the knob that fixes it disappears exactly
-                // when it's needed.
+                // what the budget is made of has to stay readable when
+                // the plan can't be computed — goal reached, target
+                // cleared — since that's exactly when someone comes
+                // looking for why.
+                //
+                // No knobs any more. The Fixed style lived here until
+                // 2026-08-02; a budget that stays put no matter what you
+                // measure is the opposite of one you earn, so it went
+                // with the model change rather than sitting beside it
+                // meaning nothing.
                 Section("Calorie budget") {
-                    // ONE choice, segmented so both options are visible at
-                    // once — the two pickers this replaced ("expected
-                    // burn" and "active days") were never really
-                    // independent (the user, 2026-07-30).
-                    Picker("Budget", selection: $budgetStyle) {
-                        ForEach(BudgetStyle.allCases, id: \.rawValue) { style in
-                            Text(style.label).tag(style.rawValue)
-                        }
+                    LabeledContent("Resting burn") {
+                        Text(model.estimatedRestingKcal.map {
+                            "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
+                        } ?? "Not estimated")
+                            .monospacedDigit()
                     }
-                    .pickerStyle(.segmented)
-                    // What the selected one actually does, in a sentence.
-                    Text(style.explanation)
+                    LabeledContent("Average burn") {
+                        // The fallback used to present as fact — the
+                        // projection above inherits this guess.
+                        Text(model.averageBurnKcal.map {
+                            "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
+                        } ?? "≈ 2000 kcal/day (assumed)")
+                            .monospacedDigit()
+                    }
+                    Text("Your budget is the day's own burn, minus the deficit. Resting burn counts from midnight — it happens whether or not you move. Active burn is added as you earn it, so a day without your watch has a smaller budget.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    if style == .fixed {
-                        // Optional under Fixed: pin the number, or leave
-                        // it blank and keep using your own average.
-                        LabeledContent("Burn per day") {
-                            TextField(
-                                model.averageBurnKcal.map {
-                                    $0.formatted(.number.precision(.fractionLength(0)))
-                                } ?? "2000",
-                                value: customExpectedBurn, format: .number
-                            )
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .focused($focusedField, equals: .customBurn)
-                        }
-                        // How much of a typical week is spent moving. Asked
-                        // rather than measured on purpose: it describes the
-                        // routine, which is what a steady number wants.
-                        Picker("Activity level", selection: $activityLevel) {
-                            ForEach(ActivityLevel.allCases, id: \.rawValue) { level in
-                                Text(level.label).tag(level.rawValue)
-                            }
-                        }
-                        .pickerStyle(.navigationLink)
-                        Text(ActivityLevel.resolve(activityLevel).detail)
+                    if model.estimatedRestingKcal == nil {
+                        Text("Add your height and date of birth in Health to estimate your resting burn. Without it, only the resting energy Health has already recorded counts.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        // One tap to fill the field from the body Health
-                        // already knows, instead of inventing a number.
-                        if let suggestion = model.suggestedDailyBurnKcal {
-                            Button {
-                                customExpectedBurnRaw = suggestion
-                                focusedField = nil
-                            } label: {
-                                HStack {
-                                    Text("Use estimate")
-                                    Spacer()
-                                    Text("≈ \(suggestion, format: .number.precision(.fractionLength(0))) kcal/day")
-                                        .foregroundStyle(.secondary)
-                                        .monospacedDigit()
-                                }
-                            }
-                            .disabled(customExpectedBurnRaw == suggestion)
-                        } else {
-                            Text("Add your height and date of birth in Health for an estimate.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        if customExpectedBurnRaw <= 0 {
-                            Text("Leave blank to hold your recent average steady instead.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        LabeledContent("Average burn") {
-                            // The fallback used to present as fact — the
-                            // whole budget inherits this guess.
-                            Text(model.averageBurnKcal.map {
-                                "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
-                            } ?? "≈ 2000 kcal/day (assumed)")
-                        }
-                        if model.averageBurnKcal == nil {
-                            Text("No activity data in Health yet — the plan assumes 2000 kcal/day until burn history exists.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                    }
+                    if model.averageBurnKcal == nil {
+                        Text("No burn history in Health yet — the plan above assumes 2000 kcal/day until there is some.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 // Goals used to be edit-only: hitting the target (or

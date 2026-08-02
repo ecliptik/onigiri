@@ -66,7 +66,7 @@ struct WatchMetricsView: View {
     @ViewBuilder
     private var goalLine: some View {
         if let target = model.state.deficitTargetKcal, target > 0 {
-            let banked = max(0, -model.state.summary.balanceKcal)
+            let banked = max(0, model.state.deficitKcal)
             let percent = Int(min(1, banked / target) * 100)
             VStack(spacing: 0) {
                 Text("Daily goal \(percent)%")

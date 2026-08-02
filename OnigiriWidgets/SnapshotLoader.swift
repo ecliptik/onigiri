@@ -40,11 +40,17 @@ struct DaySnapshot: Codable {
     /// The plan-state view of this snapshot, for the shared accessory
     /// views (budget reconstructed: remaining was budget − intake).
     var planState: DailyPlanLoader.State {
-        DailyPlanLoader.State(
+        let budget = remainingKcal.map { $0 + summary.intakeKcal }
+        return DailyPlanLoader.State(
             summary: summary,
             deficitTargetKcal: deficitTargetKcal,
             gaugeProgress: gaugeProgress,
-            dailyBudgetKcal: remainingKcal.map { $0 + summary.intakeKcal }
+            dailyBudgetKcal: budget,
+            // budget = dayBurn − deficit, so the burn comes back out
+            // without widening the persisted snapshot (a pre-2.13
+            // last-good blob still decodes, and reconstructs the same
+            // way its budget was built).
+            dayBurnKcal: budget.map { $0 + (deficitTargetKcal ?? 0) }
         )
     }
 

@@ -104,10 +104,6 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         for key in WatchSync.unitPreferenceKeys {
             hasher.combine(defaults.string(forKey: key))
         }
-        // Budget style moves the budget itself, so every complication
-        // that renders "kcal left" changes with it.
-        hasher.combine(SharedStore.budgetStyle)
-        hasher.combine(SharedStore.defaults.double(forKey: SharedStore.customExpectedBurnKey))
         return hasher.finalize()
     }
 

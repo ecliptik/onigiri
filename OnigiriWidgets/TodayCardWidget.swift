@@ -194,7 +194,8 @@ struct TodayCardView: View {
         CalorieBudget.headlineReadout(
             mode: SharedStore.headlineMode,
             summary: summary,
-            dailyBudgetKcal: snapshot.planState.dailyBudgetKcal
+            dailyBudgetKcal: snapshot.planState.dailyBudgetKcal,
+            dayBurnKcal: snapshot.planState.dayBurnKcal
         )
     }
 

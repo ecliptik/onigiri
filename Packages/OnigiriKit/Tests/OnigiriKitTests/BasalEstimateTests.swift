@@ -36,27 +36,6 @@ struct BasalEstimateTests {
         #expect(abs(unspecified - (male + female) / 2) < 0.01)
     }
 
-    @Test func activityMultipliesRestingAndRoundsToATypeableNumber() {
-        let resting = BasalEstimate.restingKcal(
-            weightLb: weightLb, heightCm: heightCm, ageYears: age, sex: .male) ?? 0
-        for level in ActivityLevel.allCases {
-            let daily = BasalEstimate.dailyBurnKcal(
-                weightLb: weightLb, heightCm: heightCm, ageYears: age, sex: .male,
-                level: level) ?? 0
-            #expect(abs(daily - resting * level.factor) <= 5)   // rounded to 10
-            #expect(daily.truncatingRemainder(dividingBy: 10) == 0)
-        }
-    }
-
-    @Test func moreActivityMeansMoreBurn() {
-        let burns = ActivityLevel.allCases.map {
-            BasalEstimate.dailyBurnKcal(
-                weightLb: weightLb, heightCm: heightCm, ageYears: age, sex: .male, level: $0) ?? 0
-        }
-        #expect(burns == burns.sorted())
-        #expect(burns.first != burns.last)
-    }
-
     // MARK: Refusals
 
     @Test func nonsenseBodiesEstimateNothing() {
@@ -65,20 +44,6 @@ struct BasalEstimateTests {
         #expect(BasalEstimate.restingKcal(weightLb: weightLb, heightCm: 30, ageYears: age, sex: .male) == nil)
         #expect(BasalEstimate.restingKcal(weightLb: weightLb, heightCm: heightCm, ageYears: 3, sex: .male) == nil)
         #expect(BasalEstimate.restingKcal(weightLb: weightLb, heightCm: heightCm, ageYears: 130, sex: .male) == nil)
-        // And the daily figure refuses with it, rather than multiplying nil into 0.
-        #expect(BasalEstimate.dailyBurnKcal(
-            weightLb: 0, heightCm: heightCm, ageYears: age, sex: .male, level: .active) == nil)
     }
 
-    @Test func activityLevelDefaultsAndResolves() {
-        #expect(ActivityLevel.resolve(nil) == .light)
-        #expect(ActivityLevel.resolve("nonsense") == .light)
-        #expect(ActivityLevel.resolve("veryActive") == .veryActive)
-        // Every option is pickable and explains itself.
-        for level in ActivityLevel.allCases {
-            #expect(!level.label.isEmpty)
-            #expect(!level.detail.isEmpty)
-            #expect(level.factor >= 1.2)
-        }
-    }
 }

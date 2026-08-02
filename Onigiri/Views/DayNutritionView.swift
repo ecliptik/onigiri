@@ -38,7 +38,7 @@ struct DayNutritionView: View {
     /// reached the target isn't a success to paint green, and it isn't a
     /// failure either.
     private var netTint: Color {
-        let deficit = -model.summary.balanceKcal
+        let deficit = model.deficitKcal
         if deficit < 0 { return .orange }
         guard let deficitGoal, deficitGoal > 0 else { return .green }
         return deficit >= deficitGoal ? .green : .primary
@@ -47,7 +47,7 @@ struct DayNutritionView: View {
     /// The colors above are the only signal otherwise (the sodium row's
     /// rule — status must never be color-only).
     private var netStatusLabel: String {
-        let deficit = -model.summary.balanceKcal
+        let deficit = model.deficitKcal
         if deficit < 0 { return "surplus" }
         guard let deficitGoal, deficitGoal > 0 else { return "deficit" }
         return deficit >= deficitGoal ? "goal met" : "short of goal"
@@ -150,7 +150,7 @@ struct DayNutritionView: View {
             // a deficit, you're the wrong side of zero, and "-27 / 633"
             // reads like arithmetic nobody asked for.
             iconRow("Net", icon: { Image(systemName: "plusminus").foregroundStyle(netTint) }) {
-                let deficit = -model.summary.balanceKcal
+                let deficit = model.deficitKcal
                 Group {
                     if deficit < 0 {
                         Text("\(-deficit, format: .number.precision(.fractionLength(0))) kcal surplus")

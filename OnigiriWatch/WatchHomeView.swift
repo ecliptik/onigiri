@@ -117,7 +117,8 @@ struct WatchHomeView: View {
         let readout = CalorieBudget.headlineReadout(
             mode: HeadlineMode(rawValue: balanceStyle) ?? .remaining,
             summary: model.state.summary,
-            dailyBudgetKcal: model.state.dailyBudgetKcal
+            dailyBudgetKcal: model.state.dailyBudgetKcal,
+            dayBurnKcal: model.state.dayBurnKcal
         )
         let valueFormat: FloatingPointFormatStyle<Double> = readout.signed
             ? .number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false))

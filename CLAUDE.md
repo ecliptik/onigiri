@@ -228,6 +228,23 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   `sessionWatchStateDidChange` now clears that fingerprint and re-pushes —
   it's the only callback that fires when `isWatchAppInstalled` moves
   (2026-07-30). Any future send-side caching needs the same escape hatch.
+- The day's budget is `DayBudget.dayBurn − requiredDeficit`, ONE figure
+  on every surface (2026-08-02, `plans/PLAN-earned-budget.md`). Resting
+  is credited UP FRONT — the whole day from midnight, measured but
+  floored by `BasalEstimate.restingKcal` — because it happens whether or
+  not you move; dripping it hourly makes breakfast read as "over". Active
+  is EARNED: raw measured, never filled, never estimated. No watch, no
+  active credit, smaller budget — that IS the incentive, and it's why the
+  trailing-average substitution and the whole Fixed budget style were
+  deleted rather than kept beside it. `TodayBurnFloor` ratchets the day
+  burn (Health revises today's burn DOWN mid-day). Verdict-shaped numbers
+  — Net, banked, the gauge, the balance headline — go through
+  `DayBudget.deficit`, NOT `DailyEnergySummary.balanceKcal`; the Burned
+  flank and the Active/Resting rows stay on Health's raw totals, because
+  those report a measurement rather than reach a judgment. Past days
+  re-grade themselves from Health; that's accepted, and it's less code
+  than freezing them. `CalorieBudget.projectedDailyBurn` survives for the
+  Goal/onboarding PREVIEW only ("a typical day"), never to judge a day.
 - Unit preferences (Settings → Units): display/entry-only. Storage is ALWAYS
   canonical — lb, US fl oz, sodium mg — in HealthKit, SwiftData, WatchSync,
   and backups; `WeightUnit`/`WaterUnit`/`SodiumUnit` (kit, UnitPreferences.swift)

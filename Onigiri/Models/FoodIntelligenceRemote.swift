@@ -353,6 +353,49 @@ extension FoodIntelligence {
         })
     }
 
+    // MARK: Sign / menu / package-front read
+
+    private struct RemoteSignReading: Decodable {
+        struct Item: Decodable {
+            let name: String
+            let serving: String?
+            let kcal: Double
+            let sodiumMg: Double
+            let fatG: Double?
+            let carbsG: Double?
+            let proteinG: Double?
+        }
+        let foods: [Item]
+    }
+
+    /// Text relay, like the screenshot read — the sign's words are the
+    /// signal, and they cost no image tokens on any provider.
+    static func readFoodSignRemote(_ text: String) async -> [SignFood] {
+        let user = Prompts.signUser(text) + """
+            \n\nRespond with ONLY a JSON object, no prose: {"foods": \
+            array of at most six {"name": string (the food as the sign \
+            titles it), "serving": string (one whole item as sold, e.g. \
+            "1 roll (2.5 oz)"), "kcal": number, "sodiumMg": number \
+            (milligrams), "fatG": number|null, "carbsG": number|null, \
+            "proteinG": number|null — grams for that portion}}. Return \
+            an empty array when the text names no food.
+            """
+        guard let reading = decode(
+            RemoteSignReading.self,
+            from: await completeRemote(system: Prompts.signInstructions, user: user)
+        ) else { return [] }
+        return plausibleSignFoods(reading.foods.prefix(6).map { item in
+            SignFood(
+                name: item.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                serving: (item.serving ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+                kcal: item.kcal,
+                sodiumMg: item.sodiumMg,
+                nutrients: macroNutrients(
+                    fatG: item.fatG, carbsG: item.carbsG, proteinG: item.proteinG,
+                    fiberG: nil, sugarG: nil))
+        }, text: text)
+    }
+
     // MARK: Label refinement
 
     private struct RemoteLabelReading: Decodable {

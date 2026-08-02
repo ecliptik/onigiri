@@ -56,6 +56,17 @@ final class FoodIntelligenceEvals: XCTestCase {
         /// feature (each part is meant to become its own editable food),
         /// so this floor means "never worse than today".
         static let mealComponents = 0.8
+        /// Sign read (2026-08-02), both set BEFORE the first run.
+        /// The NAME is a guardrail at 1.0: the sign states it in words,
+        /// so unlike every estimate in this file there is a right answer
+        /// printed in the input — and `plausibleSignFoods` already
+        /// rejects a name that appears nowhere in the text, so a miss
+        /// here means the read is coming back empty or naming the brand.
+        static let signName = 1.0
+        /// Item count gets estimate-style headroom: telling "one item
+        /// with an ingredient list" from "a menu listing two" is a
+        /// judgment, and the ingredient run is the known trap.
+        static let signItemCount = 0.75
     }
 
     @MainActor
@@ -563,6 +574,134 @@ final class FoodIntelligenceEvals: XCTestCase {
         // failure mode this feature must never ship.
         XCTAssertEqual(invented, 0, "not-food label sets must return nil")
     }
+
+    // MARK: Sign / menu / package-front read (photographed text → estimate)
+
+    private struct SignSample {
+        let what: String
+        let lines: [String]
+        /// A word the name must contain, lowercased — grounding, not a
+        /// point answer. The sign SAYS what it is; getting that wrong is
+        /// a different failure from estimating it badly.
+        let nameContains: [String]
+        let kcal: ClosedRange<Double>
+        /// How many separately-named items the text advertises. The
+        /// load-bearing check: an ingredient run under a name must not
+        /// come back as five foods.
+        let count: Int
+    }
+
+    /// The first two are the REAL transcripts that reported this
+    /// (2026-08-02), through the app's own OCR — including its mistakes
+    /// ("Mitk", "250z"), because the model has to read what Vision
+    /// actually emits, not a cleaned-up version of it.
+    private static let signGolden: [SignSample] = [
+        .init(
+            what: "bakery card, green onion bread",
+            lines: [
+                "$2.25", "青蔥麵包", "GREEN ONION",
+                "Flour/Sugar/Salt/Egg/Mitk/",
+                "Butter/Yeast/Soybean Oil/Green Onion",
+                "Net WT 250z",
+                "Allergen Warning! Contains:Wheat. Dairy, Soybean Oil",
+            ],
+            nameContains: ["onion"], kcal: 100...600, count: 1),
+        .init(
+            what: "bakery case, ham & cheese bagel",
+            lines: [
+                "SUNMERRY", "家聖瑪莉", "SUNMERRY", "◎聖瑪莉",
+                "日式火熊起士色給具果", "$3.50", "小麥粉",
+                "HAM & CHEESE", "FILLING BAGEL", "SUNMERRY",
+            ],
+            nameContains: ["bagel", "ham", "cheese"], kcal: 150...800, count: 1),
+        .init(
+            what: "package front",
+            lines: ["KIND", "DARK CHOCOLATE", "NUTS & SEA SALT", "Net Wt 1.4 oz (40g)"],
+            nameContains: ["chocolate", "nut", "kind"], kcal: 100...350, count: 1),
+        .init(
+            what: "menu board, two items",
+            lines: [
+                "TODAY'S SPECIALS",
+                "Chicken Caesar Wrap ....... $9.50",
+                "Tomato Basil Soup ....... $5.00",
+            ],
+            nameContains: ["wrap", "soup", "chicken", "tomato"], kcal: 100...900, count: 2),
+    ]
+
+    /// Text with no food in it must return NOTHING. The sign read is the
+    /// step that runs on every failed label scan, so a model that
+    /// invents a pastry out of a parking sign would fire constantly.
+    private static let signNotFood: [[String]] = [
+        ["NO PARKING", "TOW AWAY ZONE", "24 HOURS"],
+        ["Gate B14", "Boarding 7:45 PM", "Seat 22A"],
+    ]
+
+    @MainActor
+    func testReadFoodSignGoldenSet() async throws {
+        try requireEvalRun()
+        var produced = 0, kcalOK = 0, nameOK = 0, countOK = 0
+        var report: [String] = []
+
+        for sample in Self.signGolden {
+            let foods = await FoodIntelligence.readFoodSign(
+                transcript: Self.transcript(sample.lines))
+            guard let first = foods.first else {
+                report.append("REFUSED  \(sample.what)")
+                continue
+            }
+            produced += 1
+            let kcalHit = foods.allSatisfy { sample.kcal.contains($0.kcal) }
+            let lowered = foods.map { $0.name.lowercased() }.joined(separator: " ")
+            let nameHit = sample.nameContains.contains { lowered.contains($0) }
+            let countHit = foods.count == sample.count
+            if kcalHit { kcalOK += 1 }
+            if nameHit { nameOK += 1 }
+            if countHit { countOK += 1 }
+            report.append(
+                "\(kcalHit && nameHit && countHit ? "ok  " : "MISS") \(sample.what) → "
+                + foods.map { "\"\($0.name)\" (\($0.serving)) \($0.kcal) kcal, \($0.sodiumMg) mg" }
+                    .joined(separator: " | ")
+                + "  [want \(sample.count) item(s), kcal \(sample.kcal), name ~ \(sample.nameContains)]"
+                + (foods.count == 1 ? "" : "  first=\(first.name)"))
+        }
+
+        attachAndPrint(report, name: "readFoodSign-eval")
+        let n = Double(Self.signGolden.count)
+        XCTAssertGreaterThanOrEqual(Double(produced) / n, Gate.produced, "produced (refusals are failures)")
+        guard produced > 0 else {
+            XCTFail("no sample produced values — nothing was measured")
+            return
+        }
+        let a = Double(produced)
+        XCTAssertGreaterThanOrEqual(Double(nameOK) / a, Gate.signName, "name grounded in the sign's own words")
+        XCTAssertGreaterThanOrEqual(Double(kcalOK) / a, Gate.kcalInRange, "kcal plausibility")
+        XCTAssertGreaterThanOrEqual(Double(countOK) / a, Gate.signItemCount, "one item per named item")
+    }
+
+    @MainActor
+    func testReadFoodSignRejectsTextWithNoFood() async throws {
+        try requireEvalRun()
+        var report: [String] = []
+        var invented = 0
+
+        for lines in Self.signNotFood {
+            let foods = await FoodIntelligence.readFoodSign(transcript: Self.transcript(lines))
+            if foods.isEmpty {
+                report.append("ok   [\(lines.joined(separator: " / "))] → none")
+            } else {
+                invented += 1
+                report.append("INVENTED [\(lines.joined(separator: " / "))] → "
+                    + foods.map { "\"\($0.name)\" \($0.kcal) kcal" }.joined(separator: ", "))
+            }
+        }
+
+        attachAndPrint(report, name: "readFoodSign-notfood-eval")
+        XCTAssertEqual(invented, 0, "text naming no food must return no foods")
+    }
+
+    // The sign read sees only the text — geometry belongs to SignText
+    // (kit, deterministically tested against the real boxes) — so these
+    // reuse the refine section's placeholder-geometry `transcript`.
 
     // MARK: Plumbing
 

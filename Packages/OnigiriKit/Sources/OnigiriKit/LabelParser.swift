@@ -44,6 +44,11 @@ public struct ParsedLabel: Sendable, Equatable {
     /// later read off the raw transcript (the Foundation Models
     /// refinement pass) must apply the same factor to stay on basis.
     public var per100gScaleFactor: Double?
+    /// These numbers are a model's ESTIMATE, not values printed anywhere
+    /// — a sign or menu that named the food without listing nutrition.
+    /// Rides the label so the candidates dialog and the food form keep
+    /// the provenance mark; a deterministic parse never sets it.
+    public var aiGenerated = false
 
     public init() {}
 
@@ -54,7 +59,7 @@ public struct ParsedLabel: Sendable, Equatable {
     /// The prefill currency the food form consumes. A label carries no
     /// barcode — callers pass through anything the user already typed
     /// so a scan can't erase it. What the user typed ALWAYS wins; the
-    /// label's own `name` (a screenshot read) fills only a blank.
+    /// label's own `name` (a screenshot or sign read) fills only a blank.
     public func scannedProduct(name: String = "", fallbackServing: String = "") -> ScannedProduct {
         ScannedProduct(
             barcode: "",
@@ -62,7 +67,8 @@ public struct ParsedLabel: Sendable, Equatable {
             kcal: kcal,
             sodiumMg: sodiumMg,
             servingDescription: servingDescription ?? fallbackServing,
-            nutrients: nutrients)
+            nutrients: nutrients,
+            aiGenerated: aiGenerated)
     }
 }
 

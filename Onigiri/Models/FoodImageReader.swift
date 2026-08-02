@@ -63,8 +63,13 @@ enum FoodImageReader {
             return .nothing(message: "Couldn't read that photo — try another.")
         }
         let orientation = CGImagePropertyOrientation(image.imageOrientation)
+        // Kept out of the do-block: when there's no panel to parse, the
+        // words Vision DID read are the next-best signal, and they have
+        // to survive to the identify stage below.
+        var transcript: [LabelObservation] = []
         do {
             let result = try await LabelScan.scan(cgImage, orientation: orientation)
+            transcript = result.transcript
             guard !Task.isCancelled else { return .cancelled }
             // iOS 26 + Apple Intelligence: the model fills whatever the
             // deterministic parse left blank — invisible, and every
@@ -111,22 +116,51 @@ enum FoodImageReader {
             imageLog.error("Label OCR failed: \(String(describing: error))")
             return .nothing(message: "Couldn't read that photo — try another.")
         }
-        // The cascade (PLAN-identify-food): no nutrition panel in the
-        // still, so maybe it's a photo of the food itself.
-        guard FoodIntelligence.isAvailable else {
-            return .nothing(
-                message: "Couldn't read a nutrition panel there — try a closer, straighter shot with the whole panel in frame.")
+        // No nutrition panel. Two things are still worth asking, in this
+        // order, because they answer different pictures.
+        if FoodIntelligence.isAvailable {
+            status("Identifying food…")
+            // 1. Does the picture SAY what the food is? A bakery-case
+            //    card, a shelf sign, a menu board, a package front. The
+            //    text names the dish outright, which no classifier label
+            //    can, and it's the cheaper question (no image tokens, no
+            //    Vision pass, works on every engine). This step is why a
+            //    pasted bakery sign used to open a blank form: the name,
+            //    the ingredients and the net weight were all read and
+            //    then dropped on the floor (the user, 2026-08-02).
+            let named = await FoodIntelligence.readFoodSign(transcript: transcript)
+            guard !Task.isCancelled else { return .cancelled }
+            imageLog.notice("Sign read: \(named.count) food(s)")
+            // A case or a menu board advertises several at once — same
+            // rule as a multi-item nutrition page: which one is
+            // unknowable, so ask rather than log the wrong pastry.
+            if named.count > 1 { return .candidates(named.map(\.parsedLabel)) }
+            if let only = named.first {
+                return .food(only.parsedLabel.scannedProduct())
+            }
+            // 2. No usable text — maybe it's a photo of the food itself
+            //    (PLAN-identify-food).
+            let food = await FoodIntelligence.identifyFood(photo: cgImage, orientation: orientation)
+            guard !Task.isCancelled else { return .cancelled }
+            if let food {
+                imageLog.notice("Photo identified: \(food.name), \(food.components.count) components, \(food.kcal) kcal")
+                return .food(food.scannedProduct)
+            }
+            imageLog.notice("Photo identify came up empty")
         }
-        status("Identifying food…")
-        let food = await FoodIntelligence.identifyFood(photo: cgImage, orientation: orientation)
-        guard !Task.isCancelled else { return .cancelled }
-        if let food {
-            imageLog.notice("Photo identified: \(food.name), \(food.components.count) components, \(food.kcal) kcal")
-            return .food(food.scannedProduct)
+        // AI off, unavailable, or it declined — but the text may still
+        // plainly name the food. Hand over what it says and nothing
+        // more: a name and a serving are transcription, not an estimate,
+        // so they carry no provenance mark and no invented numbers. A
+        // half-filled form beats a dead end (the user, 2026-08-02).
+        if let named = SignText.namedFood(in: transcript) {
+            imageLog.notice("Sign text named: \(named.name ?? "-")")
+            return .label(named)
         }
-        imageLog.notice("Photo identify came up empty")
         return .nothing(
-            message: "Couldn't read a nutrition panel or recognize a food there — try a closer shot.")
+            message: FoodIntelligence.isAvailable
+                ? "Couldn't read a nutrition panel or recognize a food there — try a closer shot."
+                : "Couldn't read a nutrition panel there — try a closer, straighter shot with the whole panel in frame.")
     }
 }
 

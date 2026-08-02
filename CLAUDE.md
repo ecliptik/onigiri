@@ -308,6 +308,20 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   stamped its numbers onto every candidate (four salads all reading 490
   kcal, live 2026-07-24). The host asks with a confirmationDialog —
   never a sheet swapped from inside a sheet.
+- A photo with no nutrition panel is NOT a dead end (2026-08-02). The
+  cascade after a failed parse is: `FoodIntelligence.readFoodSign`
+  (the OCR TEXT — a bakery card, shelf sign, menu board, package front
+  NAMES the food, which no classifier label can) → `identifyFood`
+  (the picture itself) → `SignText.namedFood` (kit, pure: name +
+  serving, transcription only, the AI-off floor so the form opens
+  half-filled instead of blank). Sign reads are ESTIMATES and carry
+  `aiGenerated` through `ParsedLabel`; >1 named item raises the
+  existing "Which item?" dialog. Two guards are load-bearing:
+  `plausibleSignFoods` rejects a name that appears nowhere in the OCR
+  (it caught a confabulated food during the eval run), and the sign
+  prompt DELIMITS the text as photographed data — without that framing
+  an "Allergen Warning! Contains:…" line refuses every time with "May
+  contain sensitive content".
 - ALL online-search surfaces (Foods, Log sheet, and the food form's
   inline database search) render the shared `OnlineResultsSection` —
   a separate `FoodSearchSheet` with its own drifting list existed until

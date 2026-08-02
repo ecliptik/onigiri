@@ -183,9 +183,92 @@ struct GoalView: View {
             currentWeightLb: currentWeightLb,
             targetWeightLb: targetWeightLb,
             targetDate: targetDate,
-            averageDailyBurnKcal: model.averageBurnKcal,
-            todayDayBurnKcal: model.todayDayBurnKcal
+            averageDailyBurnKcal: model.averageBurnKcal
         )
+    }
+
+    /// The plan the current form implies. Split out of `body` because
+    /// the second budget row tipped the whole Form past what the type
+    /// checker will attempt in one expression.
+    @ViewBuilder
+    private func dailyPlanSection(_ plan: CalorieBudget.Plan) -> some View {
+        Section {
+            if !isMaintenance, let current = currentWeightLb, let target = targetWeightLb {
+                LabeledContent("To lose") {
+                    Text("\(unit.fromLb(current - target), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
+                }
+                LabeledContent("Deficit needed") {
+                    Text("\(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal/day")
+                }
+            }
+            budgetRows(plan)
+            // What the effort adds up to, independent of what the scale
+            // did this morning — the number a bad weigh-in can't take
+            // away (the user wanted something motivating that doesn't
+            // swing).
+            if model.trend.bankedLb > 0 {
+                LabeledContent("Total deficit") {
+                    Text("\(model.trend.bankedKcal, format: .number.precision(.fractionLength(0))) kcal ≈ \(unit.fromLb(model.trend.bankedLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
+                        .monospacedDigit()
+                }
+            }
+            // Is the math showing up on the scale? Trailing 30 days of
+            // deficit vs the smoothed weigh-in change.
+            if let predicted = model.trend.predicted30Lb, let actual = model.trend.actual30Lb {
+                LabeledContent("Last 30 days") {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("≈ \(signedLb(predicted)) predicted")
+                        Text("\(signedLb(actual)) on the scale")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            if plan.isAggressive {
+                Label(
+                    "That pace is aggressive. A later target date means a gentler daily budget.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.footnote)
+                .foregroundStyle(.orange)
+            }
+        } header: {
+            Text("Daily plan")
+        } footer: {
+            if todayBudget != nil {
+                Text("Today's budget is this day's own burn minus the deficit, so it starts at your resting burn and grows as you earn active burn. The average day uses your recent burn instead.")
+            }
+        }
+    }
+
+    /// TWO budgets, each named, because they answer different questions
+    /// and shipping both under one label read as a contradiction: Goal
+    /// said 2,293 while Details said 1,567 — 726 kcal apart at 1:43pm
+    /// with nothing to tell them apart (the user, 2026-08-02). Both were
+    /// right. One is what an average day allows; the other is what this
+    /// day has earned so far, and it climbs as active burn comes in.
+    @ViewBuilder
+    private func budgetRows(_ plan: CalorieBudget.Plan) -> some View {
+        LabeledContent("Average day") {
+            Text("≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
+                .monospacedDigit()
+        }
+        if let todayBudget {
+            LabeledContent("Today") {
+                Text("\(todayBudget, format: .number.precision(.fractionLength(0))) kcal")
+                    .monospacedDigit()
+            }
+        }
+    }
+
+    /// What TODAY allows, on the day's own burn — the same arithmetic
+    /// Today and Details run, so the two screens quote one number. nil
+    /// before Health has any burn for the day (and on the preview of a
+    /// goal that can't be derived at all).
+    private var todayBudget: Double? {
+        guard let plan, model.todayDayBurnKcal > 0 else { return nil }
+        return plan.requiredDailyDeficit >= model.todayDayBurnKcal
+            ? 0
+            : model.todayDayBurnKcal - plan.requiredDailyDeficit
     }
 
     var body: some View {
@@ -238,48 +321,7 @@ struct GoalView: View {
                 }
 
                 if let plan {
-                    Section("Daily plan") {
-                        if !isMaintenance, let current = currentWeightLb, let target = targetWeightLb {
-                            LabeledContent("To lose") {
-                                Text("\(unit.fromLb(current - target), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
-                            }
-                            LabeledContent("Deficit needed") {
-                                Text("\(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal/day")
-                            }
-                        }
-                        LabeledContent("Calorie budget") {
-                            Text("≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
-                        }
-                        // What the effort adds up to, independent of what
-                        // the scale did this morning — the number a bad
-                        // weigh-in can't take away (the user wanted
-                        // something motivating that doesn't swing).
-                        if model.trend.bankedLb > 0 {
-                            LabeledContent("Total deficit") {
-                                Text("\(model.trend.bankedKcal, format: .number.precision(.fractionLength(0))) kcal ≈ \(unit.fromLb(model.trend.bankedLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
-                                    .monospacedDigit()
-                            }
-                        }
-                        // Is the math showing up on the scale? Trailing 30
-                        // days of deficit vs the smoothed weigh-in change.
-                        if let predicted = model.trend.predicted30Lb, let actual = model.trend.actual30Lb {
-                            LabeledContent("Last 30 days") {
-                                VStack(alignment: .trailing, spacing: 2) {
-                                    Text("≈ \(signedLb(predicted)) predicted")
-                                    Text("\(signedLb(actual)) on the scale")
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        if plan.isAggressive {
-                            Label(
-                                "That pace is aggressive. A later target date means a gentler daily budget.",
-                                systemImage: "exclamationmark.triangle.fill"
-                            )
-                            .font(.footnote)
-                            .foregroundStyle(.orange)
-                        }
-                    }
+                    dailyPlanSection(plan)
                 }
 
                 // Its OWN section, deliberately outside `if let plan`:

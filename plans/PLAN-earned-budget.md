@@ -155,22 +155,29 @@ Third pass (2026-08-02, both decided with the user):
     `budget + deficitTarget` rather than growing a stored field, so a
     pre-existing last-good blob still decodes.
 
-NOT DONE:
-- **Two rows called "Calorie budget", 726 kcal apart** (the user,
-  2026-08-02, on the first deployed build). Goal showed ≈2,293 kcal/day
-  while Details showed 1,567. Both are right and that is the problem:
-  Goal is `projectedDailyBurn (2,706 average) − 413`, Details is
-  `dayBurn (1,980 so far today) − 413`. At 1:43pm resting is fully
-  credited but only 150 active has been EARNED, so today's figure is
-  below a typical day's and climbs all afternoon — by bedtime with a
-  normal ~700 active it lands back near 2,293.
-  The split was kept on purpose (a plan preview that reads low while
-  you're setting a target undersells it), but the two rows share a
-  label and nothing says one means "a typical day" and the other
-  "right now". Same failure shape as the original report. Fix is
-  naming, not math: relabel Goal's row, and probably show today's
-  live budget beside it so the pair reads as a comparison instead of
-  a contradiction.
+Fourth pass (2026-08-02): the two rows both called "Calorie budget".
+Goal showed ≈2,293 kcal/day next to Details' 1,567 — both right, 726
+kcal apart, indistinguishable. Goal is the average-day projection;
+Details is `dayBurn − deficit` on a day that at 1:43pm had earned only
+150 active kcal and would climb all afternoon.
+- Goal's "Daily plan" now names BOTH: **"Average day"** (≈2,293
+  kcal/day) over **"Today"** (1,567 kcal), with a footer saying
+  today's starts at resting burn and grows as active is earned.
+  Seeing them together is the fix; either alone invites the question.
+- The today-floor came OUT of `projectedDailyBurn`. It existed so the
+  Goal preview couldn't read lower than Today, which made the figure
+  neither an average nor today — and it did NOT prevent the disagreement
+  it was there for. With Today shown as its own row the average is free
+  to be a true average, and `derivePlan` loses its `todayDayBurnKcal`
+  parameter along with onboarding's whole today-burn read.
+- NOT verified on screen. The simulator seeder writes no body-mass or
+  burn samples, so `todayBudget` is nil there and the new row does not
+  render at all; the Health permission sheet also can't be driven from
+  osascript (CLAUDE.md's rule — it needs XCUITest). Device only.
+  **Worth fixing properly: teach `DebugSeeder` to write body mass +
+  active/basal energy.** It would make this row, the morning
+  acceptance test, and every future budget change checkable without a
+  device.
 - The morning acceptance test is unrun: at 8am the ring must read
   ~`restingFullDay + smallActive − deficit − breakfast`, NOT near zero.
   (Partly evidenced already: at 1:43pm the budget was 1,567 against

@@ -65,14 +65,13 @@ struct CalorieBudgetTests {
         #expect(CalorieBudget.projectedDailyBurn(averageKcal: 1500) == 2000)
     }
 
-    @Test func expectedBurnUsesTheAverageWithRoomLeftInTheDay() {
-        #expect(CalorieBudget.projectedDailyBurn(averageKcal: 2800, todayDayBurnKcal: 1900) == 2800)
-    }
-
-    @Test func expectedBurnFollowsTodayOnceItTopsTheAverage() {
-        // The fix behind "phone reads 150 left, widget reads 0 over" on
-        // active days: today's actual burn outranks the average.
-        #expect(CalorieBudget.projectedDailyBurn(averageKcal: 2800, todayDayBurnKcal: 3100) == 3100)
+    @Test func projectedBurnIsTheAverageAndNothingElse() {
+        // Today's own burn used to floor this so the Goal preview
+        // couldn't read lower than Today. That made the figure neither
+        // an average nor today — and it still left the two screens 726
+        // kcal apart at lunchtime under one label (2026-08-02). Goal
+        // now names both, so this one is free to mean what it says.
+        #expect(CalorieBudget.projectedDailyBurn(averageKcal: 2800) == 2800)
     }
 
     // MARK: - derivePlan (one derivation for Today/Goal/onboarding/watch)
@@ -93,27 +92,27 @@ struct CalorieBudgetTests {
         #expect(abs(plan.dailyBudget - 2450) < 0.01)
     }
 
-    @Test func derivedPlanBudgetFollowsTodaysBurn() throws {
-        // Same goal on a high-burn day: the deficit holds, the budget
-        // rises with the clamped burn — Goal's preview used to miss this.
+    /// The preview is a PROJECTION and stays one: an active afternoon
+    /// moves what Today allows, not what an average day allows. The
+    /// deficit is the part that never depended on burn either way.
+    @Test func derivedPlanIgnoresHowTodayIsGoing() throws {
         let target = Self.cal.date(byAdding: .day, value: 100, to: Self.now)!
         let plan = try #require(CalorieBudget.derivePlan(
             isMaintenance: false,
             currentWeightLb: 200, targetWeightLb: 190, targetDate: target,
-            averageDailyBurnKcal: 2800, todayDayBurnKcal: 3100,
+            averageDailyBurnKcal: 2800,
             calendar: Self.cal, now: Self.now
         ))
         #expect(abs(plan.requiredDailyDeficit - 350) < 0.01)
-        #expect(abs(plan.dailyBudget - 2750) < 0.01)
+        #expect(abs(plan.dailyBudget - 2450) < 0.01)
     }
 
-    @Test func derivedMaintenancePlanEatsTheClampedBurn() throws {
+    @Test func derivedMaintenancePlanEatsTheAverageBurn() throws {
         let plan = try #require(CalorieBudget.derivePlan(
-            isMaintenance: true,
-            averageDailyBurnKcal: 2800, todayDayBurnKcal: 3100
+            isMaintenance: true, averageDailyBurnKcal: 2800
         ))
         #expect(plan.requiredDailyDeficit == 0)
-        #expect(plan.dailyBudget == 3100)
+        #expect(plan.dailyBudget == 2800)
     }
 
     @Test func derivedMaintenancePlanColdStartsAt2000() throws {

@@ -244,7 +244,13 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   those report a measurement rather than reach a judgment. Past days
   re-grade themselves from Health; that's accepted, and it's less code
   than freezing them. `CalorieBudget.projectedDailyBurn` survives for the
-  Goal/onboarding PREVIEW only ("a typical day"), never to judge a day.
+  Goal/onboarding PREVIEW only ("an average day"), never to judge a day.
+  Goal's Daily plan shows BOTH budgets, named — "Average day" (the
+  projection) over "Today" (the live `dayBurn − deficit`) — because one
+  label on two different numbers reads as a contradiction (726 kcal
+  apart at lunchtime, 2026-08-02). Don't re-add a today-floor to the
+  projection to close the gap: that was tried, it made the average
+  neither one thing nor the other, and it didn't close it.
 - Unit preferences (Settings → Units): display/entry-only. Storage is ALWAYS
   canonical — lb, US fl oz, sodium mg — in HealthKit, SwiftData, WatchSync,
   and backups; `WeightUnit`/`WaterUnit`/`SodiumUnit` (kit, UnitPreferences.swift)

@@ -17,9 +17,8 @@ struct CompletedDayPlanTests {
         // What the headline subtracts from: over, not "67 left".
         #expect(plan.dailyBudget - 2_474 == -208)
 
-        let forecast = CalorieBudget.projectedDailyBurn(
-            averageKcal: 2_722, todayDayBurnKcal: 2_447)
-        #expect(forecast == 2_722)          // the max() that misled
+        let forecast = CalorieBudget.projectedDailyBurn(averageKcal: 2_722)
+        #expect(forecast == 2_722)          // the average that misled
         #expect(forecast - 181 - 2_474 == 67)  // the "67 kcal left" shown
     }
 

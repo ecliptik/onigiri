@@ -55,42 +55,43 @@ public enum CalorieBudget {
     }
 
     /// The burn a PROJECTION rides — the Goal tab's plan preview and
-    /// onboarding's, where the question is "a typical day", not "today".
-    /// Your measured trailing average, floored by the day's own burn so
-    /// the preview can't lag Today on an active day, and by a 2000 kcal
-    /// cold start until Health has any history to average.
+    /// onboarding's, where the question is "an average day", not
+    /// "today". Your measured trailing average, with a 2000 kcal cold
+    /// start until Health has any history to average.
     ///
     /// A SPECIFIC day's budget never comes from here — that is
     /// `DayBudget.dayBurn` fed to `completedDayPlan`. The Fixed budget
     /// style that used to substitute a pinned number for the average is
     /// gone with the setting: a budget that stays put no matter what you
     /// measure is the opposite of one you earn (2026-08-02).
-    public static func projectedDailyBurn(
-        averageKcal: Double?,
-        todayDayBurnKcal: Double = 0
-    ) -> Double {
-        max(averageKcal ?? 0, todayDayBurnKcal, 2000)
+    ///
+    /// This used to be floored by today's own burn as well, so the Goal
+    /// preview couldn't read lower than Today did on an active day. That
+    /// floor made the figure neither one thing nor the other — an
+    /// "average day" that moved with this afternoon's walk — and it
+    /// still left the two screens 726 kcal apart at lunchtime with the
+    /// same label on both (the user, 2026-08-02). Goal now shows BOTH
+    /// numbers, each named, so this one is free to be a true average.
+    public static func projectedDailyBurn(averageKcal: Double?) -> Double {
+        max(averageKcal ?? 0, 2000)
     }
 
-    /// The one shared answer to "what plan does this goal imply for a
-    /// typical day": maintenance eats what you burn; a weight goal
+    /// The one shared answer to "what plan does this goal imply for an
+    /// average day": maintenance eats what you burn; a weight goal
     /// spreads the remaining pounds over the days to the target date.
     /// nil when a weight goal lacks a current weight, target, or date.
-    /// Both modes ride the `projectedDailyBurn` clamp — which is why
-    /// this is the PREVIEW path, not the one any day is judged by.
+    /// Both modes ride `projectedDailyBurn` — which is why this is the
+    /// PREVIEW path, not the one any day is judged by.
     public static func derivePlan(
         isMaintenance: Bool,
         currentWeightLb: Double? = nil,
         targetWeightLb: Double? = nil,
         targetDate: Date? = nil,
         averageDailyBurnKcal: Double?,
-        todayDayBurnKcal: Double = 0,
         calendar: Calendar = .current,
         now: Date = .now
     ) -> Plan? {
-        let burn = projectedDailyBurn(
-            averageKcal: averageDailyBurnKcal, todayDayBurnKcal: todayDayBurnKcal
-        )
+        let burn = projectedDailyBurn(averageKcal: averageDailyBurnKcal)
         if isMaintenance { return maintenancePlan(averageDailyBurn: burn) }
         guard let current = currentWeightLb, let target = targetWeightLb, let targetDate
         else { return nil }

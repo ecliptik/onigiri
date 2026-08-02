@@ -506,7 +506,7 @@ struct MonthDetailView: View {
                     Text("\(stats.totalCalories, format: .number.precision(.fractionLength(0))) kcal")
                         .monospacedDigit()
                 }
-                LabeledContent("Total energy") {
+                LabeledContent("Total burned") {
                     Text("\(stats.totalBurned, format: .number.precision(.fractionLength(0))) kcal")
                         .monospacedDigit()
                         .foregroundStyle(.red)

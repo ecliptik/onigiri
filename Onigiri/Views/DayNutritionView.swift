@@ -131,11 +131,11 @@ struct DayNutritionView: View {
                     }
                 }
             }
-            iconRow("Active energy", icon: { Image(systemName: "flame.fill").foregroundStyle(.red) }) {
+            iconRow("Active burn", icon: { Image(systemName: "flame.fill").foregroundStyle(.red) }) {
                 Text("\(model.summary.activeBurnKcal, format: .number.precision(.fractionLength(0))) kcal")
                     .monospacedDigit()
             }
-            iconRow("Resting energy", icon: { Image(systemName: "bed.double.fill").foregroundStyle(.indigo) }) {
+            iconRow("Resting burn", icon: { Image(systemName: "bed.double.fill").foregroundStyle(.indigo) }) {
                 Text("\(model.summary.restingBurnKcal, format: .number.precision(.fractionLength(0))) kcal")
                     .monospacedDigit()
             }

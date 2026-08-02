@@ -327,7 +327,7 @@ struct GoalView: View {
                     if style == .fixed {
                         // Optional under Fixed: pin the number, or leave
                         // it blank and keep using your own average.
-                        LabeledContent("Energy per day") {
+                        LabeledContent("Burn per day") {
                             TextField(
                                 model.averageBurnKcal.map {
                                     $0.formatted(.number.precision(.fractionLength(0)))
@@ -377,7 +377,7 @@ struct GoalView: View {
                                 .foregroundStyle(.secondary)
                         }
                     } else {
-                        LabeledContent("Average energy") {
+                        LabeledContent("Average burn") {
                             // The fallback used to present as fact — the
                             // whole budget inherits this guess.
                             Text(model.averageBurnKcal.map {
@@ -385,7 +385,7 @@ struct GoalView: View {
                             } ?? "≈ 2000 kcal/day (assumed)")
                         }
                         if model.averageBurnKcal == nil {
-                            Text("No activity data in Health yet — the plan assumes 2000 kcal/day until energy history exists.")
+                            Text("No activity data in Health yet — the plan assumes 2000 kcal/day until burn history exists.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

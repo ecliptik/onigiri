@@ -34,7 +34,7 @@ struct StatusPhrasingTests {
             metric: .caloriesLeft, plan: state(intake: 2_600, budget: 2_450),
             waterGoalOz: 64, sodiumLimitMg: 2_300)
         #expect(status.headline == "150")
-        #expect(status.caption == "kcal over")
+        #expect(status.caption == "kcal over budget")
         #expect(status.spoken == "You're 150 calories over budget today.")
     }
 

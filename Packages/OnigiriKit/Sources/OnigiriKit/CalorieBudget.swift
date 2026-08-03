@@ -157,17 +157,23 @@ public enum CalorieBudget {
 
 public extension CalorieBudget {
     /// Headline presentation for the remaining budget: a positive number
-    /// with a "kcal left"/"kcal over" caption, instead of a negative count.
-    /// "Over" and "short" are different failures and were being told as
-    /// one (the user, 2026-07-30): a day that ate 2,314 against 2,759
-    /// burned said "246 kcal over", which reads as "you gained" when the
-    /// day in fact banked a 445 kcal deficit — just not the 691 the goal
-    /// wanted. Past the budget while still under your burn is SHORT of
-    /// the goal; past your burn is genuinely OVER.
-    static func remainingHeadline(
-        _ remaining: Double, deficitKcal: Double = 0
-    ) -> (value: Double, caption: String) {
-        if remaining >= 0 { return (remaining, "kcal left") }
-        return (-remaining, deficitKcal > 0 ? "kcal short" : "kcal over")
+    /// with a caption, instead of a negative count.
+    ///
+    /// Bare "over" once read as "you gained" on a day that had banked a
+    /// real deficit, just not the one the goal wanted (2026-07-30). The
+    /// fix then was to call that case "kcal short", and it overcorrected
+    /// twice over: short of WHAT was never said, and the number sat
+    /// directly above a goal card reading "≈ 106 kcal over budget" — one
+    /// figure, two words, one screen (the user, 2026-08-02).
+    ///
+    /// So: name the thing you are over. One caption, because there is
+    /// only one quantity here — `budget − intake`. The severity split
+    /// that the two captions were reaching for can't live on this
+    /// number: a day 500 past its budget while only 100 past its BURN
+    /// would have had its 500 labelled "surplus", which is a different
+    /// figure entirely. Deficit-vs-surplus belongs to Net, which
+    /// subtracts the burn.
+    static func remainingHeadline(_ remaining: Double) -> (value: Double, caption: String) {
+        remaining >= 0 ? (remaining, "kcal left") : (-remaining, "kcal over budget")
     }
 }

@@ -93,25 +93,22 @@ struct DayBudgetTests {
 
     // MARK: Headline wording
 
-    /// "Over" meant two different things and told them as one: the
-    /// reported day banked a 445 kcal deficit and still said "246 kcal
-    /// over", which reads as a gain.
-    @Test func pastTheBudgetButUnderYourBurnReadsAsShortNotOver() {
-        let short = CalorieBudget.remainingHeadline(-246, deficitKcal: 445)
-        #expect(short.value == 246)
-        #expect(short.caption == "kcal short")
+    /// One caption, naming what the number is over. "Short" said short
+    /// of WHAT, and sat above a goal card calling the same figure "over
+    /// budget" (the user, 2026-08-02).
+    @Test func pastTheBudgetSaysOverBudget() {
+        let over = CalorieBudget.remainingHeadline(-246)
+        #expect(over.value == 246)
+        #expect(over.caption == "kcal over budget")
 
-        // Ate more than burned — genuinely over.
-        let over = CalorieBudget.remainingHeadline(-208, deficitKcal: -27)
-        #expect(over.caption == "kcal over")
-
-        // Room left is unchanged either way.
-        #expect(CalorieBudget.remainingHeadline(300, deficitKcal: 800).caption == "kcal left")
-        #expect(CalorieBudget.remainingHeadline(300, deficitKcal: -50).caption == "kcal left")
+        let left = CalorieBudget.remainingHeadline(300)
+        #expect(left.value == 300)
+        #expect(left.caption == "kcal left")
     }
 
-    /// Exactly break-even is not a deficit, so it can't be "short".
-    @Test func breakEvenReadsAsOver() {
-        #expect(CalorieBudget.remainingHeadline(-100, deficitKcal: 0).caption == "kcal over")
+    /// Exactly on budget is not over it.
+    @Test func breakEvenReadsAsLeft() {
+        #expect(CalorieBudget.remainingHeadline(0).caption == "kcal left")
     }
+
 }

@@ -54,7 +54,7 @@ struct CalorieBudgetTests {
         #expect(left.caption == "kcal left")
         let over = CalorieBudget.remainingHeadline(-138)
         #expect(over.value == 138)
-        #expect(over.caption == "kcal over")
+        #expect(over.caption == "kcal over budget")
         #expect(CalorieBudget.remainingHeadline(0).caption == "kcal left")
     }
 

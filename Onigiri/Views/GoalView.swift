@@ -238,8 +238,12 @@ struct GoalView: View {
             // below already explains what a budget is made of, and on
             // screen the two captions sit a thumb apart — both opening
             // "the day's own burn minus the deficit" read as a stutter.
+            // The old second sentence ("the average day uses your recent
+            // burn instead") went because it didn't parse — it was
+            // explaining a distinction the reader hadn't been given yet
+            // (the user, 2026-08-02).
             if todayBudget != nil {
-                Text("Today's budget grows as you earn active burn. The average day uses your recent burn instead.")
+                Text("Daily budget grows as active energy increases.")
             }
         }
     }
@@ -360,7 +364,7 @@ struct GoalView: View {
                         } ?? "≈ 2000 kcal/day (assumed)")
                             .monospacedDigit()
                     }
-                    Text("Your budget is the day's own burn, minus the deficit. Resting burn counts from midnight — it happens whether or not you move. Active burn is added as you earn it, so a day without your watch has a smaller budget.")
+                    Text("Your budget is the day's energy, minus the deficit. Resting energy starts at midnight. Active energy is added throughout the day.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     if model.estimatedRestingKcal == nil {
@@ -557,7 +561,7 @@ struct GoalView: View {
                 Text("Progress since")
             } footer: {
                 Text(startIsAutomatic
-                     ? "Automatic: your earliest weigh-in on record. Pick a date to measure from instead."
+                     ? "Your earliest weight in Apple Health, or choose a date."
                      : "The progress bar and the chart's milestones measure from here. The weight is your weigh-in nearest this date.")
             }
         }

@@ -261,8 +261,9 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   projection to close the gap: that was tried, it made the average
   neither one thing nor the other, and it didn't close it.
 - A day's VERDICT has two gates, and both live in `StreakCalendar`:
-  `isTracked` (intake ≥ `untrackedBelowKcal`, default 1000 — too little
-  logged to trust the numbers) AND the `DayBadgeRule`. Any surface that
+  `isTracked` (intake ≥ `untrackedBelowKcal`, default 500 — too little
+  logged to trust the numbers; Settings → Metrics tunes it, 0 disables)
+  AND the `DayBadgeRule`. Any surface that
   says "earned" must run BOTH. Today's goal card ran only the second and
   called a 934-kcal day with a 1,702 deficit "earned" while the calendar
   left it blank (2026-08-02). Never reimplement either rule locally.

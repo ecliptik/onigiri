@@ -1495,7 +1495,8 @@ private struct MetricsSettingsScreen: View {
     @AppStorage(SharedStore.trackedMetric2IconKey, store: SharedStore.defaults) private var trackedMetric2Icon = ""
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults) private var sodiumUnit = SharedStore.unitAutomatic
-    @AppStorage(SharedStore.untrackedBelowKey, store: SharedStore.defaults) private var untrackedBelowKcal = 1000.0
+    @AppStorage(SharedStore.untrackedBelowKey, store: SharedStore.defaults)
+    private var untrackedBelowKcal = SharedStore.untrackedBelowDefaultKcal
 
     private var resolvedSodiumUnit: SodiumUnit { SodiumUnit.resolve(sodiumUnit) }
 
@@ -1520,7 +1521,7 @@ private struct MetricsSettingsScreen: View {
                 }
                 .accessibilityLabel("Counts as untracked")
                 .accessibilityValue(untrackedValueText)
-                Text("Days with less logged break the streak and stay out of the month's totals. 0 turns this off.")
+                Text("For days you forgot to log — not light ones. Days below this break the streak and stay out of the month's totals. 0 turns it off.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {

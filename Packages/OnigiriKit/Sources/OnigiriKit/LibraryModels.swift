@@ -476,12 +476,22 @@ public enum SharedStore {
         textSearchMode != .openFoodFacts
     }
 
+    /// The out-of-the-box untracked threshold.
+    ///
+    /// 500, down from 1,000 (the user, 2026-08-02). The rule exists to
+    /// catch days you FORGOT to log, and 1,000 was catching real ones: a
+    /// hard-exercise day logged honestly at 934 kcal lost its badge
+    /// despite banking a 1,702 kcal deficit. A genuinely forgotten day
+    /// looks like one or two stray entries, which 500 still excludes.
+    /// Settings → Metrics tunes it, and 0 turns it off.
+    public static let untrackedBelowDefaultKcal: Double = 500
+
     /// Days with less intake logged count as untracked — streak-breaking,
-    /// excluded from month totals. Default 1,000; the user can set 0 to
-    /// disable (so unset and explicit-zero must be distinguishable).
+    /// excluded from month totals. The user can set 0 to disable, so
+    /// unset and explicit-zero must stay distinguishable.
     public static var untrackedBelowKcal: Double {
         defaults.object(forKey: untrackedBelowKey) == nil
-            ? 1000
+            ? untrackedBelowDefaultKcal
             : defaults.double(forKey: untrackedBelowKey)
     }
 

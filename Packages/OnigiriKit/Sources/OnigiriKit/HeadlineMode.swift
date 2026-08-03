@@ -74,7 +74,9 @@ public extension CalorieBudget {
             let remaining = (dailyBudgetKcal ?? 0) - summary.intakeKcal
             let headline = remainingHeadline(remaining)
             return HeadlineReadout(
-                value: headline.value, caption: headline.caption, signed: false,
+                value: headline.value, caption: headline.caption,
+                // "+36", not "36", once past the budget.
+                signed: headline.over,
                 tint: .remainingStatus(kcal: remaining),
                 statusLabel: Color.remainingStatusLabel(kcal: remaining),
                 statusSymbol: Color.remainingStatusSymbol(kcal: remaining)

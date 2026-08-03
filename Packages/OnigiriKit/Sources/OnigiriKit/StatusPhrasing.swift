@@ -33,7 +33,10 @@ public enum StatusPhrasing {
             if let remaining = plan.remainingKcal {
                 let headline = CalorieBudget.remainingHeadline(remaining)
                 return Status(
-                    headline: whole(headline.value),
+                    // Same "+" the ring and the widgets show — this
+                    // string is a complication's whole readout when the
+                    // caption doesn't fit.
+                    headline: (headline.over ? "+" : "") + whole(headline.value),
                     caption: headline.caption,
                     spoken: remaining >= 0
                         ? "You have \(whole(remaining)) calories left today."

@@ -179,7 +179,17 @@ public extension CalorieBudget {
     /// goal card immediately below, which has the room to say it — so
     /// the short form reads as shorthand rather than as a second
     /// opinion, which is what "short" over "over budget" did.
-    static func remainingHeadline(_ remaining: Double) -> (value: Double, caption: String) {
-        remaining >= 0 ? (remaining, "kcal left") : (-remaining, "kcal over")
+    /// `over` asks callers to render the number with an explicit "+".
+    /// The caption is what tells 36-left from 36-over, and the caption
+    /// is the first thing a complication drops — "36" on a watch face
+    /// reads as 36 calories still available (the user, 2026-08-02). The
+    /// sign travels with the value so no surface can show one without
+    /// the other.
+    static func remainingHeadline(
+        _ remaining: Double
+    ) -> (value: Double, caption: String, over: Bool) {
+        remaining >= 0
+            ? (remaining, "kcal left", false)
+            : (-remaining, "kcal over", true)
     }
 }

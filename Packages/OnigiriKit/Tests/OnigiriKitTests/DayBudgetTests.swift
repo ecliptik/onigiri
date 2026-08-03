@@ -100,10 +100,14 @@ struct DayBudgetTests {
         let over = CalorieBudget.remainingHeadline(-246)
         #expect(over.value == 246)
         #expect(over.caption == "kcal over")
+        // Carries its own sign, so no surface can render the number
+        // without the thing that distinguishes it from calories left.
+        #expect(over.over)
 
         let left = CalorieBudget.remainingHeadline(300)
         #expect(left.value == 300)
         #expect(left.caption == "kcal left")
+        #expect(!left.over)
     }
 
     /// Exactly on budget is not over it.

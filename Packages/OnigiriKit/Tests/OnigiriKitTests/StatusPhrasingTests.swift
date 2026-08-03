@@ -33,7 +33,10 @@ struct StatusPhrasingTests {
         let status = StatusPhrasing.phrase(
             metric: .caloriesLeft, plan: state(intake: 2_600, budget: 2_450),
             waterGoalOz: 64, sodiumLimitMg: 2_300)
-        #expect(status.headline == "150")
+        // "+150", because a complication that drops the caption leaves
+        // this string alone on the watch face, where a bare 150 reads
+        // as calories still available (the user, 2026-08-02).
+        #expect(status.headline == "+150")
         #expect(status.caption == "kcal over")
         #expect(status.spoken == "You're 150 calories over budget today.")
     }

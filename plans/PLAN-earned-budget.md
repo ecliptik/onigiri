@@ -194,5 +194,46 @@ Details is `dayBurn − deficit` on a day that at 1:43pm had earned only
   ~`restingFullDay + smallActive − deficit − breakfast`, NOT near zero.
   (Partly evidenced already: at 1:43pm the budget was 1,567 against
   1,302 kcal of measured burn, so the estimate IS flooring resting.)
-- The Goal tab's motivation UI (milestone rungs, progress bar, "Progress
-  since" picker) has still never been visually verified.
+- The Goal tab's motivation UI is now PARTLY verified: the
+  `testHeaderShots` capture shows the progress bar ("1.9 of 12.2 lb"),
+  the "Since Jul 3, your earliest weigh-in" line and the projected
+  RANGE rendering cleanly, with no crowding of the target label. Still
+  unverified: whether a custom start date survives a target change
+  (`GoalSettings.startIsManual`).
+
+## Fifth pass (2026-08-02/03) — the field-report round
+
+Ten reports from a live device, and the same shape underneath nearly all
+of them: ONE number rendered on two surfaces under different rules or
+different labels. When a figure looks wrong, ask FIRST what other screen
+shows the same quantity.
+
+- **Badge verdict needs BOTH gates.** `StreakCalendar.isTracked` AND the
+  `DayBadgeRule`. Today's goal card ran only the second, so a 934-kcal
+  day with a 1,702 deficit read "earned" while the calendar left it
+  blank. The card now runs the shared rule and names the threshold.
+- **Untracked default 1000 → 500** (the user). The rule is for days you
+  FORGOT to log; 1,000 was disqualifying honest low-intake days.
+- **Calendar day card** shows the ring's own figure through
+  `remainingHeadline` ("+246 over"), not a bare banked deficit; green is
+  reserved for a day that MET its target; the redundant "Details ›"
+  footer is gone (the corner chevron is the affordance).
+- **Headline caption** is "kcal over" with an explicit "+" — the caption
+  is the first thing a complication drops, and a bare "36" reads as
+  calories still available. The sign travels WITH the value out of
+  `remainingHeadline` so no surface can show one without the other.
+- **"surplus" → "excess."** "remains"/"remainder" were considered and
+  rejected: they describe something LEFT OVER, and this number is what
+  was eaten BEYOND the burn.
+- **The gauge fills by AREA**, measured from the emoji's alpha channel
+  (`EmojiFillProfile`). A rice ball is bottom-heavy, so a waterline at
+  85% of its height covered 98% of it.
+- **Fresh-install bug**: `DailyPlanLoader` stamps today's target on every
+  load and on a fresh install runs before the goal mirrors to the App
+  Group, stamping 0 — Today read that and showed MAINTENANCE framing to
+  someone with a weight goal. Today now derives from the live goal; the
+  snapshot serves only days that are over.
+
+Copy: "burn" and "energy" now split by REGISTER (glanceable numbers vs
+explanatory captions) — see CLAUDE.md. Site media recaptured except
+`calendar.png` (needs a mid-month capture) and `watch/home.png`.

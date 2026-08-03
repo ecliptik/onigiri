@@ -12,7 +12,13 @@ Personal iOS + watchOS calorie/sodium/water tracker. Design + roadmap: `plans/PL
   GitHub wiki (onigiri.wiki.git); the privacy policy lives in both (site
   canonical). The site's app screenshots/clips exist in BOTH appearances
   (showcase/light + showcase/dark, media/*.mp4 + *-dark.mp4) and swap with
-  the site theme — recapture both when screens change.
+  the site theme — recapture both when screens change. Verify site media
+  by PROBING it, not by looking: two container-metadata faults render
+  wrong ONLY in a browser while sips/Finder/QuickTime show them fine —
+  an empty edit list (`elst` `media time: -1`, left by `-ss` BEFORE
+  `-i`) loops through black, and an EXIF orientation tag (which
+  `sips -r` writes) stands a landscape PNG on its side. Both bit
+  2026-08-02; probes and fixes are in the screenshot-recipe notes.
 - License: PolyForm Noncommercial 1.0.0 since the commit after the v2.2.0
   tag (≤ v2.2.0 remains MIT). Say "source-available", not "open source".
   LICENSE is verbatim PolyForm text — never edit it. External PRs are

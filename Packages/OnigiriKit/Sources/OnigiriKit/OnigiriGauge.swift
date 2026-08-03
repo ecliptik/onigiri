@@ -29,6 +29,20 @@ public struct OnigiriGauge: View {
     private static let inkBottomInLine = 0.142857
     private static let inkHeightInLine = 0.761905
 
+    /// Where the fill line goes so that `progress` of the rice ball is
+    /// actually COVERED. Not `progress` itself: the shape is
+    /// bottom-heavy, so a line at 85% of its height buries 98% of it,
+    /// and the gauge read full while the label said 85% (the user,
+    /// 2026-08-02). `EmojiFillProfile` measures the real shape, so this
+    /// stays honest for whichever badge emoji is chosen.
+    private var waterline: Double {
+        #if canImport(CoreText)
+        EmojiFillProfile.waterline(forArea: progress, emoji: emoji)
+        #else
+        max(0, min(1, progress))
+        #endif
+    }
+
     public var body: some View {
         GeometryReader { geo in
             let fontSize = min(geo.size.width, geo.size.height) * Self.emojiScale
@@ -46,7 +60,7 @@ public struct OnigiriGauge: View {
                 emoji
                     .mask(alignment: .bottom) {
                         Rectangle()
-                            .frame(height: inkBottom + inkHeight * max(0, min(1, progress)))
+                            .frame(height: inkBottom + inkHeight * waterline)
                             .frame(maxHeight: .infinity, alignment: .bottom)
                     }
             }

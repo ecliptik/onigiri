@@ -352,10 +352,17 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   `.searchable` (bottom placement) everywhere — the user vetoed custom
   bars and auto-focus; the scanner is a labeled list row (ScanRowLabel),
   never a toolbar icon.
-- Copy: "burn" STAYS — it's the app's word (settled 2026-08-02 after a
-  round trip). A pass replacing it with "Used" on the Today/widget flanks
-  and "energy" in noun slots ("Total energy", "Average energy", "Active
-  energy") was built, shipped, and fully REVERTED: "used" reads vague
+- Copy: "burn" and "energy" split by REGISTER (the user, 2026-08-02).
+  "Burn" is the user-facing word — the glanceable numbers and their
+  labels: the Today/widget flanks, the Active/Resting meters, Net, the
+  calendar day card, Goal's own rows. "Energy" is for the FORMAL
+  register: explanatory captions, settings footers, the privacy policy,
+  the wiki. Goal's budget explainer reads "Resting energy starts at
+  midnight"; the meter beside it still says Resting burn. Never swap one
+  wholesale for the other: a pass replacing "burn" with "Used" on the
+  Today/widget flanks and "energy" in every noun slot ("Total energy",
+  "Average energy", "Active energy") was built, shipped, and fully
+  REVERTED. "Used" reads vague
   next to a hard number and doubles as budget-spend in a budget-framed
   app, and the neutral nouns lost more than the metaphor cost. Don't
   re-propose it. Today and the widget label the same `totalBurnKcal` —

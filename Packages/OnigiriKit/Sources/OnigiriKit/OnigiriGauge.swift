@@ -14,10 +14,31 @@ public struct OnigiriGauge: View {
         self.emoji = emoji
     }
 
+    /// The emoji's size as a fraction of the frame's short side.
+    private static let emojiScale = 0.85
+    /// Apple Color Emoji, measured with CoreText (identical for every
+    /// glyph — they all fill the em square): the LINE box is 1.3125× the
+    /// font size, and the ink sits from 14.2857% to 90.4762% of that
+    /// line, measured from its bottom. So the drawn onigiri is inset
+    /// from the frame on both edges, and a mask measured against the
+    /// FRAME misses at both ends of the scale: it covered nothing at all
+    /// below ~12% progress, and at 85% left only a sliver of the narrow
+    /// apex showing, which reads as a full rice ball (the user,
+    /// 2026-08-02). The fill has to span the INK, not the frame.
+    private static let lineHeightRatio = 1.3125
+    private static let inkBottomInLine = 0.142857
+    private static let inkHeightInLine = 0.761905
+
     public var body: some View {
         GeometryReader { geo in
-            let emoji = Text(emoji)
-                .font(.system(size: min(geo.size.width, geo.size.height) * 0.85))
+            let fontSize = min(geo.size.width, geo.size.height) * Self.emojiScale
+            let emoji = Text(emoji).font(.system(size: fontSize))
+            // Text lays out its line box centred in the frame; the ink
+            // is a known band inside that.
+            let lineHeight = fontSize * Self.lineHeightRatio
+            let lineBottom = (geo.size.height - lineHeight) / 2
+            let inkBottom = lineBottom + Self.inkBottomInLine * lineHeight
+            let inkHeight = Self.inkHeightInLine * lineHeight
             ZStack {
                 emoji
                     .grayscale(1)
@@ -25,7 +46,7 @@ public struct OnigiriGauge: View {
                 emoji
                     .mask(alignment: .bottom) {
                         Rectangle()
-                            .frame(height: geo.size.height * max(0, min(1, progress)))
+                            .frame(height: inkBottom + inkHeight * max(0, min(1, progress)))
                             .frame(maxHeight: .infinity, alignment: .bottom)
                     }
             }

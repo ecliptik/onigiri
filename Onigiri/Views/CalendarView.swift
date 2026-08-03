@@ -393,33 +393,49 @@ struct CalendarView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// "445 / 691 deficit", not a bare "445" — the day's own target,
-    /// in Details' grammar.
+    /// The RING's figure — "1,028 left" or "+246 over" — so the day card
+    /// and Today say the same thing in the same words.
     ///
-    /// A bare number let the card contradict itself and the ring: July
-    /// 29 read "445 deficit" in GREEN under the words "Goal not met",
-    /// while Today showed "+246 kcal over" for the same day (the user,
-    /// 2026-08-02). Nothing was wrong — 445 banked plus 246 short IS the
-    /// 691 target — but the card printed one half, the ring the other,
-    /// and neither showed the sum that reconciles them.
+    /// It showed the banked deficit alone before, which let the card
+    /// contradict the ring: July 29 read "445 deficit" in green under
+    /// "Goal not met" while Today showed "+246 kcal over" (the user,
+    /// 2026-08-02). Both were true — 445 banked plus 246 short IS the
+    /// 691 target — but the card printed one half and the ring the
+    /// other. Spelling out "445 / 691 deficit" fixed the contradiction
+    /// and cost a line: it WRAPPED, pushing the card below the fold, so
+    /// the short form the ring already uses wins instead.
+    ///
+    /// Without a target that day there is nothing to be over, so the
+    /// plain net stands.
     private func deficitText(for totals: DayEnergyTotals) -> String {
-        let deficit = totals.deficitKcal.rounded()
-        let amount = abs(deficit).formatted(.number.precision(.fractionLength(0)))
-        guard deficit >= 0 else { return "\(amount) excess" }
-        guard let target = model.targetDeficit(for: selectedDay), target > 0 else {
-            return "\(amount) deficit"
+        guard let remaining = remainingKcal(for: totals) else {
+            let deficit = totals.deficitKcal.rounded()
+            let amount = abs(deficit).formatted(.number.precision(.fractionLength(0)))
+            return deficit >= 0 ? "\(amount) deficit" : "\(amount) excess"
         }
-        return "\(amount) / \(target.formatted(.number.precision(.fractionLength(0)))) deficit"
+        // Shared with the ring so the "+" and the wording can't drift;
+        // the "kcal" is dropped to match "2,314 in" / "2,759 out".
+        let headline = CalorieBudget.remainingHeadline(remaining)
+        let amount = headline.value.formatted(.number.precision(.fractionLength(0)))
+        return headline.over ? "+\(amount) over" : "\(amount) left"
     }
 
-    /// Details' netTint rule, which this card was missing: green is
-    /// reserved for a day that actually MET its target. Any deficit at
-    /// all used to paint green, so a missed day looked like a win.
+    /// Budget − intake for the day, on its OWN recorded target. nil when
+    /// the day ran goal-less.
+    private func remainingKcal(for totals: DayEnergyTotals) -> Double? {
+        guard let target = model.targetDeficit(for: selectedDay), target > 0 else { return nil }
+        return ((totals.burnKcal - target) - totals.intakeKcal).rounded()
+    }
+
+    /// The ring's own tint, for the same reason as the wording. Green
+    /// used to mean "any deficit at all", so a missed day wore the
+    /// colour of a win.
     private func deficitTint(for totals: DayEnergyTotals?) -> Color {
-        let deficit = totals?.deficitKcal ?? 0
-        if deficit < 0 { return .orange }
-        guard let target = model.targetDeficit(for: selectedDay), target > 0 else { return .green }
-        return deficit >= target ? .green : .primary
+        guard let totals else { return .primary }
+        guard let remaining = remainingKcal(for: totals) else {
+            return totals.deficitKcal > 0 ? .green : .orange
+        }
+        return .remainingStatus(kcal: remaining)
     }
 
     /// Highlights only — the full month story (deficit, predicted vs

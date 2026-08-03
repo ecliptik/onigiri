@@ -166,14 +166,20 @@ public extension CalorieBudget {
     /// directly above a goal card reading "≈ 106 kcal over budget" — one
     /// figure, two words, one screen (the user, 2026-08-02).
     ///
-    /// So: name the thing you are over. One caption, because there is
-    /// only one quantity here — `budget − intake`. The severity split
-    /// that the two captions were reaching for can't live on this
-    /// number: a day 500 past its budget while only 100 past its BURN
-    /// would have had its 500 labelled "surplus", which is a different
-    /// figure entirely. Deficit-vs-surplus belongs to Net, which
-    /// subtracts the burn.
+    /// One caption, because there is only one quantity here —
+    /// `budget − intake`. The severity split the two captions were
+    /// reaching for can't live on this number anyway: a day 500 past its
+    /// budget while only 100 past its BURN would have had its 500
+    /// labelled "excess", which is a different figure entirely.
+    /// Deficit-vs-excess belongs to Net, which subtracts the burn.
+    ///
+    /// "kcal over", not "kcal over budget": this renders in the ring, a
+    /// complication and a widget flank, and three words is too many at a
+    /// glance (the user, 2026-08-02). What it's over is answered on the
+    /// goal card immediately below, which has the room to say it — so
+    /// the short form reads as shorthand rather than as a second
+    /// opinion, which is what "short" over "over budget" did.
     static func remainingHeadline(_ remaining: Double) -> (value: Double, caption: String) {
-        remaining >= 0 ? (remaining, "kcal left") : (-remaining, "kcal over budget")
+        remaining >= 0 ? (remaining, "kcal left") : (-remaining, "kcal over")
     }
 }

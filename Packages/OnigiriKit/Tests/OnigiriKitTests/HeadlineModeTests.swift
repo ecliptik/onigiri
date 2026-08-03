@@ -22,7 +22,7 @@ struct HeadlineModeTests {
         let over = DailyEnergySummary(intakeKcal: 2000, activeBurnKcal: 0, restingBurnKcal: 0, sodiumMg: 0, waterOz: 0)
         let r = CalorieBudget.headlineReadout(mode: .remaining, summary: over, dailyBudgetKcal: budget)
         #expect(r.value == 318)            // |1682 − 2000|
-        #expect(r.caption == "kcal over budget")
+        #expect(r.caption == "kcal over")
         #expect(r.statusSymbol == "exclamationmark.triangle.fill")
     }
 

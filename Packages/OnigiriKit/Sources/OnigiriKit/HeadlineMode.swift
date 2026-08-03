@@ -84,7 +84,7 @@ public extension CalorieBudget {
             return HeadlineReadout(
                 value: balance, caption: "kcal balance", signed: true,
                 tint: balance <= 0 ? .green : .orange,
-                statusLabel: balance <= 0 ? "deficit" : "surplus",
+                statusLabel: balance <= 0 ? "deficit" : "excess",
                 statusSymbol: nil
             )
         case .eaten:

@@ -5,7 +5,7 @@ import Foundation
 /// wrapper lives in SharedIntents/ (compiled per-target — linkd rejects
 /// SPM-delivered App Shortcuts); this stays in the kit so the grammar
 /// and the over/under boundaries keep their tests. Mirrors the app's
-/// own grammar (remainingHeadline's "kcal left"/"kcal over budget", the
+/// own grammar (remainingHeadline's "kcal left"/"kcal over", the
 /// hydration row's "X / Y oz").
 public enum StatusPhrasing {
     public enum Metric: Sendable {

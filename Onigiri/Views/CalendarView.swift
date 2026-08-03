@@ -396,7 +396,7 @@ struct CalendarView: View {
     private func deficitText(for totals: DayEnergyTotals) -> String {
         let deficit = totals.deficitKcal.rounded()
         let amount = abs(deficit).formatted(.number.precision(.fractionLength(0)))
-        return deficit >= 0 ? "\(amount) deficit" : "\(amount) surplus"
+        return deficit >= 0 ? "\(amount) deficit" : "\(amount) excess"
     }
 
     /// Highlights only — the full month story (deficit, predicted vs

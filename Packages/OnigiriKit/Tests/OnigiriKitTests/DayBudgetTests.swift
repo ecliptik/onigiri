@@ -99,7 +99,7 @@ struct DayBudgetTests {
     @Test func pastTheBudgetSaysOverBudget() {
         let over = CalorieBudget.remainingHeadline(-246)
         #expect(over.value == 246)
-        #expect(over.caption == "kcal over budget")
+        #expect(over.caption == "kcal over")
 
         let left = CalorieBudget.remainingHeadline(300)
         #expect(left.value == 300)

@@ -48,7 +48,7 @@ struct DayNutritionView: View {
     /// rule — status must never be color-only).
     private var netStatusLabel: String {
         let deficit = model.deficitKcal
-        if deficit < 0 { return "surplus" }
+        if deficit < 0 { return "excess" }
         guard let deficitGoal, deficitGoal > 0 else { return "deficit" }
         return deficit >= deficitGoal ? "goal met" : "short of goal"
     }
@@ -157,20 +157,24 @@ struct DayNutritionView: View {
                 }
             }
             // Same vocabulary as the calendar day card: positive is a
-            // deficit (good), negative a surplus. "Net", not "Deficit" —
-            // a row labeled Deficit reading "surplus" flipped signs on
-            // the reader. The ± glyph says "signed balance".
+            // deficit (good), negative an EXCESS. "Net", not "Deficit" —
+            // a row labeled Deficit reading the other way flipped signs
+            // on the reader. The ± glyph says "signed balance".
+            // ("Excess", not "surplus" — the user, 2026-08-02. Plainer,
+            // and it can't be misread as something left over the way
+            // "remainder" would; this number is what you ate BEYOND
+            // your burn, the opposite of room to spare.)
             // Banked over goal, on ONE line in the sodium/water grammar —
             // "1,517 / 633" says on-track at a glance, where two separate
             // rows made the reader do the comparison (the user,
-            // 2026-07-30). A surplus drops the goal: you aren't partway to
-            // a deficit, you're the wrong side of zero, and "-27 / 633"
-            // reads like arithmetic nobody asked for.
+            // 2026-07-30). An excess drops the goal: you aren't partway
+            // to a deficit, you're the wrong side of zero, and
+            // "-27 / 633" reads like arithmetic nobody asked for.
             iconRow("Net", icon: { Image(systemName: "plusminus").foregroundStyle(netTint) }) {
                 let deficit = model.deficitKcal
                 Group {
                     if deficit < 0 {
-                        Text("\(-deficit, format: .number.precision(.fractionLength(0))) kcal surplus")
+                        Text("\(-deficit, format: .number.precision(.fractionLength(0))) kcal excess")
                     } else if let deficitGoal, deficitGoal > 0 {
                         Text("\(deficit, format: .number.precision(.fractionLength(0))) / \(deficitGoal, format: .number.precision(.fractionLength(0))) kcal deficit")
                     } else {

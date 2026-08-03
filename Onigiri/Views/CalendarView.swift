@@ -209,8 +209,8 @@ struct CalendarView: View {
 
     private var daySummaryCard: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // Goal status centered in the card; the chevron stays pinned
-            // trailing as the tap affordance.
+            // Goal status centered in the card; the chevron pinned
+            // trailing is the ONLY tap affordance (see below).
             ZStack {
                 HStack {
                     Spacer()
@@ -280,13 +280,11 @@ struct CalendarView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            // Same "Details ›" grammar as the month card and Today; the
-            // cross-tab/edit nature of the tap moved into the hint below
-            // (2.1 unified the three affordances).
-            HStack {
-                Spacer()
-                DetailsCaption()
-            }
+            // No "Details ›" footer here: the whole card is ONE tap
+            // target, and the chevron pinned top-trailing already says
+            // so. Two affordances for one gesture cost a whole line and
+            // pushed the card below the fold (the user, 2026-08-02).
+            // The month card keeps its footer — it has no chevron.
         }
         .padding(14)
         .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 14))

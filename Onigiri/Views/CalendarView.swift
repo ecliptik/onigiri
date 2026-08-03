@@ -248,7 +248,7 @@ struct CalendarView: View {
                        text: totals.map { "\($0.burnKcal.formatted(.number.precision(.fractionLength(0)))) out" } ?? "—")
                 Text(totals.map(deficitText(for:)) ?? "—")
                     .fontWeight(.semibold)
-                    .foregroundStyle((totals?.deficitKcal ?? 0) > 0 ? Color.green : Color.orange)
+                    .foregroundStyle(deficitTint(for: totals))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .font(.subheadline)
@@ -393,10 +393,33 @@ struct CalendarView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// "445 / 691 deficit", not a bare "445" — the day's own target,
+    /// in Details' grammar.
+    ///
+    /// A bare number let the card contradict itself and the ring: July
+    /// 29 read "445 deficit" in GREEN under the words "Goal not met",
+    /// while Today showed "+246 kcal over" for the same day (the user,
+    /// 2026-08-02). Nothing was wrong — 445 banked plus 246 short IS the
+    /// 691 target — but the card printed one half, the ring the other,
+    /// and neither showed the sum that reconciles them.
     private func deficitText(for totals: DayEnergyTotals) -> String {
         let deficit = totals.deficitKcal.rounded()
         let amount = abs(deficit).formatted(.number.precision(.fractionLength(0)))
-        return deficit >= 0 ? "\(amount) deficit" : "\(amount) excess"
+        guard deficit >= 0 else { return "\(amount) excess" }
+        guard let target = model.targetDeficit(for: selectedDay), target > 0 else {
+            return "\(amount) deficit"
+        }
+        return "\(amount) / \(target.formatted(.number.precision(.fractionLength(0)))) deficit"
+    }
+
+    /// Details' netTint rule, which this card was missing: green is
+    /// reserved for a day that actually MET its target. Any deficit at
+    /// all used to paint green, so a missed day looked like a win.
+    private func deficitTint(for totals: DayEnergyTotals?) -> Color {
+        let deficit = totals?.deficitKcal ?? 0
+        if deficit < 0 { return .orange }
+        guard let target = model.targetDeficit(for: selectedDay), target > 0 else { return .green }
+        return deficit >= target ? .green : .primary
     }
 
     /// Highlights only — the full month story (deficit, predicted vs

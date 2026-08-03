@@ -738,9 +738,11 @@ struct ScanRowLabel: View {
             // A CAMERA, not a barcode (the user, 2026-08-02): the row
             // has read labels and identified food for two releases, and
             // the barcode glyph kept promising only the first of the
-            // three. Still a viewfinder, so it reads as a sibling of
-            // the paste door beside it.
-            systemImage: "camera.viewfinder")
+            // three. PLAIN camera, not camera.viewfinder (the user,
+            // 2026-08-03): the viewfinder's brackets read as crowded
+            // inside the circle this row draws — the circle is already
+            // the frame, so a second one around the glyph is noise.
+            systemImage: "camera")
     }
 }
 

@@ -32,7 +32,7 @@ Runs on iPhone, iPad, and Apple Watch (iOS 18 / watchOS 10 or newer).
 
 | Foods | Goal | Calendar |
 |---|---|---|
-| <img src="docs/showcase/light/foods.png" width="260" alt="Food library with meals and foods"> | <img src="docs/showcase/light/goal.png" width="260" alt="Goal: weight trend with projection and the daily plan"> | <img src="docs/showcase/light/calendar.png" width="260" alt="Calendar: month grid of earned onigiri and streaks"> |
+| <img src="docs/showcase/light/foods.png" width="260" alt="Food library with meals and foods"> | <img src="docs/showcase/light/goal.png" width="260" alt="Goal: weight trend, progress toward the target, and the projected date range"> | <img src="docs/showcase/light/calendar.png" width="260" alt="Calendar: month grid of earned onigiri and streaks"> |
 
 ### iPad
 

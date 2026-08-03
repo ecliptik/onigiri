@@ -618,14 +618,31 @@ struct TodayView: View {
         guard dayBurn > 0 else { return nil }
         return CalorieBudget.completedDayPlan(
             dayBurnKcal: dayBurn,
-            // Maintenance has no deficit target; a day uses the target
-            // snapshotted then, falling back to the current one for days
-            // that predate snapshots (StreakCalendar's rule).
-            requiredDailyDeficit: goal.isMaintenance
-                ? 0
-                : (DeficitTargetHistory.target(on: model.selectedDate)
-                    ?? currentRequiredDeficit(for: goal) ?? 0)
+            requiredDailyDeficit: requiredDeficit(for: goal)
         )
+    }
+
+    /// The target the browsed day is judged by.
+    ///
+    /// TODAY derives from the live goal. A PAST day uses the target
+    /// snapshotted then (StreakCalendar's rule — history keeps the bar
+    /// it was actually held to), falling back to the derived one for
+    /// days that predate snapshots.
+    ///
+    /// Today used to read the snapshot too, and that let a stale stamp
+    /// outrank the real goal: `DailyPlanLoader` records today's target
+    /// on every load, and on a FRESH INSTALL it runs before the goal is
+    /// mirrored into the App Group — so it stamps 0 ("no goal"), and
+    /// Today then showed the maintenance framing, "Daily budget", to
+    /// someone who had just set a weight goal. It also meant editing
+    /// the goal didn't move Today until something re-stamped. The live
+    /// goal is the truth for the day in progress; the snapshot is for
+    /// days that are over.
+    private func requiredDeficit(for goal: GoalSettings) -> Double {
+        if goal.isMaintenance { return 0 }
+        if model.isToday { return currentRequiredDeficit(for: goal) ?? 0 }
+        return DeficitTargetHistory.target(on: model.selectedDate)
+            ?? currentRequiredDeficit(for: goal) ?? 0
     }
 
     /// The deficit target today's plan implies — the fallback for a past

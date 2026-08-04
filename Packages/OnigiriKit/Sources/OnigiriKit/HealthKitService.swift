@@ -272,20 +272,83 @@ public final class HealthKitService {
     }
 
     /// Totals for any calendar day — today ends at `now`, past days at midnight.
+    /// Intake and sodium are summed from the day's FOOD CORRELATIONS —
+    /// the very rows the day's list renders — not from a statistics
+    /// query. Water likewise sums its own samples.
+    ///
+    /// Why (2026-08-04, the user): a statistics query returns HealthKit's
+    /// MERGED total, and for a cumulative type HealthKit resolves
+    /// overlapping windows across sources by priority instead of adding
+    /// them — the machinery that stops a phone and a watch double-counting
+    /// steps. The phone app and the watch app are separate sources, so a
+    /// sandwich logged on the watch at 1:01:36 PM and a nectarine logged
+    /// on the phone at 1:01:53 PM collided: Health itself reported
+    /// 295 kcal for a 681 kcal day, dropping the watch's 386 entirely,
+    /// and we faithfully echoed Health's number while the log beneath it
+    /// listed all three. Burn stays on statistics — there the merge is
+    /// exactly right, because phone and watch really are measuring the
+    /// same body.
+    ///
+    /// The trade this makes deliberately: food logged into Health by
+    /// something OTHER than this app (a manual Health entry, another
+    /// tracker) no longer counts toward intake. It never appeared in the
+    /// day's list either — `monthStats` already made this same call for
+    /// the same reason — so the screen is now self-consistent by
+    /// construction rather than by hoping two query kinds agree.
     public func daySummary(for date: Date, now: Date = .now) async throws -> DailyEnergySummary {
         let (start, end) = Self.dayRange(for: date, now: now)
-        async let intake = sum(.dietaryEnergyConsumed, unit: .kilocalorie(), start: start, end: end)
+        async let foodsRead = foodCorrelations(start: start, end: end)
         async let active = sum(.activeEnergyBurned, unit: .kilocalorie(), start: start, end: end)
         async let resting = sum(.basalEnergyBurned, unit: .kilocalorie(), start: start, end: end)
-        async let sodium = sum(.dietarySodium, unit: .gramUnit(with: .milli), start: start, end: end)
-        async let water = sum(.dietaryWater, unit: .fluidOunceUS(), start: start, end: end)
+        async let water = waterTotal(start: start, end: end)
+        let foods = try await foodsRead
         return try await DailyEnergySummary(
-            intakeKcal: intake,
+            intakeKcal: foods.reduce(0) { $0 + $1.total(.dietaryEnergyConsumed, unit: .kilocalorie()) },
             activeBurnKcal: active,
             restingBurnKcal: resting,
-            sodiumMg: sodium,
+            sodiumMg: foods.reduce(0) { $0 + $1.total(.dietarySodium, unit: .gramUnit(with: .milli)) },
             waterOz: water
         )
+    }
+
+    /// The day's food correlations — the ONE source every food total is
+    /// summed from, shared by the list and the summary so they cannot
+    /// disagree. Deliberately does NOT touch `correlationCache`: that
+    /// cache backs deletion by id and belongs to `foodEntries`, which
+    /// knows it is loading the rows the user can act on.
+    private func foodCorrelations(start: Date, end: Date) async throws -> [HKCorrelation] {
+        let inRange = HKQuery.predicateForSamples(
+            withStart: start, end: end, options: .strictStartDate
+        )
+        let descriptor = HKSampleQueryDescriptor(
+            predicates: [.correlation(type: HKCorrelationType(.food), predicate: inRange)],
+            sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)]
+        )
+        do {
+            return try await descriptor.result(for: store)
+        } catch let error as HKError where error.code == .errorAuthorizationNotDetermined {
+            return []
+        }
+    }
+
+    /// Water summed from its own samples, for the same reason food is
+    /// summed from correlations: water is logged as bare samples on BOTH
+    /// devices, so a statistics query can merge a watch serving away
+    /// against a phone one logged in the same window.
+    private func waterTotal(start: Date, end: Date) async throws -> Double {
+        let inRange = HKQuery.predicateForSamples(
+            withStart: start, end: end, options: .strictStartDate
+        )
+        let descriptor = HKSampleQueryDescriptor(
+            predicates: [.quantitySample(type: HKQuantityType(.dietaryWater), predicate: inRange)],
+            sortDescriptors: []
+        )
+        do {
+            return try await descriptor.result(for: store)
+                .reduce(0) { $0 + $1.quantity.doubleValue(for: .fluidOunceUS()) }
+        } catch let error as HKError where error.code == .errorAuthorizationNotDetermined {
+            return 0
+        }
     }
 
     private static func dayRange(for date: Date, now: Date) -> (start: Date, end: Date) {
@@ -296,7 +359,15 @@ public final class HealthKitService {
     /// unit — Today's configurable metric slots read this.
     public func dayTotal(of nutrient: TrackedNutrient, for date: Date = .now, now: Date = .now) async throws -> Double {
         let (start, end) = Self.dayRange(for: date, now: now)
-        return try await sum(nutrient.healthKitIdentifier, unit: nutrient.healthKitUnit, start: start, end: end)
+        // Correlation-summed like every other food total (see
+        // daySummary) — a tracked slot showing a merged number beside a
+        // list that disagrees is the same bug wearing a different hat.
+        // Water is the exception on the way in, not the way out: it is
+        // logged as bare samples, so it sums samples instead.
+        guard nutrient != .water else { return try await waterTotal(start: start, end: end) }
+        return try await foodCorrelations(start: start, end: end).reduce(0) {
+            $0 + $1.total(nutrient.healthKitIdentifier, unit: nutrient.healthKitUnit)
+        }
     }
 
     /// Burn samples can span midnight (a watch basal row can run
@@ -432,6 +503,23 @@ public final class HealthKitService {
         return average
     }
 
+    /// Per-day intake, summed from food correlations and bucketed by the
+    /// calendar day each one starts in — the day-keyed twin of
+    /// `daySummary`'s intake, so the calendar and Today can't disagree.
+    /// One query for the whole range; food correlations are instantaneous,
+    /// so no apportioning across midnight is needed (unlike burn).
+    private func dailyIntakeTotals(start: Date, end: Date) async throws -> [Date: Double] {
+        let calendar = Calendar.current
+        var totals: [Date: Double] = [:]
+        for correlation in try await foodCorrelations(start: start, end: end) {
+            let day = calendar.startOfDay(for: correlation.startDate)
+            let kcal = correlation.total(.dietaryEnergyConsumed, unit: .kilocalorie())
+            guard kcal > 0 else { continue }
+            totals[day, default: 0] += kcal
+        }
+        return totals
+    }
+
     private func dailyTotals(
         _ identifier: HKQuantityTypeIdentifier, start: Date, end: Date
     ) async throws -> [Date: Double] {
@@ -550,7 +638,14 @@ public final class HealthKitService {
     /// front (measured, floored by the body-metric estimate), plus
     /// whatever active energy was actually earned.
     public func dailyEnergyTotals(from start: Date, to end: Date) async throws -> [DayEnergyTotals] {
-        async let intakeTotals = dailyTotals(.dietaryEnergyConsumed, start: start, end: end)
+        // Intake per day comes from the correlations, NOT the statistics
+        // collection: the collection merges across sources exactly as
+        // `sum` does, so a day with logs from both devices was judged on
+        // an undercount — and at 295 against a real 681 it fell under
+        // `untrackedBelowKcal`, so the calendar would have called a
+        // fully-logged day untracked (2026-08-04). Burn keeps the
+        // collection; see the day-bucketing note on alignedDaySummary.
+        async let intakeTotals = dailyIntakeTotals(start: start, end: end)
         async let activeTotals = dailyTotals(.activeEnergyBurned, start: start, end: end)
         async let basalTotals = dailyTotals(.basalEnergyBurned, start: start, end: end)
         let (intake, active, basal) = try await (intakeTotals, activeTotals, basalTotals)
@@ -592,8 +687,10 @@ public final class HealthKitService {
     /// adjacent days; the collection query apportions it across the
     /// boundary instead. That was the Today-vs-calendar burn gap (2,809
     /// against 2,759 for one day, 2026-07-30). Intake, sodium and water
-    /// stay on `daySummary`: those samples are instantaneous and strict,
-    /// which is why they always agreed.
+    /// stay on `daySummary` — which since 2026-08-04 sums the day's own
+    /// correlations and water samples rather than a merged statistics
+    /// query, so those agree with the calendar (and with the list) by
+    /// construction rather than by coincidence.
     public func alignedDaySummary(for date: Date, now: Date = .now) async throws -> DailyEnergySummary {
         let summary = try await daySummary(for: date, now: now)
         let (start, end) = Self.dayRange(for: date, now: now)
@@ -801,7 +898,9 @@ public final class HealthKitService {
             return (0, 0)
         }
         let end = min(nextMonth, now)
-        async let water = sum(.dietaryWater, unit: .fluidOunceUS(), start: start, end: end)
+        // Sample-summed, like every other water total (see waterTotal):
+        // a merged month would drop watch servings against phone ones.
+        async let water = waterTotal(start: start, end: end)
         // Correlations, not bare energy samples: the day lists render
         // food correlations, and the month count must agree with them
         // (bare samples from the Health app or other trackers don't
@@ -823,17 +922,9 @@ public final class HealthKitService {
     /// Logged eating events for any calendar day, newest first.
     public func foodEntries(on date: Date, now: Date = .now) async throws -> [FoodLogEntry] {
         let (start, end) = Self.dayRange(for: date, now: now)
-        let inToday = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
-        let descriptor = HKSampleQueryDescriptor(
-            predicates: [.correlation(type: HKCorrelationType(.food), predicate: inToday)],
-            sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)]
-        )
-        let correlations: [HKCorrelation]
-        do {
-            correlations = try await descriptor.result(for: store)
-        } catch let error as HKError where error.code == .errorAuthorizationNotDetermined {
-            return []
-        }
+        // Same fetch the day's totals sum (see daySummary) — one source
+        // for the rows and the number above them.
+        let correlations = try await foodCorrelations(start: start, end: end)
         correlationCache = Dictionary(uniqueKeysWithValues: correlations.map { ($0.uuid, $0) })
         return correlations.map(Self.entry(from:))
     }

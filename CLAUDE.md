@@ -346,6 +346,24 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   apart at lunchtime, 2026-08-02). Don't re-add a today-floor to the
   projection to close the gap: that was tried, it made the average
   neither one thing nor the other, and it didn't close it.
+- **Food totals are summed from the day's own CORRELATIONS, never from a
+  statistics query** (2026-08-04). A statistics query on the phone could
+  not see a sample logged on the WATCH: measured, `merged=295
+  bySource=295 corr=681 rows=3` with `.separateBySource` reporting a
+  SINGLE source — the watch app's bundle never appeared, so the sample
+  isn't merged away, it is invisible to that query kind. Apple Health
+  showed 295 too. A 681 kcal day therefore read as 295 with all three
+  rows listed beneath it. Worse, `dailyEnergyTotals` fed the calendar,
+  badges and streak the same undercount, and at 295 the day fell under
+  `untrackedBelowKcal` — a fully logged day would have been marked
+  untracked. Water sums its own samples for the same reason (bare
+  samples, logged on both devices). BURN keeps the statistics collection:
+  there a cross-source merge is correct, because the two devices really
+  are measuring one body. `HealthKitService.diagnoseIntake` (DEBUG)
+  re-runs the measurement; the underlying HealthKit cause is still
+  unknown, and a correlation sum is immune to it either way. The trade
+  taken knowingly: food logged into Health by another app no longer
+  counts toward intake — it never appeared in the day's list either.
 - A day's VERDICT has two gates, and both live in `StreakCalendar`:
   `isTracked` (intake ≥ `untrackedBelowKcal`, default 500 — too little
   logged to trust the numbers; Settings → Metrics tunes it, 0 disables)

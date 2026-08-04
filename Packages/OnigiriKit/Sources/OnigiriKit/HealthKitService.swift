@@ -276,18 +276,27 @@ public final class HealthKitService {
     /// the very rows the day's list renders — not from a statistics
     /// query. Water likewise sums its own samples.
     ///
-    /// Why (2026-08-04, the user): a statistics query returns HealthKit's
-    /// MERGED total, and for a cumulative type HealthKit resolves
-    /// overlapping windows across sources by priority instead of adding
-    /// them — the machinery that stops a phone and a watch double-counting
-    /// steps. The phone app and the watch app are separate sources, so a
-    /// sandwich logged on the watch at 1:01:36 PM and a nectarine logged
-    /// on the phone at 1:01:53 PM collided: Health itself reported
-    /// 295 kcal for a 681 kcal day, dropping the watch's 386 entirely,
-    /// and we faithfully echoed Health's number while the log beneath it
-    /// listed all three. Burn stays on statistics — there the merge is
-    /// exactly right, because phone and watch really are measuring the
-    /// same body.
+    /// Why (2026-08-04, the user): a 681 kcal day read as 295. The log
+    /// listed all three entries; the totals above them dropped exactly
+    /// the sandwich logged on the WATCH. Apple Health showed 295 too.
+    ///
+    /// MEASURED on device rather than reasoned about — `diagnoseIntake`
+    /// exists to re-run it:
+    ///
+    ///     intake merged=295 bySource=295 corr=681 rows=3
+    ///            | com.ecliptik.Onigiri=295 |
+    ///
+    /// `merged` and `bySource` agree, and `.separateBySource` reports a
+    /// SINGLE source — the watch app's bundle never appears. So this is
+    /// NOT the cross-source merge discarding a sample (the first theory,
+    /// and it was wrong): the watch-logged sample is not visible to a
+    /// statistics query on the phone at all, while the correlation that
+    /// contains it reads back fine. The underlying HealthKit reason is
+    /// still unknown; the behavior is not, and a total summed from
+    /// correlations is immune to it either way.
+    ///
+    /// Burn stays on statistics — there a cross-source merge is exactly
+    /// right, because phone and watch really are measuring one body.
     ///
     /// The trade this makes deliberately: food logged into Health by
     /// something OTHER than this app (a manual Health entry, another
@@ -310,6 +319,67 @@ public final class HealthKitService {
             waterOz: water
         )
     }
+
+    #if DEBUG
+    /// Evidence for the claim in `daySummary`'s note — run it, don't
+    /// argue about it (2026-08-04).
+    ///
+    /// Three readings of one day's intake:
+    ///   * merged   — what a plain statistics query returns (what Health
+    ///                shows, and what we used to display)
+    ///   * bySource — the same query with `.separateBySource`, summed by
+    ///                hand across every contributing source
+    ///   * corr     — the correlation sum we ship now
+    ///
+    /// If `merged < bySource` the cross-source merge is discarding
+    /// samples, and the per-source breakdown names which source loses.
+    /// If they agree, the merge theory is wrong and the real cause is
+    /// still open. Timings come along so the correlation path's cost is
+    /// measured rather than assumed.
+    public func diagnoseIntake(for date: Date = .now, now: Date = .now) async -> String {
+        let (start, end) = Self.dayRange(for: date, now: now)
+        let type = HKQuantityType(.dietaryEnergyConsumed)
+        let inRange = HKQuery.predicateForSamples(
+            withStart: start, end: end, options: Self.dayPredicateOptions(for: .dietaryEnergyConsumed)
+        )
+
+        let t0 = Date()
+        let merged = (try? await sum(.dietaryEnergyConsumed, unit: .kilocalorie(), start: start, end: end)) ?? -1
+        let tMerged = Date()
+
+        var perSource: [String: Double] = [:]
+        var bySourceTotal = 0.0
+        let descriptor = HKStatisticsQueryDescriptor(
+            predicate: .quantitySample(type: type, predicate: inRange),
+            options: [.cumulativeSum, .separateBySource]
+        )
+        if let statistics = try? await descriptor.result(for: store) {
+            for source in statistics.sources ?? [] {
+                let value = statistics.sumQuantity(for: source)?.doubleValue(for: .kilocalorie()) ?? 0
+                perSource[source.bundleIdentifier] = value
+                bySourceTotal += value
+            }
+        }
+        let tBySource = Date()
+
+        let correlations = (try? await foodCorrelations(start: start, end: end)) ?? []
+        let corr = correlations.reduce(0) { $0 + $1.total(.dietaryEnergyConsumed, unit: .kilocalorie()) }
+        let tCorr = Date()
+
+        let sources = perSource
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\(Int($0.value))" }
+            .joined(separator: " ")
+        return String(
+            format: "intake merged=%.0f bySource=%.0f corr=%.0f rows=%d | %@ | "
+                + "ms merged=%.0f bySource=%.0f corr=%.0f",
+            merged, bySourceTotal, corr, correlations.count, sources,
+            tMerged.timeIntervalSince(t0) * 1000,
+            tBySource.timeIntervalSince(tMerged) * 1000,
+            tCorr.timeIntervalSince(tBySource) * 1000
+        )
+    }
+    #endif
 
     /// The day's food correlations — the ONE source every food total is
     /// summed from, shared by the list and the summary so they cannot

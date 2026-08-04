@@ -139,6 +139,13 @@ final class TodayModel {
         #endif
         await loadStatic()
         await refresh()
+        #if DEBUG
+        // One line per launch: merged vs per-source vs correlation intake,
+        // with timings. Settles whether HealthKit's cross-source merge is
+        // what dropped the watch-logged sandwich, and what the correlation
+        // path actually costs.
+        print("[onigiri] \(await health.diagnoseIntake())")
+        #endif
     }
 
     /// Foreground (scenePhase) entry point: skip the query storm when the
@@ -214,6 +221,16 @@ final class TodayModel {
             async let waterLog = health.waterEntries(on: selectedDate)
             async let tracked1 = trackedTotal(slot: 1)
             async let tracked2 = trackedTotal(slot: 2)
+            // Cost of this read set, measured on device 2026-08-04 after
+            // the totals moved to correlations: ~40 ms warm (~450 ms on
+            // the first read of a launch, which is HealthKit waking up,
+            // not us). `daySummary` traded THREE statistics queries for
+            // one correlation query, so the refresh went from six queries
+            // to five — the duplicated correlation fetch (one for this
+            // list, one for the summary) rides along concurrently and a
+            // correlation query measured 34 ms against 15 ms for a
+            // statistics one. Not worth coalescing; don't "optimize" it
+            // without measuring again.
             let (loadedSummary, loadedFood, loadedWater, loaded1, loaded2) =
                 try await (summary, foodLog, waterLog, tracked1, tracked2)
             guard generation == refreshGeneration else { return }

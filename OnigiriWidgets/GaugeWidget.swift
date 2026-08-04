@@ -40,25 +40,33 @@ struct GaugeProvider: TimelineProvider {
             return
         }
         Task { @MainActor in
-            completion(GaugeEntry(date: .now, snapshot: await SnapshotLoader.load()))
+            completion(GaugeEntry(date: .now, snapshot: await SnapshotLoader.load().snapshot))
         }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<GaugeEntry>) -> Void) {
         Task { @MainActor in
             let now = Date()
-            let snapshot = await SnapshotLoader.load()
-            // Push-based reloads keep widgets fresh; this poll is only a fallback.
-            let refresh = now.addingTimeInterval(WidgetRefreshPolicy.pollFallback)
+            let load = await SnapshotLoader.load()
+            let snapshot = load.snapshot
+            // Push-based reloads keep widgets fresh (a log, or burn that
+            // moved enough to matter); this poll is the fallback.
+            let refresh = nextRefresh(after: now, wasCached: load.wasCached)
             // The midnight entry rides EVERY timeline — see nextMidnight.
             let midnight = nextMidnight(after: now)
             var entries = [GaugeEntry(date: now, snapshot: snapshot)]
             if let midnight {
                 entries.append(GaugeEntry(date: midnight, snapshot: snapshot.newDay))
             }
+            WidgetLog.timelineBuilt(
+                kind: WidgetKinds.gauge,
+                dayBurnKcal: snapshot.planState.dayBurnKcal,
+                nextPoll: refresh.interval,
+                cached: load.wasCached
+            )
             completion(Timeline(
                 entries: entries,
-                policy: .after(midnight.map { min($0, refresh) } ?? refresh)
+                policy: .after(midnight.map { min($0, refresh.date) } ?? refresh.date)
             ))
         }
     }

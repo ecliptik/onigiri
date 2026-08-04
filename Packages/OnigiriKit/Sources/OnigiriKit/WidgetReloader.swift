@@ -1,24 +1,144 @@
 import Foundation
 
+#if canImport(os)
+import os
+
+/// Timeline instrumentation (PLAN-widget-burn-freshness, Phase 0). Every
+/// provider in both bundles logs the moment it builds a timeline and the
+/// day burn it rendered, so the real reload cadence can be read off a
+/// device day with `log collect` instead of guessed at.
+public enum WidgetLog {
+    public static let timeline = Logger(
+        subsystem: "com.ecliptik.Onigiri", category: "widget.timeline"
+    )
+
+    /// One line per `getTimeline`: which kind, what it rendered, when it
+    /// asked to be woken again, and whether it was serving a cached
+    /// snapshot because the Health store was sealed.
+    public static func timelineBuilt(
+        kind: String, dayBurnKcal: Double?, nextPoll: TimeInterval, cached: Bool
+    ) {
+        timeline.notice("""
+            timeline kind=\(kind, privacy: .public) \
+            dayBurn=\(dayBurnKcal ?? -1, format: .fixed(precision: 0), privacy: .public) \
+            nextPollMin=\(nextPoll / 60, format: .fixed(precision: 1), privacy: .public) \
+            cached=\(cached, privacy: .public)
+            """)
+    }
+
+    /// One line per burn-observer fire, gate verdict included — this is
+    /// what says whether `.immediate` delivery is honored or capped.
+    public static func burnObserved(activeKcal: Double, lastRendered: Double?, reloading: Bool) {
+        timeline.notice("""
+            burn active=\(activeKcal, format: .fixed(precision: 0), privacy: .public) \
+            lastRendered=\(lastRendered ?? -1, format: .fixed(precision: 0), privacy: .public) \
+            reloading=\(reloading, privacy: .public)
+            """)
+    }
+}
+#endif
+
 /// Shared timeline policy: the observer-driven funnel is what keeps
 /// widgets fresh; providers poll only as a fallback. Outside the
 /// WidgetKit guard so the pure test host reaches `nextPoll`.
 public enum WidgetRefreshPolicy {
+    /// The old flat fallback, kept as the overnight interval and as the
+    /// name every provider's "no signal" branch still reads.
     public static let pollFallback: TimeInterval = 60 * 60
+
+    // MARK: - Waking-hours cadence
+
+    /// A day's poll is worth more between breakfast and bedtime than it
+    /// is at 03:00. Splitting the cadence buys ~1.3× the daytime
+    /// freshness for FEWER total reloads than a flat hour: ~21 daytime
+    /// (16 h ÷ 45 min) + ~3 overnight ≈ 24/day, the same spend, aimed
+    /// where the number actually moves. Deliberately well inside
+    /// WidgetKit's ~40–70/day budget, because Phase 2's burn reloads
+    /// draw on the same pool.
+    public static let wakingPoll: TimeInterval = 45 * 60
+    public static let sleepingPoll: TimeInterval = 3 * 60 * 60
+    /// Waking hours, local: [start, end).
+    public static let wakingStartHour = 7
+    public static let wakingEndHour = 23
+
+    public static func isWakingHour(_ date: Date, calendar: Calendar = .current) -> Bool {
+        let hour = calendar.component(.hour, from: date)
+        return hour >= wakingStartHour && hour < wakingEndHour
+    }
+
+    /// The baseline poll for a timeline built now.
+    public static func pollInterval(now: Date = .now, calendar: Calendar = .current) -> TimeInterval {
+        isWakingHour(now, calendar: calendar) ? wakingPoll : sleepingPoll
+    }
+
+    // MARK: - Recent-activity window
+
     /// A phone log just synced its stamp over WatchConnectivity, but the
     /// sample itself rides HealthKit's slower device sync — the reload
     /// the stamp triggered may have read pre-log totals. Poll again soon
     /// while inside the window; the second read catches the sample.
-    public static let postLogPoll: TimeInterval = 8 * 60
-    public static let postLogWindow: TimeInterval = 20 * 60
+    ///
+    /// Renamed off "post-log" 2026-08-03: burn now opens this window
+    /// too. It was only ever pointed at food because food was the only
+    /// thing anything stamped, which is exactly why a walk left every
+    /// complication on the flat hourly fallback.
+    public static let recentActivityPoll: TimeInterval = 8 * 60
+    public static let recentActivityWindow: TimeInterval = 20 * 60
 
-    /// The watch providers' next poll interval: short after a fresh phone
-    /// log stamp, the hourly fallback otherwise. `abs` so a device-clock
-    /// skew can't turn a just-written stamp into "stale".
-    public static func nextPoll(now: Date = .now, lastLogAt: Date?) -> TimeInterval {
-        guard let lastLogAt, abs(now.timeIntervalSince(lastLogAt)) < postLogWindow
-        else { return pollFallback }
-        return postLogPoll
+    /// The providers' next poll interval: short after recent activity
+    /// (a log, or burn that moved enough to matter), the waking-hours
+    /// cadence otherwise. `abs` so a device-clock skew can't turn a
+    /// just-written stamp into "stale".
+    public static func nextPoll(
+        now: Date = .now, lastActivityAt: Date?, calendar: Calendar = .current
+    ) -> TimeInterval {
+        guard let lastActivityAt,
+              abs(now.timeIntervalSince(lastActivityAt)) < recentActivityWindow
+        else { return pollInterval(now: now, calendar: calendar) }
+        return recentActivityPoll
+    }
+
+    // MARK: - Sealed store
+
+    /// A timeline built against a locked device serves a known-stale
+    /// cached snapshot. Committing the full cadence on top of that is
+    /// what turned a pocketed phone into an afternoon of yesterday's
+    /// number — retry soon instead.
+    public static let sealedStoreRetry: TimeInterval = 10 * 60
+
+    // MARK: - Burn gate
+
+    /// How far the day's active energy must move before a reload is
+    /// worth a slot of the reload budget. ~40 kcal is roughly ten
+    /// minutes' brisk walking — small enough to feel responsive, large
+    /// enough that a resting drip can't drain the budget.
+    public static let burnDeltaKcal: Double = 40
+    /// Floor between burn-driven reloads, whatever the delta.
+    public static let burnReloadInterval: TimeInterval = 10 * 60
+
+    /// The gate every burn observer runs before spending a reload.
+    ///
+    /// Active energy ALONE is the input, not the whole day burn: within a
+    /// day `DayBudget.dayBurn` is `active + max(resting, estimate)`, and
+    /// the resting term is flat (held at the full-day estimate until
+    /// measured resting overtakes it). So active is the only fast-moving
+    /// term, and reading it costs one statistics query instead of the
+    /// plan's whole pipeline.
+    ///
+    /// `nil` last-rendered means the widget has never recorded a render
+    /// today — reload, so a fresh day or a fresh install lands a real
+    /// number instead of waiting out a delta it can't measure.
+    public static func shouldReloadForBurn(
+        activeKcal: Double,
+        lastRenderedActiveKcal: Double?,
+        lastReloadAt: Date?,
+        now: Date = .now
+    ) -> Bool {
+        if let lastReloadAt, abs(now.timeIntervalSince(lastReloadAt)) < burnReloadInterval {
+            return false
+        }
+        guard let lastRenderedActiveKcal else { return true }
+        return activeKcal - lastRenderedActiveKcal >= burnDeltaKcal
     }
 }
 
@@ -43,8 +163,15 @@ public enum WidgetKinds {
     /// Phone widgets a food/water log can change — everything but the
     /// weigh-in trend chart (which polls on its own).
     public static let phoneLogAffected = [gauge, waterAccessory, streak, monthStats, todayCard]
+    /// Phone widgets a BURN change can move: the budget-shaped ones.
+    /// Water is untouched by burn, and the streak/month surfaces judge
+    /// COMPLETED days — today's burn can't change either until midnight.
+    public static let phoneBurnAffected = [gauge, todayCard]
     /// Watch complications a log can change (all of them).
     public static let watchAll = [balance, water, streak, summary]
+    /// Watch complications a burn change can move — same reasoning as
+    /// the phone's: the balance headline and the summary card.
+    public static let watchBurnAffected = [balance, summary]
 }
 
 /// The single funnel for widget reloads. A log used to fire
@@ -79,6 +206,27 @@ public enum WidgetReloader {
     public static func requestReloadAll() {
         pendingAll = true
         schedule()
+    }
+
+    /// Foreground entry point (PLAN-widget-burn-freshness, Phase 1).
+    ///
+    /// Opening the app used to reload widgets only as a SIDE EFFECT of
+    /// the watch-sync push, which skips when the payload fingerprint is
+    /// unchanged — and those fingerprints are per-process, so a cold
+    /// launch reloaded and a warm foreground reloaded NOTHING. The one
+    /// workaround the user had ("just open the app") therefore worked or
+    /// didn't depending on whether iOS had kept the process alive.
+    /// Throttled, because a scene can activate on every tab flip and
+    /// wrist raise.
+    public static let foregroundThrottle: TimeInterval = 3 * 60
+    private static var lastForegroundReload: Date?
+
+    public static func requestForegroundReload(kinds: [String], now: Date = .now) {
+        if let last = lastForegroundReload, now.timeIntervalSince(last) < foregroundThrottle {
+            return
+        }
+        lastForegroundReload = now
+        requestReload(kinds: kinds)
     }
 
     /// Immediate, for short-lived processes (App Intents in the widget

@@ -1,6 +1,14 @@
 import Foundation
 import UserNotifications
 import OnigiriKit
+import os
+
+// Logger is thread-safe; opt out of any MainActor default. Reminder taps
+// are unobservable otherwise — nothing about a tap reaches any UI, so a
+// tap that opens nothing and a tap that never arrives look identical
+// from the outside (2026-08-04).
+nonisolated(unsafe) let reminderLog =
+    Logger(subsystem: "com.ecliptik.Onigiri", category: "reminders")
 
 /// Schedules the ReminderPlanner's output as local notifications.
 ///
@@ -21,10 +29,25 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
         )
     }
 
-    /// Call once at app start: the delegate is what lets a reminder banner
-    /// while the app is frontmost (otherwise iOS swallows it silently).
-    func activate() {
+    /// The delegate is what lets a reminder banner show while the app is
+    /// frontmost (otherwise iOS swallows it silently) AND what receives
+    /// the tap — see `didReceive`, which routes the tap into the action
+    /// the reminder nags about.
+    ///
+    /// Called from `AppDelegate.application(_:didFinishLaunchingWith‑
+    /// Options:)`, NOT from a view: Apple requires the delegate to be
+    /// assigned before the app finishes launching, and this used to ride
+    /// `activate()` out of ContentView's `.task` — which runs once a view
+    /// appears, well past that point. A notification tapped from a cold
+    /// launch had no delegate to deliver its response to.
+    func registerNotificationDelegate() {
         UNUserNotificationCenter.current().delegate = self
+    }
+
+    /// Call once the UI is up: replans from current state. The delegate
+    /// registration above is deliberately separate and earlier.
+    func activate() {
+        registerNotificationDelegate()
         replan()
     }
 
@@ -178,7 +201,19 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
 
     // MARK: - UNUserNotificationCenterDelegate
 
-    nonisolated func userNotificationCenter(
+    /// MainActor-isolated (inherited from the class), NOT `nonisolated`.
+    ///
+    /// These are `async` methods bridged to ObjC completion handlers, and
+    /// the completion runs wherever the async function finishes. Marked
+    /// `nonisolated` they finish on the cooperative pool, so UIKit's
+    /// post-response work — `_updateSnapshotAndStateRestorationWith‑
+    /// Action:windowScene:` — ran off the main thread, hit an
+    /// NSAssertionHandler, and abort()ed the process ~235 ms into launch.
+    /// Tapping any reminder flashed the screen and never opened the app
+    /// (2026-08-04, crash `EXC_CRASH/SIGABRT` on thread
+    /// `com.apple.root.user-initiated-qos.cooperative`). Never add
+    /// `nonisolated` back to a UIKit-facing delegate callback.
+    func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
@@ -188,26 +223,47 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// Tapping a reminder routes into the action it nags about, like
     /// the app-icon quick actions for the same intents — it used to
     /// just open the app wherever it was left.
-    nonisolated func userNotificationCenter(
+    /// MainActor-isolated — see `willPresent` above for why `nonisolated`
+    /// here abort()ed the app on every reminder tap.
+    func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier else { return }
         let id = response.notification.request.identifier
+        reminderLog.info("""
+            tap id=\(id, privacy: .public) \
+            action=\(response.actionIdentifier, privacy: .public)
+            """)
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier else { return }
+        // BOTH namespaces. Previews are `onigiri.preview.<kind>` while
+        // planned reminders are `onigiri.reminder.<kind>.<firetime>`, and
+        // matching only the latter meant tapping a preview ran this
+        // handler and did NOTHING — i.e. the one on-demand way to test a
+        // reminder tap was the one route that never worked (2026-08-04).
         let kind = PlannedReminder.Kind.allCases.first {
             id.hasPrefix("onigiri.reminder.\($0.rawValue).")
+                || id == "onigiri.preview.\($0.rawValue)"
         }
-        guard let kind else { return }
-        await MainActor.run {
-            switch kind {
-            case .water:
-                // One tap = one serving, the app's water idiom (the
-                // logWater shortcut, the widget button, the long-press).
-                QuickActions.shared.pending = .logWater
-            case .meals, .streak:
-                // Both ask "log something" — land in the Log sheet.
-                QuickActions.shared.pending = .logMeal
-            }
+        guard let kind else {
+            reminderLog.error("tap matched no reminder kind: \(id, privacy: .public)")
+            return
+        }
+        // Already on the main actor now, so no hop.
+        switch kind {
+        case .water:
+            // Open Today (where water lives) — do NOT log. A reminder tap
+            // used to log a serving outright, matching the logWater
+            // shortcut and the Control Center button, and that asymmetry
+            // was the problem: tapping a banner is also just how a
+            // notification gets dismissed, so a half-awake tap wrote a
+            // phantom 12 oz to Health and only a transient undo toast
+            // stood between you and it (the user, 2026-08-04). The
+            // shortcut, widget, and Siri paths still log immediately —
+            // those are deliberate invocations, a nag is not.
+            QuickActions.shared.dayRequest = .now
+        case .meals, .streak:
+            // Both ask "log something" — land in the Log sheet.
+            QuickActions.shared.pending = .logMeal
         }
     }
 }

@@ -12,6 +12,7 @@ public final class HealthKitService {
     private let store = HKHealthStore()
     private var isObservingLogChanges = false
     private var isObservingWeightChanges = false
+    private var isObservingBurnChanges = false
 
     public init() {}
 
@@ -122,6 +123,79 @@ public final class HealthKitService {
                 }
             }
         }
+    }
+
+    /// Fires `onChange` whenever today's ACTIVE energy moves — the one
+    /// input that moves the day's budget between midnight and bedtime
+    /// (`DayBudget.dayBurn` is `active + max(resting, estimate)`, and the
+    /// resting term is flat until measured resting overtakes the
+    /// full-day estimate). Without this, nothing anywhere told a widget
+    /// that a walk had happened: every reload trigger in the app was a
+    /// food/water/library/settings trigger, so the home-screen widget
+    /// held its morning number all day while the app — which re-queries
+    /// on every foreground — showed the truth (the user, 2026-08-03).
+    ///
+    /// **Active energy only, deliberately.** Two types were considered
+    /// and rejected:
+    ///
+    /// - `basalEnergyBurned` — flat as a budget input for most of the
+    ///   day (see above), and its samples arrive from the same watch
+    ///   sync that carries active energy, so the active observer already
+    ///   fires in those windows. Pure duplicate wakes.
+    /// - `HKWorkoutType` — the tempting one, since a finished workout is
+    ///   the single largest jump the budget takes. It is NOT in
+    ///   `readTypes`, and adding it would flip
+    ///   `statusForAuthorizationRequest` back to `.shouldRequest` until
+    ///   the user is re-prompted — which is exactly what
+    ///   `PlanCache.needsSetup` reads, so every widget and complication
+    ///   would paint "Open Onigiri to set up" over a working setup until
+    ///   the app was next opened. A workout writes a batch of active
+    ///   energy anyway, and the gate passes on that delta, so the signal
+    ///   arrives without the regression.
+    ///
+    /// The handler is expected to run the burn gate (see
+    /// `BurnWidgetRefresh`) — this fires far too often to reload on
+    /// directly.
+    public func startObservingBurnChanges(_ onChange: @escaping @Sendable () async -> Void) {
+        // Idempotent, like the other two: a second registration doubles
+        // every fire for the process's lifetime.
+        guard !isObservingBurnChanges else { return }
+        isObservingBurnChanges = true
+        let type = HKQuantityType(.activeEnergyBurned)
+        let query = HKObserverQuery(sampleType: type, predicate: nil) { _, completion, _ in
+            // Complete AFTER the work, as the log observer does:
+            // HealthKit re-suspends a background-woken app once
+            // completion() runs, and a merely-scheduled Task dies with
+            // the suspension. Three missed completions and HealthKit
+            // disables background delivery outright, so this must be
+            // reached on every path.
+            nonisolated(unsafe) let done = completion
+            Task {
+                await onChange()
+                done()
+            }
+        }
+        store.execute(query)
+        // NOTE watchOS silently caps most types at hourly whatever we ask
+        // for — the watch therefore does NOT lean on this alone; its
+        // scheduled background refresh (WatchBackgroundRefresh) carries
+        // the cadence there. On iOS `.immediate` is honored, which is
+        // what makes the phone's sub-hour freshness possible.
+        store.enableBackgroundDelivery(for: type, frequency: .immediate) { _, error in
+            if let error {
+                print("Onigiri: burn background delivery unavailable: \(error)")
+            }
+        }
+    }
+
+    /// Today's active energy alone, in kcal — one statistics query.
+    ///
+    /// The burn gate runs on every observer fire, which is often; it must
+    /// not drag the whole plan pipeline (summary + weight + body profile)
+    /// behind it just to answer "did this move enough to matter?".
+    public func todayActiveBurnKcal(now: Date = .now) async throws -> Double {
+        let (start, end) = Self.dayRange(for: now, now: now)
+        return try await sum(.activeEnergyBurned, unit: .kilocalorie(), start: start, end: end)
     }
 
     /// Weigh-ins recorded ELSEWHERE — the Health app, a smart scale, any

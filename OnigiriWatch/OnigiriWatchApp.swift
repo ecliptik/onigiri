@@ -44,6 +44,33 @@ struct OnigiriWatchApp: App {
             // of sample writes coalesces into one query set.
             if isActive { await model.refreshIfStale(maxAge: 0) }
         }
+        // Today's ACTIVE energy — the only input that moves the day's
+        // budget between midnight and bedtime, and the one nothing
+        // observed until 2026-08-03. Registered here even though watchOS
+        // caps its delivery (see startObservingBurnChanges): when the
+        // watch app IS running, this fires live and costs nothing, and
+        // if the cap turns out not to apply to active energy the
+        // complications get the phone's cadence for free. The scheduled
+        // wake in WatchBackgroundRefresh is what carries the cadence
+        // when it does apply.
+        observer.startObservingBurnChanges {
+            let reloaded = await BurnWidgetRefresh.refreshIfBurnMoved(
+                kinds: WidgetKinds.watchBurnAffected
+            )
+            if reloaded {
+                await MainActor.run {
+                    if WKApplication.shared().applicationState != .active {
+                        WidgetReloader.flushNow()
+                    }
+                }
+            }
+        }
+        // NOTE the wake chain is armed from the SCENE below, never here.
+        // `WKApplication.shared()` during App.init reaches for an
+        // application object that does not exist yet — the app failed to
+        // launch at all (2026-08-03, caught on device the same day it was
+        // added). Observers are fine in init; anything that touches
+        // WKApplication is not.
         _model = State(initialValue: model)
         _logObserver = State(initialValue: observer)
     }
@@ -64,11 +91,28 @@ struct OnigiriWatchApp: App {
                 // tap from Home, and six pages is past the 2-5 watchOS
                 // guideline — "Foods" was five swipes away.
             }
+            // Arm the burn wake chain once the scene is actually up.
+            // `.task`, not `init`: scheduling needs a live WKApplication,
+            // and onChange alone would never fire for the FIRST
+            // activation, leaving the chain unarmed until the app was
+            // opened and closed once.
+            .task { WatchBackgroundRefresh.schedule() }
             .onChange(of: scenePhase) { _, phase in
-                // Wrist-down right after logging: run the pending reload
-                // now — a suspended app never runs its sleeping flush task.
-                if phase != .active {
+                if phase == .active {
+                    // Explicitly, like the phone's ContentView: nothing
+                    // else reloads the complications on foreground.
+                    // WatchModel refreshes the APP's numbers on every
+                    // wrist raise, which is why the app was right while
+                    // the complications beside it were not. Throttled
+                    // inside WidgetReloader.
+                    WidgetReloader.requestForegroundReload(kinds: WidgetKinds.watchAll)
+                } else {
+                    // Wrist-down right after logging: run the pending
+                    // reload now — a suspended app never runs its
+                    // sleeping flush task.
                     WidgetReloader.flushNow()
+                    // …and make sure a wake is armed for while we're gone.
+                    WatchBackgroundRefresh.schedule()
                 }
             }
             // The dock snapshot otherwise shows the calorie headline —
@@ -88,6 +132,12 @@ struct OnigiriWatchApp: App {
         // manually opened.
         .backgroundTask(.watchConnectivity) {
             await model.sync.receiveQueuedContext()
+        }
+        // The scheduled burn wake (Phase 2b). On watchOS the bare
+        // `.appRefresh` hands the closure the scheduled userInfo as a
+        // String? — it is not the identifier form iOS uses.
+        .backgroundTask(.appRefresh) { _ in
+            await WatchBackgroundRefresh.handleWake()
         }
     }
 }

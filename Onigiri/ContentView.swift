@@ -108,6 +108,17 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 PhoneSyncService.shared.push(from: context)
+                // Explicitly, not as a side effect of the push above:
+                // that path reloads only when the sync payload's
+                // fingerprint moved, and the fingerprints are per-process
+                // (PhoneSyncService), so a COLD launch reloaded the
+                // widgets and a warm foreground reloaded nothing. "Just
+                // open the app" — the user's only workaround for a stale
+                // widget — therefore worked or didn't depending on
+                // whether iOS had kept the process alive. Throttled
+                // inside WidgetReloader; a tab flip must not spend the
+                // reload budget.
+                WidgetReloader.requestForegroundReload(kinds: WidgetKinds.phoneLogAffected)
                 BackupService.backupIfDue(context: context)
                 // Reminders replan from fresh state on every foreground —
                 // logging elsewhere (watch, Health) can't notify us.

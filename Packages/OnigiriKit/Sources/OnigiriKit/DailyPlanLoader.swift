@@ -6,7 +6,13 @@ import Foundation
 /// macOS test host can reach it; only the fetch layer needs the store.
 @MainActor
 public enum DailyPlanLoader {
-    public struct State: Sendable {
+    /// Codable since 2026-08-03 so the watch complications can persist a
+    /// last-good copy: their providers had no equivalent of the phone's
+    /// `widget.lastGoodSnapshot`, so a reload against a SEALED watch
+    /// store (off wrist, locked) fell through `try? ... ?? .zero` below
+    /// and rendered a confident zero day. Stale-but-true beats
+    /// confidently wrong — the same rule the phone already followed.
+    public struct State: Sendable, Codable {
         public let summary: DailyEnergySummary
         public let deficitTargetKcal: Double?
         /// 0...1 fill of the onigiri gauge (banked deficit / daily target).

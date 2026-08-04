@@ -177,6 +177,38 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   FULL (zero rendered an empty onigiri all morning). Anything derived
   from the plan rather than the day's samples survives the pre-render;
   anything read from Health does not.
+- **Burn is the only input that moves the budget during a day, and for
+  months nothing observed it** (2026-08-03,
+  `plans/PLAN-widget-burn-freshness.md`). `DayBudget.dayBurn` is
+  `active + max(resting, estimate)` and the resting term is flat, so
+  ACTIVE energy alone moves the number — while every reload trigger in
+  the app was a food/water/library/settings trigger. A walk changed the
+  budget in the app (which re-queries on every foreground) and left the
+  widget on its morning number until the app was opened.
+  `startObservingBurnChanges` closes it. Three rules hold it shut:
+  observe `activeEnergyBurned` ONLY — adding `HKWorkoutType` would put a
+  new type in `readTypes`, flipping `statusForAuthorizationRequest` back
+  to `.shouldRequest`, which is what `PlanCache.needsSetup` reads, so
+  every widget would paint "Open Onigiri to set up" over a working setup;
+  every reload goes through `WidgetRefreshPolicy.shouldReloadForBurn`
+  (≥40 kcal AND ≥10 min) because WidgetKit grants ~40–70 reloads/day and
+  reloading per sample freezes the widget by mid-afternoon; and NEVER
+  project future burn into pre-rendered entries — active is earned, "raw
+  measured, never filled, never estimated", which is the deleted
+  trailing-average model.
+- Opening the app used to reload widgets only as a SIDE EFFECT of the
+  watch-sync push, which skips on an unchanged payload fingerprint —
+  and those fingerprints are per-process, so a COLD launch reloaded and
+  a warm foreground reloaded nothing. "Just open the app" worked or
+  didn't depending on whether iOS had kept the process. Both apps now
+  call `WidgetReloader.requestForegroundReload` explicitly.
+- A sealed Health store (locked phone, watch off wrist) must never be
+  rendered as data. The phone had `widget.lastGoodSnapshot`; the watch
+  had NOTHING, so a reload against a sealed watch store fell through
+  `DailyPlanLoader`'s `(try? …) ?? .zero` and rendered a confident ZERO
+  DAY (`WatchStateCache` fixes it). And a provider that served a cached
+  snapshot must come back in minutes, not commit the full cadence to a
+  value it already knows is stale.
 
 ## SwiftData landmines (each cost a debugging session)
 
@@ -205,6 +237,54 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   transient onDisappear/onAppear pair (@State intact) when the keyboard
   dismisses, so an onDisappear that cancels work needs an onAppear that
   resumes it, or the section wedges in its in-flight state forever.
+
+## App-launch landmines (what belongs in `init`, and what does not)
+
+- **Never call `WKApplication.scheduleBackgroundRefresh` from `App.init`**
+  — THE WATCH APP WILL NOT LAUNCH AT ALL. The crash names the reason
+  exactly (2026-08-03, `WATCHKIT API Violation`):
+
+      Condition failed:"NO". -[WKApplication scheduleBackgroundRefresh…]
+      requires that your WKApplicationDelegate (null) implement
+      handleBackgroundTasks:
+
+  The delegate is `(null)` because SwiftUI installs the one backing
+  `.backgroundTask(.appRefresh)` when the SCENE comes up, not before
+  `init` runs. So arm anything WatchKit-facing from a `.task` on the
+  scene — and NOT from `onChange(of: scenePhase)` alone, which never
+  fires for the FIRST activation and would leave the chain unarmed
+  until the app was opened and closed once. HealthKit observers in
+  `init` ARE fine; the rule is specifically WatchKit. Symptom is
+  indistinguishable from a provisioning problem: tapping a
+  complication does nothing, the app never appears, and the widget
+  extension keeps rendering fine — which is what proves the providers
+  innocent.
+- **A UIKit-facing delegate callback must never be `nonisolated`.**
+  `UNUserNotificationCenterDelegate`'s methods are `async` bridged to
+  ObjC completion handlers, and the completion runs wherever the async
+  function FINISHES. Marked `nonisolated` on a `@MainActor` class they
+  finish on the cooperative pool, so UIKit's post-response work
+  (`_updateSnapshotAndStateRestorationWithAction:windowScene:`) ran off
+  the main thread, hit an NSAssertionHandler and abort()ed ~235 ms into
+  launch: EVERY reminder tap flashed the screen and never opened the
+  app, while the icon opened it fine (2026-08-04, `EXC_CRASH/SIGABRT`
+  on `com.apple.root.user-initiated-qos.cooperative`). An inner
+  `await MainActor.run { }` does NOT save you — the hop ends before the
+  method returns. Drop `nonisolated` and let the class's `@MainActor`
+  carry the callback.
+- **`UNUserNotificationCenter.current().delegate` must be assigned
+  before launching finishes** — Apple's explicit contract. It rode
+  `ReminderScheduler.activate()` out of ContentView's `.task` (i.e.
+  once a view appeared) until 2026-08-03, so a reminder tapped from a
+  cold launch had no delegate to deliver its response to and the tap
+  did nothing. Everything a reminder tap is supposed to do lives in
+  `didReceive` (water → log a serving, meal/streak → the Log sheet).
+  It now registers from `AppDelegate.application(_:didFinishLaunching‑
+  WithOptions:)`; `activate()` still calls it (idempotent) and keeps
+  the replan.
+- Free-team reminder: an app that refuses to launch AT ALL — from the
+  icon, a notification, or a complication — is usually the lapsed
+  7-day provisioning profile, not code. Redeploy before debugging.
 
 ## Conventions
 

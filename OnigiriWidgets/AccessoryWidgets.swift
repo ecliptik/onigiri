@@ -51,13 +51,21 @@ struct StreakProvider: TimelineProvider {
             // the post-midnight number (today judged as a completed
             // day) so yesterday's count never shows into the new day
             // while WidgetKit waits out its budget.
-            let refresh = Date().addingTimeInterval(WidgetRefreshPolicy.pollFallback)
-            let midnight = nextMidnight(after: .now)
-            let (streak, atMidnight, needsSetup) = await StreakLoader.loadWithMidnight(midnight ?? .now)
-            var entries = [StreakEntry(date: .now, streak: streak, needsSetup: needsSetup)]
+            let now = Date()
+            // The streak can't move on today's burn (it judges COMPLETED
+            // days), so this one keeps the plain cadence — no recent-
+            // activity window, no sealed-store retry.
+            let refresh = now.addingTimeInterval(WidgetRefreshPolicy.pollInterval(now: now))
+            let midnight = nextMidnight(after: now)
+            let (streak, atMidnight, needsSetup) = await StreakLoader.loadWithMidnight(midnight ?? now)
+            var entries = [StreakEntry(date: now, streak: streak, needsSetup: needsSetup)]
             if let midnight {
                 entries.append(StreakEntry(date: midnight, streak: atMidnight, needsSetup: needsSetup))
             }
+            WidgetLog.timelineBuilt(
+                kind: WidgetKinds.streak, dayBurnKcal: nil,
+                nextPoll: refresh.timeIntervalSince(now), cached: false
+            )
             completion(Timeline(
                 entries: entries,
                 policy: .after(midnight.map { min($0, refresh) } ?? refresh)

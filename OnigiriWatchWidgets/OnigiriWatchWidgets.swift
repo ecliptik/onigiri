@@ -36,6 +36,59 @@ enum ComplicationRelevance {
     }
 }
 
+/// The watch's last-good plan state — the equivalent of the phone's
+/// `widget.lastGoodSnapshot`, which the complications never had
+/// (PLAN-widget-burn-freshness, Phase 4).
+///
+/// Without it, a reload against a SEALED Health store — watch off the
+/// wrist, or simply locked — fell through `DailyPlanLoader`'s
+/// `(try? await summaryRead) ?? .zero` and rendered a confident ZERO DAY:
+/// no intake, no burn, a gauge reading whatever zero means in the current
+/// mode. That is the precise failure the phone's cache was added to
+/// prevent, and it gets likelier the moment Phase 2b raises how often the
+/// watch reloads — which is why it ships in the same round.
+///
+/// Stale-but-true beats confidently wrong.
+enum WatchStateCache {
+    private static let key = "watchWidget.lastGoodState"
+
+    static func store(_ state: DailyPlanLoader.State) {
+        guard let data = try? JSONEncoder().encode(state) else { return }
+        SharedStore.defaults.set(data, forKey: key)
+    }
+
+    static func load() -> DailyPlanLoader.State? {
+        guard let data = SharedStore.defaults.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(DailyPlanLoader.State.self, from: data)
+    }
+
+    /// The plan state for a complication render, and whether it came from
+    /// the cache because the store was sealed.
+    @MainActor
+    static func resolve(goal: SyncedGoal?) async -> (state: DailyPlanLoader.State, cached: Bool) {
+        if await HealthKitService().isStoreLocked(), let cached = load() {
+            return (cached, true)
+        }
+        let state = await PlanCache.state(goal: goal)
+        store(state)
+        // The burn gate's baseline: what this render is about to show.
+        WidgetBurnGate.recordRendered(activeKcal: state.summary.activeBurnKcal)
+        return (state, false)
+    }
+}
+
+/// The poll every watch complication commits to — the phone's
+/// `nextRefresh` twin, kept separate only because the two bundles don't
+/// share a file. Recent activity is now a log OR burn (Phase 3): this
+/// window used to open for `lastPhoneLogAt` alone, so a walk with no
+/// logging left every complication on the flat hourly fallback.
+func watchNextRefresh(after now: Date, wasCached: Bool) -> (date: Date, interval: TimeInterval) {
+    let interval = wasCached
+        ? WidgetRefreshPolicy.sealedStoreRetry
+        : WidgetRefreshPolicy.nextPoll(now: now, lastActivityAt: WidgetBurnGate.lastActivityAt())
+    return (now.addingTimeInterval(interval), interval)
+}
+
 struct WatchEntry: TimelineEntry {
     let date: Date
     let state: DailyPlanLoader.State
@@ -89,22 +142,22 @@ struct WatchProvider: TimelineProvider {
             return
         }
         Task { @MainActor in
-            completion(await load())
+            completion(await load().entry)
         }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<WatchEntry>) -> Void) {
         Task { @MainActor in
             let now = Date()
-            var entry = await load()
+            let load = await load()
+            var entry = load.entry
             entry.relevance = ComplicationRelevance.mealWindow(at: now)
-            // Push-based reloads keep widgets fresh; this poll is only a
-            // fallback — except right after a phone log, when the stamp
-            // arrives ahead of the sample (WC beats Health sync) and a
-            // short follow-up poll catches the totals the reload missed.
-            let refresh = now.addingTimeInterval(
-                WidgetRefreshPolicy.nextPoll(now: now, lastLogAt: WatchSync.lastPhoneLogAt())
-            )
+            // Push-based reloads keep complications fresh; this poll is
+            // the fallback — except right after recent activity, when a
+            // stamp may have arrived ahead of the sample (WC beats
+            // Health sync) and a short follow-up poll catches the totals
+            // the reload missed.
+            let refresh = watchNextRefresh(after: now, wasCached: load.cached)
             let midnight = Calendar.current.date(
                 byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now)
             )
@@ -119,25 +172,32 @@ struct WatchProvider: TimelineProvider {
                 fresh.relevance = ComplicationRelevance.mealWindow(at: midnight)
                 entries.append(fresh)
             }
+            WidgetLog.timelineBuilt(
+                kind: WidgetKinds.balance,
+                dayBurnKcal: entry.state.dayBurnKcal,
+                nextPoll: refresh.interval,
+                cached: load.cached
+            )
             completion(Timeline(
                 entries: entries,
-                policy: .after(midnight.map { min($0, refresh) } ?? refresh)
+                policy: .after(midnight.map { min($0, refresh.date) } ?? refresh.date)
             ))
         }
     }
 
     @MainActor
-    private func load() async -> WatchEntry {
+    private func load() async -> (entry: WatchEntry, cached: Bool) {
         let needsSetup = await PlanCache.needsSetup()
         // Goal and display settings sync from the phone into the shared defaults.
-        let state = await PlanCache.state(goal: WatchSync.loadGoal())
-        return WatchEntry(
+        let resolved = await WatchStateCache.resolve(goal: WatchSync.loadGoal())
+        let entry = WatchEntry(
             date: .now,
-            state: state,
+            state: resolved.state,
             waterGoalOz: SharedStore.waterGoalOz,
             mode: SharedStore.headlineMode,
             needsSetup: needsSetup
         )
+        return (entry, resolved.cached)
     }
 }
 
@@ -267,22 +327,20 @@ struct SummaryProvider: TimelineProvider {
             return
         }
         Task { @MainActor in
-            completion(await load())
+            completion(await load().entry)
         }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<SummaryEntry>) -> Void) {
         Task { @MainActor in
             let now = Date()
-            var entry = await load()
+            let load = await load()
+            var entry = load.entry
             entry.relevance = ComplicationRelevance.mealWindow(at: now)
-            // Push-based reloads keep widgets fresh; this poll is only a
-            // fallback — except right after a phone log, when the stamp
-            // arrives ahead of the sample (WC beats Health sync) and a
-            // short follow-up poll catches the totals the reload missed.
-            let refresh = now.addingTimeInterval(
-                WidgetRefreshPolicy.nextPoll(now: now, lastLogAt: WatchSync.lastPhoneLogAt())
-            )
+            // Push-based reloads keep complications fresh; this poll is
+            // the fallback — except right after recent activity (a log,
+            // or burn that moved enough to matter).
+            let refresh = watchNextRefresh(after: now, wasCached: load.cached)
             let midnight = Calendar.current.date(
                 byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now)
             )
@@ -297,18 +355,25 @@ struct SummaryProvider: TimelineProvider {
                 fresh.relevance = ComplicationRelevance.mealWindow(at: midnight)
                 entries.append(fresh)
             }
+            WidgetLog.timelineBuilt(
+                kind: WidgetKinds.summary,
+                dayBurnKcal: entry.state.dayBurnKcal,
+                nextPoll: refresh.interval,
+                cached: load.cached
+            )
             completion(Timeline(
                 entries: entries,
-                policy: .after(midnight.map { min($0, refresh) } ?? refresh)
+                policy: .after(midnight.map { min($0, refresh.date) } ?? refresh.date)
             ))
         }
     }
 
     @MainActor
-    private func load() async -> SummaryEntry {
+    private func load() async -> (entry: SummaryEntry, cached: Bool) {
         let health = HealthKitService()
         let needsSetup = await PlanCache.needsSetup()
-        let state = await PlanCache.state(goal: WatchSync.loadGoal())
+        let resolved = await WatchStateCache.resolve(goal: WatchSync.loadGoal())
+        let state = resolved.state
         // The phone's two tracked-metric slots, exactly as Settings has
         // them (they sync into the shared defaults).
         var slots: [SummarySlot] = []
@@ -328,13 +393,14 @@ struct SummaryProvider: TimelineProvider {
                 isLimit: SharedStore.trackedMode(slot: slot, nutrient: nutrient) == .limit
             ))
         }
-        return SummaryEntry(
+        let entry = SummaryEntry(
             date: .now,
             state: state,
             slots: slots,
             mode: SharedStore.headlineMode,
             needsSetup: needsSetup
         )
+        return (entry, resolved.cached)
     }
 }
 
@@ -444,21 +510,27 @@ struct StreakComplicationProvider: TimelineProvider {
             // The streak only moves when a day completes — pre-render
             // the post-midnight number (today judged complete) so
             // yesterday's count never shows into the new day.
-            let refresh = Date().addingTimeInterval(
-                WidgetRefreshPolicy.nextPoll(now: .now, lastLogAt: WatchSync.lastPhoneLogAt())
-            )
+            let now = Date()
+            // The streak judges COMPLETED days, so today's burn can't
+            // move it — plain cadence, no recent-activity window (the
+            // phone's streak widget matches).
+            let refresh = now.addingTimeInterval(WidgetRefreshPolicy.pollInterval(now: now))
             let midnight = Calendar.current.date(
-                byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: .now)
+                byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now)
             )
-            let (streak, atMidnight, needsSetup) = await StreakLoader.loadWithMidnight(midnight ?? .now)
-            var entry = StreakEntry(date: .now, streak: streak, needsSetup: needsSetup)
-            entry.relevance = ComplicationRelevance.evening(at: .now)
+            let (streak, atMidnight, needsSetup) = await StreakLoader.loadWithMidnight(midnight ?? now)
+            var entry = StreakEntry(date: now, streak: streak, needsSetup: needsSetup)
+            entry.relevance = ComplicationRelevance.evening(at: now)
             var entries = [entry]
             if let midnight {
                 var fresh = StreakEntry(date: midnight, streak: atMidnight, needsSetup: needsSetup)
                 fresh.relevance = ComplicationRelevance.evening(at: midnight)
                 entries.append(fresh)
             }
+            WidgetLog.timelineBuilt(
+                kind: WidgetKinds.streak, dayBurnKcal: nil,
+                nextPoll: refresh.timeIntervalSince(now), cached: false
+            )
             completion(Timeline(
                 entries: entries,
                 policy: .after(midnight.map { min($0, refresh) } ?? refresh)

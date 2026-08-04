@@ -37,14 +37,21 @@ struct MonthStatsProvider: TimelineProvider {
             // Pre-render the post-midnight numbers so a just-completed
             // day's mark and the rolled streak land even if WidgetKit
             // defers the reload.
-            let refresh = Date().addingTimeInterval(WidgetRefreshPolicy.pollFallback)
-            let midnight = nextMidnight(after: .now)
-            var entries = [await load(asOf: .now)]
+            let now = Date()
+            // Month stats judge COMPLETED days, so today's burn can't
+            // move them either — plain cadence, like the streak.
+            let refresh = now.addingTimeInterval(WidgetRefreshPolicy.pollInterval(now: now))
+            let midnight = nextMidnight(after: now)
+            var entries = [await load(asOf: now)]
             // Second load costs no Health query: PlanCache serves the
             // first call's results inside its TTL.
             if let midnight {
                 entries.append(await load(asOf: midnight))
             }
+            WidgetLog.timelineBuilt(
+                kind: WidgetKinds.monthStats, dayBurnKcal: nil,
+                nextPoll: refresh.timeIntervalSince(now), cached: false
+            )
             completion(Timeline(
                 entries: entries,
                 policy: .after(midnight.map { min($0, refresh) } ?? refresh)

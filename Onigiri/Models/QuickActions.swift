@@ -56,6 +56,22 @@ final class QuickActions {
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    /// The notification delegate MUST be assigned before launching
+    /// finishes — Apple's explicit contract, and it was being set from
+    /// ContentView's `.task` instead (i.e. once a view appeared, long
+    /// after launch). Everything the reminder tap is supposed to do
+    /// lives in `didReceive`: tapping a water nag logs a serving,
+    /// tapping a meal/streak nag opens the Log sheet. Registered late,
+    /// that response is delivered to nobody and the tap does nothing.
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+    ) -> Bool {
+        ReminderScheduler.shared.registerNotificationDelegate()
+        reminderLog.info("didFinishLaunching — notification delegate registered")
+        return true
+    }
+
     func application(
         _ application: UIApplication,
         configurationForConnecting connectingSceneSession: UISceneSession,

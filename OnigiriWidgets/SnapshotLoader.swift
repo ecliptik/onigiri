@@ -109,18 +109,43 @@ func nextMidnight(after now: Date) -> Date? {
     Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now))
 }
 
+/// The poll every phone provider commits to, in one place so the four of
+/// them can't drift (they already share the midnight rule above).
+///
+/// Three cadences, in priority order: a known-stale cached snapshot comes
+/// back in minutes; recent activity — a log OR burn that moved enough to
+/// matter — keeps the short window; otherwise the waking-hours cadence.
+func nextRefresh(after now: Date, wasCached: Bool = false) -> (date: Date, interval: TimeInterval) {
+    let interval = wasCached
+        ? WidgetRefreshPolicy.sealedStoreRetry
+        : WidgetRefreshPolicy.nextPoll(now: now, lastActivityAt: WidgetBurnGate.lastActivityAt())
+    return (now.addingTimeInterval(interval), interval)
+}
+
 @MainActor
 enum SnapshotLoader {
+    /// A load and how much to trust its freshness. `wasCached` means the
+    /// Health store was sealed and this is the last good snapshot, not a
+    /// live read — the provider must then come back SOON rather than
+    /// committing the full poll cadence to a value it already knows is
+    /// stale. (Before this, a poll that landed while the phone sat locked
+    /// in a pocket — i.e. most of any walk — served the old number and
+    /// re-committed it for another full hour.)
+    struct Load {
+        var snapshot: DaySnapshot
+        var wasCached = false
+    }
+
     /// The widget process is memory-capped, so it must not open SwiftData.
     /// The phone mirrors the goal into the App Group on every sync push;
     /// the shared DailyPlanLoader does the rest, like the watch.
-    static func load() async -> DaySnapshot {
+    static func load() async -> Load {
         // Sealed store (locked phone): serve the last good snapshot —
         // its values are stale-but-true; zeros are confidently wrong.
         if await HealthKitService().isStoreLocked(),
            let data = SharedStore.defaults.data(forKey: lastGoodKey),
            let cached = try? JSONDecoder().decode(DaySnapshot.self, from: data) {
-            return cached
+            return Load(snapshot: cached, wasCached: true)
         }
         let needsSetup = await PlanCache.needsSetup()
         let goal = WatchSync.loadGoal()
@@ -138,7 +163,13 @@ enum SnapshotLoader {
         if !needsSetup, let data = try? JSONEncoder().encode(snapshot) {
             SharedStore.defaults.set(data, forKey: lastGoodKey)
         }
-        return snapshot
+        // The burn gate's baseline: record what this render is about to
+        // show, so the observer compares against the number on screen
+        // rather than against whatever it last happened to read.
+        if !needsSetup {
+            WidgetBurnGate.recordRendered(activeKcal: state.summary.activeBurnKcal)
+        }
+        return Load(snapshot: snapshot)
     }
 
     /// Day totals for the tracked slots the summary doesn't already

@@ -72,6 +72,33 @@ struct OnigiriApp: App {
             // replan would be stranded mid-flight.
             await ReminderScheduler.shared.replanNow(afterMutation: true)
         }
+        // Today's ACTIVE energy — the only input that moves the day's
+        // budget between midnight and bedtime, and until 2026-08-03 the
+        // only one nothing observed. A walk raised the budget in the app
+        // (which re-queries every foreground) while the home-screen
+        // widget held its morning number until the app was opened.
+        //
+        // Fires often; reloads rarely. `refreshIfBurnMoved` runs the
+        // shared gate — ≥40 kcal moved AND ≥10 min since the last
+        // burn reload — so the ~40–70/day reload budget is spent only on
+        // changes that alter what's on screen. Scoped to the
+        // budget-shaped widgets: water, streak and month can't move on
+        // burn (the streak/month surfaces judge COMPLETED days).
+        observer.startObservingBurnChanges {
+            let reloaded = await BurnWidgetRefresh.refreshIfBurnMoved(
+                kinds: WidgetKinds.phoneBurnAffected
+            )
+            // A background wake suspends the moment the observer
+            // completes — a debounced reload left sleeping would die
+            // with it, exactly as the log observer guards against.
+            if reloaded {
+                await MainActor.run {
+                    if UIApplication.shared.applicationState != .active {
+                        WidgetReloader.flushNow()
+                    }
+                }
+            }
+        }
         // Weigh-ins from anywhere else (Health app, smart scale, another
         // tracker). Its own observer and its own version, because the
         // Goal tab is the only screen that reads body mass and the

@@ -140,11 +140,15 @@ final class TodayModel {
         await loadStatic()
         await refresh()
         #if DEBUG
-        // One line per launch: merged vs per-source vs correlation intake,
-        // with timings. Settles whether HealthKit's cross-source merge is
-        // what dropped the watch-logged sandwich, and what the correlation
-        // path actually costs.
-        print("[onigiri] \(await health.diagnoseIntake())")
+        // One line per launch per day: merged vs per-source vs plain
+        // samples vs correlations, with timings. Yesterday comes along
+        // because a fresh morning has nothing logged yet, and the
+        // discrepancy this exists to measure only shows on a day that
+        // actually has a watch-logged entry.
+        for offset in [0, -1] {
+            let day = Calendar.current.date(byAdding: .day, value: offset, to: .now) ?? .now
+            print("[onigiri] day\(offset) \(await health.diagnoseIntake(for: day))")
+        }
         #endif
     }
 

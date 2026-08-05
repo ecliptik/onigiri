@@ -80,6 +80,11 @@ struct DayNutritionView: View {
                     microGroup("Minerals", Micronutrient.minerals)
                     microGroup("Vitamins", Micronutrient.vitamins)
                 } footer: {
+                    // Accurate again as of 2026-08-05: the breakdown sums
+                    // this app's own log entries, while the totals above
+                    // are sample sums that span every source. It was
+                    // briefly false under v2.16.1, when those totals were
+                    // correlation-summed and so Onigiri-only too.
                     Text("Breakdown covers Onigiri entries only; the totals above include every app's Health data.")
                 }
             }

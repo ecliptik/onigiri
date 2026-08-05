@@ -74,9 +74,23 @@ struct FoodsView: View {
         }
     }
 
-    // Favorites lead (the user, 2026-07-14 — supersedes the Foods
-    // default picked a day earlier).
-    @State private var scope: Scope = .favorites
+    /// Which scope opens first. Favorites led from 2026-07-14; the user
+    /// asked for Foods on 2026-08-05. It is a SETTING now rather than a
+    /// third hardcoded reversal — Appearance → "Foods opens on".
+    /// Segment order is unchanged (Favorites still reads first in the
+    /// bar); only the initial selection follows this.
+    @AppStorage(SharedStore.foodsDefaultScopeKey, store: SharedStore.defaults)
+    private var defaultScopeRaw = Scope.foods.rawValue
+    /// nil until the user picks one THIS session, so the setting decides
+    /// the opening scope without stamping over a live choice on every
+    /// re-appear (which an onAppear assignment would do).
+    @State private var scope: Scope?
+    private var currentScope: Scope {
+        scope ?? Scope(rawValue: defaultScopeRaw) ?? .foods
+    }
+    private var scopeBinding: Binding<Scope> {
+        Binding(get: { currentScope }, set: { scope = $0 })
+    }
     @State private var activeSheet: ActiveSheet?
     @State private var quickActions = QuickActions.shared
     @State private var isLogging = false
@@ -165,7 +179,7 @@ struct FoodsView: View {
                 Section {
                     ScopeBar(
                         options: Scope.allCases.map { ($0.rawValue, $0) },
-                        selection: $scope
+                        selection: scopeBinding
                     )
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets())
@@ -194,7 +208,7 @@ struct FoodsView: View {
                     }
                 }
 
-                switch scope {
+                switch currentScope {
                 case .foods:
                     Section {
                         ForEach(visibleFoods) { food in
@@ -544,7 +558,7 @@ struct FoodsView: View {
     @ViewBuilder
     private func emptyState(visibleCount: Int) -> some View {
         if visibleCount == 0 {
-            if scope == .foods && foods.isEmpty {
+            if currentScope == .foods && foods.isEmpty {
                 ContentUnavailableView {
                     Label("No saved foods yet", systemImage: "fork.knife")
                 } description: {
@@ -596,11 +610,11 @@ struct FoodsView: View {
                         Label("Add Food", systemImage: "plus")
                     }
                 }
-            } else if scope == .meals && meals.isEmpty {
+            } else if currentScope == .meals && meals.isEmpty {
                 Text("No saved meals yet — tap + to build one from saved foods.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-            } else if scope == .favorites {
+            } else if currentScope == .favorites {
                 Text("No favorites yet — swipe right on a food or meal to star it.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)

@@ -905,6 +905,9 @@ private struct AppearanceSettingsScreen: View {
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "remaining"
     @AppStorage(SharedStore.energyStatsStyleKey, store: SharedStore.defaults) private var energyStatsStyle = "cards"
     @AppStorage(SharedStore.progressGaugesKey, store: SharedStore.defaults) private var progressGauges = false
+    // Raw scope name, matching FoodsView.Scope's rawValues.
+    @AppStorage(SharedStore.foodsDefaultScopeKey, store: SharedStore.defaults)
+    private var foodsDefaultScope = "Foods"
 
     var body: some View {
         Form {
@@ -968,6 +971,14 @@ private struct AppearanceSettingsScreen: View {
                     Text("Beside balance").tag("compact")
                 }
                 Toggle("Progress gauges", isOn: $progressGauges)
+                // Which scope the Foods tab opens on. Favorites led from
+                // 2026-07-14; the user asked for Foods on 2026-08-05 —
+                // a setting rather than a third hardcoded reversal.
+                Picker("Foods opens on", selection: $foodsDefaultScope) {
+                    Text("Foods").tag("Foods")
+                    Text("Favorites").tag("Favorites")
+                    Text("Meals").tag("Meals")
+                }
                 // Last, under the other choices (the user, 2026-07-29).
                 // "Theme", not "Appearance" — this screen is already
                 // Appearance. System is the default, and the only value

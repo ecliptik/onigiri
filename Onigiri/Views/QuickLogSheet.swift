@@ -428,10 +428,18 @@ struct QuickLogSheet: View {
             .task {
                 if !kindLoaded {
                     kindLoaded = true
-                    // Routing kinds aren't scopes: both land on Favorites
-                    // (the user's default scope), .scan with the scanner
-                    // already up. No auto-focused search — the
-                    // keyboard-on-open version was too jarring (Micheal).
+                    // Routing kinds aren't scopes: both land on Favorites,
+                    // .scan with the scanner already up. No auto-focused
+                    // search — the keyboard-on-open version was too
+                    // jarring (the user).
+                    //
+                    // Favorites here is deliberate and NOT the Foods tab's
+                    // setting (Appearance → "Foods opens on", which the
+                    // user moved to Foods on 2026-08-05). This is a
+                    // LOGGING surface: what you reach for is usually
+                    // something you've eaten before. Don't wire the two
+                    // together without asking — they answer different
+                    // questions.
                     switch initialKind {
                     case .scan:
                         kind = .favorites

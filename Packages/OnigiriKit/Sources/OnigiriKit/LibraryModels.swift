@@ -336,6 +336,12 @@ public enum SharedStore {
     /// (Burned/Eaten flanking the balance headline — frees a row for
     /// the log).
     public static let energyStatsStyleKey = "energyStatsStyle"
+    /// Which scope the Foods tab opens on — "favorites" or "foods".
+    /// Configurable rather than hardcoded because the answer changed:
+    /// Favorites led from 2026-07-14, and the user asked for Foods on
+    /// 2026-08-05. A setting keeps both without a third reversal.
+    /// Absent = "foods", the current preference.
+    public static let foodsDefaultScopeKey = "foodsDefaultScope"
     /// First-run onboarding shown (or deliberately skipped) — existing
     /// installs with a goal are flagged true without seeing it.
     public static let hasOnboardedKey = "hasOnboarded"

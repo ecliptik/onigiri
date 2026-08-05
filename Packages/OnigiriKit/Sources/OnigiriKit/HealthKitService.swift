@@ -366,9 +366,7 @@ public final class HealthKitService {
             withStart: start, end: end, options: Self.dayPredicateOptions(for: .dietaryEnergyConsumed)
         )
 
-        let t0 = Date()
         let merged = (try? await sum(.dietaryEnergyConsumed, unit: .kilocalorie(), start: start, end: end)) ?? -1
-        let tMerged = Date()
 
         var perSource: [String: Double] = [:]
         var bySourceTotal = 0.0
@@ -383,11 +381,9 @@ public final class HealthKitService {
                 bySourceTotal += value
             }
         }
-        let tBySource = Date()
 
         let correlations = (try? await foodCorrelations(start: start, end: end)) ?? []
         let corr = correlations.reduce(0) { $0 + $1.total(.dietaryEnergyConsumed, unit: .kilocalorie()) }
-        let tCorr = Date()
 
         // The reading that names the mechanism: a plain SAMPLE query for
         // the same type and window. Correlation children are supposed to
@@ -403,22 +399,32 @@ public final class HealthKitService {
             predicates: [.quantitySample(type: type, predicate: inRange)],
             sortDescriptors: []
         )
-        let samples = ((try? await sampleDescriptor.result(for: store)) ?? [])
-            .reduce(0) { $0 + $1.quantity.doubleValue(for: .kilocalorie()) }
-        let tSamples = Date()
+        let sampleList = ((try? await sampleDescriptor.result(for: store)) ?? [])
+            .sorted { $0.startDate < $1.startDate }
+        let samples = sampleList.reduce(0) { $0 + $1.quantity.doubleValue(for: .kilocalorie()) }
+
+        // Per-sample device and second-precision timestamp. HealthKit
+        // attributes samples to the APP, not the device, so both phone
+        // and watch report one source — any de-duplication would happen
+        // WITHIN that source, across devices, exactly as it does to stop
+        // phone and watch double-counting steps. This line is what shows
+        // whether the dropped samples are the watch's, and whether they
+        // sit in the same minute as a phone one.
+        let clock = DateFormatter()
+        clock.dateFormat = "HH:mm:ss"
+        let breakdown = sampleList.map { sample in
+            let device = sample.device?.name ?? sample.sourceRevision.source.name
+            return "\(clock.string(from: sample.startDate))="
+                + "\(Int(sample.quantity.doubleValue(for: .kilocalorie())))@\(device)"
+        }.joined(separator: " ")
 
         let sources = perSource
             .sorted { $0.key < $1.key }
             .map { "\($0.key)=\(Int($0.value))" }
             .joined(separator: " ")
         return String(
-            format: "intake merged=%.0f bySource=%.0f samples=%.0f corr=%.0f rows=%d | %@ | "
-                + "ms merged=%.0f bySource=%.0f corr=%.0f samples=%.0f",
-            merged, bySourceTotal, samples, corr, correlations.count, sources,
-            tMerged.timeIntervalSince(t0) * 1000,
-            tBySource.timeIntervalSince(tMerged) * 1000,
-            tCorr.timeIntervalSince(tBySource) * 1000,
-            tSamples.timeIntervalSince(tCorr) * 1000
+            format: "intake merged=%.0f bySource=%.0f samples=%.0f corr=%.0f rows=%d | %@ | %@",
+            merged, bySourceTotal, samples, corr, correlations.count, sources, breakdown
         )
     }
     #endif

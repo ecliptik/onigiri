@@ -412,19 +412,62 @@ public final class HealthKitService {
         // sit in the same minute as a phone one.
         let clock = DateFormatter()
         clock.dateFormat = "HH:mm:ss"
+        // The SOURCE BUNDLE, not `sample.device` — device came back nil
+        // for every sample (2026-08-06: we never attach an HKDevice when
+        // writing), so it cannot tell phone from watch. The bundle can:
+        // the watch app is `…Onigiri.watchkitapp`, the phone plain
+        // `…Onigiri`. Printed as the suffix after the last dot.
+        // `sourceRevision.productType` is the ONLY field that names the
+        // writing device. `sample.device` is nil (we attach no HKDevice)
+        // and the bundle identifier is shared — a watch-logged sample
+        // comes back as com.ecliptik.Onigiri, the phone app's bundle,
+        // because HealthKit credits the app rather than the device
+        // (2026-08-06, after both cheaper fields proved useless).
+        // Duration is printed when non-zero: every log we write is
+        // instantaneous, so anything else came from elsewhere.
         let breakdown = sampleList.map { sample in
-            let device = sample.device?.name ?? sample.sourceRevision.source.name
+            let device = sample.sourceRevision.productType ?? "?"
+            let span = sample.endDate.timeIntervalSince(sample.startDate)
+            let duration = span > 0 ? "+\(Int(span))s" : ""
             return "\(clock.string(from: sample.startDate))="
-                + "\(Int(sample.quantity.doubleValue(for: .kilocalorie())))@\(device)"
+                + "\(Int(sample.quantity.doubleValue(for: .kilocalorie())))"
+                + "@\(device)\(duration)"
         }.joined(separator: " ")
 
         let sources = perSource
             .sorted { $0.key < $1.key }
             .map { "\($0.key)=\(Int($0.value))" }
             .joined(separator: " ")
+        // Water too: it is logged from BOTH devices as bare samples, so
+        // it is the cheapest way to reproduce a cross-device pair on
+        // demand — and a visual check can't tell the two apart, because
+        // our own totals sum samples and will show both either way. Only
+        // `merged` (what Health shows) can disagree.
+        let waterMerged = (try? await sum(
+            .dietaryWater, unit: .fluidOunceUS(), start: start, end: end)) ?? -1
+        let waterSampleList = ((try? await HKSampleQueryDescriptor(
+            predicates: [.quantitySample(
+                type: HKQuantityType(.dietaryWater),
+                predicate: HKQuery.predicateForSamples(
+                    withStart: start, end: end,
+                    options: Self.dayPredicateOptions(for: .dietaryWater))
+            )],
+            sortDescriptors: []
+        ).result(for: store)) ?? []).sorted { $0.startDate < $1.startDate }
+        let waterSamples = waterSampleList.reduce(0) {
+            $0 + $1.quantity.doubleValue(for: .fluidOunceUS())
+        }
+        let waterBreakdown = waterSampleList.map { sample in
+            "\(clock.string(from: sample.startDate))="
+                + "\(Int(sample.quantity.doubleValue(for: .fluidOunceUS())))"
+                + "@\(sample.sourceRevision.productType ?? "?")"
+        }.joined(separator: " ")
+
         return String(
-            format: "intake merged=%.0f bySource=%.0f samples=%.0f corr=%.0f rows=%d | %@ | %@",
-            merged, bySourceTotal, samples, corr, correlations.count, sources, breakdown
+            format: "intake merged=%.0f bySource=%.0f samples=%.0f corr=%.0f rows=%d | %@ | %@"
+                + "\n           water merged=%.0f samples=%.0f | %@",
+            merged, bySourceTotal, samples, corr, correlations.count, sources, breakdown,
+            waterMerged, waterSamples, waterBreakdown
         )
     }
     #endif

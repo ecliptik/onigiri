@@ -52,6 +52,35 @@ public enum WidgetBurnGate {
         return defaults.double(forKey: renderedKcalKey)
     }
 
+    /// A small, durable record of what the burn gate decided.
+    ///
+    /// os_log was not enough: a `log collect` run the morning after a
+    /// workout covered the full 24 h but held NO Onigiri lines older than
+    /// nine hours — Default-level entries roll off a busy device fast, so
+    /// the one window worth reading was already gone (2026-08-06). This
+    /// survives in the App Group until it ages out by count, and
+    /// `diagnoseIntake` prints it, so the question "did the widget
+    /// actually follow that workout?" can be answered after the fact
+    /// instead of requiring someone to watch a screen at the right moment.
+    static let journalKey = "widget.burnJournal"
+    private static let journalLimit = 40
+
+    public static func note(activeKcal: Double, lastRendered: Double?, reloading: Bool, at date: Date = .now) {
+        let stamp = DateFormatter()
+        stamp.dateFormat = "MM-dd HH:mm"
+        let line = "\(stamp.string(from: date)) active=\(Int(activeKcal))"
+            + " last=\(lastRendered.map { String(Int($0)) } ?? "-")"
+            + (reloading ? " RELOAD" : "")
+        var lines = SharedStore.defaults.stringArray(forKey: journalKey) ?? []
+        lines.append(line)
+        if lines.count > journalLimit { lines.removeFirst(lines.count - journalLimit) }
+        SharedStore.defaults.set(lines, forKey: journalKey)
+    }
+
+    public static func journal() -> [String] {
+        SharedStore.defaults.stringArray(forKey: journalKey) ?? []
+    }
+
     public static func lastBurnReloadAt() -> Date? {
         guard let stamp = SharedStore.defaults.object(forKey: lastReloadKey) as? Double
         else { return nil }
@@ -121,6 +150,9 @@ public enum BurnWidgetRefresh {
             activeKcal: active, lastRendered: lastRendered, reloading: shouldReload
         )
         #endif
+        WidgetBurnGate.note(
+            activeKcal: active, lastRendered: lastRendered, reloading: shouldReload, at: now
+        )
         guard shouldReload else { return false }
         WidgetBurnGate.noteBurnReload(at: now)
         WidgetBurnGate.noteActivity(at: now)

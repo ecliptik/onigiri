@@ -347,36 +347,56 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   projection to close the gap: that was tried, it made the average
   neither one thing nor the other, and it didn't close it.
 - **Anything LOGGED is summed with a SAMPLE query, never a statistics
-  query** (2026-08-05). `HKStatisticsQuery` sometimes omits food samples
-  that `HKSampleQueryDescriptor` returns from the same store, predicate
-  and window. Measured with `HealthKitService.diagnoseIntake` (DEBUG,
-  keep it — it is the only way to see this):
+  query** (2026-08-05, cause CONFIRMED 2026-08-06).
 
-      Aug 4  merged=1065  bySource=1065  samples=1451   ← 386 missing
-      Aug 3  merged=1489  bySource=1489  samples=1489   ← agree
-      Jul 30 merged=934   bySource=934   samples=1555   ← 621 missing
-      Aug 5  merged=235   bySource=235   samples=235    ← agree (fresh)
+  `HKStatisticsQuery` drops a WATCH-written sample when an
+  IPHONE-written sample of the same type lands close to it in time. It
+  is the cross-device de-duplication that stops a phone and watch
+  double-counting steps, misfiring on food and water where every log is
+  a distinct event. `HKSampleQueryDescriptor` returns both.
 
-  **The cause is NOT established.** FIVE explanations were argued and
-  each was killed by a measurement: cross-source merging, identical
-  timestamps, source priority, delayed sync, and "watch-written samples
-  are invisible" (refuted when a fresh watch log counted fine, and by
-  `.separateBySource` attributing watch logs to the PHONE's bundle —
-  HealthKit credits the app, not the device). What IS established: the
-  gap is real, it survives days (Jul 30 still short a week on), and
-  `samples` is always the truthful figure. Do not re-derive a theory —
-  run the diagnostic. The open lead is TIME: the two bad days are old
-  and the good ones include a minutes-old log, so re-measure a
-  watch-logged day after ~24 h to see whether it drops out.
+      Aug 4 food   13:01:36=385@Watch6,7  13:01:53=60@iPhone17,3  (17 s)
+                   merged=1065  samples=1451   ← the 385 dropped
+      Aug 6 water  10:12:43=12  10:12:45=12   (2 s, watch + phone)
+                   merged=36    samples=48     ← one 12 oz dropped
+      Aug 5 food   09:21:26=235@Watch6,7, next phone log 3.5 h later
+                   merged=samples=2808         ← isolated watch log fine
+      Aug 5 lunch  12:57:29 / :38 / :42 all @iPhone17,3
+                   merged=samples              ← same-device cluster fine
+
+  **`sourceRevision.productType` is the only field that names the
+  writer.** `sample.device` is nil (we attach no `HKDevice`) and the
+  bundle identifier is the PHONE app's for watch-written samples too —
+  HealthKit credits the app, not the device. `.separateBySource`
+  likewise reports one source. Both cost a wrong theory before
+  `productType` settled it.
+
+  Six explanations were argued and five died to measurement; the one
+  that survived — cross-device merging — was the FIRST, discarded early
+  because `.separateBySource` showed a single source and because
+  identical timestamps were tested for instead of proximity. Run
+  `HealthKitService.diagnoseIntake` (DEBUG, keep it) rather than
+  re-deriving any of this. The merge WINDOW is still unmeasured: 2 s and
+  17 s both collide, 3.5 h does not, and Apple does not document it.
 
   Apple Health's own totals are statistics-based, so **Health
   under-reports those days too — Onigiri reading higher than Health is
-  correct, not a bug.**
+  correct, not a bug.** Onigiri sums samples and therefore always shows
+  both; only Health's total can disagree, which is why a visual check in
+  Onigiri can never test any of this.
 
   BURN is the deliberate exception and keeps `sum`/statistics: burn is
   not logged, it is measured by both devices at once, so the cross-source
   merge is CORRECT there and a raw sample sum would DOUBLE-COUNT. Never
   "fix" burn for consistency.
+
+  Making HEALTH agree would mean separating the two devices' writes in
+  time so the merge cannot fire — a small change in `logFood`/`logWater`,
+  NOT the WatchConnectivity re-architecture floated earlier. It needs the
+  window width first, and it has a real catch: at write time neither
+  device reliably sees the other's recent sample (the watch writes to its
+  own store and syncs later), so a pre-write "is anything near?" query
+  can't be trusted. Any design has to work blind.
 
   This bit twice: a 681 kcal day read as 295 on Today, and
   `dailyEnergyTotals` fed the calendar/badges/streak the same undercount

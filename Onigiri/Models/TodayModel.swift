@@ -145,9 +145,15 @@ final class TodayModel {
         // because a fresh morning has nothing logged yet, and the
         // discrepancy this exists to measure only shows on a day that
         // actually has a watch-logged entry.
-        for offset in [0, -1] {
+        // -2 keeps Aug 4 in view while it is still the only day with a
+        // reproducible gap; drop back to [0, -1] once that is settled.
+        for offset in [0, -1, -2] {
             let day = Calendar.current.date(byAdding: .day, value: offset, to: .now) ?? .now
             print("[onigiri] day\(offset) \(await health.diagnoseIntake(for: day))")
+        }
+        // Durable, unlike os_log — see WidgetBurnGate.note.
+        for line in WidgetBurnGate.journal() {
+            print("[onigiri] burn \(line)")
         }
         #endif
     }

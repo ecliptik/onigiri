@@ -1936,6 +1936,192 @@ final class OnigiriUITests: XCTestCase {
         attachShot(named: "search-add-food-form")
     }
 
+    /// Cross-scope search (opt-in via CROSS_SCOPE_SEARCH=1, seeded sims):
+    /// a query searches the WHOLE library, not the selected scope. The
+    /// regression it guards: searching a FOOD while the Meals scope was
+    /// up returned nothing, because the scope filter ran before the
+    /// query (the user, 2026-08-07 — "nectarine").
+    @MainActor
+    func testSearchCrossesTheScopes() throws {
+        guard ProcessInfo.processInfo.environment["CROSS_SCOPE_SEARCH"] == "1" else {
+            throw XCTSkip("Set CROSS_SCOPE_SEARCH=1 to run the cross-scope search test")
+        }
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--seed-sample-data"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        switchTab(in: app, to: "Add")  // the corner + pill opens the Log sheet
+        let scopeBar = app.segmentedControls.firstMatch
+        XCTAssertTrue(scopeBar.waitForExistence(timeout: 10), "Log sheet scope bar")
+        // Stand squarely in the wrong scope: "Rice bowl" is a FOOD, and
+        // the seeded meal ("Chicken & rice") does not contain the query.
+        scopeBar.buttons["Meals"].tap()
+
+        let searchField = app.searchFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 10), "Log sheet search field")
+        searchField.tap()
+        searchField.typeText("Rice bowl")
+
+        // The food surfaces despite the Meals scope, under a named
+        // group. Case-insensitive: iOS 18 uppercases section headers,
+        // iOS 26 does not.
+        let foodsHeader = app.staticTexts.matching(
+            NSPredicate(format: "label ==[c] 'Foods'")
+        ).firstMatch
+        XCTAssertTrue(foodsHeader.waitForExistence(timeout: 10),
+                      "Cross-scope search should group matches under Foods")
+        XCTAssertTrue(app.buttons["Log Rice bowl"].waitForExistence(timeout: 5),
+                      "A food should match while the Meals scope is selected")
+        // The bar steps aside — no segment can be the true one when the
+        // results cross every scope.
+        XCTAssertFalse(app.segmentedControls.firstMatch.exists,
+                       "Scope bar should hide while searching")
+        attachShot(named: "logsheet-cross-scope-search")
+    }
+
+    /// Log without saving (opt-in via LOG_WITHOUT_SAVING=1, seeded sims):
+    /// reached from the LOG sheet the food form offers Log / Log & Save,
+    /// and plain Log writes the entry without minting a library food.
+    /// The library assertion at the end is the whole point of the
+    /// feature — a one-off should not permanently enlarge the library.
+    @MainActor
+    func testLogWithoutSaving() throws {
+        guard ProcessInfo.processInfo.environment["LOG_WITHOUT_SAVING"] == "1" else {
+            throw XCTSkip("Set LOG_WITHOUT_SAVING=1 to run the log-without-saving test")
+        }
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--seed-sample-data"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        // Unique per run: this test LOGS the name, and HealthKit keeps
+        // it for a week — a fixed name would match its own previous
+        // run's Recently Logged row on the second run, so the dead-end
+        // search would no longer be a dead end.
+        let oneOff = "Zzdiner plate \(Int(Date().timeIntervalSince1970) % 100_000)"
+
+        // Turn online lookups OFF first. The seeder switches them ON,
+        // and the online section's own "Add Food" only appears after a
+        // search actually RETURNS — which on a sim with no route to
+        // OpenFoodFacts means retry backoff, not a result. Off, the
+        // dead-end search offers Add Food from local state alone, so
+        // this test never depends on the network.
+        switchTab(in: app, to: "Today")
+        app.buttons["Settings"].firstMatch.tap()
+        // The row is a LabeledContent inside a NavigationLink, so its
+        // label carries the summary too ("Online Database, On") — match
+        // the prefix, not the whole string.
+        let onlineDatabase = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH 'Online Database'")
+        ).firstMatch
+        XCTAssertTrue(onlineDatabase.waitForExistence(timeout: 10), "Settings → Online Database")
+        onlineDatabase.tap()
+        let lookups = app.switches.matching(
+            NSPredicate(format: "label BEGINSWITH 'Online lookups'")
+        ).firstMatch
+        XCTAssertTrue(lookups.waitForExistence(timeout: 10), "Online lookups toggle")
+        // Unconditional (the seeder leaves this ON), and on the TRAILING
+        // edge: the switch element spans the whole Form row, so a plain
+        // .tap() lands on the label — which does not toggle a SwiftUI
+        // Toggle. Same reason the kcal field below is tapped at 0.9.
+        lookups.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        let back = app.navigationBars["Online Database"].buttons.firstMatch
+        if back.waitForExistence(timeout: 3) { back.tap() }   // back to Settings
+        // Confirm it took: the row summarises itself as "Off".
+        let lookupsOff = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH 'Online Database' AND label CONTAINS 'Off'")
+        ).firstMatch
+        XCTAssertTrue(lookupsOff.waitForExistence(timeout: 10),
+                      "Online lookups should read Off after the toggle")
+        let settingsDone = app.buttons["Done"].firstMatch
+        if settingsDone.waitForExistence(timeout: 3) { settingsDone.tap() }
+
+        switchTab(in: app, to: "Add")  // the corner + pill opens the Log sheet
+        // Confirm the SHEET is actually up before typing: the Settings
+        // detour above leaves the tab selection mid-bounce, and a
+        // search field on some other screen would silently absorb the
+        // query.
+        let logTitle = app.navigationBars["Log"]
+        if !logTitle.waitForExistence(timeout: 10) {
+            switchTab(in: app, to: "Add")
+        }
+        XCTAssertTrue(logTitle.waitForExistence(timeout: 10), "Log sheet should be up")
+
+        let searchField = app.searchFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 10), "Log sheet search field")
+        searchField.tap()
+        searchField.typeText(oneOff)
+
+        let addFood = app.buttons["Add Food"].firstMatch
+        XCTAssertTrue(addFood.waitForExistence(timeout: 20), "Add Food after dead-end search")
+        addFood.tap()
+
+        // By LABEL, not by value: the name field carries an explicit
+        // .accessibilityLabel("Name") (its placeholder rides as the
+        // value and vanishes once filled), so a by-value subscript
+        // misses it.
+        let nameField = app.textFields["Name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5), "Form name field")
+        XCTAssertEqual(nameField.value as? String, oneOff, "Form prefilled with the query")
+        // The logging route's pair — and NOT the library route's.
+        XCTAssertTrue(app.buttons["Log & Save"].waitForExistence(timeout: 5),
+                      "Log sheet route should offer Log & Save")
+        XCTAssertTrue(app.buttons["Log"].exists, "Log sheet route should offer a plain Log")
+        XCTAssertFalse(app.buttons["Save"].exists,
+                       "Log sheet route should not offer a library-only Save")
+        attachShot(named: "form-log-pair")
+
+        let kcalField = app.textFields["Calories (kcal)"].firstMatch
+        // LabeledContent stretches the row; the editable part sits trailing.
+        kcalField.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        kcalField.typeText("410")
+        app.buttons["Log"].firstMatch.tap()
+
+        // The portion sheet — "Will log" is its own, always present.
+        // Its confirm ALSO reads "Log" and the form's toolbar is still
+        // behind it, so take the last match (the same idiom the flow
+        // test uses for stacked Cancels).
+        XCTAssertTrue(app.staticTexts["Will log"].waitForExistence(timeout: 10),
+                      "Portion sheet should follow Log")
+        app.buttons.matching(identifier: "Log").allElementsBoundByIndex.last?.tap()
+
+        // It logged: the entry is on Today. The log's meal groups render
+        // COLLAPSED on a seeded day, so expand them before looking, and
+        // scroll — the slot may sit below the fold.
+        app.buttons["Done"].firstMatch.tap()
+        switchTab(in: app, to: "Today")
+        let entry = app.staticTexts[oneOff]
+        let expandAll = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH 'Log. Collapses'")
+        ).firstMatch
+        if expandAll.waitForExistence(timeout: 10), !entry.exists {
+            expandAll.tap()
+        }
+        for _ in 0..<4 where !entry.waitForExistence(timeout: 3) {
+            app.swipeUp()
+        }
+        XCTAssertTrue(entry.exists, "The one-off should appear in the Today log")
+
+        // …and it did NOT enter the library: searching Foods for it
+        // finds nothing. (Online lookups are off, so "No matches" is
+        // the whole result.)
+        switchTab(in: app, to: "Foods")
+        let foodsSearch = app.searchFields.firstMatch
+        XCTAssertTrue(foodsSearch.waitForExistence(timeout: 10), "Foods search field")
+        foodsSearch.tap()
+        foodsSearch.typeText(oneOff)
+        XCTAssertTrue(app.staticTexts["No matches"].waitForExistence(timeout: 10),
+                      "A logged-only food must not be saved to the library")
+        XCTAssertFalse(app.buttons["Log \(oneOff)"].exists,
+                       "A logged-only food must not appear as a library row")
+        attachShot(named: "library-without-the-one-off")
+    }
+
     /// Form search paging (opt-in via FORM_PAGING=1, seeded sims): the
     /// food form's Search Database sheet pages past 10 like the other
     /// search surfaces.

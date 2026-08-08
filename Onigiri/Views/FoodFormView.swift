@@ -4,10 +4,26 @@ import WidgetKit
 import OnigiriKit
 
 /// Create or edit a saved food, with barcode scanning to prefill from
-/// OpenFoodFacts. The one surface every new food passes through — Save
-/// keeps it library-only (the meal-building path), Save & Log continues
-/// to the portion sheet.
+/// OpenFoodFacts. The one surface every new food passes through; its
+/// confirm pair follows the route that opened it (see `Purpose`).
 struct FoodFormView: View {
+    /// Which route opened the form. It decides the confirm PAIR and
+    /// nothing else — same fields, same scanner, same everything.
+    ///
+    /// The Foods tab and the Log sheet answer different questions (the
+    /// same reason the Log sheet's opening scope is deliberately not
+    /// the Foods tab's setting). You reach this form from Today → Log
+    /// because you are logging something, and the old pair offered no
+    /// way to log a one-off — a restaurant plate, a friend's cooking —
+    /// without permanently enlarging the library (the user,
+    /// 2026-08-07).
+    enum Purpose {
+        /// Foods tab: Save (library only) / Save & Log.
+        case library
+        /// Log sheet: Log (no library row at all) / Log & Save.
+        case logging
+    }
+
     /// The field names what it queries — one database or both.
     static var searchPrompt: String {
         switch SharedStore.textSearchMode {
@@ -32,6 +48,9 @@ struct FoodFormView: View {
     var logDate: Date = .now
     /// Called after the Log action completes, so the presenter can dismiss too.
     var onLogged: (() -> Void)?
+    /// Which confirm pair to offer. Defaulted, so only the Log sheet
+    /// has to say anything.
+    var purpose: Purpose = .library
 
     @State private var name = ""
     @State private var kcal: Double?
@@ -98,6 +117,10 @@ struct FoodFormView: View {
     /// not logged" toast only follows an actual portion cancel.
     @State private var portionSheetWasUp = false
     @State private var portionDidLog = false
+    /// Did the action that opened the portion sheet already persist the
+    /// food? It decides what a CANCELLED portion means — see
+    /// `sheetDidDismiss`.
+    @State private var savedBeforePortion = false
     /// Cancel/drag with typed data confirms first — twelve typed
     /// nutrient fields used to vanish on a stray swipe.
     @State private var confirmDiscard = false
@@ -337,16 +360,21 @@ struct FoodFormView: View {
                     }
                     .keyboardShortcut(.cancelAction)
                 }
-                // New foods: Save keeps it library-only (meal building);
-                // Save & Log continues to the portion sheet. Two toolbar
-                // buttons replace the old post-save "Log it?" alert — a
-                // whole modal for a yes/no.
+                // New foods get a PAIR, and which pair follows the route
+                // (Purpose): from the library you Save, optionally
+                // logging too; from a logging flow you Log, optionally
+                // saving too. Both pairs put the "…& …" combined action
+                // second and emphasized, on ⇧⌘S; the plain one is ⌘S.
+                // (Two toolbar buttons replaced the old post-save
+                // "Log it?" alert — a whole modal for a yes/no.)
                 ToolbarItemGroup(placement: .confirmationAction) {
                     if food == nil {
-                        Button("Save") { saveOnly() }
-                            .keyboardShortcut("s", modifiers: .command)
-                            .disabled(!canSave)
-                        Button("Save & Log") { saveAndLog() }
+                        Button(purpose == .logging ? "Log" : "Save") {
+                            if purpose == .logging { logOnly() } else { saveOnly() }
+                        }
+                        .keyboardShortcut("s", modifiers: .command)
+                        .disabled(!canSave)
+                        Button(purpose == .logging ? "Log & Save" : "Save & Log") { saveAndLog() }
                             .fontWeight(.semibold)
                             .keyboardShortcut("s", modifiers: [.command, .shift])
                             .disabled(!canSave)
@@ -697,10 +725,19 @@ struct FoodFormView: View {
         dismiss()
     }
 
-    /// New-food "Save & Log": persist first (the food survives every
-    /// later choice), then straight to the portion sheet.
+    /// "Save & Log" / "Log & Save": persist first (the food survives
+    /// every later choice), then straight to the portion sheet.
     private func saveAndLog() {
         persist()
+        savedBeforePortion = true
+        presentPortionSheet()
+    }
+
+    /// The logging route's plain "Log": no library row at all. The
+    /// entry lands in HealthKit like any other; the Log sheet's
+    /// Recently Logged rows are how it comes back.
+    private func logOnly() {
+        savedBeforePortion = false
         presentPortionSheet()
     }
 
@@ -722,9 +759,15 @@ struct FoodFormView: View {
         // closing is routine.
         guard portionSheetWasUp else { return }
         portionSheetWasUp = false
-        // Cancelled portion after Log: the save already happened —
-        // say so instead of silently keeping it.
         guard !portionDidLog else { return }
+        // A cancelled portion means opposite things on the two routes,
+        // and getting this wrong destroys work. After Save & Log the
+        // food is already safely in the library, so saying so and
+        // leaving is right. After a plain LOG nothing has been
+        // persisted at all — dismissing would silently throw away every
+        // typed field, so stay on the form with the values intact.
+        // Cancelling a portion is "not that portion", not "discard".
+        guard savedBeforePortion else { return }
         ToastCenter.shared.show("Saved \(name.trimmingCharacters(in: .whitespaces)) to your library ✓ — not logged")
         dismiss()
     }

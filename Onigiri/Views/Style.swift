@@ -130,14 +130,23 @@ extension View {
     /// results scroll (Music-style). SHEETS ONLY — a top safeAreaInset
     /// suppresses large-title rendering, so the Foods TAB renders its
     /// ScopeBar as a list row instead.
+    /// `isHidden` empties the inset — a search crosses every scope, so
+    /// a highlighted segment would contradict the list below it.
     func scopeBar<Tag: Hashable>(
-        options: [(label: String, tag: Tag)], selection: Binding<Tag>
+        options: [(label: String, tag: Tag)], selection: Binding<Tag>,
+        isHidden: Bool = false
     ) -> some View {
         safeAreaInset(edge: .top, spacing: 0) {
-            ScopeBar(options: options, selection: selection)
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                .background(.bar)
+            // Hidden = an EMPTY inset, NOT a dropped modifier: wrapping
+            // the whole `.scopeBar(…)` call in an `if` changes the
+            // modifier chain's identity, which re-creates the List
+            // underneath it and loses its state mid-search.
+            if !isHidden {
+                ScopeBar(options: options, selection: selection)
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(.bar)
+            }
         }
     }
 }

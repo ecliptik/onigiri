@@ -81,7 +81,7 @@ struct QuickLogSheet: View {
         meals.map(\.name) + foods.map(\.name)
     }
 
-    private struct Item: Identifiable {
+    private struct Item: Identifiable, LibrarySearchable {
         let id: String
         let name: String
         let detail: String
@@ -106,6 +106,17 @@ struct QuickLogSheet: View {
         /// carried through a history row so re-logs keep the breakdown.
         var mealItems: [LoggedMealItem] = []
         var isMeal: Bool { meal != nil }
+
+        // How the cross-scope search sees a row (LibrarySearchable).
+        // Spelled out rather than renaming the stored properties: the
+        // protocol's names are deliberately distinct so a witness can't
+        // be satisfied by accident.
+        var searchName: String { name }
+        var searchCategory: String? { category }
+        var isStarred: Bool { isFavorite }
+        var isMealRow: Bool { isMeal }
+        var isHistoryRow: Bool { isHistory }
+        var searchRecency: Date { recency }
     }
 
     /// The library half of the list, CACHED like historyRows: building
@@ -179,8 +190,15 @@ struct QuickLogSheet: View {
         }
     }
 
-    /// The scope's pool, ranked purely by recency (Micheal: no favorite
-    /// boost — "what I actually eat" order), name for stability.
+    /// The BROWSING pool: the selected scope, ranked purely by recency
+    /// (Micheal: no favorite boost — "what I actually eat" order), name
+    /// for stability.
+    ///
+    /// Search does NOT come through here. It used to, and the scope
+    /// filter ran FIRST — so searching "nectarine" on the Meals scope
+    /// returned nothing while the nectarine sat in the library (the
+    /// user, 2026-08-07). A query crosses every scope and groups
+    /// instead; see `searchGroups`.
     private func pool(_ items: [Item]) -> [Item] {
         let scoped = items.filter { item in
             switch kind {
@@ -189,14 +207,17 @@ struct QuickLogSheet: View {
             case .foods, .all, .scan: !item.isMeal
             }
         }
-        let matched = searchText.isEmpty ? scoped : scoped.filter { item in
-            item.name.localizedCaseInsensitiveContains(searchText)
-                || (item.category?.localizedCaseInsensitiveContains(searchText) ?? false)
-        }
-        return matched.sorted { lhs, rhs in
+        return scoped.sorted { lhs, rhs in
             if librarySort != .name, lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
             return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
+    }
+
+    /// A query searches the WHOLE library — Favorites, Foods, Meals,
+    /// and the history rows — grouped, one home per row. The scope bar
+    /// is a browsing control, not a search filter.
+    private func searchGroups(_ items: [Item]) -> [(group: LibrarySearchGroup, items: [Item])] {
+        LibrarySearch.groups(items, query: searchText, sortByRecency: librarySort != .name)
     }
 
     /// A history entry is "a meal" when its name still matches the meal
@@ -207,7 +228,13 @@ struct QuickLogSheet: View {
 
     var body: some View {
         let items = libraryItems + historyRows
-        let ranked = pool(items)
+        // ONE search-active predicate for the whole sheet: the doors,
+        // the water row, the scope bar, and which list shape renders
+        // all have to agree, or a whitespace-only query shows half of
+        // each state.
+        let searching = !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+        let ranked = searching ? [] : pool(items)
+        let groups = searching ? searchGroups(items) : []
         NavigationStack {
             List {
                 // The scan entry, a labeled row like Foods' (the user:
@@ -216,7 +243,7 @@ struct QuickLogSheet: View {
                 // Hidden while searching so results lead, and on the
                 // Meals scope — scanning adds a FOOD; meals are built
                 // from foods already added (the user).
-                if searchText.isEmpty, kind != .meals {
+                if !searching, kind != .meals {
                     // The shared scan door, same as Foods and the food
                     // form (PLAN-entry-doors / PLAN-unified-search).
                     EntryDoorsSection(
@@ -242,7 +269,7 @@ struct QuickLogSheet: View {
                 // here (the portion shortcut made estimates the odd one
                 // out; superseded 2026-07-20, the user). Its Log action
                 // writes to the browsed day and returns here.
-                if !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                if searching {
                     AIEstimateSection(query: searchText) { product in
                         activeSheet = .form(ProductPrefill(
                             product: product,
@@ -254,7 +281,7 @@ struct QuickLogSheet: View {
                 // one place to log; widget/watch/app icon keep the
                 // 1-tap paths). Tap logs the default serving into the
                 // browsed day; long-press offers the other amounts.
-                if searchText.isEmpty {
+                if !searching {
                     Section {
                         // Shaped like every other row: name, trailing
                         // serving (its "calories" column), the + to log.
@@ -312,15 +339,30 @@ struct QuickLogSheet: View {
                         }
                     }
                 }
-                if !searchText.isEmpty || kind == .favorites || librarySort != .recent {
-                    // Search results, the Favorites scope, and the
-                    // non-Recent sort orders read as one flat ranked
-                    // list — no Recent split.
+                if searching {
+                    // Favorites → Foods → Meals → Recently Logged, one
+                    // home per row (a starred food is under Favorites
+                    // and NOT again under Foods), empty groups dropped.
+                    ForEach(groups, id: \.group) { group in
+                        Section(group.group.rawValue) {
+                            ForEach(group.items) { item in
+                                row(item)
+                            }
+                        }
+                    }
+                    if groups.isEmpty {
+                        Section {
+                            emptyState(visible: 0, items: items)
+                        }
+                    }
+                } else if kind == .favorites || librarySort != .recent {
+                    // The Favorites scope and the non-Recent sort orders
+                    // read as one flat ranked list — no Recent split.
                     Section {
                         ForEach(ranked) { item in
                             row(item)
                         }
-                        emptyState(pool: ranked, items: items)
+                        emptyState(visible: ranked.count, items: items)
                     }
                 } else {
                     // The 10 most recently logged/used lead; the rest of
@@ -329,7 +371,7 @@ struct QuickLogSheet: View {
                         ForEach(ranked.prefix(10)) { item in
                             row(item)
                         }
-                        emptyState(pool: ranked, items: items)
+                        emptyState(visible: ranked.count, items: items)
                     }
                     if ranked.count > 10 {
                         Section("Everything else") {
@@ -342,8 +384,7 @@ struct QuickLogSheet: View {
 
                 // Saved items rank first; the online database follows so a
                 // one-off food can be logged without saving it.
-                if SharedStore.onlineLookups,
-                   !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                if SharedStore.onlineLookups, searching {
                     OnlineResultsSection(query: searchText, search: onlineSearch, onPick: { product in
                         route(product)
                     }, onAddManually: { name in
@@ -369,7 +410,11 @@ struct QuickLogSheet: View {
                     ("Foods", .foods),
                     ("Meals", .meals),
                 ],
-                selection: $kind
+                selection: $kind,
+                // A query crosses every scope, so no segment can be the
+                // true one — the bar steps aside and the group headers
+                // say what you're looking at.
+                isHidden: searching
             )
             // The STANDARD system search field (Micheal: as close to
             // Apple's as possible) — the barcode scanner therefore lives
@@ -509,13 +554,16 @@ struct QuickLogSheet: View {
                         Task { activeSheet = .form(prefill) }
                     }, notice: notice)
                 case .form(let prefill):
-                    // New foods go through the full form — reviewable, complete,
-                    // and saved to the library. Its Log action returns here
-                    // (the sheet stays open for the next item). AI-estimate
-                    // prefills carry their provenance caption in.
+                    // New foods go through the full form — reviewable and
+                    // complete. Its Log action returns here (the sheet stays
+                    // open for the next item). AI-estimate prefills carry
+                    // their provenance caption in. `.logging`: you came here
+                    // to log, so the form offers Log / Log & Save — saving to
+                    // the library is the option, not the price of admission.
                     FoodFormView(
                         food: nil, prefill: prefill.product,
-                        prefillMessage: prefill.provenance, logDate: logDate)
+                        prefillMessage: prefill.provenance, logDate: logDate,
+                        purpose: .logging)
                 case .editFood(let food):
                     FoodFormView(food: food)
                 case .editMeal(let meal):
@@ -530,9 +578,11 @@ struct QuickLogSheet: View {
     }
 
     /// Scope-aware empty states, rendered inside the leading section.
+    /// `visible` is the count of rows actually rendered — the ranked
+    /// pool when browsing, the flattened group total when searching.
     @ViewBuilder
-    private func emptyState(pool: [Item], items: [Item]) -> some View {
-        if pool.isEmpty {
+    private func emptyState(visible: Int, items: [Item]) -> some View {
+        if visible == 0 {
             if items.isEmpty {
                 // Accurate copy: this sheet can create foods itself via
                 // the scan button and online search.

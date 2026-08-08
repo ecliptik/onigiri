@@ -48,9 +48,11 @@ struct FoodsView: View {
         }
     }
 
-    /// A favorites-scope row: meals and foods mixed in one ranked list,
-    /// like the Log sheet's Favorites.
-    private enum FavoriteEntry: Identifiable {
+    /// A row in a list that MIXES types: the Favorites scope, and every
+    /// grouped search result. (Was `FavoriteEntry` — the cross-scope
+    /// search needs the same mixed row, and two near-identical wrappers
+    /// would drift.)
+    private enum LibraryEntry: Identifiable, LibrarySearchable {
         case meal(Meal)
         case food(Food)
 
@@ -60,18 +62,24 @@ struct FoodsView: View {
             case .food(let food): "food-\(food.persistentModelID.hashValue)"
             }
         }
-        var recency: Date {
+
+        /// Food and Meal each conform in the kit; this just forwards,
+        /// so the enum can never disagree with the models about what a
+        /// name or a star is.
+        private var model: any LibrarySearchable {
             switch self {
-            case .meal(let meal): meal.recencyDate
-            case .food(let food): food.recencyDate
+            case .meal(let meal): meal
+            case .food(let food): food
             }
         }
-        var name: String {
-            switch self {
-            case .meal(let meal): meal.name
-            case .food(let food): food.name
-            }
-        }
+        var searchName: String { model.searchName }
+        var searchCategory: String? { model.searchCategory }
+        var isStarred: Bool { model.isStarred }
+        var isMealRow: Bool { model.isMealRow }
+        /// The Foods tab shows the LIBRARY; HealthKit history rows are
+        /// the Log sheet's business.
+        var isHistoryRow: Bool { false }
+        var searchRecency: Date { model.searchRecency }
     }
 
     /// Which scope opens first. Favorites led from 2026-07-14; the user
@@ -133,34 +141,43 @@ struct FoodsView: View {
 
     private var filteredMeals: [Meal] {
         meals
-            .filter { matches(name: $0.name, category: $0.category) }
+            .filter { matches($0) }
             .sorted { ranked(($0.isFavorite, $0.recencyDate, $0.name), ($1.isFavorite, $1.recencyDate, $1.name)) }
     }
 
     private var filteredFoods: [Food] {
         foods
-            .filter { matches(name: $0.name, category: $0.category) }
+            .filter { matches($0) }
             .sorted { ranked(($0.isFavorite, $0.recencyDate, $0.name), ($1.isFavorite, $1.recencyDate, $1.name)) }
     }
 
-    private func matches(name: String, category: String?) -> Bool {
-        if let filter = categoryFilter, category != filter.rawValue { return false }
-        if searchText.isEmpty { return true }
-        if name.localizedCaseInsensitiveContains(searchText) { return true }
-        // Matching the category text too lets "snack" pull up all snacks.
-        return category?.localizedCaseInsensitiveContains(searchText) ?? false
+    /// The toolbar's category FILTER (a browsing constraint) plus the
+    /// query. The query half is the kit's rule — name or category text,
+    /// so "snack" still pulls up all snacks — shared with the Log sheet
+    /// so the two fields can't answer differently.
+    private func matches(_ item: some LibrarySearchable) -> Bool {
+        if let filter = categoryFilter, item.searchCategory != filter.rawValue { return false }
+        return LibrarySearch.matches(item, query: searchText)
     }
 
     /// The Favorites scope pool: everybody here is starred, so rank by
     /// recency alone (then name), matching the Log sheet — unless the
-    /// sort menu asked for names.
-    private func favoriteEntries(meals: [Meal], foods: [Food]) -> [FavoriteEntry] {
-        let entries = meals.filter(\.isFavorite).map(FavoriteEntry.meal)
-            + foods.filter(\.isFavorite).map(FavoriteEntry.food)
-        return entries.sorted { lhs, rhs in
-            if librarySort != .name, lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
-            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-        }
+    /// sort menu asked for names. Routed through the shared grouper so
+    /// the starred-first precedence and the ranking have ONE definition.
+    private func favoriteEntries(meals: [Meal], foods: [Food]) -> [LibraryEntry] {
+        let entries = meals.map(LibraryEntry.meal) + foods.map(LibraryEntry.food)
+        return LibrarySearch
+            .groups(entries, query: "", sortByRecency: librarySort != .name)
+            .first { $0.group == .favorites }?.items ?? []
+    }
+
+    /// A query crosses every scope and groups the matches; the scope
+    /// bar is a browsing control, not a search filter.
+    private func searchGroups(
+        meals: [Meal], foods: [Food]
+    ) -> [(group: LibrarySearchGroup, items: [LibraryEntry])] {
+        let entries = meals.map(LibraryEntry.meal) + foods.map(LibraryEntry.food)
+        return LibrarySearch.groups(entries, query: searchText, sortByRecency: librarySort != .name)
     }
 
     var body: some View {
@@ -168,6 +185,10 @@ struct FoodsView: View {
         // re-filters and re-sorts the whole library (~3× per keystroke).
         let visibleMeals = filteredMeals
         let visibleFoods = filteredFoods
+        // ONE search-active predicate: the scope bar, the estimate row,
+        // and which list shape renders all have to agree.
+        let searching = !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+        let groups = searching ? searchGroups(meals: visibleMeals, foods: visibleFoods) : []
         NavigationStack {
             List {
                 // The scope picker rides IN the list, not a pinned
@@ -176,13 +197,19 @@ struct FoodsView: View {
                 // zone with both drawer modes), and matching the other
                 // tabs' large leading title won (the user). At rest the
                 // screen reads the same; the picker just scrolls.
-                Section {
-                    ScopeBar(
-                        options: Scope.allCases.map { ($0.rawValue, $0) },
-                        selection: scopeBinding
-                    )
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
+                // Hidden while searching: a query crosses every scope,
+                // so a highlighted segment would contradict the groups
+                // below it. (A list ROW here, not the sheet's
+                // safeAreaInset — an `if` is safe.)
+                if !searching {
+                    Section {
+                        ScopeBar(
+                            options: Scope.allCases.map { ($0.rawValue, $0) },
+                            selection: scopeBinding
+                        )
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                    }
                 }
                 // The entry doors used to lead this list. They're gone
                 // (the user, 2026-08-02): this is the LIBRARY screen,
@@ -200,7 +227,7 @@ struct FoodsView: View {
                 // library → online). Foods is the library screen, so an
                 // estimate ADDS: the prefilled form opens for review,
                 // provenance riding along.
-                if !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                if searching {
                     AIEstimateSection(query: searchText) { product in
                         activeSheet = .form(ProductPrefill(
                             product: product,
@@ -208,38 +235,63 @@ struct FoodsView: View {
                     }
                 }
 
-                switch currentScope {
-                case .foods:
-                    Section {
-                        ForEach(visibleFoods) { food in
-                            foodRow(food)
-                        }
-                        emptyState(visibleCount: visibleFoods.count)
-                    }
-                case .meals:
-                    Section {
-                        ForEach(visibleMeals) { meal in
-                            mealRow(meal)
-                        }
-                        emptyState(visibleCount: visibleMeals.count)
-                    }
-                case .favorites:
-                    let favorites = favoriteEntries(meals: visibleMeals, foods: visibleFoods)
-                    Section {
-                        ForEach(favorites) { entry in
-                            switch entry {
-                            case .meal(let meal): mealRow(meal, badged: true)
-                            case .food(let food): foodRow(food)
+                if searching {
+                    // Favorites → Foods → Meals, one home per row (a
+                    // starred food is under Favorites and NOT again
+                    // under Foods), empty groups dropped.
+                    ForEach(groups, id: \.group) { group in
+                        Section(group.group.rawValue) {
+                            ForEach(group.items) { entry in
+                                switch entry {
+                                // The meal mark only where the group
+                                // MIXES types; the Meals header already
+                                // says it otherwise.
+                                case .meal(let meal):
+                                    mealRow(meal, badged: group.group == .favorites)
+                                case .food(let food):
+                                    foodRow(food)
+                                }
                             }
                         }
-                        emptyState(visibleCount: favorites.count)
+                    }
+                    if groups.isEmpty {
+                        Section {
+                            emptyState(visibleCount: 0)
+                        }
+                    }
+                } else {
+                    switch currentScope {
+                    case .foods:
+                        Section {
+                            ForEach(visibleFoods) { food in
+                                foodRow(food)
+                            }
+                            emptyState(visibleCount: visibleFoods.count)
+                        }
+                    case .meals:
+                        Section {
+                            ForEach(visibleMeals) { meal in
+                                mealRow(meal)
+                            }
+                            emptyState(visibleCount: visibleMeals.count)
+                        }
+                    case .favorites:
+                        let favorites = favoriteEntries(meals: visibleMeals, foods: visibleFoods)
+                        Section {
+                            ForEach(favorites) { entry in
+                                switch entry {
+                                case .meal(let meal): mealRow(meal, badged: true)
+                                case .food(let food): foodRow(food)
+                                }
+                            }
+                            emptyState(visibleCount: favorites.count)
+                        }
                     }
                 }
 
                 // Saved items always rank first; the online database is one
                 // more section below — a quick log/add without the food form.
-                if SharedStore.onlineLookups,
-                   !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                if SharedStore.onlineLookups, searching {
                     OnlineResultsSection(query: searchText, search: onlineSearch, onPick: { product in
                         // Known barcodes log fast; new foods go through the
                         // full prefilled form (Save / Save & Log).

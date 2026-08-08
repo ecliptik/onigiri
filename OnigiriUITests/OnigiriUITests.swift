@@ -1128,9 +1128,14 @@ final class OnigiriUITests: XCTestCase {
             app.buttons["Cancel"].firstMatch.tap()
             let discard = app.buttons["Discard"]
             if discard.waitForExistence(timeout: 3) { discard.tap() }
+            // The form's NAME FIELD, not its title: the new-food form
+            // has no title any more (it competed with the two confirm
+            // buttons for the bar), and a navigationBars["New Food"]
+            // probe would report "gone" instantly — passing while
+            // guarding nothing.
             let formGone = expectation(
                 for: NSPredicate(format: "exists == false"),
-                evaluatedWith: app.navigationBars["New Food"]
+                evaluatedWith: app.textFields["Name"]
             )
             wait(for: [formGone], timeout: 5)
         }
@@ -2086,6 +2091,14 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Log"].exists, "Log sheet route should offer a plain Log")
         XCTAssertFalse(app.buttons["Save"].exists,
                        "Log sheet route should not offer a library-only Save")
+        // The VISIBLE title is gone (it crowded the confirm pair), but
+        // the screen must still announce what it is — the nav-bar title
+        // is what VoiceOver reads when a sheet presents, so dropping it
+        // silently took that with it.
+        XCTAssertTrue(app.staticTexts["New Food"].exists,
+                      "the form keeps a heading for VoiceOver even with no visible title")
+        XCTAssertFalse(app.navigationBars["New Food"].exists,
+                       "…and that heading is NOT the visible bar title")
         attachShot(named: "form-log-pair")
 
         let kcalField = app.textFields["Calories (kcal)"].firstMatch

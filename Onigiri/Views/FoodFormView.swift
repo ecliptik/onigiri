@@ -161,11 +161,46 @@ struct FoodFormView: View {
         initialSnapshot.map { $0 != currentSnapshot } ?? false
     }
 
+    /// Blank while the two-button PAIR is on screen.
+    ///
+    /// A new food shows Cancel + two confirm buttons, and an inline
+    /// title between them left "Cancel  New Food  Log  Log & Save"
+    /// reading as crowded (the user, 2026-08-08). Measured, it never
+    /// truncates — even iPhone SE at XXL text fits both — but tight is
+    /// still tight, and of the four things in that bar the title is the
+    /// one the form's own fields already tell you. Editing keeps its
+    /// title: one Save button leaves plenty of room.
+    private var navigationTitleText: String {
+        food == nil ? "" : "Edit Food"
+    }
+
+    /// What the screen IS, for VoiceOver, whether or not the bar shows
+    /// it. Dropping the visible title took the announcement with it —
+    /// the nav-bar title is what VoiceOver reads on presenting a sheet,
+    /// so an untitled form opened straight onto a provenance caption or
+    /// a text field with no statement of where you are.
+    private var accessibilityTitle: String {
+        food == nil && createdFood == nil ? "New Food" : "Edit Food"
+    }
+
     var body: some View {
         NavigationStack {
             searchableForm
-                .navigationTitle(food == nil && createdFood == nil ? "New Food" : "Edit Food")
+                .navigationTitle(navigationTitleText)
                 .navigationBarTitleDisplayMode(.inline)
+                // A heading with no visual weight. NOT `.hidden()` —
+                // that removes it from the accessibility tree too,
+                // which is the whole thing being preserved here;
+                // zero opacity leaves it in. Top-aligned so it is the
+                // first thing read, and hit-testing off so it can never
+                // take a tap from the form beneath it.
+                .overlay(alignment: .top) {
+                    Text(accessibilityTitle)
+                        .font(.caption)
+                        .opacity(0)
+                        .allowsHitTesting(false)
+                        .accessibilityAddTraits(.isHeader)
+                }
         }
         .toastHost()
     }

@@ -39,6 +39,44 @@ struct GoalTrendStatsTests {
         #expect(stats.predicted30Lb == -1.0)
     }
 
+    /// An UNTRACKED day is burn with nothing logged against it, which
+    /// reads as a ~2,500 kcal deficit that was never earned. `banked`
+    /// has always excluded those; the 30-day prediction did not, so one
+    /// such day inflated it by most of a pound — and since this row is
+    /// compared against the scale, the fiction landed as "the scale is
+    /// lagging" (2026-08-08).
+    @Test func untrackedDaysDoNotInflateThePrediction() {
+        let tracked = (0..<10).map {
+            DayEnergyTotals(day: Self.day(-$0), intakeKcal: 2000, burnKcal: 2350)
+        }
+        let untracked = DayEnergyTotals(day: Self.day(-11), intakeKcal: 0, burnKcal: 2500)
+        let stats = GoalTrendStats.derive(
+            weightHistory: [], dailyTotals: tracked + [untracked],
+            targetWeightLb: nil, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        // Still exactly the ten tracked days' pound — not 1.71.
+        #expect(stats.predicted30Lb == -1.0)
+        // And the all-time figure agrees, as it always did.
+        #expect(stats.bankedKcal == 3500)
+        #expect(stats.bankedDays == 10)
+    }
+
+    /// The threshold form of the same rule: a day logging less than the
+    /// untracked floor is not evidence either.
+    @Test func thePredictionRespectsTheUntrackedThreshold() {
+        let totals = (0..<10).map {
+            DayEnergyTotals(day: Self.day(-$0), intakeKcal: 2000, burnKcal: 2350)
+        } + [DayEnergyTotals(day: Self.day(-11), intakeKcal: 200, burnKcal: 2500)]
+        let stats = GoalTrendStats.derive(
+            weightHistory: [], dailyTotals: totals,
+            targetWeightLb: nil, isMaintenance: false,
+            untrackedBelowKcal: 500,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(stats.predicted30Lb == -1.0)
+    }
+
     @Test func noLoggedDaysMeansNoPrediction() {
         let stats = GoalTrendStats.derive(
             weightHistory: [],

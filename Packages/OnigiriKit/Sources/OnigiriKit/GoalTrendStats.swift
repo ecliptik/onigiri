@@ -110,7 +110,16 @@ public struct GoalTrendStats: Equatable, Sendable {
         let banked = trackedDays.reduce(0) { $0 + $1.deficitKcal }
         let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) ?? now
         // Nil until the window has logged days — no data, no claim.
-        let deficits = dailyTotals
+        //
+        // TRACKED days only, the same gate `banked` applies, and for the
+        // same reason its doc calls load-bearing: a day with burn and no
+        // logged food reads as a ~2,500 kcal deficit. Unfiltered, one
+        // such day inflates "predicted" by most of a pound of fiction —
+        // and this row's whole job is to be compared against the scale,
+        // so the fiction lands as "the scale is lagging" when really the
+        // prediction was never earned (2026-08-08). `banked` guarded
+        // this from the start; this line simply never did.
+        let deficits = trackedDays
             .filter { $0.day >= thirtyDaysAgo }
             .map(\.deficitKcal)
         let predicted = deficits.isEmpty

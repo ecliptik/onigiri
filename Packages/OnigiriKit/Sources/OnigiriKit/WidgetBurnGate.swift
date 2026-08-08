@@ -81,6 +81,37 @@ public enum WidgetBurnGate {
         SharedStore.defaults.stringArray(forKey: journalKey) ?? []
     }
 
+    /// The budget's inputs, every time a plan is computed — app, widget
+    /// and watch alike, since they all go through `DailyPlanLoader.load`.
+    /// Deduplicated on the value line so an idle hour of identical reads
+    /// doesn't push the interesting ones out of a 40-entry window.
+    static let planJournalKey = "widget.planJournal"
+
+    public static func notePlan(
+        active: Double, restingMeasured: Double, restingEstimate: Double?,
+        weight: Double?, at date: Date = .now
+    ) {
+        let stamp = DateFormatter()
+        stamp.dateFormat = "MM-dd HH:mm"
+        let values = "act=\(Int(active)) restM=\(Int(restingMeasured))"
+            + " restE=\(restingEstimate.map { String(Int($0)) } ?? "NIL")"
+            + " wt=\(weight.map { String(Int($0)) } ?? "NIL")"
+        var lines = SharedStore.defaults.stringArray(forKey: planJournalKey) ?? []
+        // Same numbers as last time: refresh the timestamp rather than
+        // add a row, so the trail shows CHANGES.
+        if let last = lines.last, last.hasSuffix(values) {
+            lines[lines.count - 1] = "\(stamp.string(from: date)) \(values)"
+        } else {
+            lines.append("\(stamp.string(from: date)) \(values)")
+        }
+        if lines.count > journalLimit { lines.removeFirst(lines.count - journalLimit) }
+        SharedStore.defaults.set(lines, forKey: planJournalKey)
+    }
+
+    public static func planJournal() -> [String] {
+        SharedStore.defaults.stringArray(forKey: planJournalKey) ?? []
+    }
+
     public static func lastBurnReloadAt() -> Date? {
         guard let stamp = SharedStore.defaults.object(forKey: lastReloadKey) as? Double
         else { return nil }

@@ -166,7 +166,17 @@ enum SnapshotLoader {
         // The burn gate's baseline: record what this render is about to
         // show, so the observer compares against the number on screen
         // rather than against whatever it last happened to read.
-        if !needsSetup {
+        //
+        // NOT on a degenerate read. `isStoreLocked()` probes ONE type and
+        // can report "open" while weight, height and the summary all come
+        // back empty — observed 2026-08-07, a plan computed as
+        // `act=0 restM=0 restE=NIL wt=NIL` that then wrote a baseline of
+        // zero. A false baseline is worse than none: it made the next
+        // observer fire see a 106 kcal jump that had not happened, and the
+        // mirror case would suppress a reload that should have run.
+        // No plan (`dailyBudgetKcal == nil`) means the read is not
+        // trustworthy enough to compare against.
+        if !needsSetup, state.dailyBudgetKcal != nil {
             WidgetBurnGate.recordRendered(activeKcal: state.summary.activeBurnKcal)
         }
         return Load(snapshot: snapshot)

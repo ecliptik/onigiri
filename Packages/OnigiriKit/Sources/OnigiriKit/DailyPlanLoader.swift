@@ -198,6 +198,60 @@ public extension DailyPlanLoader {
         return state
     }
 
+    #if DEBUG
+    /// Every input the budget is built from, in one line.
+    ///
+    /// Exists because a budget can move hundreds of kcal without anything
+    /// visible changing (2026-08-07: ~1,000 kcal left on waking, ~1,600 an
+    /// hour later at a desk). The suspicion is the WEIGHT read: it feeds
+    /// both the resting estimate and — via
+    /// `healthWeightLb ?? goal.fallbackCurrentWeightLb` — the required
+    /// deficit, so a sealed store on a locked phone silently swaps in the
+    /// goal's stored weight. With a near target date a few pounds is
+    /// hundreds of kcal/day, and `TodayBurnFloor` keeps `dayBurn` pinned
+    /// at its high-water mark so the budget shrinks instead of standing
+    /// down, which makes the swap invisible. Print it rather than infer it.
+    public static func diagnose(
+        goal: SyncedGoal?,
+        health: any HealthPlanReading = HealthKitService(),
+        now: Date = .now
+    ) async -> String {
+        let summary = (try? await health.todaySummary()) ?? .zero
+        let healthWeight = (try? await health.latestBodyMassLb()) ?? nil
+        let profile = await health.bodyProfile()
+        let estimate: Double? = {
+            guard let heightCm = profile.heightCm, let age = profile.ageYears,
+                  let weightLb = healthWeight else { return nil }
+            return BasalEstimate.restingKcal(
+                weightLb: weightLb, heightCm: heightCm, ageYears: age, sex: profile.sex)
+        }()
+        let rawBurn = DayBudget.dayBurn(
+            activeKcal: summary.activeBurnKcal,
+            restingKcal: summary.restingBurnKcal,
+            estimatedRestingKcal: estimate
+        )
+        let floored = TodayBurnFloor.ratcheted(rawBurn, now: now)
+        let deficit = goal.flatMap {
+            CalorieBudget.requiredDailyDeficit(
+                currentWeightLb: healthWeight ?? $0.fallbackCurrentWeightLb,
+                targetWeightLb: $0.targetWeightLb,
+                targetDate: $0.targetDate,
+                now: now
+            )
+        }
+        func show(_ value: Double?) -> String { value.map { String(Int($0)) } ?? "nil" }
+        return "budget active=\(Int(summary.activeBurnKcal))"
+            + " restingMeasured=\(Int(summary.restingBurnKcal))"
+            + " restingEstimate=\(show(estimate))"
+            + " weightHealth=\(show(healthWeight))"
+            + " weightFallback=\(show(goal?.fallbackCurrentWeightLb))"
+            + " height=\(show(profile.heightCm)) age=\(profile.ageYears.map(String.init) ?? "nil")"
+            + " rawBurn=\(Int(rawBurn)) floored=\(Int(floored))"
+            + " deficit=\(show(deficit))"
+            + " intake=\(Int(summary.intakeKcal))"
+    }
+    #endif
+
     private static func computeState(
         goal: SyncedGoal?,
         health: any HealthPlanReading
@@ -226,6 +280,19 @@ public extension DailyPlanLoader {
                 weightLb: weightLb, heightCm: heightCm,
                 ageYears: age, sex: profile.sex)
         }()
+        #if DEBUG
+        // Durable trail of the budget's inputs, for the same reason the
+        // burn journal exists: a budget read ~1,000 kcal on waking and
+        // ~1,600 an hour later (2026-08-07), and by the time anyone could
+        // look the inputs were self-consistent and the morning's were
+        // gone. os_log does not survive on a busy device; this does.
+        WidgetBurnGate.notePlan(
+            active: summary.activeBurnKcal,
+            restingMeasured: summary.restingBurnKcal,
+            restingEstimate: estimatedResting,
+            weight: weightLb
+        )
+        #endif
         // Ratchet the DAY burn, not the raw total: under measured-only
         // active energy the guard against Health revising burn downward
         // mid-day matters more, not less.

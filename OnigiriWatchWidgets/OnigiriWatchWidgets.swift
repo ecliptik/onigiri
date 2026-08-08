@@ -71,8 +71,13 @@ enum WatchStateCache {
         }
         let state = await PlanCache.state(goal: goal)
         store(state)
-        // The burn gate's baseline: what this render is about to show.
-        WidgetBurnGate.recordRendered(activeKcal: state.summary.activeBurnKcal)
+        // The burn gate's baseline: what this render is about to show —
+        // but never from a degenerate read. See SnapshotLoader for the
+        // 2026-08-07 case where a sealed store slipped past
+        // `isStoreLocked()` and wrote a baseline of zero.
+        if state.dailyBudgetKcal != nil {
+            WidgetBurnGate.recordRendered(activeKcal: state.summary.activeBurnKcal)
+        }
         return (state, false)
     }
 }

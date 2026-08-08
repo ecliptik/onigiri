@@ -151,7 +151,11 @@ final class TodayModel {
             let day = Calendar.current.date(byAdding: .day, value: offset, to: .now) ?? .now
             print("[onigiri] day\(offset) \(await health.diagnoseIntake(for: day))")
         }
+        print("[onigiri] \(await DailyPlanLoader.diagnose(goal: WatchSync.loadGoal()))")
         // Durable, unlike os_log — see WidgetBurnGate.note.
+        for line in WidgetBurnGate.planJournal() {
+            print("[onigiri] plan \(line)")
+        }
         for line in WidgetBurnGate.journal() {
             print("[onigiri] burn \(line)")
         }

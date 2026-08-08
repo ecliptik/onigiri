@@ -1,5 +1,35 @@
 # PLAN — Fall back to Apple Intelligence when the provider can't be reached (2026-08-07)
 
+> **SHIPPED** as v2.18.0 (2026-08-08), and VERIFIED ON DEVICE in the
+> condition that prompted it: airplane mode with a remote provider
+> selected, estimate answered by Apple Intelligence (the user).
+>
+> Verification that ran: 398 kit tests; the eval suite 10/10 with ZERO
+> skips (245 s); `AIFallbackTests` 3/3, which proves the whole path with
+> no network by pointing the Local provider at `127.0.0.1:1` — refused
+> instantly, estimate still arrives stamped `.onDevice` after 16.5 s of
+> real on-device inference, and with the switch OFF the same fixture
+> produces nothing.
+>
+> Deltas from the plan as written:
+>
+> 1. `AIChat` became `public` (its two deadlines only — the helpers stay
+>    internal) so the app can pass `fallbackTimeout`.
+> 2. The engine rides to the UI on `ScannedProduct.aiEngine` as planned,
+>    and is stamped at the ENTRY POINT rather than at each construction
+>    site — the entry point is the one place that knows whether the
+>    remote replied or the fallback ran.
+> 3. `identifyFoodOnDevice(from:)` had to be split out: the photo
+>    branch's fallback cannot re-enter `identifyFood(from:)`, which
+>    would re-read the selected provider and try the remote text relay
+>    a second time against the same dead network.
+> 4. `PreferenceSnapshotTests`' exact-count tripwire fired on the new
+>    sweep key (48 → 49), as designed; updated with a named assertion
+>    for the key and the reason.
+> 5. The first `AIFallbackTests` run reported TEST SUCCEEDED while
+>    executing ZERO tests — a new file needs `xcodegen generate` before
+>    it is in the target. Checking for skips is what caught it.
+
 ## The complaint
 
 Identifying and logging food with a BYO-AI provider failed in an area

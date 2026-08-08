@@ -54,6 +54,20 @@ struct GoalView: View {
 
     private var currentWeightLb: Double? { model.healthWeightLb ?? manualWeightLb }
 
+    /// The weight the DEFICIT CHAIN is derived from — "To lose",
+    /// "Deficit needed", and both budgets. Distinct from
+    /// `currentWeightLb`, which stays the real last weigh-in for the
+    /// Weight field, validation and "use current as target".
+    ///
+    /// They must not be mixed: with the deficit on the average and
+    /// "To lose" on the raw reading, the two rows contradict each other
+    /// (2.2 lb above a deficit implying 4.1 lb) — the same "one label,
+    /// two numbers" failure that hit this screen twice on 2026-08-02.
+    private var planWeightLb: Double? { model.basisWeightLb ?? currentWeightLb }
+
+    /// The basis actually in force, for the picker row's caption.
+    private var weightBasis: WeightBasis { SharedStore.weightBasis }
+
     private var isMaintenance: Bool { mode == GoalMode.maintain }
 
     /// Two weigh-ins is the least that draws a line.
@@ -175,12 +189,12 @@ struct GoalView: View {
         // preview used to lag Today on high-burn days by skipping the
         // today-actual floor).
         if !isMaintenance {
-            guard let current = currentWeightLb, let target = targetWeightLb, target < current
+            guard let current = planWeightLb, let target = targetWeightLb, target < current
             else { return nil }
         }
         return CalorieBudget.derivePlan(
             isMaintenance: isMaintenance,
-            currentWeightLb: currentWeightLb,
+            currentWeightLb: planWeightLb,
             targetWeightLb: targetWeightLb,
             targetDate: targetDate,
             averageDailyBurnKcal: model.averageBurnKcal
@@ -193,7 +207,11 @@ struct GoalView: View {
     @ViewBuilder
     private func dailyPlanSection(_ plan: CalorieBudget.Plan) -> some View {
         Section {
-            if !isMaintenance, let current = currentWeightLb, let target = targetWeightLb {
+            if !isMaintenance, let current = planWeightLb, let target = targetWeightLb {
+                // The chain starts with the weight it is all derived
+                // from — and the picker lives HERE, at the point where
+                // its effect is visible, rather than in Settings.
+                weightBasisRow(basisLb: current)
                 LabeledContent("To lose") {
                     Text("\(unit.fromLb(current - target), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
                 }
@@ -208,8 +226,18 @@ struct GoalView: View {
             // swing).
             if model.trend.bankedLb > 0 {
                 LabeledContent("Total deficit") {
-                    Text("\(model.trend.bankedKcal, format: .number.precision(.fractionLength(0))) kcal ≈ \(unit.fromLb(model.trend.bankedLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
-                        .monospacedDigit()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("\(model.trend.bankedKcal, format: .number.precision(.fractionLength(0))) kcal ≈ \(unit.fromLb(model.trend.bankedLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
+                            .monospacedDigit()
+                        // ALL tracked days on record, not since the goal
+                        // was set — which is what it reads as without
+                        // this line (the user, 2026-08-08).
+                        if model.trend.bankedDays > 0 {
+                            Text("across \(model.trend.bankedDays) tracked \(model.trend.bankedDays == 1 ? "day" : "days")")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
             // Is the math showing up on the scale? Trailing 30 days of
@@ -217,8 +245,14 @@ struct GoalView: View {
             if let predicted = model.trend.predicted30Lb, let actual = model.trend.actual30Lb {
                 LabeledContent("Last 30 days") {
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text("≈ \(signedLb(predicted)) predicted")
-                        Text("\(signedLb(actual)) on the scale")
+                        // No ≈: "predicted" already says it is an
+                        // estimate, and the squiggle on this line but
+                        // not the one below implied a precision
+                        // difference that isn't the real distinction
+                        // (the user, 2026-08-08). Calendar's month
+                        // detail carries the identical pair — both fixed.
+                        Text("\(signedLb(predicted)) predicted")
+                        Text("\(signedLb(actual)) on scale")
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -256,15 +290,54 @@ struct GoalView: View {
     /// day has earned so far, and it climbs as active burn comes in.
     @ViewBuilder
     private func budgetRows(_ plan: CalorieBudget.Plan) -> some View {
-        LabeledContent("Average day") {
+        // The burn sits directly above the budget it feeds, so the
+        // subtraction reads off the screen: average burn − deficit =
+        // budget. It used to live one section down under "Calorie
+        // budget", where "Average day" and "Average burn" looked like
+        // two of the same kind of number and neither said which (the
+        // user, 2026-08-08). Naming each for what it IS finishes the job.
+        LabeledContent("Average daily burn") {
+            Text(model.averageBurnKcal.map {
+                "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
+            } ?? "≈ 2000 kcal/day (assumed)")
+                .monospacedDigit()
+        }
+        LabeledContent("Budget, average day") {
             Text("≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
                 .monospacedDigit()
         }
         if let todayBudget {
-            LabeledContent("Today") {
+            LabeledContent("Budget, today") {
                 Text("\(todayBudget, format: .number.precision(.fractionLength(0))) kcal")
                     .monospacedDigit()
             }
+        }
+    }
+
+    /// Which weight the target is derived from, and the control to
+    /// change it. Shows BOTH numbers: the basis is what the rows below
+    /// use, the last weigh-in is what the scale actually said.
+    @ViewBuilder
+    private func weightBasisRow(basisLb: Double) -> some View {
+        Picker(selection: Binding(
+            get: { weightBasis },
+            set: { SharedStore.defaults.set($0.rawValue, forKey: SharedStore.weightBasisKey) }
+        )) {
+            ForEach(WeightBasis.allCases, id: \.rawValue) { option in
+                Text(option.displayName).tag(option)
+            }
+        } label: {
+            LabeledContent("Weight used") {
+                Text("\(unit.fromLb(basisLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
+                    .monospacedDigit()
+            }
+        }
+        .pickerStyle(.navigationLink)
+        if weightBasis == .sevenDayAverage, let raw = currentWeightLb,
+           abs(raw - basisLb) >= 0.05 {
+            Text("7-day average of daily lows — last weigh-in \(unit.fromLb(raw), format: .number.precision(.fractionLength(1))) \(unit.symbol).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -354,14 +427,6 @@ struct GoalView: View {
                         Text(model.estimatedRestingKcal.map {
                             "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
                         } ?? "Not estimated")
-                            .monospacedDigit()
-                    }
-                    LabeledContent("Average burn") {
-                        // The fallback used to present as fact — the
-                        // projection above inherits this guess.
-                        Text(model.averageBurnKcal.map {
-                            "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
-                        } ?? "≈ 2000 kcal/day (assumed)")
                             .monospacedDigit()
                     }
                     Text("Your budget is the day's energy, minus the deficit. Resting energy starts at midnight. Active energy is added throughout the day.")

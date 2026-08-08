@@ -168,10 +168,26 @@ public enum DailyPlanLoader {
 public protocol HealthPlanReading: Sendable {
     func todaySummary() async throws -> DailyEnergySummary
     func latestBodyMassLb() async throws -> Double?
+    /// The weight the DEFICIT TARGET is derived from — the user's
+    /// `WeightBasis` applied to recent history, which is not always the
+    /// last weigh-in (PLAN-target-weight-basis).
+    ///
+    /// Every surface that computes a deficit must call THIS and not
+    /// `latestBodyMassLb()`, or Today and the widget quote different
+    /// numbers for the same day.
+    func targetBasisWeightLb() async -> Double?
     /// Height/age/sex — with weight, the inputs the resting estimate
     /// needs. The trailing burn average it replaced is no longer a plan
     /// input on any surface.
     func bodyProfile() async -> (heightCm: Double?, ageYears: Int?, sex: BasalEstimate.Sex)
+}
+
+public extension HealthPlanReading {
+    /// Raw latest — the honest degradation, and what a test double gets
+    /// without implementing anything.
+    func targetBasisWeightLb() async -> Double? {
+        (try? await latestBodyMassLb()) ?? nil
+    }
 }
 
 extension HealthKitService: HealthPlanReading {
@@ -179,6 +195,10 @@ extension HealthKitService: HealthPlanReading {
     // this forwards to the real implementation.
     public func todaySummary() async throws -> DailyEnergySummary {
         try await todaySummary(now: .now)
+    }
+
+    public func targetBasisWeightLb() async -> Double? {
+        await targetBasisWeightLb(now: .now)
     }
 }
 
@@ -217,7 +237,7 @@ public extension DailyPlanLoader {
         now: Date = .now
     ) async -> String {
         let summary = (try? await health.todaySummary()) ?? .zero
-        let healthWeight = (try? await health.latestBodyMassLb()) ?? nil
+        let healthWeight = await health.targetBasisWeightLb()
         let profile = await health.bodyProfile()
         let estimate: Double? = {
             guard let heightCm = profile.heightCm, let age = profile.ageYears,
@@ -268,10 +288,13 @@ public extension DailyPlanLoader {
         // maintenance now: it isn't a plan input there, but the resting
         // estimate that floors the day's burn is built from it.
         async let summaryRead = health.todaySummary()
-        async let weightRead = health.latestBodyMassLb()
+        // The BASIS, not the raw latest: the deficit target rides this,
+        // and so does the resting estimate below, so one screen never
+        // mixes two different "current weights".
+        async let weightRead = health.targetBasisWeightLb()
         async let profileRead = health.bodyProfile()
         let summary = (try? await summaryRead) ?? .zero
-        let weightLb = resolvedWeight((try? await weightRead) ?? nil)
+        let weightLb = resolvedWeight(await weightRead)
         let profile = await profileRead
         let estimatedResting: Double? = {
             guard let heightCm = profile.heightCm, let age = profile.ageYears,

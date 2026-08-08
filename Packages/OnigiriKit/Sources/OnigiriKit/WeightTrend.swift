@@ -142,3 +142,100 @@ public enum WeightTrend {
         )
     }
 }
+
+// MARK: - The basis the deficit target is derived from
+
+/// Which weight `CalorieBudget.requiredDailyDeficit` is derived from.
+///
+/// The target is `(current − goal) × 3500 / daysRemaining`, so its
+/// sensitivity to the "current" term is `3500 / daysRemaining` — about
+/// 146 kcal per pound at 24 days out, and 700 kcal/lb at five. Which
+/// reading feeds it is therefore not a detail.
+public enum WeightBasis: String, CaseIterable, Sendable {
+    /// The most recent weigh-in, whenever it happened.
+    case lastWeighIn
+    /// The mean of the last seven days' DAILY LOWS. The default.
+    case sevenDayAverage
+
+    /// Absent/unrecognized reads as the smoothed basis.
+    public static func resolve(_ raw: String?) -> WeightBasis {
+        raw.flatMap(WeightBasis.init(rawValue:)) ?? .sevenDayAverage
+    }
+
+    public var displayName: String {
+        switch self {
+        case .lastWeighIn: "Last weigh-in"
+        case .sevenDayAverage: "7-day average"
+        }
+    }
+}
+
+public extension WeightTrend {
+    /// One comparable reading per calendar day: that day's LOWEST.
+    ///
+    /// Weight at night runs 2–3 lb above the next morning — the day's
+    /// food and water (the user, 2026-08-08). So a mean over RAW samples
+    /// measures weighing habits as much as body mass: two evening
+    /// weigh-ins in a week pull it up ~0.6 lb and quietly tighten the
+    /// budget ~90 kcal, with nothing on screen to explain it.
+    ///
+    /// The minimum picks the morning reading without a cutoff hour to
+    /// tune, ignores a stray evening weigh-in rather than averaging it
+    /// in, and never drops a day for lacking a morning reading. (A day
+    /// weighed ONLY in the evening still reads high; the mean damps it.)
+    ///
+    /// Each kept point carries its own reading's timestamp, not the
+    /// day's start, so windowing stays exact.
+    static func dailyLows(_ points: [Point], calendar: Calendar = .current) -> [Point] {
+        var lowestByDay: [Date: Point] = [:]
+        for point in points {
+            let day = calendar.startOfDay(for: point.date)
+            if let existing = lowestByDay[day], existing.weightLb <= point.weightLb { continue }
+            lowestByDay[day] = point
+        }
+        return lowestByDay.values.sorted { $0.date < $1.date }
+    }
+
+    /// The weight the deficit target should be derived from: the mean of
+    /// the daily lows within the trailing `windowDays`.
+    ///
+    /// Returns nil when the window holds nothing — no history, or a
+    /// gap longer than the window — and the caller falls back to the raw
+    /// latest. A target derived from a stale reading beats no target.
+    ///
+    /// A trailing window of DAYS, not of readings: skipping three days
+    /// should average the four that remain, not reach further back and
+    /// silently widen the window.
+    static func targetBasisLb(
+        _ points: [Point],
+        windowDays: Int = 7,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> Double? {
+        guard windowDays > 0 else { return nil }
+        let cutoff = now.addingTimeInterval(-Double(windowDays) * 86400)
+        let recent = dailyLows(points, calendar: calendar).filter { $0.date > cutoff && $0.date <= now }
+        guard !recent.isEmpty else { return nil }
+        return recent.reduce(0) { $0 + $1.weightLb } / Double(recent.count)
+    }
+
+    /// The basis a caller should use, given the setting and what Health
+    /// has. `latestLb` is the fallback for every case the average can't
+    /// be computed — including `.lastWeighIn`, which IS that fallback.
+    static func basisLb(
+        _ basis: WeightBasis,
+        history: [Point],
+        latestLb: Double?,
+        windowDays: Int = 7,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> Double? {
+        switch basis {
+        case .lastWeighIn:
+            return latestLb
+        case .sevenDayAverage:
+            return targetBasisLb(history, windowDays: windowDays, now: now, calendar: calendar)
+                ?? latestLb
+        }
+    }
+}

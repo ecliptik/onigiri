@@ -557,7 +557,10 @@ struct MonthDetailView: View {
                         .foregroundStyle(outcomeColor(stats.totalDeficit.map { -$0 }))
                 }
                 LabeledContent("Predicted") {
-                    Text(stats.predictedLb.map { "≈ \(signedLb($0))" } ?? "—")
+                    // No ≈ — the label already says predicted, and the
+                    // "Scale change" row below carries none (the user,
+                    // 2026-08-08). Goal's Last-30-days pair is the twin.
+                    Text(stats.predictedLb.map { signedLb($0) } ?? "—")
                         .monospacedDigit()
                         .foregroundStyle(outcomeColor(stats.predictedLb))
                 }

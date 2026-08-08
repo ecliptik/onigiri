@@ -753,6 +753,28 @@ public final class HealthKitService {
         return try await bodyMassHistory(from: start, to: now)
     }
 
+    /// The weight the DEFICIT TARGET is derived from.
+    ///
+    /// `requiredDailyDeficit` is `(current − goal) × 3500 / daysRemaining`,
+    /// so its sensitivity to this term is `3500 / daysRemaining` — ~146
+    /// kcal per pound at 24 days out, 700 at five. Feeding it the raw
+    /// last weigh-in therefore encodes WHEN you last weighed as much as
+    /// what you weigh: evening readings run 2–3 lb above the next
+    /// morning, which is a 290–440 kcal swing in the day's allowance
+    /// from clock time alone (the user, 2026-08-08).
+    ///
+    /// Reads 14 days so the 7-day window has margin in one query.
+    /// Falls back to the raw latest whenever the average can't be
+    /// computed — no history, a gap longer than the window, a sealed
+    /// store. A target from a stale reading beats no target.
+    public func targetBasisWeightLb(now: Date = .now) async -> Double? {
+        let latest = (try? await latestBodyMassLb()) ?? nil
+        let basis = SharedStore.weightBasis
+        guard basis != .lastWeighIn else { return latest }
+        let history = (try? await bodyMassHistory(days: 14, now: now)) ?? []
+        return WeightTrend.basisLb(basis, history: history, latestLb: latest, now: now)
+    }
+
     /// Weigh-ins for an arbitrary range — the calendar extends its year
     /// of history on demand when older months are browsed.
     public func bodyMassHistory(from start: Date, to end: Date) async throws -> [WeightTrend.Point] {

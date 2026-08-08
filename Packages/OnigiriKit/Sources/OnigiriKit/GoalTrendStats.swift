@@ -53,6 +53,10 @@ public struct GoalTrendStats: Equatable, Sendable {
     /// and would silently inflate this into fiction.
     public let bankedKcal: Double
     public let bankedLb: Double
+    /// How many tracked days `bankedKcal` covers. Shown beside it
+    /// because "Total deficit" otherwise reads as "since I set this
+    /// goal", which it has never been (the user, 2026-08-08).
+    public let bankedDays: Int
     /// Weigh-ins (and the target/anchor line, when one is set) padded
     /// by 2 lb.
     public let chartYDomain: ClosedRange<Double>
@@ -69,7 +73,7 @@ public struct GoalTrendStats: Equatable, Sendable {
     public static let empty = GoalTrendStats(
         predicted30Lb: nil, actual30Lb: nil, projectedWindow: nil,
         fasterWindow: nil,
-        driftLbPerWeek: nil, bankedKcal: 0, bankedLb: 0, chartYDomain: 0...1
+        driftLbPerWeek: nil, bankedKcal: 0, bankedLb: 0, bankedDays: 0, chartYDomain: 0...1
     )
 
     public init(
@@ -77,7 +81,7 @@ public struct GoalTrendStats: Equatable, Sendable {
         projectedWindow: ClosedRange<Date>?,
         fasterWindow: ClosedRange<Date>? = nil,
         driftLbPerWeek: Double?,
-        bankedKcal: Double = 0, bankedLb: Double = 0,
+        bankedKcal: Double = 0, bankedLb: Double = 0, bankedDays: Int = 0,
         chartYDomain: ClosedRange<Double>
     ) {
         self.predicted30Lb = predicted30Lb
@@ -87,6 +91,7 @@ public struct GoalTrendStats: Equatable, Sendable {
         self.driftLbPerWeek = driftLbPerWeek
         self.bankedKcal = bankedKcal
         self.bankedLb = bankedLb
+        self.bankedDays = bankedDays
         self.chartYDomain = chartYDomain
     }
 
@@ -100,9 +105,9 @@ public struct GoalTrendStats: Equatable, Sendable {
         now: Date = .now
     ) -> GoalTrendStats {
         // Tracked days only — see bankedKcal.
-        let banked = dailyTotals
+        let trackedDays = dailyTotals
             .filter { StreakCalendar.isTracked($0, untrackedBelowKcal: untrackedBelowKcal) }
-            .reduce(0) { $0 + $1.deficitKcal }
+        let banked = trackedDays.reduce(0) { $0 + $1.deficitKcal }
         let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) ?? now
         // Nil until the window has logged days — no data, no claim.
         let deficits = dailyTotals
@@ -166,6 +171,7 @@ public struct GoalTrendStats: Equatable, Sendable {
             predicted30Lb: predicted, actual30Lb: actual,
             projectedWindow: projected, fasterWindow: faster, driftLbPerWeek: drift,
             bankedKcal: banked, bankedLb: -WeightTrend.Change.predictedLb(totalDeficitKcal: banked),
+            bankedDays: trackedDays.count,
             chartYDomain: domain
         )
     }

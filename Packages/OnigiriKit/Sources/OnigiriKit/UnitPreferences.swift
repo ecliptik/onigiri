@@ -218,4 +218,13 @@ public extension SharedStore {
     static var sodiumUnit: SodiumUnit {
         SodiumUnit.resolve(defaults.string(forKey: sodiumUnitKey))
     }
+
+    /// Which weight the deficit target is derived from — see
+    /// `WeightBasis`. Absent = the 7-day average (the default), so a
+    /// fresh install gets the steadier target.
+    static let weightBasisKey = "weightBasis"
+
+    static var weightBasis: WeightBasis {
+        WeightBasis.resolve(defaults.string(forKey: weightBasisKey))
+    }
 }

@@ -189,10 +189,14 @@ final class TodayModel {
     /// start and on foregrounding instead.
     func loadStatic() async {
         // Independent reads — run them concurrently.
-        async let weightRead = health.latestBodyMassLb()
+        // The deficit-target BASIS, not the raw last weigh-in — Today's
+        // deficit has to match the widget's, and both ride this. The
+        // resting estimate below uses the same value so one screen never
+        // mixes two "current weights" (PLAN-target-weight-basis).
+        async let weightRead = health.targetBasisWeightLb()
         async let burnRead = health.averageDailyBurnKcal()
         async let historyRead = health.bodyMassHistory(days: 7)
-        currentWeightLb = (try? await weightRead) ?? currentWeightLb
+        currentWeightLb = (await weightRead) ?? currentWeightLb
         averageBurnKcal = (try? await burnRead) ?? averageBurnKcal
         let body = await health.bodyProfile()
         estimatedRestingKcal = {

@@ -40,6 +40,18 @@ func scanRow(in app: XCUIApplication) -> XCUIElement {
     ).firstMatch
 }
 
+/// Tap a scope segment, scrolling it back into reach first. The Foods
+/// tab renders its scope bar as a LIST ROW, so anything that scrolls the
+/// list can leave the segment present-but-unhittable — a state
+/// `waitForExistence` reports as ready.
+@MainActor
+func scopeTap(in app: XCUIApplication, _ label: String) {
+    guard app.segmentedControls.count > 0 else { return }
+    let segment = app.segmentedControls.firstMatch.buttons[label]
+    for _ in 0..<3 where !segment.isHittable { app.swipeDown() }
+    if segment.isHittable { segment.tap() }
+}
+
 /// The Calendar tab's MONTH summary card, which pushes the month detail.
 /// Since 2.1 the day card ALSO shows "Details ›" (grammar unified), so a
 /// bare detailsLink is ambiguous on this tab — target the month card by
@@ -613,16 +625,16 @@ final class OnigiriUITests: XCTestCase {
         // is why the old app.staticTexts[name] never matched and both
         // edit shots silently skipped. ("Log <name>" is the separate +
         // button, unaffected by the exact-label match.)
-        if app.segmentedControls.count > 0 {
-            app.segmentedControls.firstMatch.buttons["Foods"].tap()
-        }
+        // EXISTENCE is not hittability: the Foods scope bar is a list
+        // ROW, and the dismissal loop above swipes down, which can leave
+        // it scrolled under the translucent nav bar — present in the
+        // hierarchy, untappable. Scroll it back into reach first.
+        scopeTap(in: app, "Foods")
         if tapIfExists(app.buttons["Protein shake"].firstMatch, timeout: 5) {
             shot("food-form-edit", settle: 1.2)
             tapIfExists(app.buttons["Cancel"].firstMatch)
         }
-        if app.segmentedControls.count > 0 {
-            app.segmentedControls.firstMatch.buttons["Meals"].tap()
-        }
+        scopeTap(in: app, "Meals")
         if tapIfExists(app.buttons["Chicken & rice"].firstMatch, timeout: 5) {
             shot("meal-form-edit", settle: 1.2)
             tapIfExists(app.buttons["Cancel"].firstMatch)

@@ -7,6 +7,10 @@ import OnigiriKit
 @Observable
 final class GoalModel {
     private(set) var healthWeightLb: Double?
+    /// The weight the deficit target is derived from (the user's
+    /// WeightBasis). nil until loaded; callers fall back to
+    /// healthWeightLb.
+    var basisWeightLb: Double?
     private(set) var averageBurnKcal: Double?
     /// Today's own burn (`DayBudget.dayBurn`, day-ratcheted), floor for
     /// the projection — without it the preview lags Today on an active
@@ -62,6 +66,12 @@ final class GoalModel {
         dailyTotals = (try? await totalsRead) ?? []
         let today = (try? await todayRead) ?? .zero
         smoothedHistory = WeightTrend.movingAverage(weightHistory, windowDays: 7)
+        // The weight the DEFICIT TARGET rides — free here, since the
+        // history is already loaded. Kept SEPARATE from healthWeightLb:
+        // the Weight field, validation and "use current as target" must
+        // keep showing what the scale actually said.
+        basisWeightLb = WeightTrend.basisLb(
+            SharedStore.weightBasis, history: weightHistory, latestLb: healthWeightLb)
         let body = await health.bodyProfile()
         estimatedRestingKcal = {
             guard let heightCm = body.heightCm, let age = body.ageYears,

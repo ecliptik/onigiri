@@ -72,6 +72,10 @@ struct PreferenceSnapshotTests {
         #expect(keys.contains(SharedStore.weightUnitKey))
         #expect(keys.contains(SharedStore.waterUnitKey))
         #expect(keys.contains(SharedStore.sodiumUnitKey))
+        // Which weight the deficit target follows (2026-08-08). Defaults
+        // ON to the average, so a reset that left it behind would strand
+        // an explicit "last weigh-in" the user can no longer see.
+        #expect(keys.contains(SharedStore.weightBasisKey))
         // Reminders: toggles and all five minute keys.
         for key in [SharedStore.remindMealsKey, SharedStore.remindWaterKey,
                     SharedStore.remindStreakKey, SharedStore.remindMealsMinuteKey,
@@ -104,6 +108,6 @@ struct PreferenceSnapshotTests {
         #expect(keys.contains(SharedStore.retiredActivityCreditKey))
         // Onboarding deliberately stays OUT (reset must not replay it).
         #expect(!keys.contains(SharedStore.hasOnboardedKey))
-        #expect(keys.count == 49)
+        #expect(keys.count == 50)
     }
 }

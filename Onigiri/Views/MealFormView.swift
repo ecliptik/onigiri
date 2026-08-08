@@ -42,6 +42,10 @@ struct MealFormView: View {
     /// so a matched component holds its library food by ID and a new one
     /// holds the estimate's values until then.
     @State private var pending: [PendingComponent] = []
+    /// Which engine produced `pending` — an unreachable provider hands
+    /// off to Apple Intelligence, and the footer below is the only
+    /// place that says where these numbers came from.
+    @State private var pendingEngine: AIProvider = .onDevice
     /// Raised by the estimate row while inference runs, so the ✨ name
     /// button goes quiet: two concurrent calls serialize on-device and
     /// double-bill a BYO-AI provider.
@@ -435,8 +439,8 @@ struct MealFormView: View {
         } footer: {
             let minted = pending.count { $0.matchID == nil && $0.quantity > 0 }
             Text(minted == 0
-                 ? AIProviderSettings.selected.estimateCaption
-                 : "\(AIProviderSettings.selected.estimateCaption) Saving adds \(minted == 1 ? "1 food" : "\(minted) foods") to your library.")
+                 ? pendingEngine.estimateCaption
+                 : "\(pendingEngine.estimateCaption) Saving adds \(minted == 1 ? "1 food" : "\(minted) foods") to your library.")
         }
     }
 
@@ -454,6 +458,7 @@ struct MealFormView: View {
     /// against the library first so an existing food is reused rather than
     /// twinned. Nothing is written yet — Save does that.
     private func apply(_ meal: FoodIntelligence.DescribedMeal) {
+        pendingEngine = meal.engine
         // The estimate names the meal too; a name already typed WINS (the
         // suggestName rule — the user's words outrank the model's).
         if name.trimmingCharacters(in: .whitespaces).isEmpty {

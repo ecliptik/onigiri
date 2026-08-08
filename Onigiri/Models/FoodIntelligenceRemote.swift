@@ -26,37 +26,75 @@ extension FoodIntelligence {
         }
     }
 
+    /// What a remote engine did with a request.
+    ///
+    /// The distinction is the whole point of the fallback: a provider
+    /// that is UNREACHABLE is not a provider that said no. Every remote
+    /// failure used to collapse to `nil`, so nothing downstream could
+    /// tell "no cell coverage" from "the model refused" — and an
+    /// identify-and-log in a dead zone died on the deterministic path
+    /// with a perfectly good on-device model sitting idle (the user,
+    /// 2026-08-07).
+    enum RemoteAnswer<Value> {
+        /// The provider replied. `nil` means the reply was unusable — a
+        /// refusal, an unparseable shape, values the guards rejected.
+        /// That is still an ANSWER, and no other engine second-guesses
+        /// it.
+        case answered(Value?)
+        /// Couldn't get an answer now (`AIReachability.isTransient`), so
+        /// a fallback engine may try. Also covers an unconfigured
+        /// provider — there is nothing to ask.
+        case unavailable
+    }
+
+    /// Is the fallback armed for THIS call? Used only to pick the
+    /// deadline; whether it actually runs is the entry point's call.
+    static var fallbackArmed: Bool {
+        AIProviderSettings.selected != .onDevice && fallbackToOnDevice
+    }
+
     private static func completeRemote(
         system: String, user: String, imageJPEG: Data? = nil
-    ) async -> Data? {
+    ) async -> RemoteAnswer<Data> {
+        // Shorter deadline when another engine is standing by: hard
+        // offline fails instantly either way, so 30 s only ever bit the
+        // weak-signal case.
+        let timeout = fallbackArmed ? AIChat.fallbackTimeout : AIChat.timeout
         do {
             switch AIProviderSettings.selected {
             case .onDevice:
-                return nil
+                return .answered(nil)
             case .anthropic:
                 let key = AIProviderSettings.anthropicAPIKey
-                guard !key.isEmpty else { return nil }
-                return try await AnthropicClient.completeJSON(
+                guard !key.isEmpty else { return .unavailable }
+                return .answered(try await AnthropicClient.completeJSON(
                     apiKey: key, model: AIProviderSettings.anthropicModel,
-                    system: system, user: user, imageJPEG: imageJPEG)
+                    system: system, user: user, imageJPEG: imageJPEG,
+                    timeout: timeout))
             case .openAI:
                 let key = AIProviderSettings.openAIAPIKey
-                guard !key.isEmpty else { return nil }
-                return try await OpenAICompatibleClient.completeJSON(
+                guard !key.isEmpty else { return .unavailable }
+                return .answered(try await OpenAICompatibleClient.completeJSON(
                     baseURL: OpenAICompatibleClient.openAIBaseURL,
                     apiKey: key, model: AIProviderSettings.openAIModel,
-                    system: system, user: user, imageJPEG: imageJPEG)
+                    system: system, user: user, imageJPEG: imageJPEG,
+                    timeout: timeout))
             case .local:
-                guard let base = AIProviderSettings.localBaseURL else { return nil }
+                guard let base = AIProviderSettings.localBaseURL else { return .unavailable }
                 let model = AIProviderSettings.localModel
-                guard !model.isEmpty else { return nil }
-                return try await OpenAICompatibleClient.completeJSON(
+                guard !model.isEmpty else { return .unavailable }
+                return .answered(try await OpenAICompatibleClient.completeJSON(
                     baseURL: base, apiKey: AIProviderSettings.localAIToken,
-                    model: model, system: system, user: user, imageJPEG: imageJPEG)
+                    model: model, system: system, user: user, imageJPEG: imageJPEG,
+                    timeout: timeout))
             }
         } catch {
-            log.notice("remote AI fell back: \(String(describing: error))")
-            return nil
+            let transient = AIReachability.isTransient(error)
+            log.notice("""
+                remote AI fell back: \(String(describing: error)) \
+                (\(transient ? "unreachable — on-device may answer" : "answered, no fallback"))
+                """)
+            return transient ? .unavailable : .answered(nil)
         }
     }
 
@@ -81,9 +119,9 @@ extension FoodIntelligence {
         let sugarG: Double?
     }
 
-    static func describeFoodRemote(_ description: String) async -> DescribedFood? {
+    static func describeFoodRemote(_ description: String) async -> RemoteAnswer<DescribedFood> {
         let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed.count < 500 else { return nil }
+        guard !trimmed.isEmpty, trimmed.count < 500 else { return .answered(nil) }
         let user = Prompts.describeUser(trimmed) + """
              Respond with ONLY a JSON object, no prose: {"name": string \
             (at most five words, title style), "kcal": number, \
@@ -92,14 +130,13 @@ extension FoodIntelligence {
             "proteinG": number, "fiberG": number, "sugarG": number — \
             grams for the described portion}.
             """
-        guard let estimate = decode(
-            RemoteFoodEstimate.self,
-            from: await completeRemote(system: Prompts.describeInstructions, user: user)
-        ) else { return nil }
+        guard case .answered(let data) = await completeRemote(
+            system: Prompts.describeInstructions, user: user) else { return .unavailable }
+        guard let estimate = decode(RemoteFoodEstimate.self, from: data) else { return .answered(nil) }
         let name = estimate.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, estimate.kcal >= 0, estimate.kcal <= 5000,
-              estimate.sodiumMg >= 0, estimate.sodiumMg <= 20_000 else { return nil }
-        return DescribedFood(
+              estimate.sodiumMg >= 0, estimate.sodiumMg <= 20_000 else { return .answered(nil) }
+        return .answered(DescribedFood(
             name: name,
             kcal: estimate.kcal,
             sodiumMg: estimate.sodiumMg,
@@ -107,7 +144,7 @@ extension FoodIntelligence {
             nutrients: macroNutrients(
                 fatG: estimate.fatG, carbsG: estimate.carbsG,
                 proteinG: estimate.proteinG, fiberG: estimate.fiberG,
-                sugarG: estimate.sugarG))
+                sugarG: estimate.sugarG)))
     }
 
     // MARK: Describe-meal
@@ -130,9 +167,9 @@ extension FoodIntelligence {
         let components: [Component]
     }
 
-    static func describeMealRemote(_ description: String) async -> DescribedMeal? {
+    static func describeMealRemote(_ description: String) async -> RemoteAnswer<DescribedMeal> {
         let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed.count < 500 else { return nil }
+        guard !trimmed.isEmpty, trimmed.count < 500 else { return .answered(nil) }
         let user = Prompts.describeMealUser(trimmed) + """
              Respond with ONLY a JSON object, no prose: {"name": string \
             (the meal, at most five words, title style), "components": \
@@ -142,10 +179,9 @@ extension FoodIntelligence {
             "proteinG": number, "fiberG": number, "sugarG": number — \
             grams for that portion}}.
             """
-        guard let estimate = decode(
-            RemoteMealEstimate.self,
-            from: await completeRemote(system: Prompts.describeMealInstructions, user: user)
-        ) else { return nil }
+        guard case .answered(let data) = await completeRemote(
+            system: Prompts.describeMealInstructions, user: user) else { return .unavailable }
+        guard let estimate = decode(RemoteMealEstimate.self, from: data) else { return .answered(nil) }
         let name = estimate.name.trimmingCharacters(in: .whitespacesAndNewlines)
         // Same shared gate as on-device (name/kcal sanity, sodium clamp,
         // repeat collapse) — and the same six-component ceiling.
@@ -157,33 +193,32 @@ extension FoodIntelligence {
                     fatG: $0.fatG, carbsG: $0.carbsG, proteinG: $0.proteinG,
                     fiberG: $0.fiberG, sugarG: $0.sugarG))
         })
-        guard !name.isEmpty, !components.isEmpty else { return nil }
-        return DescribedMeal(name: name, components: components)
+        guard !name.isEmpty, !components.isEmpty else { return .answered(nil) }
+        return .answered(DescribedMeal(name: name, components: components))
     }
 
     // MARK: Meal names
 
     private struct RemoteMealName: Decodable { let name: String }
 
-    static func suggestMealNameRemote(for foodNames: [String]) async -> String? {
+    static func suggestMealNameRemote(for foodNames: [String]) async -> RemoteAnswer<String> {
         let list = foodNames.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        guard !list.isEmpty, list.joined().count < 500 else { return nil }
+        guard !list.isEmpty, list.joined().count < 500 else { return .answered(nil) }
         let user = Prompts.mealNameUser(list) + """
              Respond with ONLY a JSON object, no prose: {"name": string \
             (a short, concrete meal name, at most four words)}.
             """
-        guard let suggestion = decode(
-            RemoteMealName.self,
-            from: await completeRemote(system: Prompts.mealNameInstructions, user: user)
-        ) else { return nil }
+        guard case .answered(let data) = await completeRemote(
+            system: Prompts.mealNameInstructions, user: user) else { return .unavailable }
+        guard let suggestion = decode(RemoteMealName.self, from: data) else { return .answered(nil) }
         let name = suggestion.name.trimmingCharacters(in: .whitespacesAndNewlines)
         // Code-level twin of the on-device @Guide's "at most four
         // words" — a misbehaving remote server shouldn't dump a
         // paragraph into the name field (numeric fields already get
         // this parity treatment in describeFoodRemote).
         guard !name.isEmpty, name.count <= 60,
-              name.split(separator: " ").count <= 6 else { return nil }
-        return name
+              name.split(separator: " ").count <= 6 else { return .answered(nil) }
+        return .answered(name)
     }
 
     // MARK: Identify Food
@@ -210,26 +245,26 @@ extension FoodIntelligence {
 
     /// Text relay — any provider, no vision needed. Same containment
     /// guard as on-device: labels in, only labeled foods out.
-    static func identifyFoodRemote(from guesses: [FoodGuess]) async -> IdentifiedFood? {
+    static func identifyFoodRemote(from guesses: [FoodGuess]) async -> RemoteAnswer<IdentifiedFood> {
         let labels = guesses.map(\.label).filter { !$0.isEmpty }
-        guard !labels.isEmpty, labels.joined().count < 500 else { return nil }
+        guard !labels.isEmpty, labels.joined().count < 500 else { return .answered(nil) }
         let user = Prompts.identifyUser(labels) + identifyShape
-        guard let food = parseIdentified(
-            from: await completeRemote(system: Prompts.identifyInstructions, user: user)
-        ) else { return nil }
+        guard case .answered(let data) = await completeRemote(
+            system: Prompts.identifyInstructions, user: user) else { return .unavailable }
+        guard let food = parseIdentified(from: data) else { return .answered(nil) }
         guard identifyContainmentHolds(
             name: food.name, componentNames: food.components.map(\.name), labels: labels
         ) else {
             log.notice("remote identify rejected: \(food.name) shares no words with labels")
-            return nil
+            return .answered(nil)
         }
-        return food
+        return .answered(food)
     }
 
     /// Photo path for vision-capable providers: the model sees the
     /// image itself (the grounding), with the classifier labels as a
     /// second, possibly-wrong signal — so no label-containment guard.
-    static func identifyFoodRemote(photoJPEG: Data, guesses: [FoodGuess]) async -> IdentifiedFood? {
+    static func identifyFoodRemote(photoJPEG: Data, guesses: [FoodGuess]) async -> RemoteAnswer<IdentifiedFood> {
         let labels = guesses.map(\.label).filter { !$0.isEmpty }
         let system = """
             You identify everyday foods and dishes from a photo. When it \
@@ -246,8 +281,9 @@ extension FoodIntelligence {
             guessed (most confident first, possibly wrong): \
             \(labels.joined(separator: ", ")).
             """ + identifyShape
-        return parseIdentified(
-            from: await completeRemote(system: system, user: user, imageJPEG: photoJPEG))
+        guard case .answered(let data) = await completeRemote(
+            system: system, user: user, imageJPEG: photoJPEG) else { return .unavailable }
+        return .answered(parseIdentified(from: data))
     }
 
     private static func parseIdentified(from data: Data?) -> IdentifiedFood? {
@@ -326,7 +362,7 @@ extension FoodIntelligence {
     /// Text relay — the OCR transcript, not the image. Works on every
     /// provider (no vision required), costs no image tokens, and OCR of
     /// rendered screen text is near-perfect anyway.
-    static func readNutritionScreenshotRemote(_ text: String) async -> [ScreenshotFood] {
+    static func readNutritionScreenshotRemote(_ text: String) async -> RemoteAnswer<[ScreenshotFood]> {
         let user = Prompts.screenshotUser(text) + """
             \n\nRespond with ONLY a JSON object, no prose — every \
             numeric field exactly as printed on the page, or null when \
@@ -337,11 +373,10 @@ extension FoodIntelligence {
             number|null, "sugarG": number|null}}. Return an empty array \
             when the text shows no nutrition figures.
             """
-        guard let reading = decode(
-            RemoteScreenshotReading.self,
-            from: await completeRemote(system: Prompts.screenshotInstructions, user: user)
-        ) else { return [] }
-        return plausibleScreenshotFoods(reading.foods.prefix(6).map { item in
+        guard case .answered(let data) = await completeRemote(
+            system: Prompts.screenshotInstructions, user: user) else { return .unavailable }
+        guard let reading = decode(RemoteScreenshotReading.self, from: data) else { return .answered(nil) }
+        return .answered(plausibleScreenshotFoods(reading.foods.prefix(6).map { item in
             ScreenshotFood(
                 name: item.name.trimmingCharacters(in: .whitespacesAndNewlines),
                 serving: (item.serving ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
@@ -350,7 +385,7 @@ extension FoodIntelligence {
                 nutrients: macroNutrients(
                     fatG: item.fatG, carbsG: item.carbsG, proteinG: item.proteinG,
                     fiberG: item.fiberG, sugarG: item.sugarG))
-        })
+        }))
     }
 
     // MARK: Sign / menu / package-front read
@@ -370,7 +405,7 @@ extension FoodIntelligence {
 
     /// Text relay, like the screenshot read — the sign's words are the
     /// signal, and they cost no image tokens on any provider.
-    static func readFoodSignRemote(_ text: String) async -> [SignFood] {
+    static func readFoodSignRemote(_ text: String) async -> RemoteAnswer<[SignFood]> {
         let user = Prompts.signUser(text) + """
             \n\nRespond with ONLY a JSON object, no prose: {"foods": \
             array of at most six {"name": string (the food as the sign \
@@ -380,11 +415,10 @@ extension FoodIntelligence {
             "proteinG": number|null — grams for that portion}}. Return \
             an empty array when the text names no food.
             """
-        guard let reading = decode(
-            RemoteSignReading.self,
-            from: await completeRemote(system: Prompts.signInstructions, user: user)
-        ) else { return [] }
-        return plausibleSignFoods(reading.foods.prefix(6).map { item in
+        guard case .answered(let data) = await completeRemote(
+            system: Prompts.signInstructions, user: user) else { return .unavailable }
+        guard let reading = decode(RemoteSignReading.self, from: data) else { return .answered(nil) }
+        return .answered(plausibleSignFoods(reading.foods.prefix(6).map { item in
             SignFood(
                 name: item.name.trimmingCharacters(in: .whitespacesAndNewlines),
                 serving: (item.serving ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
@@ -393,7 +427,7 @@ extension FoodIntelligence {
                 nutrients: macroNutrients(
                     fatG: item.fatG, carbsG: item.carbsG, proteinG: item.proteinG,
                     fiberG: nil, sugarG: nil))
-        }, text: text)
+        }, text: text))
     }
 
     // MARK: Label refinement
@@ -408,10 +442,10 @@ extension FoodIntelligence {
         let sugarG: Double?
     }
 
-    static func refineRemote(_ parsed: ParsedLabel, transcript: [LabelObservation]) async -> ParsedLabel {
-        guard refineNeeded(parsed) else { return parsed }
+    static func refineRemote(_ parsed: ParsedLabel, transcript: [LabelObservation]) async -> RemoteAnswer<ParsedLabel> {
+        guard refineNeeded(parsed) else { return .answered(parsed) }
         let text = transcript.map(\.text).joined(separator: "\n")
-        guard !text.isEmpty, text.count < 6_000 else { return parsed }
+        guard !text.isEmpty, text.count < 6_000 else { return .answered(parsed) }
         let user = Prompts.refineUser(text) + """
             \n\nRespond with ONLY a JSON object, no prose — every field a \
             number exactly as printed or null when the label doesn't show \
@@ -420,16 +454,15 @@ extension FoodIntelligence {
             "carbsG": number|null, "proteinG": number|null, "fiberG": \
             number|null, "sugarG": number|null}.
             """
-        guard let reading = decode(
-            RemoteLabelReading.self,
-            from: await completeRemote(
-                system: Prompts.refineInstructions(basis: labelBasis(parsed)), user: user)
-        ) else { return parsed }
-        return merged(
+        guard case .answered(let data) = await completeRemote(
+            system: Prompts.refineInstructions(basis: labelBasis(parsed)), user: user)
+        else { return .unavailable }
+        guard let reading = decode(RemoteLabelReading.self, from: data) else { return .answered(nil) }
+        return .answered(merged(
             parsed,
             kcal: reading.kcal, sodiumMg: reading.sodiumMg,
             fatG: reading.fatG, carbsG: reading.carbsG,
             proteinG: reading.proteinG, fiberG: reading.fiberG,
-            sugarG: reading.sugarG)
+            sugarG: reading.sugarG))
     }
 }

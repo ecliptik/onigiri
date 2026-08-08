@@ -87,6 +87,10 @@ struct PreferenceSnapshotTests {
         #expect(keys.contains(SharedStore.onlineLookupsKey))
         #expect(keys.contains(AIProviderSettings.enabledKey))
         #expect(keys.contains(AIProviderSettings.localVisionKey))
+        // The unreachable-provider fallback (2026-08-07). It defaults
+        // ON, so a reset that left it behind would strand an explicit
+        // OFF that the user could no longer see in a fresh Settings.
+        #expect(keys.contains(AIProviderSettings.fallbackOnDeviceKey))
         // Icons, including the meal mark (2026-07-23).
         #expect(keys.contains(SharedStore.mealIconKey))
         // Theme (2026-07-29) — an Appearance subscreen key like the icons.
@@ -100,6 +104,6 @@ struct PreferenceSnapshotTests {
         #expect(keys.contains(SharedStore.retiredActivityCreditKey))
         // Onboarding deliberately stays OUT (reset must not replay it).
         #expect(!keys.contains(SharedStore.hasOnboardedKey))
-        #expect(keys.count == 48)
+        #expect(keys.count == 49)
     }
 }

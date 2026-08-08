@@ -92,6 +92,13 @@ AI providers are off unless you configure one — deleting the provider's
 key or switching back to Apple Intelligence stops all AI traffic
 immediately.
 
+If the provider you chose can't be reached — no signal, or a temporary
+outage on their end — Onigiri estimates on your iPhone with Apple
+Intelligence instead, and nothing leaves the device for that request.
+This only ever sends less, never more. Settings → AI → Fall back to
+Apple Intelligence turns it off, in which case the estimate is simply
+skipped.
+
 ## What Onigiri stores on your device
 
 Your food and meal library, goals, and preferences are stored locally

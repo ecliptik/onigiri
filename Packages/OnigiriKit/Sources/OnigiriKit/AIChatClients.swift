@@ -42,10 +42,18 @@ public enum AIChatError: Error, LocalizedError {
 /// and the extractors strip a markdown fence if the model added one.
 /// Matching FoodIntelligence's manners: no retries, bounded timeout,
 /// throw and let the caller fall back silently.
-enum AIChat {
-    static let timeout: TimeInterval = 30
+/// Public only for the two deadlines — the helpers below stay internal.
+public enum AIChat {
+    public static let timeout: TimeInterval = 30
 
-    static func session() -> URLSession {
+    /// The deadline to use when another engine is standing by. Hard
+    /// offline already fails instantly (the OS knows there is no
+    /// route), so the full 30 s only bites on a WEAK signal — which is
+    /// the case that was reported, and half a minute of spinner before
+    /// an on-device answer is not a fallback anyone wants.
+    public static let fallbackTimeout: TimeInterval = 10
+
+    static func session(timeout: TimeInterval) -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = timeout
         config.timeoutIntervalForResource = timeout
@@ -66,8 +74,8 @@ enum AIChat {
         return trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    static func data(for request: URLRequest) async throws -> Data {
-        let (data, response) = try await session().data(for: request)
+    static func data(for request: URLRequest, timeout: TimeInterval = timeout) async throws -> Data {
+        let (data, response) = try await session(timeout: timeout).data(for: request)
         guard let http = response as? HTTPURLResponse else { throw AIChatError.badResponse }
         guard (200..<300).contains(http.statusCode) else {
             let message = errorMessage(from: data)
@@ -102,7 +110,9 @@ public enum AnthropicClient {
         system: String,
         user: String,
         imageJPEG: Data? = nil,
-        maxTokens: Int = 1024
+        maxTokens: Int = 1024,
+        /// Shortened when a fallback engine is standing by.
+        timeout: TimeInterval = AIChat.timeout
     ) async throws -> Data {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
@@ -129,7 +139,7 @@ public enum AnthropicClient {
             "messages": [["role": "user", "content": content]],
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        return try extractContent(from: try await AIChat.data(for: request))
+        return try extractContent(from: try await AIChat.data(for: request, timeout: timeout))
     }
 
     /// Envelope → the reply text as JSON bytes. Split out for the
@@ -167,7 +177,9 @@ public enum OpenAICompatibleClient {
         system: String,
         user: String,
         imageJPEG: Data? = nil,
-        maxTokens: Int = 1024
+        maxTokens: Int = 1024,
+        /// Shortened when a fallback engine is standing by.
+        timeout: TimeInterval = AIChat.timeout
     ) async throws -> Data {
         let url = baseURL.appendingPathComponent("chat/completions")
         var request = URLRequest(url: url)
@@ -200,7 +212,7 @@ public enum OpenAICompatibleClient {
         ]
         body[Self.tokenParameterName(for: baseURL)] = maxTokens
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        return try extractContent(from: try await AIChat.data(for: request))
+        return try extractContent(from: try await AIChat.data(for: request, timeout: timeout))
     }
 
     /// api.openai.com: `max_tokens` is legacy and 400s on the GPT-5

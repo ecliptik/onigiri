@@ -35,7 +35,13 @@ struct AIEstimateSection: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(food.name)
                     .foregroundStyle(.primary)
-                Text(AIProviderSettings.selected.estimateCaption)
+                // The engine that ANSWERED, not the one selected: an
+                // unreachable provider hands off to Apple Intelligence,
+                // and this caption is the only thing that says where the
+                // numbers came from. (The row's TITLE above still names
+                // the selection — that's a description of what tapping
+                // will do, before anything has happened.)
+                Text(food.engine.estimateCaption)
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
@@ -60,7 +66,8 @@ struct AIEstimateSection: View {
             sodiumMg: food.sodiumMg,
             servingDescription: food.serving,
             nutrients: food.nutrients,
-            aiGenerated: true)
+            aiGenerated: true,
+            aiEngine: food.engine)
     }
 }
 
@@ -101,7 +108,8 @@ struct MealEstimateSection: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(meal.name)
                     .foregroundStyle(.primary)
-                Text(AIProviderSettings.selected.estimateCaption)
+                // See the food row: the engine that answered.
+                Text(meal.engine.estimateCaption)
                     .font(.caption)
                     .foregroundStyle(.orange)
             }

@@ -12,6 +12,14 @@ public struct ScannedProduct: Sendable, Equatable {
     /// identify) rather than a database record — rides through the
     /// form so saved foods keep their ✨ provenance.
     public let aiGenerated: Bool
+    /// WHICH engine produced an AI estimate — the one that actually
+    /// answered, which is not always the selected provider: an
+    /// unreachable provider hands off to Apple Intelligence. Every
+    /// retrospective caption ("AI estimate from …") reads this, because
+    /// captioning an on-device answer with a remote provider's name is
+    /// exactly the claim that caption exists to prevent. nil for
+    /// anything not AI-derived.
+    public let aiEngine: AIProvider?
 
     public init(
         barcode: String,
@@ -20,7 +28,8 @@ public struct ScannedProduct: Sendable, Equatable {
         sodiumMg: Double?,
         servingDescription: String,
         nutrients: NutrientValues,
-        aiGenerated: Bool = false
+        aiGenerated: Bool = false,
+        aiEngine: AIProvider? = nil
     ) {
         self.barcode = barcode
         self.name = name
@@ -29,6 +38,7 @@ public struct ScannedProduct: Sendable, Equatable {
         self.servingDescription = servingDescription
         self.nutrients = nutrients
         self.aiGenerated = aiGenerated
+        self.aiEngine = aiEngine
     }
 }
 

@@ -243,7 +243,7 @@ struct FoodFormView: View {
                 if isBlankNewFood, !dbQuery.trimmingCharacters(in: .whitespaces).isEmpty {
                     AIEstimateSection(query: dbQuery) { product in
                         apply(product)
-                        lookupMessage = AIProviderSettings.selected.estimateCaption
+                        lookupMessage = product.aiEngine?.estimateCaption
                         endDatabaseSearch()
                     }
                 }
@@ -456,7 +456,7 @@ struct FoodFormView: View {
                         // the provider (BYO-AI can send the photo off
                         // device; "on-device" would be a lie there).
                         apply(product)
-                        lookupMessage = AIProviderSettings.selected.photoEstimateCaption
+                        lookupMessage = product.aiEngine?.photoEstimateCaption
                     }, notice: notice)
                 case .portion(let target):
                     PortionSheet(target: target) { quantity, category, _ in

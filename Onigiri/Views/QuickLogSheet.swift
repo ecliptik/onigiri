@@ -273,7 +273,7 @@ struct QuickLogSheet: View {
                     AIEstimateSection(query: searchText) { product in
                         activeSheet = .form(ProductPrefill(
                             product: product,
-                            provenance: AIProviderSettings.selected.estimateCaption))
+                            provenance: product.aiEngine?.estimateCaption))
                     }
                 }
                 // Water leads the sheet, above Recent in every scope

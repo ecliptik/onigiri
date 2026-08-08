@@ -1257,6 +1257,10 @@ private struct AISettingsScreen: View {
     @AppStorage(AIProviderSettings.localModelKey, store: SharedStore.defaults) private var aiLocalModel = ""
     @AppStorage(AIProviderSettings.localBaseURLKey, store: SharedStore.defaults) private var aiLocalBaseURL = ""
     @AppStorage(AIProviderSettings.localVisionKey, store: SharedStore.defaults) private var aiLocalVision = false
+    /// Default TRUE, matching AIProviderSettings.fallbackToOnDevice —
+    /// @AppStorage's default is what an ABSENT key reads as, so `false`
+    /// here would show the switch off while the engine treated it as on.
+    @AppStorage(AIProviderSettings.fallbackOnDeviceKey, store: SharedStore.defaults) private var aiFallback = true
     /// The SELECTED provider's secret, drafted like the FDC key —
     /// reloaded when the picker moves (each provider keeps its own
     /// Keychain slot, so switching never clobbers another's key).
@@ -1324,7 +1328,15 @@ private struct AISettingsScreen: View {
                     // labels as text instead of the photo.
                     Toggle("Model accepts photos", isOn: $aiLocalVision)
                 }
+                // Nothing to fall back FROM when Apple Intelligence is
+                // already the engine, so the row only exists for the
+                // bring-your-own providers.
                 if AIProviderSettings.selected != .onDevice {
+                    Toggle("Fall back to Apple Intelligence", isOn: $aiFallback)
+                        .disabled(!FoodIntelligence.onDeviceAvailable)
+                    if !FoodIntelligence.onDeviceAvailable {
+                        WarningFootnote("Apple Intelligence isn't available on this iPhone, so there's nothing to fall back to.")
+                    }
                     HStack {
                         Button("Test connection") { testAIConnection() }
                             .disabled(!AIProviderSettings.selectedRemoteIsConfigured || aiTest == .testing)
@@ -1357,6 +1369,12 @@ private struct AISettingsScreen: View {
                         Text("All AI features are off — estimates, label reading, and Identify Food are hidden.")
                     } else {
                         Text(AIProviderSettings.selected.providerDescription)
+                        // Formal register, like every settings footer.
+                        if AIProviderSettings.selected != .onDevice, FoodIntelligence.onDeviceAvailable {
+                            Text(aiFallback
+                                 ? "When \(AIProviderSettings.selected.displayName) can't be reached — no signal, or a temporary outage — Onigiri estimates on this iPhone instead. Nothing is sent anywhere in that case."
+                                 : "When \(AIProviderSettings.selected.displayName) can't be reached, the estimate is skipped.")
+                        }
                     }
                     // Deep links to each doc's AI section specifically
                     // (the user) — the general doors live in the colophon.

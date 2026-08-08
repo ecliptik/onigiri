@@ -86,6 +86,7 @@ public extension SharedStore {
         holdToLogWaterKey,
         weightUnitKey, waterUnitKey, sodiumUnitKey,
         AIProviderSettings.enabledKey, AIProviderSettings.hintDismissedKey,
+        AIProviderSettings.fallbackOnDeviceKey,
         AIProviderSettings.providerKey, AIProviderSettings.anthropicModelKey,
         AIProviderSettings.openAIModelKey, AIProviderSettings.localModelKey,
         AIProviderSettings.localBaseURLKey, AIProviderSettings.localVisionKey,

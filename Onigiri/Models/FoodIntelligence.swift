@@ -43,6 +43,19 @@ enum FoodIntelligence {
         #endif
     }
 
+    /// May a remote provider that couldn't be REACHED hand off to Apple
+    /// Intelligence? The Settings switch, and a model that actually
+    /// exists on this device.
+    ///
+    /// Read only from inside a `selected != .onDevice` branch, and only
+    /// on `.unavailable` — a provider that ANSWERED (a refusal, a
+    /// rejected key, an unusable shape) is never second-guessed, or a
+    /// key that quietly stopped working would look exactly like one
+    /// that works.
+    static var fallbackToOnDevice: Bool {
+        AIProviderSettings.fallbackToOnDevice && onDeviceAvailable
+    }
+
     // MARK: Label-parse refinement
 
     /// When the deterministic parse left holes on a gnarly label, the
@@ -59,7 +72,11 @@ enum FoodIntelligence {
         // affordances; identifyFood(photo:) already had this guard.
         guard isAvailable else { return parsed }
         if AIProviderSettings.selected != .onDevice {
-            return await refineRemote(parsed, transcript: transcript)
+            switch await refineRemote(parsed, transcript: transcript) {
+            case .answered(let refined): return refined ?? parsed
+            case .unavailable:
+                guard fallbackToOnDevice else { return parsed }
+            }
         }
         #if canImport(FoundationModels)
         guard #available(iOS 26.0, *) else { return parsed }
@@ -84,6 +101,11 @@ enum FoodIntelligence {
         /// estimates, same review contract as kcal. Micros stay out:
         /// that's where models produce confident garbage.
         let nutrients: NutrientValues
+        /// Which engine ANSWERED — not which provider is selected. An
+        /// unreachable provider hands off to Apple Intelligence, and
+        /// the caption has to say so. Stamped at the entry point, the
+        /// one place that knows which branch produced the value.
+        var engine: AIProvider = .onDevice
     }
 
     /// Clamped macro assembly, shared by both engines so bounds can't
@@ -106,12 +128,25 @@ enum FoodIntelligence {
     }
 
     static func describeFood(_ description: String) async -> DescribedFood? {
+        // Defense in depth, not a fix: every caller already gates
+        // (DescribeFoodIntent guards explicitly; the estimate row lives
+        // inside `if FoodIntelligence.isAvailable`). But those gates are
+        // render-time reads of a static value, and five of the seven
+        // engine-paired entry points guard here — an asymmetry invites a
+        // future caller to assume protection that isn't there, which is
+        // exactly how refine() shipped OCR text to a stale provider with
+        // AI switched off (2026-07-20 audit).
+        guard isAvailable else { return nil }
         if AIProviderSettings.selected != .onDevice {
-            return await describeFoodRemote(description)
+            switch await describeFoodRemote(description) {
+            case .answered(let food): return food?.stamped(AIProviderSettings.selected)
+            case .unavailable:
+                guard fallbackToOnDevice else { return nil }
+            }
         }
         #if canImport(FoundationModels)
         guard #available(iOS 26.0, *) else { return nil }
-        return await describeFood26(description)
+        return (await describeFood26(description))?.stamped(.onDevice)
         #else
         return nil
         #endif
@@ -139,6 +174,8 @@ enum FoodIntelligence {
         }
         let name: String
         let components: [Component]
+        /// Which engine ANSWERED — see DescribedFood.engine.
+        var engine: AIProvider = .onDevice
 
         /// Summed IN CODE, never model arithmetic — the IdentifiedFood
         /// rule: a model asked to total its own columns gets it wrong.
@@ -153,11 +190,15 @@ enum FoodIntelligence {
         // typed text to that provider's API).
         guard isAvailable else { return nil }
         if AIProviderSettings.selected != .onDevice {
-            return await describeMealRemote(description)
+            switch await describeMealRemote(description) {
+            case .answered(let meal): return meal?.stamped(AIProviderSettings.selected)
+            case .unavailable:
+                guard fallbackToOnDevice else { return nil }
+            }
         }
         #if canImport(FoundationModels)
         guard #available(iOS 26.0, *) else { return nil }
-        return await describeMeal26(description)
+        return (await describeMeal26(description))?.stamped(.onDevice)
         #else
         return nil
         #endif
@@ -243,7 +284,11 @@ enum FoodIntelligence {
         // table — and it would blow the on-device context window.
         guard !text.isEmpty, text.count < 6_000 else { return [] }
         if AIProviderSettings.selected != .onDevice {
-            return await readNutritionScreenshotRemote(text)
+            switch await readNutritionScreenshotRemote(text) {
+            case .answered(let foods): return foods ?? []
+            case .unavailable:
+                guard fallbackToOnDevice else { return [] }
+            }
         }
         #if canImport(FoundationModels)
         guard #available(iOS 26.0, *) else { return [] }
@@ -325,7 +370,11 @@ enum FoodIntelligence {
         // page of prose, and it would blow the on-device context window.
         guard !text.isEmpty, text.count < 6_000 else { return [] }
         if AIProviderSettings.selected != .onDevice {
-            return await readFoodSignRemote(text)
+            switch await readFoodSignRemote(text) {
+            case .answered(let foods): return foods ?? []
+            case .unavailable:
+                guard fallbackToOnDevice else { return [] }
+            }
         }
         #if canImport(FoundationModels)
         guard #available(iOS 26.0, *) else { return [] }
@@ -377,8 +426,15 @@ enum FoodIntelligence {
 
     /// One prompt, one suggestion, freely editable — nil on any failure.
     static func suggestMealName(for foodNames: [String]) async -> String? {
+        // See describeFood: the suggest button gates on isAvailable
+        // (MealFormView), this makes the entry points uniform.
+        guard isAvailable else { return nil }
         if AIProviderSettings.selected != .onDevice {
-            return await suggestMealNameRemote(for: foodNames)
+            switch await suggestMealNameRemote(for: foodNames) {
+            case .answered(let name): return name
+            case .unavailable:
+                guard fallbackToOnDevice else { return nil }
+            }
         }
         #if canImport(FoundationModels)
         guard #available(iOS 26.0, *) else { return nil }
@@ -403,6 +459,8 @@ enum FoodIntelligence {
         }
         let name: String
         let components: [Component]
+        /// Which engine ANSWERED — see DescribedFood.engine.
+        var engine: AIProvider = .onDevice
         /// Summed IN CODE from the components — never model arithmetic.
         var kcal: Double { components.reduce(0) { $0 + $1.kcal } }
         var sodiumMg: Double { components.reduce(0) { $0 + $1.sodiumMg } }
@@ -421,7 +479,8 @@ enum FoodIntelligence {
                     .map { "\($0.portion) \($0.name)" }
                     .joined(separator: " + "),
                 nutrients: NutrientValues(),
-                aiGenerated: true)
+                aiGenerated: true,
+                aiEngine: engine)
         }
     }
 
@@ -446,7 +505,14 @@ enum FoodIntelligence {
         // on-device relay and text-only remotes — decomposes the labels.
         if AIProviderSettings.selected != .onDevice, remoteVisionCapable,
            let jpeg = await jpegForUpload(photo, orientation: orientation) {
-            return await identifyFoodRemote(photoJPEG: jpeg, guesses: guesses)
+            switch await identifyFoodRemote(photoJPEG: jpeg, guesses: guesses) {
+            case .answered(let food): return food?.stamped(AIProviderSettings.selected)
+            case .unavailable:
+                // Falls through to the text relay below, which IS the
+                // on-device path — the classifier already ran locally.
+                guard fallbackToOnDevice else { return nil }
+                return await identifyFoodOnDevice(from: guesses)
+            }
         }
         return await identifyFood(from: guesses)
     }
@@ -456,17 +522,38 @@ enum FoodIntelligence {
     /// kit-tested; this half is the model under evaluation).
     static func identifyFood(from guesses: [FoodGuess]) async -> IdentifiedFood? {
         if AIProviderSettings.selected != .onDevice {
-            return await identifyFoodRemote(from: guesses)
+            switch await identifyFoodRemote(from: guesses) {
+            case .answered(let food): return food?.stamped(AIProviderSettings.selected)
+            case .unavailable:
+                guard fallbackToOnDevice else { return nil }
+            }
         }
+        return await identifyFoodOnDevice(from: guesses)
+    }
+
+    /// The on-device text relay on its own, so the fallback can reach it
+    /// DIRECTLY. Going back through `identifyFood(from:)` would re-read
+    /// the selected provider and try the remote relay a second time —
+    /// against the same unreachable network that just failed.
+    static func identifyFoodOnDevice(from guesses: [FoodGuess]) async -> IdentifiedFood? {
         #if canImport(FoundationModels)
         guard #available(iOS 26.0, *) else { return nil }
-        return await identifyFood26(from: guesses)
+        return (await identifyFood26(from: guesses))?.stamped(.onDevice)
         #else
         return nil
         #endif
     }
 
     // MARK: - Shared between engines (prompts, guards, post-processing)
+
+    // Which engine ANSWERED, stamped at the entry point — the one place
+    // that knows whether the remote replied or the fallback ran. Doing
+    // it at each construction site instead would need the answer
+    // threaded through eight builders, and the one that got missed
+    // would caption an on-device estimate with a remote provider's name.
+
+    // (One-line copies rather than a protocol: three unrelated structs,
+    // one mutable field each.)
 
     /// Prompt text is single-source so the on-device and remote engines
     /// can't drift apart silently: every wording choice was earned by
@@ -1091,4 +1178,18 @@ enum FoodIntelligence {
         }
     }
     #endif
+}
+
+// MARK: - Engine stamping
+
+extension FoodIntelligence.DescribedFood {
+    func stamped(_ engine: AIProvider) -> Self { var copy = self; copy.engine = engine; return copy }
+}
+
+extension FoodIntelligence.DescribedMeal {
+    func stamped(_ engine: AIProvider) -> Self { var copy = self; copy.engine = engine; return copy }
+}
+
+extension FoodIntelligence.IdentifiedFood {
+    func stamped(_ engine: AIProvider) -> Self { var copy = self; copy.engine = engine; return copy }
 }

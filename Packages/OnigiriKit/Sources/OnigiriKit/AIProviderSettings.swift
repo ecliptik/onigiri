@@ -76,6 +76,26 @@ public enum AIProviderSettings {
     /// The one-time "AI is available" hint's dismissal flag.
     public static let hintDismissedKey = "aiHintDismissed"
 
+    /// When the chosen provider can't be REACHED — no signal, DNS
+    /// failure, a rate limit, an outage — answer with Apple
+    /// Intelligence instead of failing (the user, 2026-08-07: an
+    /// identify-and-log died in an area with no cell coverage while the
+    /// on-device model sat idle).
+    ///
+    /// ON by default, unlike everything else AI. The privacy-first
+    /// default doesn't apply here: a fallback sends LESS, not more —
+    /// nothing leaves the device — and by the time this can fire the
+    /// user has already opted into AI and picked a provider.
+    ///
+    /// Hence the explicit absent check: `defaults.bool(forKey:)` alone
+    /// returns false for an unset key, which would ship a fresh install
+    /// with exactly the behavior this fixes.
+    public static let fallbackOnDeviceKey = "aiFallbackOnDevice"
+    public static var fallbackToOnDevice: Bool {
+        guard SharedStore.defaults.object(forKey: fallbackOnDeviceKey) != nil else { return true }
+        return SharedStore.defaults.bool(forKey: fallbackOnDeviceKey)
+    }
+
     public static let providerKey = "aiProvider"
     public static let anthropicModelKey = "aiAnthropicModel"
     public static let openAIModelKey = "aiOpenAIModel"

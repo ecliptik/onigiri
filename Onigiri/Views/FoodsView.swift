@@ -231,7 +231,7 @@ struct FoodsView: View {
                     AIEstimateSection(query: searchText) { product in
                         activeSheet = .form(ProductPrefill(
                             product: product,
-                            provenance: AIProviderSettings.selected.estimateCaption))
+                            provenance: product.aiEngine?.estimateCaption))
                     }
                 }
 

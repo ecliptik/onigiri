@@ -314,30 +314,26 @@ struct GoalView: View {
         }
     }
 
-    /// Which weight the target is derived from, and the control to
-    /// change it. Shows BOTH numbers: the basis is what the rows below
-    /// use, the last weigh-in is what the scale actually said.
+    /// TWO rows, because they answer two questions: which period the
+    /// target follows, and what weight that period produces. One row
+    /// carrying both ("212.4 lb  7-day average ›") made the reader work
+    /// out which half was the control (the user, 2026-08-08) — and
+    /// split like this the pair explains itself, so the caption that
+    /// used to sit under it is gone.
     @ViewBuilder
     private func weightBasisRow(basisLb: Double) -> some View {
-        Picker(selection: Binding(
+        Picker("Based on", selection: Binding(
             get: { weightBasis },
             set: { SharedStore.defaults.set($0.rawValue, forKey: SharedStore.weightBasisKey) }
         )) {
             ForEach(WeightBasis.allCases, id: \.rawValue) { option in
                 Text(option.displayName).tag(option)
             }
-        } label: {
-            LabeledContent("Weight used") {
-                Text("\(unit.fromLb(basisLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
-                    .monospacedDigit()
-            }
         }
         .pickerStyle(.navigationLink)
-        if weightBasis == .sevenDayAverage, let raw = currentWeightLb,
-           abs(raw - basisLb) >= 0.05 {
-            Text("7-day average of daily lows — last weigh-in \(unit.fromLb(raw), format: .number.precision(.fractionLength(1))) \(unit.symbol).")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        LabeledContent("Weight used") {
+            Text("\(unit.fromLb(basisLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
+                .monospacedDigit()
         }
     }
 

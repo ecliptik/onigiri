@@ -1,10 +1,14 @@
 # Onigiri 🍙
 
+<p align="center">
+  <a href="https://ecliptik.github.io/onigiri/"><b>Website</b></a> ·
+  <a href="https://github.com/ecliptik/onigiri/wiki/User-Guide"><b>User Guide</b></a> ·
+  <a href="https://ecliptik.github.io/onigiri/privacy/"><b>Privacy Policy</b></a>
+</p>
+
 A personal calorie, nutrition, and water tracker for iPhone, iPad, and Apple Watch. Everything logged is saved to Apple Health, there's no account to sign up for and data always remains yours.
 
 Runs on iPhone, iPad, and Apple Watch (iOS 18 / watchOS 10 or newer).
-
-**[Website](https://ecliptik.github.io/onigiri/)** · **[User Guide](https://github.com/ecliptik/onigiri/wiki/User-Guide)** · **[Privacy Policy](https://ecliptik.github.io/onigiri/privacy/)**
 
 **Built 100% agentically with [Claude Code](https://claude.com/claude-code).**
 

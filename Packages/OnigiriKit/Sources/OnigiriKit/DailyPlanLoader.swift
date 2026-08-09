@@ -335,6 +335,12 @@ public extension DailyPlanLoader {
 
     /// On the watch, prefer the phone's synced weight while fresh (see
     /// `planInput`); everywhere else the local store IS the phone's.
+    ///
+    /// Both sides of that choice are a BASIS weight — the local read is
+    /// `targetBasisWeightLb`, and the phone now sends the same thing
+    /// rather than its raw latest weigh-in. They have to be the same kind
+    /// of number, because this preference silently decides which one the
+    /// wrist quotes.
     private static func resolvedWeight(_ local: Double?) -> Double? {
         #if os(watchOS)
         return planInput(

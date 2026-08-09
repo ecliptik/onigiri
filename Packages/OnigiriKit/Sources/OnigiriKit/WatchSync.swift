@@ -95,9 +95,12 @@ public struct SyncPayload: Sendable, Hashable {
     /// Keyed by the SharedStore key, stored verbatim.
     public let trackedMetricSettings: [String: String]?
     public let sodiumLimitMg: Double?
-    /// The phone's latest weigh-in. The watch prefers it while fresh —
-    /// its own Health store purges old samples, so a weigh-in older than
-    /// that window is invisible there and the two devices' plans drift.
+    /// The weight the phone's PLAN is built from — its
+    /// `targetBasisWeightLb`, not its latest weigh-in (those differ by
+    /// the diurnal swing, and a pound is 3500/daysRemaining kcal of
+    /// allowance). The watch prefers it while fresh — its own Health store
+    /// purges old samples, so a weigh-in older than that window is
+    /// invisible there and the two devices' plans drift.
     /// Day-stamped (not time-stamped) so an unchanged value hashes
     /// identically and the phone's send-skip fingerprint still works.
     /// nil = keep.
@@ -207,6 +210,20 @@ public enum WatchSync {
     public static var unitPreferenceKeys: [String] { [
         SharedStore.weightUnitKey, SharedStore.waterUnitKey, SharedStore.sodiumUnitKey,
     ] }
+
+    /// Plan preferences ride that same dict and are likewise ALWAYS sent —
+    /// but as resolved pairs rather than a key list, because each one's
+    /// absent value means its own default ("the 7-day average"), not the
+    /// units' shared "follow the region".
+    ///
+    /// The weight basis travels because it picks WHICH weight a deficit is
+    /// derived from, and the watch computes its own deficit whenever the
+    /// phone's synced plan weight has aged out of `planInput`'s window. A
+    /// watch left on a different basis would then quote a different budget
+    /// from the very same weigh-ins.
+    public static var planPreferencePairs: [(String, String)] {
+        [(SharedStore.weightBasisKey, SharedStore.weightBasis.rawValue)]
+    }
 
     // The budget-style keys used to ride here so a watch left on
     // Automatic couldn't compute a different allowance than the phone.

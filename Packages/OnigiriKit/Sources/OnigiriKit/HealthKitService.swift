@@ -562,40 +562,59 @@ public final class HealthKitService {
     }
 
     /// Most recent weight sample (smart scale writes these), in pounds.
-    /// Write-through cached in the App Group (day-stamped) so the watch
-    /// context push — a synchronous path — can read it without a query.
+    ///
+    /// This is what the Weight field, validation and onboarding show —
+    /// the app must never report a weight the scale never said. It is NOT
+    /// what a deficit is derived from; that is `targetBasisWeightLb`,
+    /// which is also the only writer of the plan-weight cache below.
     public func latestBodyMassLb() async throws -> Double? {
         let descriptor = HKSampleQueryDescriptor(
             predicates: [.quantitySample(type: HKQuantityType(.bodyMass))],
             sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)],
             limit: 1
         )
-        let result: Double?
         do {
-            result = try await descriptor.result(for: store).first?.quantity.doubleValue(for: .pound())
+            return try await descriptor.result(for: store).first?.quantity.doubleValue(for: .pound())
         } catch let error as HKError where error.code == .errorAuthorizationNotDetermined {
             return nil
         }
-        if let result {
-            SharedStore.defaults.set(
-                ["value": result, "day": DeficitTargetHistory.dayKey(for: .now)] as [String: Any],
-                forKey: Self.weightCacheKey
-            )
-        } else {
-            // All weigh-ins deleted: a lingering cache would push a
-            // phantom weight to the watch until the day window aged out.
-            SharedStore.defaults.removeObject(forKey: Self.weightCacheKey)
-        }
-        return result
     }
 
-    private static let weightCacheKey = "latestBodyMassLb"
+    /// Write-through of the weight the PLAN is built from, day-stamped in
+    /// the App Group so the watch context push — a synchronous path — can
+    /// read it without a query.
+    ///
+    /// It caches the BASIS, and that distinction is the whole point. The
+    /// watch PREFERS this synced value over its own Health read
+    /// (`DailyPlanLoader.resolvedWeight`), so while the cache held the raw
+    /// last weigh-in the phone derived its deficit from the 7-day mean of
+    /// daily lows and the watch derived one from the last weigh-in — at
+    /// 3500/daysRemaining kcal per pound (~146 at 24 days out) the two
+    /// devices quoted budgets a couple of hundred kcal apart, every day,
+    /// with neither of them wrong about its own arithmetic. v2.19.0 routed
+    /// all three phone-side deficit sites through `targetBasisWeightLb`;
+    /// this is the fourth, and it was missed (2026-08-08).
+    static func cachePlanWeight(_ lb: Double?, now: Date) {
+        guard let lb else {
+            // All weigh-ins deleted: a lingering cache would push a
+            // phantom weight to the watch until the day window aged out.
+            SharedStore.defaults.removeObject(forKey: planWeightCacheKey)
+            return
+        }
+        SharedStore.defaults.set(
+            ["value": lb, "day": DeficitTargetHistory.dayKey(for: now)] as [String: Any],
+            forKey: planWeightCacheKey
+        )
+    }
+
+    static let planWeightCacheKey = "planBasisWeightLb"
 
     static func burnCacheKey(days: Int) -> String { "averageDailyBurnKcal.\(days)" }
 
-    /// The last weight read's write-through, same shape as the burn cache.
-    public static func cachedLatestBodyMassLb() -> (lb: Double, day: String)? {
-        guard let cached = SharedStore.defaults.dictionary(forKey: weightCacheKey),
+    /// The last plan-weight read's write-through, same shape as the burn
+    /// cache. The phone's watch push is the only reader.
+    public static func cachedPlanWeightLb() -> (lb: Double, day: String)? {
+        guard let cached = SharedStore.defaults.dictionary(forKey: planWeightCacheKey),
               let value = cached["value"] as? Double,
               let day = cached["day"] as? String else { return nil }
         return (value, day)
@@ -767,12 +786,22 @@ public final class HealthKitService {
     /// Falls back to the raw latest whenever the average can't be
     /// computed — no history, a gap longer than the window, a sealed
     /// store. A target from a stale reading beats no target.
+    ///
+    /// Write-through cached on the way out: the watch push needs this
+    /// value synchronously and must never fall back to the raw weigh-in
+    /// (see `cachePlanWeight`).
     public func targetBasisWeightLb(now: Date = .now) async -> Double? {
         let latest = (try? await latestBodyMassLb()) ?? nil
         let basis = SharedStore.weightBasis
-        guard basis != .lastWeighIn else { return latest }
-        let history = (try? await bodyMassHistory(days: 14, now: now)) ?? []
-        return WeightTrend.basisLb(basis, history: history, latestLb: latest, now: now)
+        let resolved: Double?
+        if basis == .lastWeighIn {
+            resolved = latest
+        } else {
+            let history = (try? await bodyMassHistory(days: 14, now: now)) ?? []
+            resolved = WeightTrend.basisLb(basis, history: history, latestLb: latest, now: now)
+        }
+        Self.cachePlanWeight(resolved, now: now)
+        return resolved
     }
 
     /// Weigh-ins for an arbitrary range — the calendar extends its year

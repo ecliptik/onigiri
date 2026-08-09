@@ -142,16 +142,31 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
             + WatchSync.unitPreferenceKeys.map { key in
                 (key, SharedStore.defaults.string(forKey: key) ?? SharedStore.unitAutomatic)
             }
+            // And the plan preferences, already resolved — see
+            // WatchSync.planPreferencePairs for why the weight basis has
+            // to reach the watch at all.
+            + WatchSync.planPreferencePairs
         )
-        // The phone's weigh-in rides along: the watch's Health store
+        // The phone's plan weight rides along: the watch's Health store
         // purges old samples, so one older than that window is invisible
-        // there and the two devices' plans drift. A cached read
-        // (day-stamped, hash-stable within a day) — this path must stay
-        // synchronous for flushNow. The trailing-average burn that used
+        // there and the two devices' plans drift. A cached read — this
+        // path must stay synchronous for flushNow. The day STAMP is a
+        // day key, but under the 7-day basis the VALUE also shifts when a
+        // daily low crosses the trailing cutoff, so the send-skip
+        // fingerprint moves once or twice a day rather than once per
+        // weigh-in. Cheap: planWeight is deliberately outside
+        // settingsFingerprint, so none of that reloads a widget.
+        // The trailing-average burn that used
         // to travel beside it went with the average-based budget
         // (2026-08-02): both devices read the day's own Health channels
         // now, and those already agree.
-        let planWeight = HealthKitService.cachedLatestBodyMassLb()
+        //
+        // It must be the BASIS weight, never the raw weigh-in. The watch
+        // prefers whatever arrives here over its own read, so sending the
+        // latest sample put its deficit on a different weight than the
+        // phone's from the day v2.19.0 shipped — the one thing
+        // `targetBasisWeightLb` exists to prevent.
+        let planWeight = HealthKitService.cachedPlanWeightLb()
         // The last observed Health log write: its change is what wakes
         // the watch complications (HealthKit's own sync carries the
         // sample, but watchOS caps its background delivery at hourly).

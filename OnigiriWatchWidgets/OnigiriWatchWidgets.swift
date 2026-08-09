@@ -66,16 +66,18 @@ enum WatchStateCache {
     /// the cache because the store was sealed.
     @MainActor
     static func resolve(goal: SyncedGoal?) async -> (state: DailyPlanLoader.State, cached: Bool) {
-        if await HealthKitService().isStoreLocked(), let cached = load() {
+        if await HealthKitService().healthReadLooksSealed(), let cached = load() {
             return (cached, true)
         }
         let state = await PlanCache.state(goal: goal)
-        store(state)
-        // The burn gate's baseline: what this render is about to show —
-        // but never from a degenerate read. See SnapshotLoader for the
-        // 2026-08-07 case where a sealed store slipped past
-        // `isStoreLocked()` and wrote a baseline of zero.
+        // Storing and baselining share one test, and it is deliberately
+        // the same one: the seal check above runs BEFORE the reads, so a
+        // store sealing in between still arrives here as a zero day.
+        // Writing that as "last good" would poison the very fallback this
+        // cache exists to provide, and writing it as the burn baseline
+        // made the next observer fire measure a jump that never happened.
         if state.dailyBudgetKcal != nil {
+            store(state)
             WidgetBurnGate.recordRendered(activeKcal: state.summary.activeBurnKcal)
         }
         return (state, false)

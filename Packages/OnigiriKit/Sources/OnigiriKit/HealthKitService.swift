@@ -541,24 +541,23 @@ public final class HealthKitService {
         }
     }
 
-    /// True when reads fail because the device is locked (file
-    /// protection seals the Health store until first unlock). A
-    /// background widget reload hitting a sealed store reads empty and
-    /// replaced a correct widget with confident zeros until the next
-    /// unlock — callers keep their last-good snapshot instead.
-    public func isStoreLocked() async -> Bool {
-        let descriptor = HKSampleQueryDescriptor(
-            predicates: [.quantitySample(type: HKQuantityType(.dietaryEnergyConsumed))],
-            sortDescriptors: [], limit: 1
+    /// True when a read now would come back empty because the store is
+    /// SEALED (locked device, watch off the wrist) rather than because
+    /// there is nothing to read. A background reload against a sealed
+    /// store replaced a correct widget with confident zeros; callers keep
+    /// their last-good snapshot instead.
+    ///
+    /// One sample query — the same cost as the `isStoreLocked()` probe
+    /// this replaces — but it reads a channel we KNOW goes nil when the
+    /// store is sealed, and then judges that nil against the day-stamped
+    /// weight cache rather than waiting for a throw the store is not
+    /// obliged to make. See `HealthReadTrust` for why the old shape could
+    /// never work.
+    public func healthReadLooksSealed(now: Date = .now) async -> Bool {
+        let weightLb = (try? await latestBodyMassLb()) ?? nil
+        return HealthReadTrust.looksSealed(
+            weightLb: weightLb, cachedDay: Self.cachedPlanWeightLb()?.day, now: now
         )
-        do {
-            _ = try await descriptor.result(for: store)
-            return false
-        } catch let error as HKError where error.code == .errorDatabaseInaccessible {
-            return true
-        } catch {
-            return false
-        }
     }
 
     /// Most recent weight sample (smart scale writes these), in pounds.
@@ -596,8 +595,18 @@ public final class HealthKitService {
     /// this is the fourth, and it was missed (2026-08-08).
     static func cachePlanWeight(_ lb: Double?, now: Date) {
         guard let lb else {
-            // All weigh-ins deleted: a lingering cache would push a
-            // phantom weight to the watch until the day window aged out.
+            // A nil is ambiguous: every weigh-in deleted, or a SEALED
+            // store answering empty. Keep a RECENT cache through it —
+            // clearing on a bad read would throw away good data, stop the
+            // watch push carrying a weight at all, and destroy the very
+            // evidence `healthReadLooksSealed` judges the next nil
+            // against. An genuinely deleted weight ages out of the
+            // window on its own within two days, which is when the
+            // phantom-weight concern below actually applies.
+            if let cached = Self.cachedPlanWeightLb(),
+               WatchSync.isRecentDay(cached.day, now: now) { return }
+            // Stale or absent: a lingering cache would push a phantom
+            // weight to the watch long after the scale stopped saying it.
             SharedStore.defaults.removeObject(forKey: planWeightCacheKey)
             return
         }

@@ -167,7 +167,12 @@ public enum BurnWidgetRefresh {
         // and a zero would look like the day reset and gate the reload
         // off for the rest of the window. Bail instead; the next fire
         // after unlock does the real comparison.
-        guard await !health.isStoreLocked() else { return false }
+        //
+        // This is the site the old `isStoreLocked()` failed worst: it
+        // passed on a sealed store, read active as 0, and then wrote that
+        // zero as the rendered baseline — so the following fire measured
+        // a jump that never happened.
+        guard await !health.healthReadLooksSealed(now: now) else { return false }
         guard let active = try? await health.todayActiveBurnKcal(now: now) else { return false }
         let lastRendered = WidgetBurnGate.renderedActiveKcal(now: now)
         let shouldReload = WidgetRefreshPolicy.shouldReloadForBurn(

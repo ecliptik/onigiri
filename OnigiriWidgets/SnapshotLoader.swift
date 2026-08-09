@@ -142,7 +142,7 @@ enum SnapshotLoader {
     static func load() async -> Load {
         // Sealed store (locked phone): serve the last good snapshot —
         // its values are stale-but-true; zeros are confidently wrong.
-        if await HealthKitService().isStoreLocked(),
+        if await HealthKitService().healthReadLooksSealed(),
            let data = SharedStore.defaults.data(forKey: lastGoodKey),
            let cached = try? JSONDecoder().decode(DaySnapshot.self, from: data) {
             return Load(snapshot: cached, wasCached: true)
@@ -160,22 +160,28 @@ enum SnapshotLoader {
             isMaintenance: goal?.isMaintenance ?? false,
             trackedTotals: await trackedTotals()
         )
-        if !needsSetup, let data = try? JSONEncoder().encode(snapshot) {
+        // Same trustworthiness test as the baseline below, for the same
+        // reason: a store that sealed AFTER the check above yields a zero
+        // day, and writing that as "last good" poisons the fallback —
+        // the next sealed render would then serve those zeros as
+        // stale-but-true, which is exactly what the cache exists to stop.
+        if !needsSetup, state.dailyBudgetKcal != nil,
+           let data = try? JSONEncoder().encode(snapshot) {
             SharedStore.defaults.set(data, forKey: lastGoodKey)
         }
         // The burn gate's baseline: record what this render is about to
         // show, so the observer compares against the number on screen
         // rather than against whatever it last happened to read.
         //
-        // NOT on a degenerate read. `isStoreLocked()` probes ONE type and
-        // can report "open" while weight, height and the summary all come
-        // back empty — observed 2026-08-07, a plan computed as
-        // `act=0 restM=0 restE=NIL wt=NIL` that then wrote a baseline of
-        // zero. A false baseline is worse than none: it made the next
-        // observer fire see a 106 kcal jump that had not happened, and the
-        // mirror case would suppress a reload that should have run.
-        // No plan (`dailyBudgetKcal == nil`) means the read is not
-        // trustworthy enough to compare against.
+        // NOT on a degenerate read. This second guard predates
+        // `healthReadLooksSealed` and outlives it: the seal check runs
+        // BEFORE the reads, so a device that locks in between still lands
+        // here with `act=0 restM=0 restE=NIL wt=NIL` (observed 2026-08-07,
+        // and three more times on 08-08). A false baseline is worse than
+        // none — it made the next observer fire see a 106 kcal jump that
+        // had not happened, and the mirror case would suppress a reload
+        // that should have run. No plan (`dailyBudgetKcal == nil`) means
+        // the read is not trustworthy enough to compare against.
         if !needsSetup, state.dailyBudgetKcal != nil {
             WidgetBurnGate.recordRendered(activeKcal: state.summary.activeBurnKcal)
         }

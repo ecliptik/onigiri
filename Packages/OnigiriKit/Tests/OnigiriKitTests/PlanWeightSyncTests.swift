@@ -35,12 +35,16 @@ struct PlanWeightSyncTests {
         #expect(cached?.day == DeficitTargetHistory.dayKey(for: now))
     }
 
+    /// A weight that stays gone stops being pushed. The cache is not
+    /// cleared the instant a read returns nil — that nil is ambiguous and
+    /// a recent cache survives it (`HealthReadTrustTests`) — but once the
+    /// cache ages out of the freshness window the absence is taken as
+    /// real, so the watch is not fed a phantom weight indefinitely.
     @MainActor
-    @Test func aWeightThatWentAwayClearsTheCache() {
+    @Test func aWeightThatStaysGoneStopsBeingPushed() {
         defer { SharedStore.defaults.removeObject(forKey: HealthKitService.planWeightCacheKey) }
-        HealthKitService.cachePlanWeight(212.4, now: .now)
-        // Every weigh-in deleted: a lingering cache would push a phantom
-        // weight to the watch until the day window aged out.
+        let staleDay = Calendar.current.date(byAdding: .day, value: -3, to: .now)!
+        HealthKitService.cachePlanWeight(212.4, now: staleDay)
         HealthKitService.cachePlanWeight(nil, now: .now)
         #expect(HealthKitService.cachedPlanWeightLb() == nil)
     }

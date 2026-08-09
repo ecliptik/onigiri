@@ -29,6 +29,44 @@
 >    a LIST ROW, and the tour's own `swipeDown()` can leave it under the
 >    nav bar. Pre-existing (the bar has been a list row throughout);
 >    fixed with a `scopeTap` helper that scrolls it into reach.
+>
+> **Follow-ups after use on device:**
+>
+> **v2.19.1** — (a) `Weight used` split into TWO rows, `Based on`
+> (the period, and the picker) over `Weight used` (the weight it
+> yields); the caption under it is gone, since split the pair explains
+> itself and "Based on" covers the last-weigh-in option that
+> "7-day average of daily lows" never did. (b) `predicted30Lb` now
+> applies the SAME tracked-day filter `bankedKcal` always had — one
+> untracked day was adding ~0.7 lb of phantom loss to a row whose whole
+> job is to be compared against the scale, so the fiction read as "the
+> scale is lagging". Both new tests were CONFIRMED to fail without the
+> fix (−1.71 and −1.66 against −1.0), not assumed to.
+>
+> **v2.19.2** — the new-food form drops its visible title: `Cancel ·
+> New Food · Log · Log & Save` read as crowded. Measured first, it
+> never truncates (iPhone SE at XXL text lays both out with real
+> frames), so this is density, not breakage. The title yields ONLY
+> where the confirm pair needs the room — editing keeps "Edit Food"
+> and `MealFormView` keeps "New Meal", both single-button bars. A
+> nav-bar title is what VoiceOver announces on presenting a sheet, so
+> the form keeps a zero-opacity header-trait `Text`; NOT `.hidden()`,
+> which removes it from the accessibility tree and defeats the point.
+> The rest of the app was audited for the same hole and had none
+> (TodayView draws its own headline, PortionSheet announces the food
+> name as a section header).
+>
+> **A test that would have rotted:** it used
+> `navigationBars["New Food"]` as its "form is gone" probe. With an
+> empty title that predicate goes true INSTANTLY — passing forever
+> while guarding nothing, which is precisely the dismissal race its own
+> comment describes. It waits on the Name field now.
+>
+> **Not fixed, and known:** `requiredDeficit`'s sensitivity is still
+> `3500/daysRemaining` per pound — 146 kcal/lb at 24 days out, 700 at
+> five. Smoothing damps the INPUT; the amplifier is untouched. If a
+> near-deadline plan still swings, the next lever is the deficit's rate
+> of change, which is a separate decision.
 
 ## The observation
 

@@ -17,6 +17,10 @@ final class GoalModel {
     /// day. Ratcheted HERE, once per load, not in the view body: the
     /// floor writes as it reads, and a view body re-runs per keystroke.
     private(set) var todayDayBurnKcal: Double = 0
+    /// Eaten so far today — the numerator of Goal's `Budget` row. Free:
+    /// it rides the `todaySummary()` read that already produces the burn
+    /// above it, so showing progress costs no extra HealthKit query.
+    private(set) var todayIntakeKcal: Double = 0
     private(set) var weightHistory: [WeightTrend.Point] = []
     /// Full-day resting from Health's body metrics — the floor under
     /// every day's resting credit, shown on the Goal screen because it
@@ -65,6 +69,7 @@ final class GoalModel {
         weightHistory = (try? await historyRead) ?? []
         dailyTotals = (try? await totalsRead) ?? []
         let today = (try? await todayRead) ?? .zero
+        todayIntakeKcal = today.intakeKcal
         smoothedHistory = WeightTrend.movingAverage(weightHistory, windowDays: 7)
         // The weight the DEFICIT TARGET rides — free here, since the
         // history is already loaded. Kept SEPARATE from healthWeightLb:

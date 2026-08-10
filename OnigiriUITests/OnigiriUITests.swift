@@ -1401,7 +1401,7 @@ final class OnigiriUITests: XCTestCase {
         // in the accessibility tree until they're scrolled near.
         // A LabeledContent row is ONE element carrying the value, but the
         // shape isn't guaranteed — accept a sibling static text too.
-        let weightThen = app.staticTexts["Weight then"]
+        let weightThen = app.staticTexts["Weight"]
         func startWeightShown() -> Bool {
             ((weightThen.value as? String) ?? "").contains("210")
                 || app.staticTexts.matching(

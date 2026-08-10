@@ -257,41 +257,37 @@ struct GoalView: View {
     /// strongly, not loosened — do not collapse them back into one.
     @ViewBuilder
     private func dailyPlanSection(_ plan: CalorieBudget.Plan) -> some View {
-        // What TODAY allows, on the day's own burn. It leads because it
-        // is the only number here you act on; it used to be seventh.
+        // ONE section, and exactly ONE row on the visible screen called
+        // "Budget" (the user, 2026-08-10). Two sections each holding a
+        // row by that name still read as "these should match" — the
+        // average-day pair is a PROJECTION, so it moved into the
+        // derivation group where its context is.
+        //
+        // The fraction is eaten-of-today's-budget, which is a real
+        // part-of-whole. It is NOT today's budget over the average
+        // day's: those are different quantities over different spans,
+        // and on an active day the first exceeds the second, so that
+        // fraction would render past 100% and break its own metaphor.
         if let todayBudget {
             Section {
                 LabeledContent("Budget") {
-                    Text("\(todayBudget, format: .number.precision(.fractionLength(0))) kcal")
+                    Text("\(model.todayIntakeKcal, format: .number.precision(.fractionLength(0))) / \(todayBudget, format: .number.precision(.fractionLength(0))) kcal")
+                        .monospacedDigit()
+                }
+                // NOT "so far": `dayBurn` is active earned to now PLUS
+                // the whole day's resting, credited from midnight. The
+                // bare-label version of this collided with Details'
+                // measured-so-far figure and read as the app
+                // contradicting itself (2026-08-02); the footer carries
+                // the distinction instead.
+                LabeledContent("Burn") {
+                    Text("\(model.todayDayBurnKcal, format: .number.precision(.fractionLength(0))) kcal")
                         .monospacedDigit()
                 }
             } header: {
                 Text("Today")
             } footer: {
-                Text("Grows as you move: resting energy is credited from midnight, active energy as you earn it.")
-            }
-        }
-        Section {
-            // The burn sits directly above the budget it feeds, so the
-            // subtraction reads off the screen: burn − deficit = budget.
-            LabeledContent("Burn") {
-                Text(model.averageBurnKcal.map {
-                    "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
-                } ?? "≈ 2000 kcal/day (assumed)")
-                    .monospacedDigit()
-            }
-            LabeledContent("Budget") {
-                Text("≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
-                    .monospacedDigit()
-            }
-        } header: {
-            Text("An average day")
-        } footer: {
-            // Points back at Today on purpose: the two budgets now sit in
-            // different sections, and nothing else on screen says they
-            // are the same arithmetic over different spans.
-            if todayBudget != nil {
-                Text("A forecast from your recent burn — today's own number is above.")
+                Text("Eaten of today's budget. It grows as you move: resting energy is credited from midnight, active energy as you earn it.")
             }
         }
         // Its own section, and NEVER inside the collapsed group below: a
@@ -308,16 +304,12 @@ struct GoalView: View {
         }
     }
 
-    /// Effort banked, and whether it is showing on the scale — the
-    /// retrospective half, which used to share a header with the
-    /// forecast. Gated exactly as before (only alongside a computable
-    /// plan), and self-hiding when there is nothing to report so the
-    /// header can't stand over an empty card.
+    /// Effort banked, and whether it is showing on the scale — the rows
+    /// that answer "how far", under the same header as the start they
+    /// are measured against.
     @ViewBuilder
-    private var progressSection: some View {
-        if model.trend.bankedLb > 0
-            || (model.trend.predicted30Lb != nil && model.trend.actual30Lb != nil) {
-            Section {
+    private var progressTotals: some View {
+        if hasProgressTotals {
             // What the effort adds up to, independent of what the scale
             // did this morning — the number a bad weigh-in can't take
             // away (the user wanted something motivating that doesn't
@@ -355,9 +347,6 @@ struct GoalView: View {
                     }
                 }
             }
-            } header: {
-                Text("Progress")
-            }
         }
     }
 
@@ -377,7 +366,7 @@ struct GoalView: View {
     @ViewBuilder
     private func budgetCompositionSection(_ plan: CalorieBudget.Plan?) -> some View {
         Section {
-            DisclosureGroup("How your budget is set") {
+            DisclosureGroup("How the budget is set") {
                 if !isMaintenance, let current = planWeightLb, let target = targetWeightLb {
                     weightBasisRow(basisLb: current)
                     LabeledContent("To lose") {
@@ -387,6 +376,22 @@ struct GoalView: View {
                         LabeledContent("Deficit needed") {
                             Text("\(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal/day")
                         }
+                    }
+                }
+                // The projection, and the burn it comes from — a
+                // FORECAST, so it lives with the derivation rather than
+                // beside today's live figure, where a second row called
+                // "Budget" read as a number that ought to match it.
+                LabeledContent("Average daily burn") {
+                    Text(model.averageBurnKcal.map {
+                        "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
+                    } ?? "≈ 2000 kcal/day (assumed)")
+                        .monospacedDigit()
+                }
+                if let plan {
+                    LabeledContent("Budget, average day") {
+                        Text("≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
+                            .monospacedDigit()
                     }
                 }
                 // "Resting burn, FULL DAY" — the bare label collided with
@@ -433,7 +438,7 @@ struct GoalView: View {
             }
         }
         .pickerStyle(.navigationLink)
-        LabeledContent("Weight used") {
+        LabeledContent("Weight") {
             Text("\(unit.fromLb(basisLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
                 .monospacedDigit()
         }
@@ -514,11 +519,6 @@ struct GoalView: View {
                 // matter what you measure is the opposite of one you
                 // earn, so it went with the model change.)
                 budgetCompositionSection(plan)
-                // Last, because it answers a question you ask after the
-                // fact, not one you act on now.
-                if plan != nil {
-                    progressSection
-                }
                 // Goals used to be edit-only: hitting the target (or
                 // quitting the diet) left the deficit budget and streak
                 // judging on forever.
@@ -708,30 +708,51 @@ struct GoalView: View {
     ///
     /// Only rendered with weigh-ins on record: with none there is no
     /// date worth offering and nothing for a chosen one to measure.
+    /// ONE "Progress" section: where the journey is measured FROM, then
+    /// how far it has come. `Progress since` and `Progress` used to be
+    /// two sections a screen apart, which split one question in half
+    /// (the user, 2026-08-10).
+    ///
+    /// The start explainer is an inline caption rather than the
+    /// section's footer, because a footer now trails the banked totals
+    /// and would read as explaining those instead of the date above it.
     @ViewBuilder
     private var startSection: some View {
-        if !isMaintenance, let earliest = automaticStart {
+        let earliest = automaticStart
+        if !isMaintenance, earliest != nil || hasProgressTotals {
             Section {
-                DatePicker(
-                    "Date",
-                    selection: startDateBinding,
-                    in: startDateRange,
-                    displayedComponents: .date
-                )
-                LabeledContent("Weight then") {
-                    Text("\(unit.fromLb(formStart?.weightLb ?? earliest.weightLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
+                if let earliest {
+                    DatePicker(
+                        "Date",
+                        selection: startDateBinding,
+                        in: startDateRange,
+                        displayedComponents: .date
+                    )
+                    LabeledContent("Weight") {
+                        Text("\(unit.fromLb(formStart?.weightLb ?? earliest.weightLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
+                    }
+                    if !startIsAutomatic {
+                        Button("Use earliest weigh-in") { startIsAutomatic = true }
+                    }
+                    Text(startIsAutomatic
+                         ? "Your earliest weight in Apple Health, or choose a date."
+                         : "The progress bar and the chart's milestones measure from here. The weight is your weigh-in nearest this date.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                if !startIsAutomatic {
-                    Button("Use earliest weigh-in") { startIsAutomatic = true }
-                }
+                progressTotals
             } header: {
-                Text("Progress since")
-            } footer: {
-                Text(startIsAutomatic
-                     ? "Your earliest weight in Apple Health, or choose a date."
-                     : "The progress bar and the chart's milestones measure from here. The weight is your weigh-in nearest this date.")
+                Text("Progress")
             }
         }
+    }
+
+    /// Whether there is anything to report below the start rows. Gated on
+    /// a computable plan exactly as these rows were before the merge.
+    private var hasProgressTotals: Bool {
+        guard plan != nil else { return false }
+        return model.trend.bankedLb > 0
+            || (model.trend.predicted30Lb != nil && model.trend.actual30Lb != nil)
     }
 
     /// Reading it shows whatever start is in force; writing it IS the

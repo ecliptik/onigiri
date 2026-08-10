@@ -36,6 +36,14 @@ enum GoalUpsert {
         case manual(at: Date, weightLb: Double)
         /// Back to inferring it from the earliest weigh-in on record.
         case automatic
+        /// Continuing past a target that was REACHED: the same journey,
+        /// extended. Leaves the stored start alone AND suppresses the
+        /// target-changed re-stamp below, so the progress bar keeps
+        /// measuring the whole arc (22 of 27 lb) instead of re-zeroing
+        /// at the moment it was earned. Only the goal-reached flow
+        /// passes this — editing a target by hand is still a new
+        /// journey.
+        case keep
     }
 
     /// Update the existing goal or insert one, then push sync (which
@@ -75,7 +83,10 @@ enum GoalUpsert {
                 goal.startWeightLb = nil
                 goal.startedAt = nil
                 goal.startIsManual = nil
-            case nil:
+            case .keep, nil:
+                // `.keep` differs from nil only below: it is NOT `nil`,
+                // so the re-stamp guard skips it and the journey
+                // survives the new target.
                 break
             }
             // The stamp is for goals whose start nobody is steering: a
@@ -98,7 +109,10 @@ enum GoalUpsert {
             let start: (lb: Double, at: Date, manual: Bool)? = switch startChange {
             case .manual(let at, let weightLb): (weightLb, at, true)
             case .automatic: nil
-            case nil: stamped.map { ($0.lb, $0.at, false) }
+            // `.keep` can't reach here in practice (continuing implies a
+            // goal that was already reached), and a first goal has no
+            // journey to preserve — so it stamps like any other.
+            case .keep, nil: stamped.map { ($0.lb, $0.at, false) }
             }
             context.insert(GoalSettings(
                 targetWeightLb: targetLb,

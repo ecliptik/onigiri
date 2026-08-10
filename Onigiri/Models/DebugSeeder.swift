@@ -54,7 +54,22 @@ enum DebugSeeder {
         let goalCount = (try? context.fetchCount(FetchDescriptor<GoalSettings>())) ?? 0
         if goalCount == 0 {
             let target = Calendar.current.date(byAdding: .day, value: 60, to: .now) ?? .now
-            context.insert(GoalSettings(targetWeightLb: 190, targetDate: target))
+            // `--seed-goal-reached` puts the target ABOVE the seeded
+            // weigh-ins (which drift 202 → 200 lb), so the goal-reached
+            // criterion is met and the celebration can be exercised.
+            // Inserted directly, so `GoalUpsert`'s target-below-current
+            // rule doesn't apply — which is the only way to reach this
+            // state without a month of simulated weight loss.
+            let reached = ProcessInfo.processInfo.arguments.contains("--seed-goal-reached")
+            // A stamped start too, so the celebration has an ARC to
+            // report ("10 lb down") and continuing can be seen to
+            // preserve it rather than re-zero at today's weight.
+            let started = Calendar.current.date(byAdding: .day, value: -60, to: .now)
+            context.insert(GoalSettings(
+                targetWeightLb: reached ? 205 : 190,
+                targetDate: target,
+                startWeightLb: reached ? 210 : nil,
+                startedAt: reached ? started : nil))
         }
         try? context.save()
     }

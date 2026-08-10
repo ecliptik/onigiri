@@ -43,6 +43,13 @@ final class TodayModel {
     /// Smoothed scale movement over the past 7 days (negative = down);
     /// nil until Health holds enough weigh-ins to say.
     private(set) var weeklyTrendLb: Double?
+    /// Weigh-ins behind that trend, kept rather than discarded so the
+    /// goal-reached card can ask `GoalCompletion` whether the target has
+    /// actually been reached. The read was already happening; only the
+    /// window widened (to `GoalCompletion.maximumWindowDays`, since the
+    /// criterion reaches that far back for a sparse weigher), and
+    /// `Change.actualLb` windows to its own 7 days regardless.
+    private(set) var weightHistory: [WeightTrend.Point] = []
     private(set) var errorMessage: String?
     /// Health write access explicitly denied — every log would fail
     /// with an opaque toast, so Today shows a recovery hint instead.
@@ -195,7 +202,7 @@ final class TodayModel {
         // mixes two "current weights" (PLAN-target-weight-basis).
         async let weightRead = health.targetBasisWeightLb()
         async let burnRead = health.averageDailyBurnKcal()
-        async let historyRead = health.bodyMassHistory(days: 7)
+        async let historyRead = health.bodyMassHistory(days: GoalCompletion.maximumWindowDays)
         currentWeightLb = (await weightRead) ?? currentWeightLb
         averageBurnKcal = (try? await burnRead) ?? averageBurnKcal
         let body = await health.bodyProfile()
@@ -209,6 +216,7 @@ final class TodayModel {
         // The week's change comes from a linear fit over the raw
         // weigh-ins in the window — no smoothing, so no extra runway.
         if let history = try? await historyRead {
+            weightHistory = history
             weeklyTrendLb = WeightTrend.Change.actualLb(
                 history: history,
                 from: Date.now.addingTimeInterval(-7 * 86400),

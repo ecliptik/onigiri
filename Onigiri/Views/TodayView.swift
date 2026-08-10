@@ -48,6 +48,14 @@ struct TodayView: View {
     @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults) private var sodiumUnitRaw = SharedStore.unitAutomatic
     private var waterUnit: WaterUnit { WaterUnit.resolve(waterUnitRaw) }
     private var sodiumUnit: SodiumUnit { SodiumUnit.resolve(sodiumUnitRaw) }
+    @AppStorage(SharedStore.weightUnitKey, store: SharedStore.defaults) private var weightUnitRaw = SharedStore.unitAutomatic
+    private var weightUnit: WeightUnit { WeightUnit.resolve(weightUnitRaw) }
+    /// The celebration wears the badge the streak already awards, not a
+    /// hardcoded glyph — @AppStorage so an Appearance change repaints it.
+    @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
+    /// Bumped by the card's ✕ purely to re-evaluate the body: the
+    /// decision lives in UserDefaults, which publishes nothing on write.
+    @State private var goalReachedDismissed = 0
     @State private var activeSheet: TodaySheet?
     @State private var quickActions = QuickActions.shared
     /// Value-routed push so the deep-link path can force-pop: a bare
@@ -465,6 +473,9 @@ struct TodayView: View {
             }
         }
         hydrationRow
+        // Above the goal card, because it is ABOUT the goal — and below
+        // the headline, which it must never displace.
+        goalReachedCard
         // Pure display: its numbers are on its face, and the
         // day summary already has its one door ("Details").
         goalCard
@@ -552,6 +563,103 @@ struct TodayView: View {
         .accessibilityLabel("\(readout.value.formatted(valueFormat)) \(readout.caption)")
         .accessibilityValue(readout.statusLabel ?? "")
         .accessibilityHint("Changes what this number shows")
+    }
+
+    /// Hitting the target is the one moment this app exists for, and it
+    /// used to happen only on a screen you had to go looking for. Shown
+    /// once per target, dismissible, with a single re-arm two weeks on if
+    /// nothing was decided — the rule lives in `GoalReachedCard`, because
+    /// "twice, never three times" rots silently inside a view.
+    ///
+    /// Deliberately NOT gated on being today: the milestone is true
+    /// whichever day you're looking at.
+    @ViewBuilder
+    private var goalReachedCard: some View {
+        if let goal = goals.first, showsGoalReached(goal) {
+            Button {
+                QuickActions.shared.goalRequest = true
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(verbatim: SharedStore.rewardEmoji(for: rewardIcon))
+                        .font(.title3)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("You hit your target")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Text(goalReachedDetail(goal))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(.secondarySystemGroupedBackground),
+                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens Goal to choose what's next")
+            // Dismissal is a swipe-free explicit control: this card sits
+            // in a ScrollView, not a List, so there is no swipe to lean on.
+            .overlay(alignment: .topTrailing) {
+                Button {
+                    SharedStore.acknowledgeGoalReached(
+                        targetLb: goal.targetWeightLb, decided: false)
+                    goalReachedDismissed += 1
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.tertiary)
+                        .contentShape(Rectangle().inset(by: -14))
+                }
+                .buttonStyle(.plain)
+                .padding(10)
+                .accessibilityLabel("Dismiss")
+            }
+        }
+    }
+
+    private func showsGoalReached(_ goal: GoalSettings) -> Bool {
+        // Read so SwiftUI re-evaluates after a dismissal: the decision
+        // rests on UserDefaults, which publishes nothing.
+        _ = goalReachedDismissed
+        let ack = SharedStore.goalReachedAck
+        return GoalReachedCard.shouldShow(
+            isMet: GoalCompletion.evaluate(
+                targetLb: goal.targetWeightLb, history: model.weightHistory).isMet,
+            isMaintenance: goal.isMaintenance,
+            targetLb: goal.targetWeightLb,
+            ackTarget: ack.targetLb, ackCount: ack.count, ackAt: ack.at)
+    }
+
+    /// The arc, when there is one worth stating; the target otherwise.
+    /// Routed through `GoalProgress` rather than reading the stamp
+    /// directly, so a goal set before the stamp existed still reports its
+    /// journey (derived from the earliest weigh-in) and this card can't
+    /// disagree with the Goal screen about the same number.
+    private func goalReachedDetail(_ goal: GoalSettings) -> String {
+        let digits = weightUnit == .pounds ? 0 : 1
+        let target = "\(weightUnit.fromLb(goal.targetWeightLb).formatted(.number.precision(.fractionLength(digits)))) \(weightUnit.symbol)"
+        let progress = GoalProgress.resolve(
+            startWeightLb: goal.startWeightLb,
+            startedAt: goal.startedAt,
+            startIsManual: goal.startIsManual ?? false,
+            weightHistory: model.weightHistory,
+            currentWeightLb: model.currentWeightLb,
+            targetWeightLb: goal.targetWeightLb,
+            isMaintenance: goal.isMaintenance,
+            milestoneStepLb: GoalProgress.milestoneStepLb(for: weightUnit))
+        guard let progress, progress.lostLb >= GoalProgress.minimumJourneyLb else {
+            return "\(target) · Choose what's next"
+        }
+        let lostText = "\(weightUnit.fromLb(progress.lostLb).formatted(.number.precision(.fractionLength(digits)))) \(weightUnit.symbol)"
+        return "\(lostText) down · Choose what's next"
     }
 
     @ViewBuilder

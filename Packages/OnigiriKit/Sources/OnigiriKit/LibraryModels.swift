@@ -346,6 +346,45 @@ public enum SharedStore {
     /// installs with a goal are flagged true without seeing it.
     public static let hasOnboardedKey = "hasOnboarded"
 
+    /// The "you hit your target" card's memory. Keyed by the TARGET it
+    /// belongs to, which is what makes a NEW target re-arm the card for
+    /// free while bouncing above and back below the same one never
+    /// re-celebrates. See `GoalReachedCard` for the state machine; the
+    /// count reaches `maximumShows` on a DECISION as well as on a second
+    /// dismissal. Deliberately NOT in `PreferenceSnapshot` or the watch
+    /// sync: the watch shows no card, and syncing these would let a
+    /// dismissal on one device silence a celebration the other never
+    /// showed.
+    public static let goalReachedAckTargetKey = "goalReachedAckTarget"
+    public static let goalReachedAckCountKey = "goalReachedAckCount"
+    public static let goalReachedAckAtKey = "goalReachedAckAt"
+
+    /// Records a dismissal (or, with `decided`, a choice) of the
+    /// goal-reached card for `targetLb`. One writer so the three keys
+    /// can't disagree.
+    public static func acknowledgeGoalReached(
+        targetLb: Double, decided: Bool, now: Date = .now
+    ) {
+        let previous = defaults.double(forKey: goalReachedAckTargetKey) == targetLb
+            ? defaults.integer(forKey: goalReachedAckCountKey)
+            : 0
+        defaults.set(targetLb, forKey: goalReachedAckTargetKey)
+        defaults.set(
+            decided ? GoalReachedCard.maximumShows : previous + 1,
+            forKey: goalReachedAckCountKey)
+        defaults.set(now.timeIntervalSince1970, forKey: goalReachedAckAtKey)
+    }
+
+    /// The stored acknowledgement, in the shape `GoalReachedCard` reads.
+    public static var goalReachedAck: (targetLb: Double, count: Int, at: Date?) {
+        let stamp = defaults.double(forKey: goalReachedAckAtKey)
+        return (
+            defaults.double(forKey: goalReachedAckTargetKey),
+            defaults.integer(forKey: goalReachedAckCountKey),
+            stamp > 0 ? Date(timeIntervalSince1970: stamp) : nil
+        )
+    }
+
     /// Master switch for EVERY online food lookup — text search AND
     /// barcode lookups, OpenFoodFacts and USDA alike. OFF BY DEFAULT
     /// (the user, 2026-07-20: the whole privacy story is "nothing

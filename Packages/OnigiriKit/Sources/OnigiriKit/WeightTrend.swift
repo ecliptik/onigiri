@@ -212,11 +212,28 @@ public extension WeightTrend {
         now: Date = .now,
         calendar: Calendar = .current
     ) -> Double? {
-        guard windowDays > 0 else { return nil }
-        let cutoff = now.addingTimeInterval(-Double(windowDays) * 86400)
-        let recent = dailyLows(points, calendar: calendar).filter { $0.date > cutoff && $0.date <= now }
+        let recent = recentDailyLows(
+            points, windowDays: windowDays, now: now, calendar: calendar)
         guard !recent.isEmpty else { return nil }
         return recent.reduce(0) { $0 + $1.weightLb } / Double(recent.count)
+    }
+
+    /// The daily lows inside a trailing window, date-ascending — the ONE
+    /// definition of "recent weigh-ins" in the app.
+    ///
+    /// Factored out because `GoalCompletion` needs the same points AND
+    /// their count, and a second copy of this boundary is exactly how a
+    /// celebration and a budget come to disagree about the same week.
+    static func recentDailyLows(
+        _ points: [Point],
+        windowDays: Int = 7,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> [Point] {
+        guard windowDays > 0 else { return [] }
+        let cutoff = now.addingTimeInterval(-Double(windowDays) * 86400)
+        return dailyLows(points, calendar: calendar)
+            .filter { $0.date > cutoff && $0.date <= now }
     }
 
     /// The basis a caller should use, given the setting and what Health

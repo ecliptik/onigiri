@@ -171,16 +171,58 @@ struct GoalView: View {
             || startEdited
     }
 
-    /// The saved lose goal is met: the scale reached the stored target,
-    /// and the form still shows that target (editing the field into
+    /// Whether the SAVED lose goal has actually been reached — sustained,
+    /// not touched by one morning. The rule (and the widening that keeps
+    /// it reachable for a weekly weigher) lives in the kit.
+    ///
+    /// This used to compare `currentWeightLb`, the RAW last weigh-in, so
+    /// a single low reading fired the celebration off a number the plan
+    /// beside it deliberately ignores (2026-08-10).
+    private var completion: GoalCompletion? {
+        guard !isMaintenance, let goal = goals.first,
+              (goal.mode ?? GoalMode.lose) == GoalMode.lose
+        else { return nil }
+        return GoalCompletion.evaluate(
+            targetLb: goal.targetWeightLb, history: model.weightHistory)
+    }
+
+    /// ...and the form still shows that target (editing the field into
     /// invalidity keeps the plain warning instead of the celebration).
     private var goalReached: Bool {
-        guard !isMaintenance, let goal = goals.first,
-              (goal.mode ?? GoalMode.lose) == GoalMode.lose,
-              let current = currentWeightLb,
-              targetWeightLb == goal.targetWeightLb
+        guard let goal = goals.first, targetWeightLb == goal.targetWeightLb
         else { return false }
-        return current <= goal.targetWeightLb
+        return completion?.isMet == true
+    }
+
+    /// Quick "another 5 lb" amounts, in the DISPLAY unit with round
+    /// values for that unit — 5/10 lb, 2/5 kg. Never "2.3 kg more".
+    /// Deltas convert like weights (the scale is purely multiplicative).
+    private var continueAmounts: [(label: String, deltaLb: Double)] {
+        let amounts: [Double] = unit == .pounds ? [5, 10] : [2, 5]
+        return amounts.map { amount in
+            (label: "\(amount.formatted(.number.precision(.fractionLength(0)))) \(unit.symbol) more",
+             deltaLb: unit.toLb(amount))
+        }
+    }
+
+    /// A date the new target can actually be met by: 1 lb/week, floored
+    /// at two weeks. Without this the stored date rides along, and
+    /// `requiredDailyDeficit` divides by `max(1, daysRemaining)` — 5 lb
+    /// against a stale date is 17,500 kcal/day.
+    private func suggestedDate(forLosing poundsLb: Double) -> Date {
+        let days = max(14, Int((poundsLb * 7).rounded(.up)))
+        return Calendar.current.date(byAdding: .day, value: days, to: .now) ?? .now
+    }
+
+    /// Continue past a reached target: same journey, new destination.
+    private func continueGoal(byLosing deltaLb: Double) {
+        guard let reached = goals.first?.targetWeightLb else { return }
+        // Measured from the TARGET you just hit, not today's weight — so
+        // "5 lb more" off 175 is a round 170, not 169.6 off a basis that
+        // moves daily.
+        targetWeightLb = reached - deltaLb
+        targetDate = suggestedDate(forLosing: deltaLb)
+        save(continuing: true)
     }
 
     private var plan: CalorieBudget.Plan? {
@@ -569,15 +611,41 @@ struct GoalView: View {
             // celebrate and offer the mode that fits now.
             if goalReached {
                 Label {
-                    Text("You've reached your target — nice work.")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("You've reached your target — nice work.")
+                        // The arc, not just the finish line.
+                        if let progress, progress.lostLb >= GoalProgress.minimumJourneyLb {
+                            Text("\(unit.fromLb(progress.lostLb), format: .number.precision(.fractionLength(targetDigits))) \(unit.symbol) down since \(progress.startedAt, format: .dateTime.month(.abbreviated).day())")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 } icon: {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundStyle(.green)
                 }
                 .font(.subheadline)
+                // The two real next moves. Quick amounts because "another
+                // 5 lb" is the actual thought; Custom leaves the number
+                // to the user rather than the app appearing to set a goal.
+                // Label ABOVE the chips, not beside them: three bordered
+                // buttons in a LabeledContent's trailing slot wrap to
+                // two lines ("5 lb / more") on a phone.
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Keep going")
+                    HStack(spacing: 8) {
+                        ForEach(continueAmounts, id: \.label) { amount in
+                            Button(amount.label) { continueGoal(byLosing: amount.deltaLb) }
+                                .buttonStyle(.bordered)
+                        }
+                        Button("Custom…") { focusedField = .target }
+                            .buttonStyle(.bordered)
+                    }
+                    .font(.footnote)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 Button("Switch to Maintain") {
                     mode = GoalMode.maintain
-                    save()
+                    save(decidedFromReached: true)
                 }
             // Say WHY the plan is missing and Save is disabled —
             // it used to just silently vanish.
@@ -891,8 +959,16 @@ struct GoalView: View {
         .font(.subheadline)
     }
 
-    private func save() {
+    /// `continuing` = the user chose to keep going from a target they
+    /// REACHED, which is the one save that must not re-stamp the journey
+    /// start. `decidedFromReached` covers the other resolution (switching
+    /// to Maintain): both conclude the goal-reached card for the target
+    /// that was hit, so no re-arm is left loaded behind them.
+    private func save(continuing: Bool = false, decidedFromReached: Bool = false) {
         guard validation == .valid else { return }
+        if continuing || decidedFromReached, let reached = goals.first?.targetWeightLb {
+            SharedStore.acknowledgeGoalReached(targetLb: reached, decided: true)
+        }
         // targetWeightLb is non-optional on the model; in maintenance
         // it's ignored, so park the best-known weight there.
         guard let target = targetWeightLb
@@ -901,9 +977,17 @@ struct GoalView: View {
         // Only an actual start edit is sent — otherwise the stamp rule
         // stays in charge, and an untouched auto-stamped goal doesn't
         // quietly promote itself to a manual one.
-        let startChange: GoalUpsert.StartChange? = startEdited
-            ? formStart.map { .manual(at: $0.date, weightLb: $0.weightLb) } ?? .automatic
-            : nil
+        // Continuing keeps the journey: `.keep` suppresses the
+        // target-changed re-stamp, so the bar reads 22 of 27 rather than
+        // re-zeroing at the moment it was earned. Editing a target by
+        // hand is still a new journey.
+        let startChange: GoalUpsert.StartChange? = if continuing {
+            .keep
+        } else if startEdited {
+            formStart.map { .manual(at: $0.date, weightLb: $0.weightLb) } ?? .automatic
+        } else {
+            nil
+        }
         GoalUpsert.save(
             targetLb: target,
             targetDate: targetDate,

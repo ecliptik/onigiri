@@ -8,6 +8,42 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.20.1 — Goal's numbers, sorted by the question they answer
+
+_2026-08-10_ · [changes since v2.20.0](https://github.com/ecliptik/onigiri/compare/v2.20.0...v2.20.1)
+
+Nine rows sat under one "Daily plan" header answering four unrelated
+questions — the controls, the derivation, today's live figure, and what the
+scale has done — with nothing marking where one ended and the next began. The
+word "budget" meant three things on that screen at once: the average-day
+forecast, today's number, and a section header that named no budget at all.
+
+Worst of it, the two budgets sat adjacent, similarly labelled, differently
+united and 639 kcal apart. They were never in conflict — one is a forecast from
+your recent burn, the other a live count of what today has earned, and they
+converge by bedtime — but nothing on screen said so.
+
+Four sections now, each a plain question. **Today** leads, because it is the
+only number here you act on and it used to be seventh. **An average day**
+follows, with the burn directly above the budget it feeds so the subtraction
+still reads off the screen. **How your budget is set** collapses the
+derivation — the weight it comes from, the deficit that implies, the resting
+estimate the day is floored by — taking the screen from nine rows to five
+without hiding a single figure, and the weight-basis picker stays one tap from
+the numbers it governs. **Progress** goes last, being the question you ask after
+the fact rather than one you act on now.
+
+The headers now carry the distinction the row labels used to spell out, so
+neither budget needs a qualifier. A Budget under Today and a Budget under An
+average day cannot be read as competing answers, where two "Budget, …" rows a
+thumb apart always could.
+
+No arithmetic moved, and nothing was removed. The old "Calorie budget" section
+is gone as a header — its resting row is an input to the math and its caption is
+that math's explanation, so both moved into the collapsed group, which still
+appears when no plan can be computed. The aggressive-pace warning stays outside
+it: a warning you have to open something to see is not a warning.
+
 ## v2.20.0 — what's in the meal, and what comes after the goal
 
 _2026-08-10_ · [changes since v2.19.4](https://github.com/ecliptik/onigiri/compare/v2.19.4...v2.20.0)

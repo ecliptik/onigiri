@@ -8,6 +8,52 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.20.0 — what's in the meal, and what comes after the goal
+
+_2026-08-10_ · [changes since v2.19.4](https://github.com/ecliptik/onigiri/compare/v2.19.4...v2.20.0)
+
+Building a meal showed you the library and moved your picks to the top of it.
+That was the only sign a food was in the meal — that, and its portion no longer
+reading as a dash. Search for the next food and the ones already chosen were
+filtered out of sight, while the running Total still counted them.
+
+There is now one section that IS the meal, above the library it draws from. It
+never filters and never re-sorts: a search filters the LIBRARY, so the meal
+stays on screen while you hunt. Each row reports what it CONTRIBUTES rather
+than what one serving costs — 380 kcal · 190 each — so the Total reads as a sum
+of the rows above it, and swiping removes any of them. Components an estimate
+minted sit in that same list, because "what is in this meal" should have one
+answer in one place.
+
+Hitting your goal was a single line on a screen you had to go looking for, and
+it fired off the wrong number: it compared the raw last weigh-in while the
+budget beside it planned from the smoothed 7-day basis, so one light morning
+could congratulate you on a week nowhere near target.
+
+Reaching it is now a sustained result — the 7-day basis at or below target
+across at least three weigh-in days, the same window the budget plans from. Three
+days inside seven is impossible for anyone who weighs weekly, so the window
+widens until it finds three, capped at thirty days; past that there is nothing
+recent enough to call current.
+
+Today carries the moment: a card wearing your reward badge, reporting the arc
+rather than the finish line — "10 lb down" — and opening Goal for the decision.
+It appears once per target, dismisses, and returns once after two weeks if
+nothing was chosen. That last part is not politeness. Sitting at target
+undecided grades days more permissively than either real mode, and nothing else
+on screen says so.
+
+Goal offers the two moves that actually exist. "5 lb more" measures from the
+target you just hit, so it lands on a round number, with a date that can be met
+— a fresh target against a stale date divides by the days remaining and asks for
+17,500 kcal a day. And continuing keeps the journey: the bar still measures the
+whole arc instead of re-zeroing at the moment you earned it.
+
+Smaller: the meal builder's serving field is a plain number again, since that is
+what a serving looks like everywhere else in the app, and Settings now says once
+that your first tracked metric is the one riding alongside calories on food,
+meal, and log rows.
+
 ## v2.19.4 — a read you can trust, instead of a lock you can't detect
 
 _2026-08-09_ · [changes since v2.19.3](https://github.com/ecliptik/onigiri/compare/v2.19.3...v2.19.4)

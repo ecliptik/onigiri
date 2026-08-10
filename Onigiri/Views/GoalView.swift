@@ -243,25 +243,81 @@ struct GoalView: View {
         )
     }
 
-    /// The plan the current form implies. Split out of `body` because
-    /// the second budget row tipped the whole Form past what the type
-    /// checker will attempt in one expression.
+    /// The plan the current form implies, as FOUR questions rather than
+    /// one nine-row block: what can I eat today, what does a typical day
+    /// look like, where do these numbers come from, and is it working
+    /// (the user, 2026-08-10 — "there's a lot here").
+    ///
+    /// Nothing was removed. The SECTION now carries the distinction the
+    /// two budget rows used to spell out, which is why neither says
+    /// "average day" or "today" any more: a `Budget` under `Today` and a
+    /// `Budget` under `An average day` cannot be read as competing
+    /// answers, where two `Budget, …` rows a thumb apart always could.
+    /// That is the 2026-08-02 ruling (both budgets named) satisfied more
+    /// strongly, not loosened — do not collapse them back into one.
     @ViewBuilder
     private func dailyPlanSection(_ plan: CalorieBudget.Plan) -> some View {
-        Section {
-            if !isMaintenance, let current = planWeightLb, let target = targetWeightLb {
-                // The chain starts with the weight it is all derived
-                // from — and the picker lives HERE, at the point where
-                // its effect is visible, rather than in Settings.
-                weightBasisRow(basisLb: current)
-                LabeledContent("To lose") {
-                    Text("\(unit.fromLb(current - target), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
+        // What TODAY allows, on the day's own burn. It leads because it
+        // is the only number here you act on; it used to be seventh.
+        if let todayBudget {
+            Section {
+                LabeledContent("Budget") {
+                    Text("\(todayBudget, format: .number.precision(.fractionLength(0))) kcal")
+                        .monospacedDigit()
                 }
-                LabeledContent("Deficit needed") {
-                    Text("\(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal/day")
-                }
+            } header: {
+                Text("Today")
+            } footer: {
+                Text("Grows as you move: resting energy is credited from midnight, active energy as you earn it.")
             }
-            budgetRows(plan)
+        }
+        Section {
+            // The burn sits directly above the budget it feeds, so the
+            // subtraction reads off the screen: burn − deficit = budget.
+            LabeledContent("Burn") {
+                Text(model.averageBurnKcal.map {
+                    "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
+                } ?? "≈ 2000 kcal/day (assumed)")
+                    .monospacedDigit()
+            }
+            LabeledContent("Budget") {
+                Text("≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
+                    .monospacedDigit()
+            }
+        } header: {
+            Text("An average day")
+        } footer: {
+            // Points back at Today on purpose: the two budgets now sit in
+            // different sections, and nothing else on screen says they
+            // are the same arithmetic over different spans.
+            if todayBudget != nil {
+                Text("A forecast from your recent burn — today's own number is above.")
+            }
+        }
+        // Its own section, and NEVER inside the collapsed group below: a
+        // warning you have to open something to see is not a warning.
+        if plan.isAggressive {
+            Section {
+                Label(
+                    "That pace is aggressive. A later target date means a gentler daily budget.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.footnote)
+                .foregroundStyle(.orange)
+            }
+        }
+    }
+
+    /// Effort banked, and whether it is showing on the scale — the
+    /// retrospective half, which used to share a header with the
+    /// forecast. Gated exactly as before (only alongside a computable
+    /// plan), and self-hiding when there is nothing to report so the
+    /// header can't stand over an empty card.
+    @ViewBuilder
+    private var progressSection: some View {
+        if model.trend.bankedLb > 0
+            || (model.trend.predicted30Lb != nil && model.trend.actual30Lb != nil) {
+            Section {
             // What the effort adds up to, independent of what the scale
             // did this morning — the number a bad weigh-in can't take
             // away (the user wanted something motivating that doesn't
@@ -299,59 +355,63 @@ struct GoalView: View {
                     }
                 }
             }
-            if plan.isAggressive {
-                Label(
-                    "That pace is aggressive. A later target date means a gentler daily budget.",
-                    systemImage: "exclamationmark.triangle.fill"
-                )
-                .font(.footnote)
-                .foregroundStyle(.orange)
-            }
-        } header: {
-            Text("Daily plan")
-        } footer: {
-            // Only the DIFFERENCE between the two rows. The section
-            // below already explains what a budget is made of, and on
-            // screen the two captions sit a thumb apart — both opening
-            // "the day's own burn minus the deficit" read as a stutter.
-            // The old second sentence ("the average day uses your recent
-            // burn instead") went because it didn't parse — it was
-            // explaining a distinction the reader hadn't been given yet
-            // (the user, 2026-08-02).
-            if todayBudget != nil {
-                Text("Daily budget grows as active energy increases.")
+            } header: {
+                Text("Progress")
             }
         }
     }
 
-    /// TWO budgets, each named, because they answer different questions
-    /// and shipping both under one label read as a contradiction: Goal
-    /// said 2,293 while Details said 1,567 — 726 kcal apart at 1:43pm
-    /// with nothing to tell them apart (the user, 2026-08-02). Both were
-    /// right. One is what an average day allows; the other is what this
-    /// day has earned so far, and it climbs as active burn comes in.
+    /// Where every number above comes from: the weight the deficit is
+    /// derived from, the deficit that implies, and the resting estimate
+    /// the day is floored by. COLLAPSED, because it is read once to
+    /// understand the model and rarely after — which is what takes the
+    /// screen from nine rows to five without hiding a single figure.
+    ///
+    /// Rendered whether or not a plan can be computed. That is why its
+    /// rows used to sit in their own section outside `if let plan`: a
+    /// goal that was reached or a target that was cleared is exactly
+    /// when someone comes looking for where the numbers went.
+    ///
+    /// The weight-basis picker stays here, one tap from the figures it
+    /// governs, rather than moving to Settings.
     @ViewBuilder
-    private func budgetRows(_ plan: CalorieBudget.Plan) -> some View {
-        // The burn sits directly above the budget it feeds, so the
-        // subtraction reads off the screen: average burn − deficit =
-        // budget. It used to live one section down under "Calorie
-        // budget", where "Average day" and "Average burn" looked like
-        // two of the same kind of number and neither said which (the
-        // user, 2026-08-08). Naming each for what it IS finishes the job.
-        LabeledContent("Average daily burn") {
-            Text(model.averageBurnKcal.map {
-                "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
-            } ?? "≈ 2000 kcal/day (assumed)")
-                .monospacedDigit()
-        }
-        LabeledContent("Budget, average day") {
-            Text("≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
-                .monospacedDigit()
-        }
-        if let todayBudget {
-            LabeledContent("Budget, today") {
-                Text("\(todayBudget, format: .number.precision(.fractionLength(0))) kcal")
-                    .monospacedDigit()
+    private func budgetCompositionSection(_ plan: CalorieBudget.Plan?) -> some View {
+        Section {
+            DisclosureGroup("How your budget is set") {
+                if !isMaintenance, let current = planWeightLb, let target = targetWeightLb {
+                    weightBasisRow(basisLb: current)
+                    LabeledContent("To lose") {
+                        Text("\(unit.fromLb(current - target), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
+                    }
+                    if let plan {
+                        LabeledContent("Deficit needed") {
+                            Text("\(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal/day")
+                        }
+                    }
+                }
+                // "Resting burn, FULL DAY" — the bare label collided with
+                // Details', which shows what Health has recorded SO FAR,
+                // and the two read as the app contradicting itself: 1,830
+                // here against 1,272 there (the user, 2026-08-02).
+                LabeledContent("Resting burn, full day") {
+                    Text(model.estimatedRestingKcal.map {
+                        "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
+                    } ?? "Not estimated")
+                        .monospacedDigit()
+                }
+                Text("Your budget is the day's energy, minus the deficit. Resting energy starts at midnight. Active energy is added throughout the day.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if model.estimatedRestingKcal == nil {
+                    Text("Add your height and date of birth in Health to estimate your resting burn. Without it, only the resting energy Health has already recorded counts.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if model.averageBurnKcal == nil {
+                    Text("No burn history in Health yet — the plan above assumes 2000 kcal/day until there is some.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
@@ -439,47 +499,25 @@ struct GoalView: View {
                     holdNearSection
                 }
 
+                // Today, then the average day — the forecast reads as a
+                // comparison to the live number rather than the other way
+                // round.
                 if let plan {
                     dailyPlanSection(plan)
                 }
-
-                // Its OWN section, deliberately outside `if let plan`:
-                // what the budget is made of has to stay readable when
+                // Outside `if let plan`, as its rows have always been:
+                // where the numbers come from has to stay readable when
                 // the plan can't be computed — goal reached, target
                 // cleared — since that's exactly when someone comes
-                // looking for why.
-                //
-                // No knobs any more. The Fixed style lived here until
-                // 2026-08-02; a budget that stays put no matter what you
-                // measure is the opposite of one you earn, so it went
-                // with the model change rather than sitting beside it
-                // meaning nothing.
-                Section("Calorie budget") {
-                    // "Resting burn, FULL DAY" — the bare label collided
-                    // with Details', which shows what Health has
-                    // recorded so far, and the two read as the app
-                    // contradicting itself: 1,830 here against 1,272
-                    // there (the user, 2026-08-02, one screen after the
-                    // same mistake with "Calorie budget").
-                    LabeledContent("Resting burn, full day") {
-                        Text(model.estimatedRestingKcal.map {
-                            "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
-                        } ?? "Not estimated")
-                            .monospacedDigit()
-                    }
-                    Text("Your budget is the day's energy, minus the deficit. Resting energy starts at midnight. Active energy is added throughout the day.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    if model.estimatedRestingKcal == nil {
-                        Text("Add your height and date of birth in Health to estimate your resting burn. Without it, only the resting energy Health has already recorded counts.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    if model.averageBurnKcal == nil {
-                        Text("No burn history in Health yet — the plan above assumes 2000 kcal/day until there is some.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                // looking for why. (The Fixed budget style lived in this
+                // section until 2026-08-02; a budget that stays put no
+                // matter what you measure is the opposite of one you
+                // earn, so it went with the model change.)
+                budgetCompositionSection(plan)
+                // Last, because it answers a question you ask after the
+                // fact, not one you act on now.
+                if plan != nil {
+                    progressSection
                 }
                 // Goals used to be edit-only: hitting the target (or
                 // quitting the diet) left the deficit budget and streak

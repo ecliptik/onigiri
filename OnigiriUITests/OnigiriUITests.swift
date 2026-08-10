@@ -1333,6 +1333,101 @@ final class OnigiriUITests: XCTestCase {
         attachShot(named: "meal-builder-describe-prompt")
     }
 
+    /// Reaching the target: the announcement, that it can be dismissed for
+    /// good, and — the part that matters — that continuing past a reached
+    /// target KEEPS the journey instead of re-zeroing the bar at the moment
+    /// it was earned.
+    ///
+    /// Opt-in via GOAL_REACHED=1, and seeded with `--seed-goal-reached`:
+    /// the criterion is a sustained one (7-day basis, 3+ weigh-in days), so
+    /// there is no way to reach this state on a fresh simulator without a
+    /// month of simulated weight loss.
+    @MainActor
+    func testGoalReachedCelebrationAndContinue() throws {
+        guard ProcessInfo.processInfo.environment["GOAL_REACHED"] == "1" else {
+            throw XCTSkip("Set GOAL_REACHED=1 to run the goal-reached flow")
+        }
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--seed-sample-data", "--seed-goal-reached"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        // The milestone lands on the screen you actually open, and it
+        // reports the ARC rather than only the finish line.
+        let announcement = NSPredicate(format: "label BEGINSWITH 'You hit your target'")
+        let card = app.descendants(matching: .any).matching(announcement).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 20), "Today announces a reached target")
+        XCTAssertTrue(card.label.contains("down"),
+                      "The card says how far you've come, not just that you arrived: \(card.label)")
+        attachShot(named: "goal-reached-card")
+
+        // Dismissing is permanent for this target — the acknowledgement
+        // lives in defaults, so it has to survive the process.
+        let dismiss = app.buttons["Dismiss"].firstMatch
+        XCTAssertTrue(dismiss.waitForExistence(timeout: 5), "The card can be dismissed")
+        dismiss.tap()
+        XCTAssertTrue(card.waitForNonExistence(timeout: 5), "Dismissing hides the card")
+        app.terminate()
+        // No seed arguments: the library and the Health samples are already
+        // in place, and every seeded launch ADDS samples.
+        app.launchArguments = []
+        app.launch()
+        grantHealthAccess(in: app, timeout: 10)
+        XCTAssertFalse(
+            app.descendants(matching: .any).matching(announcement).firstMatch
+                .waitForExistence(timeout: 8),
+            "A dismissed card stays dismissed across launches")
+
+        // ...but dismissing the ANNOUNCEMENT must never hide the DECISION.
+        switchTab(in: app, to: "Goal")
+        let celebration = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH \"You've reached your target\"")).firstMatch
+        XCTAssertTrue(celebration.waitForExistence(timeout: 15),
+                      "Goal keeps the celebration after the card is dismissed")
+        XCTAssertTrue(app.buttons["Switch to Maintain"].firstMatch.exists,
+                      "Maintain is offered")
+        let keepGoing = app.buttons["5 lb more"].firstMatch
+        XCTAssertTrue(keepGoing.waitForExistence(timeout: 5), "Quick amounts are offered")
+        attachShot(named: "goal-reached-choices")
+
+        // The journey's start weight, before and after. The seeded start is
+        // 210 lb against weigh-ins that never exceed 202, and continuing
+        // drops the target to 200 — so nothing else on this screen can put
+        // a "210" on it, and its survival is the assertion.
+        //
+        // Progress since sits below the fold, and a Form's rows don't exist
+        // in the accessibility tree until they're scrolled near.
+        // A LabeledContent row is ONE element carrying the value, but the
+        // shape isn't guaranteed — accept a sibling static text too.
+        let weightThen = app.staticTexts["Weight then"]
+        func startWeightShown() -> Bool {
+            ((weightThen.value as? String) ?? "").contains("210")
+                || app.staticTexts.matching(
+                    NSPredicate(format: "label CONTAINS '210'")).firstMatch.exists
+        }
+        XCTAssertTrue(scroll(app, until: weightThen),
+                      "Progress since reports the journey's start")
+        XCTAssertTrue(startWeightShown(), "...and that start is the seeded 210 lb")
+
+        keepGoing.tap()
+
+        // Measured from the target that was HIT (205), not from today's
+        // weight — so it lands on a round 200 rather than 195.2.
+        XCTAssertTrue(
+            app.textFields.matching(NSPredicate(format: "value == '200'")).firstMatch
+                .waitForExistence(timeout: 10),
+            "\"5 lb more\" sets a round new target below the one just reached")
+        // Saving re-lays the screen out (the celebration is gone), so find
+        // the section again rather than trusting the old scroll position.
+        XCTAssertTrue(scroll(app, until: weightThen),
+                      "Progress since survives the new target")
+        XCTAssertTrue(startWeightShown(),
+                      "Continuing KEEPS the original start — the bar still measures the whole arc")
+        attachShot(named: "goal-reached-continued")
+    }
+
     /// Adds the Onigiri medium widget to the simulator home screen by driving
     /// springboard. Mutates home-screen state — opt in via ADD_WIDGET=1.
     @MainActor
@@ -1782,6 +1877,20 @@ final class OnigiriUITests: XCTestCase {
         }
     }
 
+    /// Scrolls until `element` materializes, or gives up. Form rows below
+    /// the fold don't exist in the accessibility tree at all, so a plain
+    /// `waitForExistence` on one waits out its timeout and fails.
+    @MainActor
+    @discardableResult
+    private func scroll(_ app: XCUIApplication, until element: XCUIElement, swipes: Int = 8) -> Bool {
+        for _ in 0..<swipes {
+            if element.exists { return true }
+            app.swipeUp()
+        }
+        return element.exists
+    }
+
+    @MainActor
     private func attachShot(named name: String, settle: TimeInterval = 0.8) {
         Thread.sleep(forTimeInterval: settle)
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())

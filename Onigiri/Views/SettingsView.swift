@@ -1641,6 +1641,14 @@ private struct MetricsSettingsScreen: View {
             }
         } header: {
             Text(slot == 1 ? "First tracked metric" : "Second tracked metric")
+        } footer: {
+            // Slot 1 only, and only when it applies to a FOOD:
+            // TrackedNutrient.firstFoodMetric skips water (it isn't a
+            // property of a food and falls through to slot 2), so the
+            // sentence would be false on a water slot.
+            if slot == 1, let nutrient, nutrient != .water {
+                Text("Shown alongside calories on food, meal, and log rows.")
+            }
         }
         // Sodium's limit keeps coloring the calendar, day details, and
         // Today's log even when no slot tracks it — keep its knob

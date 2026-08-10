@@ -1250,9 +1250,38 @@ final class OnigiriUITests: XCTestCase {
             NSPredicate(format: "label BEGINSWITH 'Servings of'")
         ).firstMatch
         XCTAssertTrue(quantityField.waitForExistence(timeout: 5), "Typed quantity field")
+        // The row's own name, so the member assertions below don't depend
+        // on which food the seed happens to sort first.
+        let memberName = quantityField.label.replacingOccurrences(of: "Servings of ", with: "")
         quantityField.tap()
         quantityField.typeText("0.5")
         attachShot(named: "meal-builder-typed-quantity")
+
+        // TextField(value:format:) commits on focus RESIGNATION, so the
+        // food doesn't join the meal until the decimal pad is dismissed.
+        let done = app.buttons["Done"].firstMatch
+        if done.waitForExistence(timeout: 3) { done.tap() }
+
+        // What's in the meal has its own section (2026-08-09) — the
+        // grouped list owns the header's case, hence BEGINSWITH[c].
+        let membersHeader = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH[c] 'In this meal'")
+        ).firstMatch
+        XCTAssertTrue(membersHeader.waitForExistence(timeout: 5),
+                      "A picked food gets an 'In this meal' section")
+        // ...and it appears ONCE in the whole form: the list below is
+        // strictly what is NOT in the meal yet, so a member must not be
+        // in both. Matched by PREFIX because a member row's label
+        // carries ", in this meal" — membership must not depend on
+        // VoiceOver having announced the section header — which the next
+        // assertion pins.
+        let mentions = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", memberName))
+        XCTAssertEqual(mentions.count, 1,
+                       "A member is listed in the meal, not also in the library below")
+        XCTAssertEqual(mentions.firstMatch.label, "\(memberName), in this meal",
+                       "A member row says so to VoiceOver on its own")
+        attachShot(named: "meal-builder-members")
 
         // The sort menu: Recent leads, Name is one tap away.
         let sortMenu = app.buttons["Sort foods"].firstMatch
@@ -1267,11 +1296,10 @@ final class OnigiriUITests: XCTestCase {
         // the Add Food form made for a release.
         let search = app.searchFields["Search foods or describe a meal"].firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5), "Meal-builder search prompt names both jobs")
-        // The quantity step above left the decimal pad up, and it covers
-        // the bottom-placed search field — taps land on the keyboard.
-        // The form's own principal Done button is the way out (decimal
-        // pads have no return key).
-        let done = app.buttons["Done"].firstMatch
+        // The decimal pad covers the bottom-placed search field, so taps
+        // land on the keyboard; the form's own principal Done button is
+        // the way out (decimal pads have no return key). Already tapped
+        // after the quantity above — re-check in case focus came back.
         if done.exists {
             done.tap()
         }
@@ -1294,6 +1322,14 @@ final class OnigiriUITests: XCTestCase {
                 NSPredicate(format: "label BEGINSWITH 'Estimate this meal'")
             ).firstMatch.exists,
             "The meal estimate row must not appear while AI is switched off")
+        // The regression this rework exists to prevent: a search filters
+        // the LIBRARY, never the meal. Before 2026-08-09 the member
+        // vanished from view while its calories still counted toward the
+        // Total — you lost sight of the meal exactly while building it.
+        XCTAssertTrue(
+            app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", memberName))
+                .firstMatch.waitForExistence(timeout: 3),
+            "Members stay visible while the search filters the library")
         attachShot(named: "meal-builder-describe-prompt")
     }
 

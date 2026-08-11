@@ -216,6 +216,34 @@ struct MealFormView: View {
             return sum + amount * component.quantity
         }
     }
+    /// Every nutrient the meal carries, scaled by each member's quantity.
+    /// Scale THEN sum: the reverse would multiply someone else's numbers.
+    ///
+    /// `+` leaves a field nil when it is nil on both sides, so a meal of
+    /// foods with patchy data reports what is known and stays silent
+    /// about the rest — the same rule the day's breakdown follows.
+    private var totalNutrients: NutrientValues {
+        foods.reduce(into: NutrientValues()) { sum, food in
+            let quantity = quantities[food.persistentModelID] ?? 0
+            guard quantity > 0 else { return }
+            sum = sum + food.nutrients.scaled(by: quantity)
+        } + pending.reduce(into: NutrientValues()) { sum, component in
+            guard component.quantity > 0 else { return }
+            sum = sum + component.nutrients.scaled(by: component.quantity)
+        }
+    }
+
+    /// Whether anything in the meal is an estimate. The breakdown counts
+    /// estimated components — they ARE in the meal, and leaving them out
+    /// would make it disagree with the Total above it — so it says so
+    /// rather than mixing measured and estimated numbers silently.
+    private var hasEstimatedMembers: Bool {
+        pending.contains { $0.quantity > 0 }
+            || foods.contains {
+                ($0.aiGenerated) && (quantities[$0.persistentModelID] ?? 0) > 0
+            }
+    }
+
     /// Anything in the meal at all — picked from the library OR waiting in
     /// the review section. Gates Save, the Total's emphasis, and the ✨
     /// name button; a described meal has nothing in `quantities`, so
@@ -283,6 +311,22 @@ struct MealFormView: View {
                     Text("\(totalKcal, format: .number.precision(.fractionLength(0))) kcal • \(libraryMetric.captionText(totalMetricAmount, sodium: SharedStore.sodiumUnit))")
                         .monospacedDigit()
                         .foregroundStyle(hasItems ? .primary : .secondary)
+                }
+
+                // Everything the Total doesn't say. Collapsed, and gone
+                // entirely when the members carry no nutrient data —
+                // an empty disclosure answers nothing.
+                if hasItems, !totalNutrients.isEmpty {
+                    Section {
+                        DisclosureGroup("Nutrition") {
+                            NutrientBreakdown(totals: totalNutrients)
+                            if hasEstimatedMembers {
+                                Text("Includes estimated values.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                 }
 
                 // The search field describes a MEAL as readily as it

@@ -1283,6 +1283,30 @@ final class OnigiriUITests: XCTestCase {
                        "A member row says so to VoiceOver on its own")
         attachShot(named: "meal-builder-members")
 
+        // The meal's full nutrition, summed from its members and shown
+        // through the same rows as the day's breakdown.
+        let nutrition = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == 'Nutrition'")).firstMatch
+        XCTAssertTrue(nutrition.waitForExistence(timeout: 5),
+                      "A meal whose foods carry nutrient data offers a breakdown")
+        nutrition.tap()
+        let macros = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == 'Macronutrients'")).firstMatch
+        XCTAssertTrue(macros.waitForExistence(timeout: 5), "...which opens onto the macros")
+        macros.tap()
+        // SCALED, not raw: the row above is half a 30 g-protein shake,
+        // so this must read 15 g. The Total only proves kcal scaling —
+        // nutrients go through NutrientValues.scaled(by:), a different
+        // path, and forgetting to scale it would look plausible.
+        let protein = app.staticTexts["Protein"]
+        XCTAssertTrue(protein.waitForExistence(timeout: 5), "Protein is listed")
+        let shown = ((protein.value as? String) ?? "")
+            + app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH '15'"))
+                .firstMatch.label
+        XCTAssertTrue(shown.contains("15"),
+                      "Half a serving contributes half its protein, not all of it: \(shown)")
+        attachShot(named: "meal-builder-nutrition")
+
         // The sort menu: Recent leads, Name is one tap away.
         let sortMenu = app.buttons["Sort foods"].firstMatch
         XCTAssertTrue(sortMenu.waitForExistence(timeout: 5), "Sort menu in the Foods header")

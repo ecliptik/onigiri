@@ -8,6 +8,24 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.20.5 — View Food
+
+_2026-08-11_ · [changes since v2.20.4](https://github.com/ecliptik/onigiri/compare/v2.20.4...v2.20.5)
+
+The door a logged food gained in v2.20.4 is called **View Food** now. "Edit
+food" promised more than the row does: it opens the food, and what happens
+there is your business — most of the time a look rather than a change.
+
+The caption underneath follows. It described editing, which contradicted a row
+that no longer says edit; it now describes changes, which is true whichever you
+came to do: changes to the food apply to future logs, not to the entry you're
+looking at.
+
+Nothing else in the app moved. The rest of this tag is housekeeping in the
+project's own notes — a watch-install chronology that the deploy script and a
+watchOS update between them made unnecessary, and a description of the Goal
+screen that stopped matching the Goal screen two releases ago.
+
 ## v2.20.4 — a logged food can open the food it came from
 
 _2026-08-11_ · [changes since v2.20.3](https://github.com/ecliptik/onigiri/compare/v2.20.3...v2.20.4)

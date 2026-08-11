@@ -917,6 +917,9 @@ struct PortionSheet: View {
     /// meal's parts are name+kcal SNAPSHOTS, so this is a name lookup —
     /// resolved once on appear, not per row render.
     @State private var resolvedFoods: [Int: Food] = [:]
+    /// The library food this entry IS, when it's a plain food and still
+    /// in the library — the door the log was missing.
+    @State private var resolvedSelf: Food?
     /// The food a Contains row opened. PortionSheet's own single sheet
     /// slot: a nested sheet is fine, it's SWAPPING one slot's binding
     /// mid-dismissal that races (the 2026-07-22 landmine).
@@ -939,7 +942,7 @@ struct PortionSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(target.name) {
+                Section {
                     // Plain decimals, 0.01–100: type 0.85 to fine-tune
                     // calories, or 2 to double. The ± buttons step by
                     // quarters for quick nudges.
@@ -964,6 +967,37 @@ struct PortionSheet: View {
                         LabeledContent("One serving") {
                             Text(target.serving)
                         }
+                    }
+                    // A logged MEAL could always reach its foods through
+                    // the Contains rows below; a logged FOOD had no door
+                    // to its own library entry at all (the user,
+                    // 2026-08-11). Same treatment as a Contains row: a
+                    // real Button with a chevron, and shown only when the
+                    // food is still findable — nothing to tap beats a tap
+                    // that opens nothing.
+                    if let food = resolvedSelf {
+                        Button {
+                            openFood = food
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text("Edit food")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } header: {
+                    Text(target.name)
+                } footer: {
+                    // The same drift the Contains footer calls out, for
+                    // the case that has no Contains section: this entry
+                    // keeps the numbers it was logged with.
+                    if resolvedSelf != nil, editDate != nil {
+                        Text("Editing the food changes it for future logs, not this entry.")
                     }
                 }
                 Section {
@@ -1131,11 +1165,20 @@ struct PortionSheet: View {
     /// that comes off before matching; matching itself is deliberately
     /// strict (ComponentMatch) — a wrong row would open the wrong food.
     private func resolveContainsRows() {
-        guard !target.mealItems.isEmpty else { return }
         // On-demand fetch, not an @Query: see the .onAppear note.
         let foods = (try? context.fetch(FetchDescriptor<Food>())) ?? []
         guard !foods.isEmpty else { return }
         let names = foods.map(\.name)
+        // A plain food resolves ITSELF, by the same strict match the
+        // Contains rows use. Meals are excluded deliberately: a meal's
+        // name belongs to a Meal, and a Food that happened to share it
+        // would open the wrong thing.
+        if target.mealItems.isEmpty {
+            if let index = ComponentMatch.index(of: target.name, in: names) {
+                resolvedSelf = foods[index]
+            }
+            return
+        }
         var resolved: [Int: Food] = [:]
         for (offset, item) in target.mealItems.enumerated() {
             let bare = ComponentMatch.strippingQuantityPrefix(item.name)

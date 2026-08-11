@@ -8,6 +8,42 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.20.2 — one budget on the Goal screen
+
+_2026-08-10_ · [changes since v2.20.1](https://github.com/ecliptik/onigiri/compare/v2.20.1...v2.20.2)
+
+v2.20.1 sorted Goal's numbers into sections, and left two of them a screen apart
+both labelled "Budget" — "which makes me think they should be the same". They
+never could be. One is a forecast from your recent burn; the other is a live
+count of what today has earned. Same arithmetic, different spans.
+
+Only one of them is on the visible screen now. **Today** reads
+`Budget 1,100 / 1,532 kcal` — eaten of what today allows — over the burn that
+produces it. The average-day pair moved into **How the budget is set**, where a
+projection belongs beside the rest of the derivation and its label has the
+context to mean something.
+
+The fraction is deliberately not today's budget over the average day's. Those
+are different quantities, and on an active day the first exceeds the second, so
+that fraction would render past 100% and break its own metaphor. Eaten over
+today's budget cannot.
+
+**Progress since** and **Progress** were one question split across a screen —
+since when, and how far. They are one section now: the start date and weight,
+then the banked total and the 30-day comparison. Its explainer moved from the
+section footer to a caption under the rows it explains, since a footer there
+would now trail the totals and read as describing those instead.
+
+Smaller: "Weight then" and "Weight used" are both just **Weight** — the sections
+they sit in already say which weight — and the disclosure is **How the budget is
+set**.
+
+One thing that did NOT change, on purpose: the burn row does not say "so far".
+The day's burn is active energy earned to now PLUS the whole day's resting,
+credited from midnight. Calling it "so far" would contradict the Details screen,
+which shows what Health has actually recorded — a collision this app has already
+made once. The caption carries the distinction instead.
+
 ## v2.20.1 — Goal's numbers, sorted by the question they answer
 
 _2026-08-10_ · [changes since v2.20.0](https://github.com/ecliptik/onigiri/compare/v2.20.0...v2.20.1)

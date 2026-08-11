@@ -485,11 +485,15 @@ struct GoalView: View {
                             Text("\(unit.fromLb(healthWeightLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
                         }
                     } else {
-                        LabeledContent("Weight (\(unit.symbol))") {
-                            TextField("0", value: displayBinding($manualWeightLb), format: .number)
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .focused($focusedField, equals: .current)
+                        LabeledContent("Weight") {
+                            HStack(spacing: 4) {
+                                TextField("0", value: displayBinding($manualWeightLb), format: .number)
+                                    .keyboardType(.decimalPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .focused($focusedField, equals: .current)
+                                Text(unit.symbol)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         Text("No weight in Apple Health yet — enter it here.")
                             .font(.caption)
@@ -632,12 +636,23 @@ struct GoalView: View {
     // MARK: - Target / hold-near
 
     /// The weight field both modes share (lose target / hold-near anchor).
+    ///
+    /// The unit rides the VALUE, never the label — every read-only weight
+    /// row on this screen reads "202.2 lb", and an editable one labelled
+    /// "Weight (lb)" made the same fact appear in two different places
+    /// depending on whether you could type in it (the user, 2026-08-11).
+    /// A `TextField` can't carry a suffix, so the symbol sits beside it
+    /// in secondary — the shape Settings' sodium target already uses.
     private var targetWeightField: some View {
-        LabeledContent("Weight (\(unit.symbol))") {
-            TextField("0", value: displayBinding($targetWeightLb), format: .number)
-                .keyboardType(.decimalPad)
-                .multilineTextAlignment(.trailing)
-                .focused($focusedField, equals: .target)
+        LabeledContent("Weight") {
+            HStack(spacing: 4) {
+                TextField("0", value: displayBinding($targetWeightLb), format: .number)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .focused($focusedField, equals: .target)
+                Text(unit.symbol)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

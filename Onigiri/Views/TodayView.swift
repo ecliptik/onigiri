@@ -1721,17 +1721,23 @@ private struct WaterEditSheet: View {
                     // State stays oz (1–128); mL mode steps ±50 on a
                     // snapped readout and the field edits whole mL.
                     Stepper {
-                        LabeledContent("Amount (\(unit.symbol))") {
-                            TextField("0", value: Binding(
-                                get: {
-                                    unit == .fluidOunces ? oz : unit.fromOz(oz).rounded()
-                                },
-                                set: { oz = min(max(unit.toOz($0), 1), 128) }
-                            ), format: .number.precision(.fractionLength(0...1)))
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .frame(maxWidth: 80)
-                                .focused($amountFocused)
+                        // Unit in the VALUE, not the label — the same
+                        // rule the weight fields follow (2026-08-11).
+                        LabeledContent("Amount") {
+                            HStack(spacing: 4) {
+                                TextField("0", value: Binding(
+                                    get: {
+                                        unit == .fluidOunces ? oz : unit.fromOz(oz).rounded()
+                                    },
+                                    set: { oz = min(max(unit.toOz($0), 1), 128) }
+                                ), format: .number.precision(.fractionLength(0...1)))
+                                    .keyboardType(.decimalPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(maxWidth: 80)
+                                    .focused($amountFocused)
+                                Text(unit.symbol)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         .padding(.trailing, 8)
                     } onIncrement: {

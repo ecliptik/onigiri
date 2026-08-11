@@ -356,17 +356,34 @@ start rather than 0%.
 - `Onigiri/Models/GoalUpsert.swift` — `StartChange.keep`.
 - `OnigiriUITests/OnigiriUITests.swift` — the opt-in flow above.
 
-## Deliberately NOT in this pass
+## Both deferred items BUILT 2026-08-10
 
-- **Milestone celebrations** (decision 8). `GoalProgress.Milestone`
-  already carries `isReached` and nothing marks it, and the card
-  machinery would generalize almost as-is — the ack key would store a
-  milestone instead of a target. Held back until the target moment has
-  been seen on device, because the failure mode of celebrating
-  everything is that nothing reads as a celebration.
-- **Regain after Maintain.** Nothing watches for drifting back up above
-  a held anchor. It's the natural next question and a different feature
-  (it needs a tolerance band and a much more careful tone).
+- **Milestone celebrations.** The same Today card, quieter: shown once,
+  dismissible, and NO re-arm — a 40 lb journey posts seven of these, and
+  if each nagged like the target's the target would stop feeling
+  different. Judged on the SUSTAINED basis (`GoalCompletion`), not
+  `Milestone.isReached`, whose `currentLb` is a raw weigh-in — a mark
+  reached by one light morning isn't reached. The acknowledgement is a
+  single number, the deepest mark seen: dismissing "15 lb down" settles
+  everything at or below 15 and a later 20 lb mark still shows, so there
+  is no count or timestamp to keep in step. The target card wins where
+  both would show. `GoalUpsert` resets the acknowledgement exactly where
+  it re-stamps the start — a new journey re-derives its marks, but
+  CONTINUING (`.keep`) must not re-announce marks already passed.
+- **Regain after Maintain.** `GoalCompletion.hasRegained` — the mirror
+  of `isMet`, same basis, same weigh-in guard, 5 lb tolerance because
+  daily swing is 2–3 lb and this is measured on the smoothed basis.
+  Deliberately a plain Bool with no "by how much" in it.
+
+  Presentation is the part that mattered. This is the one notice in the
+  app carrying bad news, so: no Today card, no badge, no colour, no
+  dismissal state — a single neutral line inside `Hold near`, where you
+  only see it if you went looking, with "Set a new goal" attached so it
+  is an offer rather than a verdict. It reads the SAVED anchor, not the
+  form's, since an anchor being edited isn't one you're holding near.
+
+Three debug seeds now cover states a fresh simulator cannot otherwise
+reach: `--seed-goal-reached`, `--seed-milestone`, `--seed-regained`.
 
 ## Open (taste knobs, decide on device)
 

@@ -1401,14 +1401,14 @@ final class OnigiriUITests: XCTestCase {
         // in the accessibility tree until they're scrolled near.
         // A LabeledContent row is ONE element carrying the value, but the
         // shape isn't guaranteed — accept a sibling static text too.
-        let weightThen = app.staticTexts["Weight"]
+        let weightThen = app.staticTexts["Starting weight"]
         func startWeightShown() -> Bool {
             ((weightThen.value as? String) ?? "").contains("210")
                 || app.staticTexts.matching(
                     NSPredicate(format: "label CONTAINS '210'")).firstMatch.exists
         }
         XCTAssertTrue(scroll(app, until: weightThen),
-                      "Progress since reports the journey's start")
+                      "Progress reports the journey's start")
         XCTAssertTrue(startWeightShown(), "...and that start is the seeded 210 lb")
 
         keepGoing.tap()

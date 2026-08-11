@@ -359,6 +359,19 @@ public enum SharedStore {
     public static let goalReachedAckCountKey = "goalReachedAckCount"
     public static let goalReachedAckAtKey = "goalReachedAckAt"
 
+    /// The deepest milestone already announced, in pounds off the start.
+    /// One number IS the whole rule (see `MilestoneCard`): dismissing
+    /// "15 lb down" settles everything at or below 15, and a later 20 lb
+    /// mark still shows. Reset to 0 when a new journey starts, since the
+    /// marks are re-derived from the new start.
+    public static let milestoneAckLostLbKey = "milestoneAckLostLb"
+    public static var milestoneAckLostLb: Double {
+        defaults.double(forKey: milestoneAckLostLbKey)
+    }
+    public static func acknowledgeMilestone(lostLb: Double) {
+        defaults.set(lostLb, forKey: milestoneAckLostLbKey)
+    }
+
     /// Records a dismissal (or, with `decided`, a choice) of the
     /// goal-reached card for `targetLb`. One writer so the three keys
     /// can't disagree.

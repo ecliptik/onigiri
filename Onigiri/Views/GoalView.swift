@@ -722,23 +722,30 @@ struct GoalView: View {
         if !isMaintenance, earliest != nil || hasProgressTotals {
             Section {
                 if let earliest {
+                    // Weight first: it is the number you came to read,
+                    // and the date is what qualifies it (the user).
+                    LabeledContent("Starting weight") {
+                        Text("\(unit.fromLb(formStart?.weightLb ?? earliest.weightLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
+                    }
                     DatePicker(
-                        "Date",
+                        "Starting date",
                         selection: startDateBinding,
                         in: startDateRange,
                         displayedComponents: .date
                     )
-                    LabeledContent("Weight") {
-                        Text("\(unit.fromLb(formStart?.weightLb ?? earliest.weightLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
-                    }
                     if !startIsAutomatic {
                         Button("Use earliest weigh-in") { startIsAutomatic = true }
                     }
-                    Text(startIsAutomatic
-                         ? "Your earliest weight in Apple Health, or choose a date."
-                         : "The progress bar and the chart's milestones measure from here. The weight is your weigh-in nearest this date.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    // Only the OVERRIDE is explained. The automatic case
+                    // ("Your earliest weight in Apple Health…") went: the
+                    // rows now say what they are, and a caption stating
+                    // the default under labels that already read plainly
+                    // was noise (the user, 2026-08-10).
+                    if !startIsAutomatic {
+                        Text("The progress bar and the chart's milestones measure from here. The weight is your weigh-in nearest this date.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 progressTotals
             } header: {
@@ -781,11 +788,38 @@ struct GoalView: View {
     private var holdNearSection: some View {
         Section {
             targetWeightField
+            // Drifting back up, stated once and plainly. No badge, no
+            // colour, no dismissal state to manage, and no "by how
+            // much" — the chart above already draws the line and the
+            // weight row already gives the number. This is the one
+            // notice in the app that carries bad news, so it is an
+            // OFFER: a fact and a way forward, not a verdict, and never
+            // a card on the screen you open every morning.
+            if hasRegained {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Your 7-day weight has settled above the weight you're holding near.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Button("Set a new goal") { mode = GoalMode.lose }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         } header: {
             Text("Hold near")
         } footer: {
             Text("The chart's reference line. The badge judges eating within what you burn, not the scale.")
         }
+    }
+
+    /// Only in maintenance, only against the SAVED anchor (an anchor
+    /// being edited isn't one you're holding near yet), and on the same
+    /// sustained basis as everything else — see `GoalCompletion`.
+    private var hasRegained: Bool {
+        guard isMaintenance, let goal = goals.first, goal.isMaintenance,
+              targetWeightLb == goal.targetWeightLb
+        else { return false }
+        return GoalCompletion.hasRegained(
+            anchorLb: goal.targetWeightLb, history: model.weightHistory)
     }
 
     // MARK: - Weight trend

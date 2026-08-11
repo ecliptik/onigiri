@@ -60,16 +60,31 @@ enum DebugSeeder {
             // Inserted directly, so `GoalUpsert`'s target-below-current
             // rule doesn't apply — which is the only way to reach this
             // state without a month of simulated weight loss.
-            let reached = ProcessInfo.processInfo.arguments.contains("--seed-goal-reached")
+            // Three states that a fresh simulator cannot otherwise reach
+            // without a month of simulated weight change, against the
+            // seeded weigh-ins (which drift 202 → 200 lb):
+            //  --seed-goal-reached  target ABOVE the weigh-ins, so the
+            //                       sustained criterion is met
+            //  --seed-milestone     a 210 lb start against a 190 target,
+            //                       so the 5 lb mark is passed and the
+            //                       target is not
+            //  --seed-regained      maintenance held near 193, which the
+            //                       weigh-ins now sit well above
+            let args = ProcessInfo.processInfo.arguments
+            let reached = args.contains("--seed-goal-reached")
+            let milestone = args.contains("--seed-milestone")
+            let regained = args.contains("--seed-regained")
             // A stamped start too, so the celebration has an ARC to
             // report ("10 lb down") and continuing can be seen to
             // preserve it rather than re-zero at today's weight.
             let started = Calendar.current.date(byAdding: .day, value: -60, to: .now)
+            let stamps = reached || milestone
             context.insert(GoalSettings(
-                targetWeightLb: reached ? 205 : 190,
+                targetWeightLb: reached ? 205 : (regained ? 193 : 190),
                 targetDate: target,
-                startWeightLb: reached ? 210 : nil,
-                startedAt: reached ? started : nil))
+                mode: regained ? GoalMode.maintain : nil,
+                startWeightLb: stamps ? 210 : nil,
+                startedAt: stamps ? started : nil))
         }
         try? context.save()
     }

@@ -84,6 +84,54 @@ public struct GoalCompletion: Equatable, Sendable {
         guard !points.isEmpty else { return nil }
         return points.reduce(0) { $0 + $1.weightLb } / Double(points.count)
     }
+
+    /// How far above a maintenance anchor counts as having drifted back
+    /// up. Daily weight swings 2–3 lb, but this is measured on the
+    /// SMOOTHED basis, so five pounds above the anchor is a real move
+    /// rather than a heavy dinner — and it is the step people count in.
+    public static let regainToleranceLb = 5.0
+
+    /// Whether the scale has settled meaningfully ABOVE a maintenance
+    /// anchor — the mirror of `isMet`, on the same sustained basis and
+    /// the same weigh-in guard, so it cannot fire off one bad morning.
+    ///
+    /// Deliberately a plain Bool with no "by how much" in it: what a
+    /// surface does with this has to be an offer, not a verdict.
+    public static func hasRegained(
+        anchorLb: Double,
+        history: [WeightTrend.Point],
+        toleranceLb: Double = regainToleranceLb,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> Bool {
+        let reading = evaluate(
+            targetLb: anchorLb, history: history, now: now, calendar: calendar)
+        guard reading.weighInDays >= minimumWeighInDays,
+              let basis = reading.basisLb
+        else { return false }
+        return basis >= anchorLb + toleranceLb
+    }
+}
+
+/// When the "N lb down" note should appear for a milestone on the way to
+/// the target.
+///
+/// Quieter than `GoalReachedCard` on purpose: a 40 lb journey posts
+/// seven of these, and if each one nagged like the target's card the
+/// target would stop feeling different from the routine. So: shown once,
+/// dismissible, and NO re-arm.
+///
+/// The acknowledgement is the deepest milestone already seen, which
+/// makes the rule a single comparison — dismissing "15 lb down" settles
+/// everything at or below 15, and a later 20 lb mark still shows. No
+/// count, no timestamp, nothing to keep in step.
+public enum MilestoneCard {
+    public static func shouldShow(lostLb: Double?, ackLostLb: Double) -> Bool {
+        guard let lostLb, lostLb > 0 else { return false }
+        // A hair of slack, since these are floating-point multiples of a
+        // step (3 × 4.4 lb for a 2 kg step won't land exactly).
+        return lostLb > ackLostLb + 0.001
+    }
 }
 
 /// When the "you hit your target" card should appear on Today.

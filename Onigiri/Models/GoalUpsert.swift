@@ -98,6 +98,14 @@ enum GoalUpsert {
                mode != GoalMode.maintain, let currentLb {
                 goal.startWeightLb = currentLb
                 goal.startedAt = .now
+                // A new journey re-derives its marks from a new start, so
+                // the deepest one already announced no longer describes
+                // anything. Left alone, a 20 lb ack would silently settle
+                // every mark of the next journey. Deliberately NOT reset
+                // for `.keep` (continuing past a reached target): that
+                // journey's marks carry on from the same start, and
+                // re-announcing "20 lb down" would be a lie about news.
+                SharedStore.acknowledgeMilestone(lostLb: 0)
             }
         } else {
             // Maintenance has no journey to measure; its "target" is a

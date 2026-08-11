@@ -575,54 +575,127 @@ struct TodayView: View {
     /// whichever day you're looking at.
     @ViewBuilder
     private var goalReachedCard: some View {
-        if let goal = goals.first, showsGoalReached(goal) {
-            Button {
-                QuickActions.shared.goalRequest = true
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text(verbatim: SharedStore.rewardEmoji(for: rewardIcon))
-                        .font(.title3)
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("You hit your target")
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-                        Text(goalReachedDetail(goal))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 8)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .accessibilityHidden(true)
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(.secondarySystemGroupedBackground),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("Opens Goal to choose what's next")
-            // Dismissal is a swipe-free explicit control: this card sits
-            // in a ScrollView, not a List, so there is no swipe to lean on.
-            .overlay(alignment: .topTrailing) {
-                Button {
+        if let goal = goals.first {
+            // The target wins where both are true: arriving is not "20 lb
+            // down", and two cards would make neither feel like an event.
+            if showsGoalReached(goal) {
+                celebrationCard(
+                    title: "You hit your target",
+                    detail: goalReachedDetail(goal),
+                    hint: "Opens Goal to choose what's next"
+                ) {
                     SharedStore.acknowledgeGoalReached(
                         targetLb: goal.targetWeightLb, decided: false)
                     goalReachedDismissed += 1
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(.tertiary)
-                        .contentShape(Rectangle().inset(by: -14))
                 }
-                .buttonStyle(.plain)
-                .padding(10)
-                .accessibilityLabel("Dismiss")
+            } else if let milestone = unseenMilestone(goal) {
+                celebrationCard(
+                    title: "\(weightText(milestone.lostLb)) down",
+                    detail: milestoneDetail(goal, milestone),
+                    hint: "Opens Goal"
+                ) {
+                    SharedStore.acknowledgeMilestone(lostLb: milestone.lostLb)
+                    goalReachedDismissed += 1
+                }
             }
         }
+    }
+
+    /// The shared shape of both celebrations: badge, headline, one line of
+    /// detail, a door to Goal, and an explicit ✕ — this card sits in a
+    /// ScrollView, not a List, so there is no swipe to lean on.
+    private func celebrationCard(
+        title: String, detail: String, hint: String, onDismiss: @escaping () -> Void
+    ) -> some View {
+        Button {
+            QuickActions.shared.goalRequest = true
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(verbatim: SharedStore.rewardEmoji(for: rewardIcon))
+                    .font(.title3)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text(detail)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemGroupedBackground),
+                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(hint)
+        .overlay(alignment: .topTrailing) {
+            Button(action: onDismiss) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.tertiary)
+                    .contentShape(Rectangle().inset(by: -14))
+            }
+            .buttonStyle(.plain)
+            .padding(10)
+            .accessibilityLabel("Dismiss")
+        }
+    }
+
+    private func weightText(_ lb: Double) -> String {
+        let digits = weightUnit == .pounds ? 0 : 1
+        return "\(weightUnit.fromLb(lb).formatted(.number.precision(.fractionLength(digits)))) \(weightUnit.symbol)"
+    }
+
+    /// The journey, as the Goal screen would draw it.
+    private func goalProgress(_ goal: GoalSettings) -> GoalProgress? {
+        GoalProgress.resolve(
+            startWeightLb: goal.startWeightLb,
+            startedAt: goal.startedAt,
+            startIsManual: goal.startIsManual ?? false,
+            weightHistory: model.weightHistory,
+            currentWeightLb: model.currentWeightLb,
+            targetWeightLb: goal.targetWeightLb,
+            isMaintenance: goal.isMaintenance,
+            milestoneStepLb: GoalProgress.milestoneStepLb(for: weightUnit))
+    }
+
+    /// The deepest mark the SUSTAINED basis has passed and that hasn't
+    /// been announced. Judged on the same basis as the target — a mark
+    /// reached by one light morning isn't reached — which is why this
+    /// reads `GoalCompletion` rather than `Milestone.isReached`, whose
+    /// `currentLb` is a raw weigh-in.
+    private func unseenMilestone(_ goal: GoalSettings) -> GoalProgress.Milestone? {
+        _ = goalReachedDismissed
+        guard !goal.isMaintenance, let progress = goalProgress(goal) else { return nil }
+        let reading = GoalCompletion.evaluate(
+            targetLb: goal.targetWeightLb, history: model.weightHistory)
+        guard reading.weighInDays >= GoalCompletion.minimumWeighInDays,
+              let basis = reading.basisLb
+        else { return nil }
+        // Blowing past two marks at once announces the deeper one only.
+        let deepest = progress.milestones
+            .filter { basis <= $0.weightLb }
+            .max { $0.lostLb < $1.lostLb }
+        guard let deepest,
+              MilestoneCard.shouldShow(
+                lostLb: deepest.lostLb, ackLostLb: SharedStore.milestoneAckLostLb)
+        else { return nil }
+        return deepest
+    }
+
+    private func milestoneDetail(_ goal: GoalSettings, _ milestone: GoalProgress.Milestone) -> String {
+        guard let progress = goalProgress(goal) else { return "Keep going" }
+        let remaining = max(0, progress.currentLb - progress.targetLb)
+        guard remaining >= 0.1 else { return "Keep going" }
+        return "\(weightText(remaining)) to your target"
     }
 
     private func showsGoalReached(_ goal: GoalSettings) -> Bool {
@@ -644,22 +717,11 @@ struct TodayView: View {
     /// journey (derived from the earliest weigh-in) and this card can't
     /// disagree with the Goal screen about the same number.
     private func goalReachedDetail(_ goal: GoalSettings) -> String {
-        let digits = weightUnit == .pounds ? 0 : 1
-        let target = "\(weightUnit.fromLb(goal.targetWeightLb).formatted(.number.precision(.fractionLength(digits)))) \(weightUnit.symbol)"
-        let progress = GoalProgress.resolve(
-            startWeightLb: goal.startWeightLb,
-            startedAt: goal.startedAt,
-            startIsManual: goal.startIsManual ?? false,
-            weightHistory: model.weightHistory,
-            currentWeightLb: model.currentWeightLb,
-            targetWeightLb: goal.targetWeightLb,
-            isMaintenance: goal.isMaintenance,
-            milestoneStepLb: GoalProgress.milestoneStepLb(for: weightUnit))
-        guard let progress, progress.lostLb >= GoalProgress.minimumJourneyLb else {
-            return "\(target) · Choose what's next"
-        }
-        let lostText = "\(weightUnit.fromLb(progress.lostLb).formatted(.number.precision(.fractionLength(digits)))) \(weightUnit.symbol)"
-        return "\(lostText) down · Choose what's next"
+        let target = weightText(goal.targetWeightLb)
+        guard let progress = goalProgress(goal),
+              progress.lostLb >= GoalProgress.minimumJourneyLb
+        else { return "\(target) · Choose what's next" }
+        return "\(weightText(progress.lostLb)) down · Choose what's next"
     }
 
     @ViewBuilder

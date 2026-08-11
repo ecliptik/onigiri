@@ -160,6 +160,96 @@ struct GoalCompletionTests {
     }
 }
 
+/// Drifting back up above a maintenance anchor — the mirror of reaching
+/// a target, and held to the same sustained standard so it can never
+/// fire off one heavy morning.
+struct RegainTests {
+    private let now = Date(timeIntervalSince1970: 1_770_000_000)
+
+    private func history(_ entries: [(daysAgo: Double, lb: Double)]) -> [WeightTrend.Point] {
+        entries
+            .map { WeightTrend.Point(date: now.addingTimeInterval(-$0.daysAgo * 86400), weightLb: $0.lb) }
+            .sorted { $0.date < $1.date }
+    }
+
+    @Test func settlingWellAboveTheAnchorCounts() {
+        #expect(GoalCompletion.hasRegained(
+            anchorLb: 175,
+            history: history([(5, 181.2), (3, 180.6), (1, 181.0)]),
+            now: now))
+    }
+
+    /// Inside the tolerance is not regain — this is where daily swing
+    /// lives, and calling it regain would be both wrong and unkind.
+    @Test func driftingInsideTheToleranceIsNotRegain() {
+        #expect(!GoalCompletion.hasRegained(
+            anchorLb: 175,
+            history: history([(5, 177.4), (3, 178.1), (1, 177.9)]),
+            now: now))
+    }
+
+    @Test func exactlyAtTheToleranceCounts() {
+        #expect(GoalCompletion.hasRegained(
+            anchorLb: 175,
+            history: history([(5, 180), (3, 180), (1, 180)]),
+            now: now))
+    }
+
+    @Test func beingAtOrBelowTheAnchorIsNeverRegain() {
+        #expect(!GoalCompletion.hasRegained(
+            anchorLb: 175,
+            history: history([(5, 174.2), (3, 173.8), (1, 174.0)]),
+            now: now))
+    }
+
+    /// One heavy morning in an otherwise on-anchor week must not trip it.
+    @Test func oneHighMorningIsNotRegain() {
+        #expect(!GoalCompletion.hasRegained(
+            anchorLb: 175,
+            history: history([(6, 174.8), (4, 175.2), (2, 174.9), (1, 183.0)]),
+            now: now))
+    }
+
+    /// Same weigh-in guard as the target rule: too little data is not a
+    /// finding.
+    @Test func tooFewWeighInsIsNotRegain() {
+        #expect(!GoalCompletion.hasRegained(
+            anchorLb: 175,
+            history: history([(1, 190)]),
+            now: now))
+    }
+}
+
+/// Milestones: shown once, dismissible, never re-armed.
+struct MilestoneCardTests {
+    @Test func aDeeperMilestoneThanAcknowledgedShows() {
+        #expect(MilestoneCard.shouldShow(lostLb: 15, ackLostLb: 10))
+    }
+
+    @Test func theAcknowledgedOneDoesNotComeBack() {
+        #expect(!MilestoneCard.shouldShow(lostLb: 15, ackLostLb: 15))
+    }
+
+    /// Dismissing settles everything at or below it, so a bounce back up
+    /// and down doesn't re-announce a mark already seen.
+    @Test func shallowerMarksStaySettled() {
+        #expect(!MilestoneCard.shouldShow(lostLb: 10, ackLostLb: 15))
+        #expect(!MilestoneCard.shouldShow(lostLb: 5, ackLostLb: 15))
+    }
+
+    @Test func noMilestoneReachedShowsNothing() {
+        #expect(!MilestoneCard.shouldShow(lostLb: nil, ackLostLb: 0))
+        #expect(!MilestoneCard.shouldShow(lostLb: 0, ackLostLb: 0))
+    }
+
+    /// A 2 kg step lands on 4.4 lb multiples, so the comparison needs
+    /// slack against its own float error.
+    @Test func aStepThatIsNotAWholeNumberStillSettles() {
+        #expect(!MilestoneCard.shouldShow(lostLb: 4.4 * 3, ackLostLb: 13.200000000000001))
+        #expect(MilestoneCard.shouldShow(lostLb: 4.4 * 4, ackLostLb: 13.2))
+    }
+}
+
 /// "Announce it, allow a dismissal, say it once more in two weeks if
 /// nothing was decided, then never again for that target."
 struct GoalReachedCardTests {

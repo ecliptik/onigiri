@@ -75,24 +75,19 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   Fix: `pkill -f CoreDeviceService` (no sudo needed), wait ~15 s for the
   watch to reach "connecting/connected", then install. Don't send the user
   chasing watch reboots until this is ruled out.
-- **If 4000/RemotePairingError-1001 persists past the daemon reset (watch
-  "available (paired)", BT on, VPN exonerated): keep making contact and
-  POLL.** The watch's "preparation errors" state clears with repeated
-  attempts; once the error shifts to "Device is busy (Connecting…)", loop
-  `devicectl list devices` every ~10 s until the state reads "connected"
-  (it bounces available↔connecting↔connected) and build+install in that
-  window. A patience loop succeeds where one-shot attempts time out
-  (2026-07-11: ~an hour of identical failures, then connected on poll 7).
-  ATTEMPT THE INSTALL every round, don't just watch the state: a loop
-  that only polled `list devices` sat at "available (paired)" for 20
-  rounds, while a loop that ran `devicectl device install app` each
-  round succeeded on attempt 2 after one 3002 (2026-07-20) — the
-  install attempt itself is the contact that wakes the channel.
-  `IXRemoteErrorDomain code 6` belongs to the same retry-through family
-  (2026-07-21: five of those + one network timeout, then success on
-  attempt 7). deploy-phone.sh runs this loop itself now — and never
-  gates the watch on a one-shot `list devices` (a not-yet-enumerated
-  watch read as "unreachable" and got silently skipped).
+- **4000 / RemotePairingError-1001 / 3002 / `IXRemoteErrorDomain code 6`
+  on the first attempts are normal — the install attempt itself is what
+  wakes the channel.** deploy-phone.sh runs that retry loop, so don't
+  build one by hand and never gate the watch on a one-shot
+  `list devices` (a not-yet-enumerated watch reads as "unreachable" and
+  gets silently skipped). Typical is success within 1–3 attempts;
+  12 has happened.
+- **`devicectl list devices` reading `unavailable` is NOT that failure
+  family** — it means the watch is off-wrist, asleep, or out of range,
+  and no amount of retrying fixes it. `available (paired)` is the state
+  installs succeed from. Check this before starting a deploy: it costs
+  one command and saves a 12-attempt loop that was never going to work
+  (2026-08-10).
 - **Watch discovery requires Mac BLUETOOTH ON.** Two days of debugging
   (reboots, re-pairing, trust resets, cache wipes, VPN toggles) and the watch
   never appeared in Xcode/devicectl until the Mac's Bluetooth was enabled —
@@ -132,6 +127,17 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   running the flow test, or seeded totals will be off (`simctl erase <both udids>`).
   Same for the iPad sim: every `--seed-sample-data` launch ADDS samples, so after
   a few QA runs the flow test's total assertions fail on stale data — erase first.
+- **`simctl erase` FAILS on a BOOTED device** ("Unable to erase contents
+  and settings in current state"). Shut down first, and never swallow its
+  stderr: a silently-failed erase leaves the old container, and the next
+  run tests stale state while looking like a code bug (cost a debugging
+  detour 2026-08-10).
+- Three goal states a fresh sim can't otherwise reach without weeks of
+  simulated weight change, each an extra launch argument beside
+  `--seed-sample-data`: `--seed-goal-reached` (target above the seeded
+  weigh-ins), `--seed-milestone` (a 210 lb start against a 190 target, so
+  a 5 lb rung is passed and the target isn't), `--seed-regained`
+  (maintenance held near 193, which the weigh-ins sit above).
 - UI-test capture runs leave the sim in their last orientation; tests that
   assume portrait must set `XCUIDevice.shared.orientation` themselves (the flow
   and QA tests now do).
@@ -340,12 +346,17 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   re-grade themselves from Health; that's accepted, and it's less code
   than freezing them. `CalorieBudget.projectedDailyBurn` survives for the
   Goal/onboarding PREVIEW only ("an average day"), never to judge a day.
-  Goal's Daily plan shows BOTH budgets, named — "Average day" (the
-  projection) over "Today" (the live `dayBurn − deficit`) — because one
+  Goal shows BOTH budgets and they must stay TOLD APART, because one
   label on two different numbers reads as a contradiction (726 kcal
-  apart at lunchtime, 2026-08-02). Don't re-add a today-floor to the
-  projection to close the gap: that was tried, it made the average
-  neither one thing nor the other, and it didn't close it.
+  apart at lunchtime, 2026-08-02). Since 2026-08-11 the SECTION carries
+  that distinction rather than the row labels: `Budget` under `Today`
+  (the live `dayBurn − deficit`, shown as eaten/budget) and
+  `Budget, average day` inside the collapsed "How the budget is set",
+  where a projection belongs. Two adjacent rows both called "Budget"
+  read as one number failing to match itself — don't put them back
+  side by side. Don't re-add a today-floor to the projection to close
+  the gap either: that was tried, it made the average neither one thing
+  nor the other, and it didn't close it.
 - **Anything LOGGED is summed with a SAMPLE query, never a statistics
   query** (2026-08-05, cause CONFIRMED 2026-08-06).
 

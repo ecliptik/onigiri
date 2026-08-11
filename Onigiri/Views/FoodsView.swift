@@ -980,7 +980,7 @@ struct PortionSheet: View {
                             openFood = food
                         } label: {
                             HStack(spacing: 6) {
-                                Text("Edit food")
+                                Text("View Food")
                                     .foregroundStyle(.primary)
                                 Spacer()
                                 Image(systemName: "chevron.right")
@@ -997,7 +997,10 @@ struct PortionSheet: View {
                     // the case that has no Contains section: this entry
                     // keeps the numbers it was logged with.
                     if resolvedSelf != nil, editDate != nil {
-                        Text("Editing the food changes it for future logs, not this entry.")
+                        // Worded for what you might DO in there, not for
+                        // the row's verb: the door says View, but the
+                        // form behind it edits.
+                        Text("Changes to the food apply to future logs, not this entry.")
                     }
                 }
                 Section {

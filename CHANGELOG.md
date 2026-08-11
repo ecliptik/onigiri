@@ -8,6 +8,43 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.20.3 — the way down marked, the way back up noticed
+
+_2026-08-11_ · [changes since v2.20.2](https://github.com/ecliptik/onigiri/compare/v2.20.2...v2.20.3)
+
+The chart has drawn 5 lb rungs since the progress bar landed, and passing one
+never got a word. Today's card now marks it — quieter than the target's: shown
+once, dismissible, no re-arm. A 40 lb journey posts seven of these, and if each
+nagged like the target's card the target would stop feeling like an arrival.
+
+They are judged on the same sustained basis as the target rather than on the
+latest weigh-in, so a rung reached by one light morning isn't reached. The
+acknowledgement is a single number — the deepest mark announced — so dismissing
+"15 lb down" settles everything at or below it while a later 20 lb mark still
+shows. Starting a new goal clears it, because a new journey re-derives its
+rungs; continuing past a target you reached does not, because those rungs are
+the same ones.
+
+**Maintenance has always had an anchor and never looked at it.** If your 7-day
+weight settles 5 lb above the weight you're holding near, the Goal screen now
+says so once, in plain text, with "Set a new goal" attached. No card on the
+screen you open every morning, no badge, no colour, nothing to dismiss. It is
+the only notice in this app carrying bad news, and it is built as an offer.
+
+**A meal shows everything it contains.** The builder had kcal and whichever
+single nutrient your first tracked slot names; the rest were sitting in the
+foods, unsummed. A collapsed Nutrition breakdown now adds them up through the
+same rows the day's detail screen uses — scaled by each member's quantity, and
+silent about nutrients none of the foods recorded. Estimated components count,
+and it says so, because leaving them out would have made the breakdown disagree
+with the total right above it.
+
+Smaller, on Goal: Progress leads with Starting weight, then Starting date. And
+the unit moved out of the label on every field that takes one — "Weight (lb)"
+sat directly under "From Apple Health  200.2 lb", the same fact in two places
+depending on whether you could type in it. Three fields did that, all editable;
+they now read like the rows around them.
+
 ## v2.20.2 — one budget on the Goal screen
 
 _2026-08-10_ · [changes since v2.20.1](https://github.com/ecliptik/onigiri/compare/v2.20.1...v2.20.2)

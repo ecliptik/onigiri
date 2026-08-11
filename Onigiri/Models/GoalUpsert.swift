@@ -105,7 +105,7 @@ enum GoalUpsert {
                 // for `.keep` (continuing past a reached target): that
                 // journey's marks carry on from the same start, and
                 // re-announcing "20 lb down" would be a lie about news.
-                SharedStore.acknowledgeMilestone(lostLb: 0)
+                SharedStore.recordMilestoneSeen(lostLb: 0)
             }
         } else {
             // Maintenance has no journey to measure; its "target" is a

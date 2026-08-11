@@ -113,24 +113,24 @@ public struct GoalCompletion: Equatable, Sendable {
     }
 }
 
-/// When the "N lb down" note should appear for a milestone on the way to
-/// the target.
+/// Whether a milestone is NEW — deeper than the deepest one already
+/// seen.
 ///
-/// Quieter than `GoalReachedCard` on purpose: a 40 lb journey posts
-/// seven of these, and if each one nagged like the target's card the
-/// target would stop feeling different from the routine. So: shown once,
-/// dismissible, and NO re-arm.
+/// Quieter than `GoalReachedCard` by design: a 40 lb journey posts seven
+/// rungs, and a card apiece would make the target stop feeling like an
+/// arrival. So a rung is a LINE in the Daily goal card, shown on the day
+/// it is crossed and no other (the user, 2026-08-11) — which is why
+/// there is no dismissal here to model. The caller pairs this with the
+/// stamp's date; this half only answers "is this one new".
 ///
-/// The acknowledgement is the deepest milestone already seen, which
-/// makes the rule a single comparison — dismissing "15 lb down" settles
-/// everything at or below 15, and a later 20 lb mark still shows. No
-/// count, no timestamp, nothing to keep in step.
+/// One number carries it: recording "15 lb down" settles everything at
+/// or below 15, and a later 20 lb rung still reads as new.
 public enum MilestoneCard {
-    public static func shouldShow(lostLb: Double?, ackLostLb: Double) -> Bool {
+    public static func isNew(lostLb: Double?, seenLostLb: Double) -> Bool {
         guard let lostLb, lostLb > 0 else { return false }
         // A hair of slack, since these are floating-point multiples of a
         // step (3 × 4.4 lb for a 2 kg step won't land exactly).
-        return lostLb > ackLostLb + 0.001
+        return lostLb > seenLostLb + 0.001
     }
 }
 

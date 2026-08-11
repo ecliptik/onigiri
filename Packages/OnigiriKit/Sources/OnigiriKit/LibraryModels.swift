@@ -359,17 +359,24 @@ public enum SharedStore {
     public static let goalReachedAckCountKey = "goalReachedAckCount"
     public static let goalReachedAckAtKey = "goalReachedAckAt"
 
-    /// The deepest milestone already announced, in pounds off the start.
-    /// One number IS the whole rule (see `MilestoneCard`): dismissing
-    /// "15 lb down" settles everything at or below 15, and a later 20 lb
-    /// mark still shows. Reset to 0 when a new journey starts, since the
-    /// marks are re-derived from the new start.
+    /// The deepest milestone already seen, in pounds off the start, and
+    /// the day it was first seen. A rung shows on its DAY and no other
+    /// (the user, 2026-08-11), so there is nothing to dismiss and no
+    /// count to keep in step — the stamp expires on its own at midnight.
+    /// Reset to 0 when a new journey starts, since the rungs are
+    /// re-derived from the new start.
     public static let milestoneAckLostLbKey = "milestoneAckLostLb"
-    public static var milestoneAckLostLb: Double {
-        defaults.double(forKey: milestoneAckLostLbKey)
+    public static let milestoneSeenAtKey = "milestoneSeenAt"
+    public static var milestoneSeen: (lostLb: Double, at: Date?) {
+        let stamp = defaults.double(forKey: milestoneSeenAtKey)
+        return (
+            defaults.double(forKey: milestoneAckLostLbKey),
+            stamp > 0 ? Date(timeIntervalSince1970: stamp) : nil
+        )
     }
-    public static func acknowledgeMilestone(lostLb: Double) {
+    public static func recordMilestoneSeen(lostLb: Double, now: Date = .now) {
         defaults.set(lostLb, forKey: milestoneAckLostLbKey)
+        defaults.set(now.timeIntervalSince1970, forKey: milestoneSeenAtKey)
     }
 
     /// Records a dismissal (or, with `decided`, a choice) of the

@@ -290,7 +290,13 @@ struct TodayView: View {
             // Don't reintroduce a scroll-spanning swipe here.
             }
         }
-        .task { await model.start() }
+        .task {
+            await model.start()
+            stampMilestoneIfNew()
+        }
+        // The weigh-in that crosses a rung arrives with a refresh, not
+        // with the first load.
+        .onChange(of: model.weightHistory) { _, _ in stampMilestoneIfNew() }
         .onChange(of: toastCenter.mutationVersion) { _, _ in
             Task { await model.refresh() }
         }
@@ -575,28 +581,19 @@ struct TodayView: View {
     /// whichever day you're looking at.
     @ViewBuilder
     private var goalReachedCard: some View {
-        if let goal = goals.first {
-            // The target wins where both are true: arriving is not "20 lb
-            // down", and two cards would make neither feel like an event.
-            if showsGoalReached(goal) {
-                celebrationCard(
-                    title: "You hit your target",
-                    detail: goalReachedDetail(goal),
-                    hint: "Opens Goal to choose what's next"
-                ) {
-                    SharedStore.acknowledgeGoalReached(
-                        targetLb: goal.targetWeightLb, decided: false)
-                    goalReachedDismissed += 1
-                }
-            } else if let milestone = unseenMilestone(goal) {
-                celebrationCard(
-                    title: "\(weightText(milestone.lostLb)) down",
-                    detail: milestoneDetail(goal, milestone),
-                    hint: "Opens Goal"
-                ) {
-                    SharedStore.acknowledgeMilestone(lostLb: milestone.lostLb)
-                    goalReachedDismissed += 1
-                }
+        // Only the TARGET gets a card. A milestone is a line inside the
+        // Daily goal card instead (the user, 2026-08-11): seven rungs on
+        // a long journey is too many cards, and a card of its own made a
+        // rung look like an arrival.
+        if let goal = goals.first, showsGoalReached(goal) {
+            celebrationCard(
+                title: "You hit your target",
+                detail: goalReachedDetail(goal),
+                hint: "Opens Goal to choose what's next"
+            ) {
+                SharedStore.acknowledgeGoalReached(
+                    targetLb: goal.targetWeightLb, decided: false)
+                goalReachedDismissed += 1
             }
         }
     }
@@ -623,10 +620,9 @@ struct TodayView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 8)
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
+                // No chevron: it sat directly under the ✕ and the two
+                // read as one crowded control (the user, 2026-08-11).
+                // The detail line says where the tap goes.
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -667,35 +663,59 @@ struct TodayView: View {
             milestoneStepLb: GoalProgress.milestoneStepLb(for: weightUnit))
     }
 
-    /// The deepest mark the SUSTAINED basis has passed and that hasn't
-    /// been announced. Judged on the same basis as the target — a mark
-    /// reached by one light morning isn't reached — which is why this
-    /// reads `GoalCompletion` rather than `Milestone.isReached`, whose
-    /// `currentLb` is a raw weigh-in.
-    private func unseenMilestone(_ goal: GoalSettings) -> GoalProgress.Milestone? {
-        _ = goalReachedDismissed
+    /// The deepest mark the SUSTAINED basis has passed — judged on the
+    /// same basis as the target, since a mark reached by one light
+    /// morning isn't reached. That is why this reads `GoalCompletion`
+    /// rather than `Milestone.isReached`, whose `currentLb` is a raw
+    /// weigh-in.
+    private func deepestReachedMilestone(_ goal: GoalSettings) -> GoalProgress.Milestone? {
         guard !goal.isMaintenance, let progress = goalProgress(goal) else { return nil }
         let reading = GoalCompletion.evaluate(
             targetLb: goal.targetWeightLb, history: model.weightHistory)
         guard reading.weighInDays >= GoalCompletion.minimumWeighInDays,
               let basis = reading.basisLb
         else { return nil }
-        // Blowing past two marks at once announces the deeper one only.
-        let deepest = progress.milestones
+        // Crossing two rungs at once reports the deeper one only.
+        return progress.milestones
             .filter { basis <= $0.weightLb }
             .max { $0.lostLb < $1.lostLb }
-        guard let deepest,
-              MilestoneCard.shouldShow(
-                lostLb: deepest.lostLb, ackLostLb: SharedStore.milestoneAckLostLb)
-        else { return nil }
-        return deepest
     }
 
-    private func milestoneDetail(_ goal: GoalSettings, _ milestone: GoalProgress.Milestone) -> String {
-        guard let progress = goalProgress(goal) else { return "Keep going" }
+    /// The rung line for the Daily goal card, or nil.
+    ///
+    /// PURE — deciding it must not depend on a task having already run,
+    /// or the line misses the very render the weigh-in arrives on. A
+    /// rung shows while it is NEW (deeper than any seen) or while the
+    /// day it was first seen is still today; the stamp below closes it
+    /// out at midnight. Showing on the day it is FIRST SEEN rather than
+    /// the day it was crossed is deliberate: a rung crossed while the
+    /// app was closed is still news the next time it opens.
+    private var milestoneLine: String? {
+        guard let goal = goals.first, !showsGoalReached(goal),
+              let milestone = deepestReachedMilestone(goal),
+              let progress = goalProgress(goal)
+        else { return nil }
+        let seen = SharedStore.milestoneSeen
+        guard MilestoneCard.isNew(lostLb: milestone.lostLb, seenLostLb: seen.lostLb)
+                || Calendar.current.isDateInToday(seen.at ?? .distantPast)
+        else { return nil }
         let remaining = max(0, progress.currentLb - progress.targetLb)
-        guard remaining >= 0.1 else { return "Keep going" }
-        return "\(weightText(remaining)) to your target"
+        return remaining >= 0.1
+            ? "\(weightText(milestone.lostLb)) down · \(weightText(remaining)) to your target"
+            : "\(weightText(milestone.lostLb)) down"
+    }
+
+    /// Starts the one-day clock on a newly crossed rung. Writes, so it
+    /// runs from a task — but nothing on screen waits for it: the line
+    /// above already shows a new rung, and this only decides when it
+    /// stops.
+    private func stampMilestoneIfNew() {
+        guard let goal = goals.first, !showsGoalReached(goal),
+              let milestone = deepestReachedMilestone(goal),
+              MilestoneCard.isNew(
+                lostLb: milestone.lostLb, seenLostLb: SharedStore.milestoneSeen.lostLb)
+        else { return }
+        SharedStore.recordMilestoneSeen(lostLb: milestone.lostLb)
     }
 
     private func showsGoalReached(_ goal: GoalSettings) -> Bool {
@@ -740,7 +760,11 @@ struct TodayView: View {
                     plan: plan,
                     isMaintenanceMode: goal.isMaintenance,
                     showsRemaining: model.isToday,
-                    weeklyTrendLb: model.weeklyTrendLb
+                    weeklyTrendLb: model.weeklyTrendLb,
+                    // Today only: a rung belongs to the day it was
+                    // crossed, and browsing back to Tuesday shouldn't
+                    // re-announce it.
+                    milestoneText: model.isToday ? milestoneLine : nil
                 )
                 .equatable()
             } else {
@@ -1883,6 +1907,9 @@ struct DailyGoalCard: View, Equatable {
     /// Actual scale movement over the past week (negative = down);
     /// nil when Health has too few weigh-ins to say.
     var weeklyTrendLb: Double? = nil
+    /// "5 lb down · 2 lb to your target", on the day that rung is
+    /// crossed and no other. nil the rest of the time.
+    var milestoneText: String? = nil
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
     // Display-only (like the reward icon, uncompared in ==): its own
     // observation re-renders the scale line when the unit changes.
@@ -1906,6 +1933,7 @@ struct DailyGoalCard: View, Equatable {
             && lhs.isMaintenanceMode == rhs.isMaintenanceMode
             && lhs.showsRemaining == rhs.showsRemaining
             && lhs.weeklyTrendLb == rhs.weeklyTrendLb
+            && lhs.milestoneText == rhs.milestoneText
     }
 
     /// A zero-deficit plan is maintenance: the gauge tracks budget left
@@ -2012,6 +2040,19 @@ struct DailyGoalCard: View, Equatable {
                         Text("Scale: \(trend < 0 ? "down" : "up") \(unit.fromLb(abs(trend)), format: .number.precision(.fractionLength(1))) \(unit.symbol) this week")
                     } icon: {
                         Image(systemName: trend < 0 ? "arrow.down.right" : "arrow.up.right")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                // A milestone belongs beside the scale line that earned
+                // it, not in a card of its own (the user, 2026-08-11) —
+                // and it lasts the DAY it is crossed, then goes quietly.
+                // Nothing to dismiss, so nothing to keep in step.
+                if let milestone = milestoneText {
+                    Label {
+                        Text(milestone)
+                    } icon: {
+                        Text(verbatim: SharedStore.rewardEmoji(for: rewardIcon))
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)

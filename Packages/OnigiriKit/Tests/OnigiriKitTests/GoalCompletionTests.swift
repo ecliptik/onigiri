@@ -220,33 +220,34 @@ struct RegainTests {
     }
 }
 
-/// Milestones: shown once, dismissible, never re-armed.
+/// Milestones: a rung is news exactly once, and only when it is deeper
+/// than anything already seen.
 struct MilestoneCardTests {
-    @Test func aDeeperMilestoneThanAcknowledgedShows() {
-        #expect(MilestoneCard.shouldShow(lostLb: 15, ackLostLb: 10))
+    @Test func aDeeperMilestoneThanSeenIsNews() {
+        #expect(MilestoneCard.isNew(lostLb: 15, seenLostLb: 10))
     }
 
-    @Test func theAcknowledgedOneDoesNotComeBack() {
-        #expect(!MilestoneCard.shouldShow(lostLb: 15, ackLostLb: 15))
+    @Test func theSameOneIsNotNewsAgain() {
+        #expect(!MilestoneCard.isNew(lostLb: 15, seenLostLb: 15))
     }
 
-    /// Dismissing settles everything at or below it, so a bounce back up
-    /// and down doesn't re-announce a mark already seen.
+    /// Recording settles everything at or below it, so bouncing back up
+    /// and down doesn't re-announce a rung already passed.
     @Test func shallowerMarksStaySettled() {
-        #expect(!MilestoneCard.shouldShow(lostLb: 10, ackLostLb: 15))
-        #expect(!MilestoneCard.shouldShow(lostLb: 5, ackLostLb: 15))
+        #expect(!MilestoneCard.isNew(lostLb: 10, seenLostLb: 15))
+        #expect(!MilestoneCard.isNew(lostLb: 5, seenLostLb: 15))
     }
 
-    @Test func noMilestoneReachedShowsNothing() {
-        #expect(!MilestoneCard.shouldShow(lostLb: nil, ackLostLb: 0))
-        #expect(!MilestoneCard.shouldShow(lostLb: 0, ackLostLb: 0))
+    @Test func noMilestoneReachedIsNotNews() {
+        #expect(!MilestoneCard.isNew(lostLb: nil, seenLostLb: 0))
+        #expect(!MilestoneCard.isNew(lostLb: 0, seenLostLb: 0))
     }
 
     /// A 2 kg step lands on 4.4 lb multiples, so the comparison needs
     /// slack against its own float error.
     @Test func aStepThatIsNotAWholeNumberStillSettles() {
-        #expect(!MilestoneCard.shouldShow(lostLb: 4.4 * 3, ackLostLb: 13.200000000000001))
-        #expect(MilestoneCard.shouldShow(lostLb: 4.4 * 4, ackLostLb: 13.2))
+        #expect(!MilestoneCard.isNew(lostLb: 4.4 * 3, seenLostLb: 13.200000000000001))
+        #expect(MilestoneCard.isNew(lostLb: 4.4 * 4, seenLostLb: 13.2))
     }
 }
 

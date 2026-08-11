@@ -8,6 +8,31 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.20.4 — a logged food can open the food it came from
+
+_2026-08-11_ · [changes since v2.20.3](https://github.com/ecliptik/onigiri/compare/v2.20.3...v2.20.4)
+
+Tap a logged meal in the log and you get its components, each one a door into
+that food's editor. Tap a logged food and you got nothing: the portion sheet's
+only route to a food was through a meal's Contains rows, and a plain food has no
+Contains section.
+
+It now offers **Edit food**, with the same treatment a Contains row gets — a real
+button with a chevron, and only when the food is still findable. A food logged
+from an online search and never saved, or one since renamed, simply has no row;
+nothing to tap beats a tap that opens nothing.
+
+Meals are deliberately left out of that match. A meal's name belongs to a meal,
+and a food that happened to share it would open the wrong thing. The match
+itself is exact on the normalized name rather than a substring, so "Chicken
+burrito" cannot reach "Chicken breast".
+
+While you're editing an entry that already exists, the section now says what the
+door does and doesn't do: the food changes for future logs, and this entry keeps
+the numbers it was logged with. A logged meal's breakdown already carried that
+caveat; the single-food case needed it too — otherwise the obvious move is to
+"fix" an entry's calories there and watch nothing happen.
+
 ## v2.20.3 — the way down marked, the way back up noticed
 
 _2026-08-11_ · [changes since v2.20.2](https://github.com/ecliptik/onigiri/compare/v2.20.2...v2.20.3)

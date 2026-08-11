@@ -8,6 +8,25 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.20.6 — a milestone is a line, not a card
+
+_2026-08-11_ · [changes since v2.20.5](https://github.com/ecliptik/onigiri/compare/v2.20.5...v2.20.6)
+
+v2.20.5 gave every 5 lb rung a card of its own on Today. That made a rung look
+like an arrival, stacked a ✕ directly above a chevron so two controls read as
+one crowded control, and promised seven cards over a long journey.
+
+A rung is a line in the **Daily goal** card now, under the scale movement that
+earned it: *5 lb down · 10 lb to your target*. Only hitting the target still
+gets a card — and that card loses its chevron, since its own text already says
+where the tap goes and nothing should sit under the ✕.
+
+The line lasts the day and then goes quietly. That deletes the whole dismissal
+apparatus with it: no ✕, no count, no re-arm, nothing to keep in step. What is
+recorded is the deepest rung and the day it was first SEEN rather than first
+crossed — a rung passed while the app was closed is still news the next time it
+opens.
+
 ## v2.20.5 — View Food
 
 _2026-08-11_ · [changes since v2.20.4](https://github.com/ecliptik/onigiri/compare/v2.20.4...v2.20.5)

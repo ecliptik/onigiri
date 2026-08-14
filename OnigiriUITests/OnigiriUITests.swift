@@ -810,8 +810,21 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(picker.waitForExistence(timeout: 10), "Goal mode picker should exist")
         picker.buttons["Maintain"].tap()
         shot("goal-maintain")
-        // Target section hides; the plan shows the budget without a deficit.
-        XCTAssertTrue(app.staticTexts["Calorie budget"].waitForExistence(timeout: 5))
+        // Target section hides; the budget stands without a deficit.
+        // The old "Calorie budget" section became this disclosure on
+        // 2026-08-10 — and the deficit row moved INSIDE it, so absence
+        // has to be checked with the group OPEN or it passes merely
+        // because the group is shut.
+        let howSet = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == 'How the budget is set'")).firstMatch
+        // Below the fold, and a Form's rows don't exist in the tree until
+        // scrolled near — waiting on one that isn't there just times out.
+        XCTAssertTrue(scroll(app, until: howSet), "The budget explainer is reachable")
+        // Open it and PROVE it opened before asserting a row is absent:
+        // a shut group makes every absence trivially true.
+        let restingRow = app.staticTexts["Resting burn, full day"]
+        if !restingRow.exists { howSet.tap() }
+        XCTAssertTrue(restingRow.waitForExistence(timeout: 5), "The group opens")
         XCTAssertFalse(app.staticTexts["Deficit needed"].exists, "No deficit row in maintenance")
         let save = app.buttons["Save"]
         XCTAssertTrue(save.isEnabled, "Mode change should enable Save")
@@ -822,14 +835,18 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(budgetTitle.waitForExistence(timeout: 10), "Today card should read Daily budget")
         shot("today-maintain")
 
-        // Back to lose so the sim isn't left in maintenance. The Daily
-        // plan section sits below the fold in lose mode (Form rows are
-        // lazy — they don't exist until scrolled near).
+        // Back to lose so the sim isn't left in maintenance.
         switchTab(in: app, to: "Goal")
+        // The budget check above scrolled this screen down and a tab
+        // switch preserves that, so the mode picker is off the top.
+        for _ in 0..<6 where !picker.exists { app.swipeDown() }
         picker.buttons["Lose Weight"].tap()
+        // "Deficit needed" moved INSIDE the disclosure on 2026-08-10, so
+        // scrolling alone can never reveal it — the group has to be open.
         let deficitRow = app.staticTexts["Deficit needed"]
-        for _ in 0..<4 where !deficitRow.exists {
-            app.swipeUp()
+        if !deficitRow.exists {
+            XCTAssertTrue(scroll(app, until: howSet), "The explainer is reachable in lose mode")
+            if !deficitRow.exists { howSet.tap() }
         }
         XCTAssertTrue(deficitRow.waitForExistence(timeout: 5), "Deficit row returns in lose mode")
         app.buttons["Save"].tap()
@@ -1421,7 +1438,7 @@ final class OnigiriUITests: XCTestCase {
         // drops the target to 200 — so nothing else on this screen can put
         // a "210" on it, and its survival is the assertion.
         //
-        // Progress since sits below the fold, and a Form's rows don't exist
+        // The Progress section sits below the fold, and a Form's rows don't exist
         // in the accessibility tree until they're scrolled near.
         // A LabeledContent row is ONE element carrying the value, but the
         // shape isn't guaranteed — accept a sibling static text too.
@@ -1446,7 +1463,7 @@ final class OnigiriUITests: XCTestCase {
         // Saving re-lays the screen out (the celebration is gone), so find
         // the section again rather than trusting the old scroll position.
         XCTAssertTrue(scroll(app, until: weightThen),
-                      "Progress since survives the new target")
+                      "Progress survives the new target")
         XCTAssertTrue(startWeightShown(),
                       "Continuing KEEPS the original start — the bar still measures the whole arc")
         attachShot(named: "goal-reached-continued")

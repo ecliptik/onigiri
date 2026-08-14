@@ -16,7 +16,7 @@ struct GoalView: View {
     @State private var targetDate = Calendar.current.date(byAdding: .day, value: 90, to: .now) ?? .now
     @State private var mode: String = GoalMode.lose
     @State private var manualWeightLb: Double?
-    /// The "Progress since" override. Automatic (the earliest weigh-in
+    /// The Progress section's start override. Automatic (the earliest weigh-in
     /// on record) is the default and the way back; touching the date
     /// picker flips this off, exactly like leaving the custom burn field
     /// blank falls back to the recent average.
@@ -243,31 +243,26 @@ struct GoalView: View {
         )
     }
 
-    /// The plan the current form implies, as FOUR questions rather than
-    /// one nine-row block: what can I eat today, what does a typical day
-    /// look like, where do these numbers come from, and is it working
-    /// (the user, 2026-08-10 — "there's a lot here").
+    /// What today allows, and the pace warning if the plan has earned
+    /// one. The screen reads as four questions — what can I eat today,
+    /// how far have I come, where do these numbers come from, is the
+    /// pace sane — rather than the one nine-row block it used to be
+    /// (the user, 2026-08-10: "there's a lot here").
     ///
-    /// Nothing was removed. The SECTION now carries the distinction the
-    /// two budget rows used to spell out, which is why neither says
-    /// "average day" or "today" any more: a `Budget` under `Today` and a
-    /// `Budget` under `An average day` cannot be read as competing
-    /// answers, where two `Budget, …` rows a thumb apart always could.
-    /// That is the 2026-08-02 ruling (both budgets named) satisfied more
-    /// strongly, not loosened — do not collapse them back into one.
+    /// Exactly ONE row on the visible screen is called "Budget". The
+    /// average-day projection lives in the collapsed derivation group
+    /// instead, because two rows by that name — in any two sections —
+    /// read as one number failing to match itself (the user,
+    /// 2026-08-11). That is the 2026-08-02 ruling (both budgets must be
+    /// told apart) satisfied harder, not loosened: do not bring the
+    /// projection back up here, and do not collapse the two into one.
     @ViewBuilder
-    private func dailyPlanSection(_ plan: CalorieBudget.Plan) -> some View {
-        // ONE section, and exactly ONE row on the visible screen called
-        // "Budget" (the user, 2026-08-10). Two sections each holding a
-        // row by that name still read as "these should match" — the
-        // average-day pair is a PROJECTION, so it moved into the
-        // derivation group where its context is.
-        //
-        // The fraction is eaten-of-today's-budget, which is a real
-        // part-of-whole. It is NOT today's budget over the average
-        // day's: those are different quantities over different spans,
-        // and on an active day the first exceeds the second, so that
-        // fraction would render past 100% and break its own metaphor.
+    private func todaySection(_ plan: CalorieBudget.Plan) -> some View {
+        // The fraction is eaten-of-today's-budget, a real part-of-whole.
+        // It is NOT today's budget over the average day's: those are
+        // different quantities over different spans, and on an active
+        // day the first exceeds the second, so that fraction would
+        // render past 100% and break its own metaphor.
         if let todayBudget {
             Section {
                 LabeledContent("Budget") {
@@ -503,7 +498,7 @@ struct GoalView: View {
 
                 if !isMaintenance {
                     targetSection
-                    startSection
+                    progressSection
                 } else {
                     holdNearSection
                 }
@@ -512,7 +507,7 @@ struct GoalView: View {
                 // comparison to the live number rather than the other way
                 // round.
                 if let plan {
-                    dailyPlanSection(plan)
+                    todaySection(plan)
                 }
                 // Outside `if let plan`, as its rows have always been:
                 // where the numbers come from has to stay readable when
@@ -714,7 +709,7 @@ struct GoalView: View {
         }
     }
 
-    // MARK: - Progress since
+    // MARK: - Progress
 
     /// Where the progress bar and the chart's milestones measure from.
     /// Automatic by default and shown as such; moving the picker is the
@@ -732,7 +727,7 @@ struct GoalView: View {
     /// section's footer, because a footer now trails the banked totals
     /// and would read as explaining those instead of the date above it.
     @ViewBuilder
-    private var startSection: some View {
+    private var progressSection: some View {
         let earliest = automaticStart
         if !isMaintenance, earliest != nil || hasProgressTotals {
             Section {

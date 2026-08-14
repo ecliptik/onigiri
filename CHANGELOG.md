@@ -8,6 +8,35 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.20.7 — Goal reads shorter
+
+_2026-08-13_ · [changes since v2.20.6](https://github.com/ecliptik/onigiri/compare/v2.20.6...v2.20.7)
+
+Two captions on the Goal screen were explaining the same thing, which is most of
+why each one was long. They have separate jobs now. The Today footer says what
+the number is — *Eaten of today's budget, which grows as you move* — and the
+disclosure, the one place the mechanism belongs, says how it is built.
+
+That disclosure is **How budget is set**, a word lighter than it was.
+
+Its own caption went through two drafts. The short version gapped a noun —
+"Resting energy is credited at midnight, active as you earn it" — which reads as
+though resting energy becomes active rather than naming a second kind of it.
+Both halves keep the noun.
+
+Underneath, names that had outlived the sections they described: a function
+called `dailyPlanSection` that renders no "Daily plan", another called
+`startSection` that renders Progress, and a doc comment describing an "An
+average day" section that moved into the disclosure two releases ago —
+contradicting the code directly beneath it.
+
+The maintenance UI test came with them. It still asserted a section header
+deleted three releases back, and being opt-in it had never run to notice. Its
+companion assertion had rotted more quietly: "no deficit row in maintenance"
+passed whether or not the app was correct, because that row moved inside a
+collapsed group and absence is free while the group is shut. It now proves the
+group open before asserting anything is missing from it.
+
 ## v2.20.6 — a milestone is a line, not a card
 
 _2026-08-11_ · [changes since v2.20.5](https://github.com/ecliptik/onigiri/compare/v2.20.5...v2.20.6)

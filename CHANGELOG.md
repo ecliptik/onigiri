@@ -8,6 +8,29 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.20.8 — call it what you like
+
+_2026-08-13_ · [changes since v2.20.7](https://github.com/ecliptik/onigiri/compare/v2.20.7...v2.20.8)
+
+The app had four names for one quantity. Today's meter said **Intake**, the
+budget card below it said **eaten**, Details said **logged**, and a caption on
+Goal had just started saying **consumed**. All four meant the food energy you
+have taken in.
+
+Rather than pick one and impose it, it is now yours to choose:
+**Settings → Appearance → Call it**, offering Eaten, Intake, or Consumed. Eaten
+is the default. Whatever you pick is what every one of those surfaces says.
+
+The three words are not grammatically interchangeable, which shaped the
+implementation more than the setting did: "1,100 of 2,128 kcal eaten" reads
+fine and "…kcal intake" does not. So the word is handed out as a noun and every
+sentence puts it in a noun slot — the budget card reads "Intake 1,100 of 2,128
+kcal" now — where no choice can break the sentence around it.
+
+One thing that deliberately did not move: the Calorie display option still
+stores itself as "eaten" whatever it is called on screen. That raw value is a
+preference people already have, and renaming it would silently reset it.
+
 ## v2.20.7 — Goal reads shorter
 
 _2026-08-13_ · [changes since v2.20.6](https://github.com/ecliptik/onigiri/compare/v2.20.6...v2.20.7)

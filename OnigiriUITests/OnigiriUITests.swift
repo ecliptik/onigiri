@@ -816,7 +816,7 @@ final class OnigiriUITests: XCTestCase {
         // has to be checked with the group OPEN or it passes merely
         // because the group is shut.
         let howSet = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == 'How the budget is set'")).firstMatch
+            .matching(NSPredicate(format: "label == 'How budget is set'")).firstMatch
         // Below the fold, and a Form's rows don't exist in the tree until
         // scrolled near — waiting on one that isn't there just times out.
         XCTAssertTrue(scroll(app, until: howSet), "The budget explainer is reachable")

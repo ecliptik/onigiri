@@ -351,7 +351,7 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   apart at lunchtime, 2026-08-02). Since 2026-08-11 the SECTION carries
   that distinction rather than the row labels: `Budget` under `Today`
   (the live `dayBurn − deficit`, shown as eaten/budget) and
-  `Budget, average day` inside the collapsed "How the budget is set",
+  `Budget, average day` inside the collapsed "How budget is set",
   where a projection belongs. Two adjacent rows both called "Budget"
   read as one number failing to match itself — don't put them back
   side by side. Don't re-add a today-floor to the projection to close
@@ -513,8 +513,11 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   labels: the Today/widget flanks, the Active/Resting meters, Net, the
   calendar day card, Goal's own rows. "Energy" is for the FORMAL
   register: explanatory captions, settings footers, the privacy policy,
-  the wiki. Goal's budget explainer reads "Resting energy starts at
-  midnight"; the meter beside it still says Resting burn. Never swap one
+  the wiki. Goal's budget explainer reads "Resting energy is credited at
+  midnight"; the meter beside it still says Resting burn. Keep the NOUN
+  in both halves of that pair — shortening it to "…, active as you earn
+  it" made "active" read as a state of resting energy rather than a
+  second kind of it (2026-08-13). Never swap one
   wholesale for the other: a pass replacing "burn" with "Used" on the
   Today/widget flanks and "energy" in every noun slot ("Total energy",
   "Average energy", "Active energy") was built, shipped, and fully

@@ -282,7 +282,11 @@ struct GoalView: View {
             } header: {
                 Text("Today")
             } footer: {
-                Text("Eaten of today's budget. It grows as you move: resting energy is credited from midnight, active energy as you earn it.")
+                // Says what the number IS and nothing more — HOW it is
+                // built is the disclosure's job, and both captions
+                // explaining midnight-and-earned made each one long
+                // (the user, 2026-08-13).
+                Text("Eaten of today's budget, which grows as you move.")
             }
         }
         // Its own section, and NEVER inside the collapsed group below: a
@@ -361,7 +365,7 @@ struct GoalView: View {
     @ViewBuilder
     private func budgetCompositionSection(_ plan: CalorieBudget.Plan?) -> some View {
         Section {
-            DisclosureGroup("How the budget is set") {
+            DisclosureGroup("How budget is set") {
                 if !isMaintenance, let current = planWeightLb, let target = targetWeightLb {
                     weightBasisRow(basisLb: current)
                     LabeledContent("To lose") {
@@ -399,7 +403,14 @@ struct GoalView: View {
                     } ?? "Not estimated")
                         .monospacedDigit()
                 }
-                Text("Your budget is the day's energy, minus the deficit. Resting energy starts at midnight. Active energy is added throughout the day.")
+                // Three sentences became two: this is the one place the
+                // mechanism belongs, so it keeps it and the Today
+                // footer above no longer repeats it.
+                // Both clauses keep the NOUN. Dropping it from the second
+                // ("…, active as you earn it") made "active" read as a
+                // state of resting energy rather than a second kind of
+                // it (the user, 2026-08-13).
+                Text("The day's energy, minus the deficit. Resting energy is credited at midnight, active energy as you earn it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if model.estimatedRestingKcal == nil {

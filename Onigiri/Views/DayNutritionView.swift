@@ -22,6 +22,8 @@ struct DayNutritionView: View {
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
+    @AppStorage(SharedStore.intakeWordKey, store: SharedStore.defaults) private var intakeWordRaw = IntakeWord.eaten.rawValue
+    private var intakeWord: IntakeWord { IntakeWord.resolve(intakeWordRaw) }
     @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
     @AppStorage(SharedStore.waterUnitKey, store: SharedStore.defaults) private var waterUnitRaw = SharedStore.unitAutomatic
     @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults) private var sodiumUnitRaw = SharedStore.unitAutomatic
@@ -130,7 +132,7 @@ struct DayNutritionView: View {
                 }
             }
             // The same icon this number wears on Today.
-            iconRow("Calories logged", icon: { FoodIconView(raw: foodIcon) }) {
+            iconRow(intakeWord.label, icon: { FoodIconView(raw: foodIcon) }) {
                 Text("\(model.summary.intakeKcal, format: .number.precision(.fractionLength(0))) kcal")
                     .monospacedDigit()
             }

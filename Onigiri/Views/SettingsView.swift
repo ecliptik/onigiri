@@ -898,6 +898,7 @@ struct SettingsView: View {
 /// shared defaults keys; SettingsView's always-mounted observers handle
 /// the icon mirroring, emoji prompt, and watch sync.
 private struct AppearanceSettingsScreen: View {
+    @AppStorage(SharedStore.intakeWordKey, store: SharedStore.defaults) private var intakeWordRaw = IntakeWord.eaten.rawValue
     @AppStorage(SharedStore.appearanceKey, store: SharedStore.defaults) private var appearance = AppTheme.system.rawValue
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
@@ -961,8 +962,19 @@ private struct AppearanceSettingsScreen: View {
                 Picker("Calorie display", selection: $balanceStyle) {
                     Text("kcal left").tag("remaining")
                     Text("kcal balance").tag("balance")
-                    Text("kcal eaten").tag("eaten")
+                    // Label follows the word below; the stored tag is
+                    // "eaten" forever, whatever it is called on screen.
+                    Text("kcal \(IntakeWord.resolve(intakeWordRaw).lowercased)").tag("eaten")
                     Text("kcal budget").tag("budget")
+                }
+                // ONE word for food energy taken in, everywhere it is
+                // named — Today's meter and budget card, Goal, Details.
+                // The app had four (the user, 2026-08-13); this settles
+                // it without imposing a choice.
+                Picker("Call it", selection: $intakeWordRaw) {
+                    ForEach(IntakeWord.allCases, id: \.rawValue) { word in
+                        Text(word.label).tag(word.rawValue)
+                    }
                 }
                 // "Compact" trades the Intake/Active/Resting cards for
                 // Burned/Eaten beside the headline — more room for the log.

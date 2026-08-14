@@ -50,6 +50,10 @@ struct TodayView: View {
     private var sodiumUnit: SodiumUnit { SodiumUnit.resolve(sodiumUnitRaw) }
     @AppStorage(SharedStore.weightUnitKey, store: SharedStore.defaults) private var weightUnitRaw = SharedStore.unitAutomatic
     private var weightUnit: WeightUnit { WeightUnit.resolve(weightUnitRaw) }
+    /// What this app calls food energy taken in — one word, chosen in
+    /// Settings, read from `IntakeWord` and nowhere else.
+    @AppStorage(SharedStore.intakeWordKey, store: SharedStore.defaults) private var intakeWordRaw = IntakeWord.eaten.rawValue
+    private var intakeWord: IntakeWord { IntakeWord.resolve(intakeWordRaw) }
     /// The celebration wears the badge the streak already awards, not a
     /// hardcoded glyph — @AppStorage so an Appearance change repaints it.
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
@@ -882,7 +886,7 @@ struct TodayView: View {
             GridRow {
                 // Intake wears the user's food icon — one food icon
                 // everywhere content means "food".
-                MeterCell(label: "Intake", value: model.summary.intakeKcal) {
+                MeterCell(label: intakeWord.label, value: model.summary.intakeKcal) {
                     FoodIconView(raw: foodIcon)
                 }
                 MeterCell(label: "Active", value: model.summary.activeBurnKcal) {
@@ -1914,6 +1918,9 @@ struct DailyGoalCard: View, Equatable {
     // Display-only (like the reward icon, uncompared in ==): its own
     // observation re-renders the scale line when the unit changes.
     @AppStorage(SharedStore.weightUnitKey, store: SharedStore.defaults) private var weightUnitRaw = SharedStore.unitAutomatic
+    // Display-only too: the card re-renders on its own observation.
+    @AppStorage(SharedStore.intakeWordKey, store: SharedStore.defaults) private var intakeWordRaw = IntakeWord.eaten.rawValue
+    private var intakeWord: IntakeWord { IntakeWord.resolve(intakeWordRaw) }
     /// The gauge badge scales with its frame, so the frame must follow
     /// Dynamic Type or the badge stays frozen beside growing text.
     /// (Not compared in ==: ScaledMetric is a DynamicProperty — its
@@ -1992,7 +1999,7 @@ struct DailyGoalCard: View, Equatable {
                                 ? Color.green : Color.secondary)
                 }
                 if isMaintenance {
-                    Text("\(intakeKcal, format: .number.precision(.fractionLength(0))) of \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal eaten")
+                    Text("\(intakeWord.label) \(intakeKcal, format: .number.precision(.fractionLength(0))) of \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {

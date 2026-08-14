@@ -38,6 +38,10 @@ struct GoalView: View {
     @AppStorage(SharedStore.weightUnitKey, store: SharedStore.defaults)
     private var weightUnitRaw = SharedStore.unitAutomatic
     private var unit: WeightUnit { WeightUnit.resolve(weightUnitRaw) }
+    /// The app's one word for food energy taken in (Settings → Metrics).
+    @AppStorage(SharedStore.intakeWordKey, store: SharedStore.defaults)
+    private var intakeWordRaw = IntakeWord.eaten.rawValue
+    private var intakeWord: IntakeWord { IntakeWord.resolve(intakeWordRaw) }
     /// Whole pounds read fine; kg wants a decimal (1 kg ≈ 2.2 lb) — the
     /// target/anchor lines follow this where lb kept 0 digits.
     private var targetDigits: Int { unit == .pounds ? 0 : 1 }
@@ -286,7 +290,7 @@ struct GoalView: View {
                 // built is the disclosure's job, and both captions
                 // explaining midnight-and-earned made each one long
                 // (the user, 2026-08-13).
-                Text("Eaten of today's budget, which grows as you move.")
+                Text("\(intakeWord.label) against today's budget. It grows as you move.")
             }
         }
         // Its own section, and NEVER inside the collapsed group below: a

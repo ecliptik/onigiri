@@ -181,10 +181,40 @@ struct ContentView: View {
         return formatter
     }()
 
+    /// The TabView's selection, proxied so tapping Today can do more
+    /// than select it.
+    ///
+    /// The tab is called Today, so it goes to today — the way home from
+    /// a day you browsed back to. Re-tapping the tab you are already on
+    /// still writes this binding, which is the case that prompted it:
+    /// paging back through the week left the only route home being the
+    /// nav bar's own control (the user, 2026-08-14).
+    ///
+    /// Deliberately only the USER's taps. Every programmatic selection
+    /// assigns `selectedTab` directly and so skips this — the Add pill's
+    /// bounce restores the tab you came from (and the Log sheet it opens
+    /// backfills into the day you were browsing, which a reset would
+    /// silently redirect to today), and the widget deep links set a day
+    /// of their own immediately after.
+    private var tabSelection: Binding<AppTab> {
+        Binding(
+            get: { selectedTab },
+            set: { tapped in
+                if tapped == .today {
+                    // The same request Calendar's "View day" raises, so
+                    // this shares its consumer: it pops any pushed detail
+                    // and browses, rather than reaching into TodayModel.
+                    quickActions.dayRequest = Calendar.current.startOfDay(for: .now)
+                }
+                selectedTab = tapped
+            }
+        )
+    }
+
     private var mainTabs: some View {
         // iPad: the top tab bar can become a sidebar at the user's
         // choice (no effect on iPhone's bottom bar).
-        TabView(selection: $selectedTab) {
+        TabView(selection: tabSelection) {
             // Today sits first and is the app's home; water lives inside it
             // (hydration row + a Water group in the log).
             Tab("Today", systemImage: "gauge.with.needle", value: .today) {

@@ -2517,4 +2517,69 @@ final class OnigiriUITests: XCTestCase {
             notNow.tap()
         }
     }
+
+    /// The tab called Today goes to today — including a RE-TAP while the
+    /// tab is already selected, which is the whole point (the user,
+    /// 2026-08-14: paging back through the week left the nav bar as the
+    /// only way home).
+    ///
+    /// This exists because the implementation rests on an assumption a
+    /// build cannot check: that SwiftUI writes the TabView's selection
+    /// binding when you tap the tab you are already on. If that ever
+    /// stops holding, the feature silently does nothing — so the re-tap,
+    /// not the tab switch, is what this asserts.
+    @MainActor
+    func testTodayTabReturnsToTodaysDate() throws {
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--seed-sample-data"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        // The in-content large title doubles as the date control, and its
+        // label carries the browsed day ("Today. Jump to date").
+        let dayTitle = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS 'Jump to date'")
+        ).firstMatch
+        XCTAssertTrue(dayTitle.waitForExistence(timeout: 30), "Today's date control should render")
+        XCTAssertTrue(
+            dayTitle.label.contains("Today"),
+            "should open on today, got '\(dayTitle.label)'"
+        )
+
+        // Page back. Asserting the move is load-bearing: without it a
+        // tab tap that does nothing would still end on "Today" and this
+        // test would pass while proving nothing.
+        let previousDay = app.buttons["Previous day"]
+        XCTAssertTrue(previousDay.waitForExistence(timeout: 10), "day pager should exist")
+        previousDay.tap()
+        previousDay.tap()
+        let movedAway = expectation(
+            for: NSPredicate(format: "NOT (label CONTAINS 'Today')"),
+            evaluatedWith: dayTitle
+        )
+        wait(for: [movedAway], timeout: 10)
+
+        // The re-tap: already on Today, two days back.
+        switchTab(in: app, to: "Today")
+        let cameHome = expectation(
+            for: NSPredicate(format: "label CONTAINS 'Today'"),
+            evaluatedWith: dayTitle
+        )
+        wait(for: [cameHome], timeout: 10)
+
+        // And from another tab, since "always" covers that too.
+        previousDay.tap()
+        wait(for: [expectation(
+            for: NSPredicate(format: "NOT (label CONTAINS 'Today')"),
+            evaluatedWith: dayTitle
+        )], timeout: 10)
+        switchTab(in: app, to: "Foods")
+        switchTab(in: app, to: "Today")
+        wait(for: [expectation(
+            for: NSPredicate(format: "label CONTAINS 'Today'"),
+            evaluatedWith: dayTitle
+        )], timeout: 10)
+    }
 }

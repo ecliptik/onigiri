@@ -186,6 +186,14 @@ public extension WeightTrend {
     ///
     /// Each kept point carries its own reading's timestamp, not the
     /// day's start, so windowing stays exact.
+    ///
+    /// How far a same-day reading normally sits ABOVE that day's low —
+    /// the 2–3 lb of food and water described above, rounded up. Used
+    /// only to bound how far the raw cloud may stretch the chart's
+    /// y-axis: a normal evening weigh-in stays in frame, a fat-fingered
+    /// one can't flatten a month of trend (`GoalTrendStats`).
+    static let sameDayRiseLb = 3.0
+
     static func dailyLows(_ points: [Point], calendar: Calendar = .current) -> [Point] {
         var lowestByDay: [Date: Point] = [:]
         for point in points {

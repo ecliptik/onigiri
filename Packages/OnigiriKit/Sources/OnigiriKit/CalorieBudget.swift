@@ -116,6 +116,7 @@ public enum CalorieBudget {
         currentWeightLb: Double?,
         targetWeightLb: Double?,
         targetDate: Date?,
+        bandLb: Double = GoalFinishLine.bandLb,
         calendar: Calendar = .current,
         now: Date = .now
     ) -> Double? {
@@ -125,14 +126,23 @@ public enum CalorieBudget {
             [.day], from: calendar.startOfDay(for: now), to: targetDate
         ).day ?? 0
         return requiredDailyDeficit(
-            currentWeightLb: current, targetWeightLb: target, daysRemaining: days
+            currentWeightLb: current, targetWeightLb: target,
+            daysRemaining: days, bandLb: bandLb
         )
     }
 
+    /// Inside `bandLb` of the target the deficit is 0 — see
+    /// `GoalFinishLine.bandLb` for why. The band lives HERE rather than
+    /// in the UI so every surface that quotes a deficit agrees: Today,
+    /// the widget, the watch, and the snapshots `DeficitTargetHistory`
+    /// stamps for past days all come through this one function.
     public static func requiredDailyDeficit(
-        currentWeightLb: Double, targetWeightLb: Double, daysRemaining: Int
+        currentWeightLb: Double, targetWeightLb: Double, daysRemaining: Int,
+        bandLb: Double = GoalFinishLine.bandLb
     ) -> Double {
-        max(0, currentWeightLb - targetWeightLb) * kcalPerPound / Double(max(1, daysRemaining))
+        let remaining = currentWeightLb - targetWeightLb
+        guard remaining >= bandLb else { return 0 }
+        return remaining * kcalPerPound / Double(max(1, daysRemaining))
     }
 
     public static func plan(

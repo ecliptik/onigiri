@@ -58,15 +58,23 @@ struct GoalView: View {
 
     private var currentWeightLb: Double? { model.healthWeightLb ?? manualWeightLb }
 
-    /// The weight the DEFICIT CHAIN is derived from — "To lose",
-    /// "Deficit needed", and both budgets. Distinct from
-    /// `currentWeightLb`, which stays the real last weigh-in for the
-    /// Weight field, validation and "use current as target".
+    /// The weight every VERDICT on this screen is reached from — "To
+    /// lose", "Deficit needed", both budgets, the progress bar, the
+    /// finish line, and form validation.
     ///
-    /// They must not be mixed: with the deficit on the average and
-    /// "To lose" on the raw reading, the two rows contradict each other
-    /// (2.2 lb above a deficit implying 4.1 lb) — the same "one label,
-    /// two numbers" failure that hit this screen twice on 2026-08-02.
+    /// `currentWeightLb` (the raw last weigh-in) is now ONLY the
+    /// "Current weight" row, which reports a measurement rather than
+    /// reaching a judgment — the same split `DayBudget.deficit` draws
+    /// against `DailyEnergySummary.balanceKcal`.
+    ///
+    /// This carve-out used to be narrower: validation and the progress
+    /// bar stayed on the raw reading, on the grounds that only the
+    /// deficit chain had to agree with itself. 2026-08-14 showed what
+    /// that costs. A 209.8 lb morning against a 210 lb target rendered
+    /// an orange "Target must be below your current weight." (raw)
+    /// beside a full bar reading 8.9 of 8.7 lb (raw) beside no
+    /// celebration at all (basis, still above 210) — three answers, one
+    /// question. The 2026-08-02 ruling was right; its scope was wrong.
     private var planWeightLb: Double? { model.basisWeightLb ?? currentWeightLb }
 
     /// The basis actually in force, for the picker row's caption.
@@ -123,7 +131,11 @@ struct GoalView: View {
             startedAt: formStart?.date,
             startIsManual: formStart?.manual ?? false,
             weightHistory: model.weightHistory,
-            currentWeightLb: currentWeightLb,
+            // The BASIS, matching TodayView's own progress row (which
+            // has read the basis all along) and the finish line below.
+            // On the raw reading this bar said "8.9 of 8.7 lb", full,
+            // while the celebration it appears to announce stayed away.
+            currentWeightLb: planWeightLb,
             targetWeightLb: targetWeightLb,
             isMaintenance: isMaintenance,
             milestoneStepLb: GoalProgress.milestoneStepLb(for: unit)
@@ -135,8 +147,10 @@ struct GoalView: View {
         progress?.milestones.first { !$0.isReached }
     }
 
+    /// On `planWeightLb`, so the one refusal this form can make agrees
+    /// with every number under it. See that property for why.
     private var validation: GoalUpsert.Validation {
-        GoalUpsert.validate(targetLb: targetWeightLb, currentLb: currentWeightLb, mode: mode)
+        GoalUpsert.validate(targetLb: targetWeightLb, currentLb: planWeightLb, mode: mode)
     }
 
     /// Save enables only when the form is valid AND differs from the
@@ -175,27 +189,21 @@ struct GoalView: View {
             || startEdited
     }
 
-    /// Whether the SAVED lose goal has actually been reached — sustained,
-    /// not touched by one morning. The rule (and the widening that keeps
-    /// it reachable for a weekly weigher) lives in the kit.
+    /// Where the SAVED lose goal stands — under way, inside the last
+    /// pound, or reached. Sustained, not touched by one morning: the
+    /// rule (and the widening that keeps it reachable for a weekly
+    /// weigher) lives in the kit.
     ///
-    /// This used to compare `currentWeightLb`, the RAW last weigh-in, so
-    /// a single low reading fired the celebration off a number the plan
-    /// beside it deliberately ignores (2026-08-10).
-    private var completion: GoalCompletion? {
+    /// Gated on the form still showing that target, because editing the
+    /// field into something else must show the plain form state rather
+    /// than a verdict about a target no longer on screen.
+    private var finishLine: GoalFinishLine {
         guard !isMaintenance, let goal = goals.first,
-              (goal.mode ?? GoalMode.lose) == GoalMode.lose
-        else { return nil }
-        return GoalCompletion.evaluate(
+              (goal.mode ?? GoalMode.lose) == GoalMode.lose,
+              targetWeightLb == goal.targetWeightLb
+        else { return .underWay }
+        return GoalFinishLine.evaluate(
             targetLb: goal.targetWeightLb, history: model.weightHistory)
-    }
-
-    /// ...and the form still shows that target (editing the field into
-    /// invalidity keeps the plain warning instead of the celebration).
-    private var goalReached: Bool {
-        guard let goal = goals.first, targetWeightLb == goal.targetWeightLb
-        else { return false }
-        return completion?.isMet == true
     }
 
     /// Quick "another 5 lb" amounts, in the DISPLAY unit with round
@@ -230,15 +238,15 @@ struct GoalView: View {
     }
 
     private var plan: CalorieBudget.Plan? {
-        // The preview keeps GoalUpsert's target-below-current rule;
-        // derivation itself is the shared kit path (clamped burn — this
-        // preview used to lag Today on high-burn days by skipping the
-        // today-actual floor).
-        if !isMaintenance {
-            guard let current = planWeightLb, let target = targetWeightLb, target < current
-            else { return nil }
-        }
-        return CalorieBudget.derivePlan(
+        // No target-below-current guard. It used to blank this whole
+        // chain the moment the basis crossed the target — taking the
+        // Today rows, "Total deficit" and "Last 30 days" off the screen
+        // at exactly the moment someone comes looking for them, while
+        // TodayView carried on rendering a budget from the same goal
+        // (`requiredDailyDeficit` clamps to 0, so the day's budget is
+        // simply the whole burn). Goal is catching up to Today here;
+        // the model did not change.
+        CalorieBudget.derivePlan(
             isMaintenance: isMaintenance,
             currentWeightLb: planWeightLb,
             targetWeightLb: targetWeightLb,
@@ -290,7 +298,23 @@ struct GoalView: View {
                 // built is the disclosure's job, and both captions
                 // explaining midnight-and-earned made each one long
                 // (the user, 2026-08-13).
-                Text("\(intakeWord.label) against today's budget. It grows as you move.")
+                //
+                // The at-target sentence is the exception, because
+                // something else changes there and nothing said so: a
+                // zero deficit target makes `DayBadgeRule.current`
+                // return `.anyDeficit`, which grades more permissively
+                // than either real mode. That silent loosening is the
+                // whole reason `GoalReachedCard` re-arms after two
+                // weeks; it should not take a card to find out.
+                //
+                // Worded for BOTH cases it fires in — at or under the
+                // target, and inside the band a pound above it. "You're
+                // at your target" would be a small lie in the second.
+                if !isMaintenance, plan.requiredDailyDeficit == 0 {
+                    Text("\(intakeWord.label) against today's budget. At this weight there's no deficit left to hit, so it's your whole burn — and any deficit earns the day.")
+                } else {
+                    Text("\(intakeWord.label) against today's budget. It grows as you move.")
+                }
             }
         }
         // Its own section, and NEVER inside the collapsed group below: a
@@ -666,62 +690,112 @@ struct GoalView: View {
         }
     }
 
+    @ViewBuilder
     private var targetSection: some View {
         Section("Target") {
             targetWeightField
             DatePicker("By date", selection: $targetDate, in: Date.now..., displayedComponents: .date)
-            // Reaching the target is a milestone, not a form error —
-            // celebrate and offer the mode that fits now.
-            if goalReached {
-                Label {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("You've reached your target — nice work.")
-                        // The arc, not just the finish line.
-                        if let progress, progress.lostLb >= GoalProgress.minimumJourneyLb {
-                            Text("\(unit.fromLb(progress.lostLb), format: .number.precision(.fractionLength(targetDigits))) \(unit.symbol) down since \(progress.startedAt, format: .dateTime.month(.abbreviated).day())")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                } icon: {
-                    Image(systemName: "checkmark.seal.fill")
-                        .foregroundStyle(.green)
+            // Three states, not two. Arriving is not a form error, and
+            // the last pound before arriving is neither — that middle
+            // state is what this screen had no word for, so it rendered
+            // it in orange as a malformed goal (2026-08-14).
+            switch finishLine {
+            case .reached:
+                reachedRows
+            case .approaching(let basisLb, let remainingLb):
+                approachingRows(basisLb: basisLb, remainingLb: remainingLb)
+            case .underWay:
+                // Say WHY the plan is missing and Save is disabled —
+                // it used to just silently vanish. Now that validation
+                // runs on the basis, this fires only for a target that
+                // really is above where you are.
+                if validation == .targetNotBelowCurrent {
+                    Text("Target must be below your current weight.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                } else if targetWeightLb == nil {
+                    Text("Enter a target weight to set a goal.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                .font(.subheadline)
-                // The two real next moves. Quick amounts because "another
-                // 5 lb" is the actual thought; Custom leaves the number
-                // to the user rather than the app appearing to set a goal.
-                // Label ABOVE the chips, not beside them: three bordered
-                // buttons in a LabeledContent's trailing slot wrap to
-                // two lines ("5 lb / more") on a phone.
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Keep going")
-                    HStack(spacing: 8) {
-                        ForEach(continueAmounts, id: \.label) { amount in
-                            Button(amount.label) { continueGoal(byLosing: amount.deltaLb) }
-                                .buttonStyle(.bordered)
-                        }
-                        Button("Custom…") { focusedField = .target }
-                            .buttonStyle(.bordered)
-                    }
-                    .font(.footnote)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Button("Switch to Maintain") {
-                    mode = GoalMode.maintain
-                    save(decidedFromReached: true)
-                }
-            // Say WHY the plan is missing and Save is disabled —
-            // it used to just silently vanish.
-            } else if validation == .targetNotBelowCurrent {
-                Text("Target must be below your current weight.")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            } else if targetWeightLb == nil {
-                Text("Enter a target weight to set a goal.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// Reaching the target is a milestone, not a form error — celebrate
+    /// and offer the two moves that actually follow.
+    @ViewBuilder
+    private var reachedRows: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("You've reached your target — nice work.")
+                // The arc, not just the finish line.
+                if let progress, progress.lostLb >= GoalProgress.minimumJourneyLb {
+                    Text("\(unit.fromLb(progress.lostLb), format: .number.precision(.fractionLength(targetDigits))) \(unit.symbol) down since \(progress.startedAt, format: .dateTime.month(.abbreviated).day())")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } icon: {
+            Image(systemName: "checkmark.seal.fill")
+                .foregroundStyle(.green)
+        }
+        .font(.subheadline)
+        keepGoingControls
+        // Only offered once you've actually arrived: switching to
+        // maintain while still a pound out is deciding a question you
+        // haven't been asked yet.
+        Button("Switch to Maintain") {
+            mode = GoalMode.maintain
+            save(decidedFromReached: true)
+        }
+    }
+
+    /// Inside the last pound. Green, not orange — and it names the
+    /// weight it is measured on, because that number is NOT the
+    /// "Current weight" row above and the two will differ by a pound or
+    /// so all week. Stating the rule here is the only place the app
+    /// answers "what has to happen for this to count".
+    @ViewBuilder
+    private func approachingRows(basisLb: Double, remainingLb: Double) -> some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Almost there — \(unit.fromLb(remainingLb), format: .number.precision(.fractionLength(1))) \(unit.symbol) to go.")
+                Text("Your target is judged on the 7-day average of your daily lows, now \(unit.fromLb(basisLb), format: .number.precision(.fractionLength(1))) \(unit.symbol). A few more mornings at this weight finishes it.")
+                    .foregroundStyle(.secondary)
+            }
+        } icon: {
+            Image(systemName: "flag.checkered")
+                .foregroundStyle(.green)
+        }
+        .font(.subheadline)
+        // Reachable HERE, and that is the point of the state. These
+        // chips are the only save path that preserves the journey
+        // (`StartChange.keep`), and gating them on the celebration meant
+        // that anyone deciding "210, then 200" a few days early had no
+        // choice but to hand-edit — which re-stamped the start and
+        // re-zeroed a bar with 8.9 lb behind it.
+        keepGoingControls
+    }
+
+    /// The two real next moves. Quick amounts because "another 5 lb" is
+    /// the actual thought; Custom leaves the number to the user rather
+    /// than the app appearing to set a goal. Label ABOVE the chips, not
+    /// beside them: three bordered buttons in a LabeledContent's
+    /// trailing slot wrap to two lines ("5 lb / more") on a phone.
+    private var keepGoingControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Keep going")
+            HStack(spacing: 8) {
+                ForEach(continueAmounts, id: \.label) { amount in
+                    Button(amount.label) { continueGoal(byLosing: amount.deltaLb) }
+                        .buttonStyle(.bordered)
+                }
+                Button("Custom…") { focusedField = .target }
+                    .buttonStyle(.bordered)
+            }
+            .font(.footnote)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Progress
@@ -865,7 +939,13 @@ struct GoalView: View {
                             y: .value("Weight", unit.fromLb(point.weightLb))
                         )
                         .foregroundStyle(.secondary)
-                        .opacity(0.35)
+                        // The day's LOW carries; the rest of the cloud
+                        // recedes. Every dot at one opacity read as
+                        // equally meaningful data, when an evening
+                        // weigh-in is 2–3 lb of food and water and is
+                        // ignored by every number on this screen
+                        // (`WeightTrend.dailyLows`).
+                        .opacity(model.dailyLowDates.contains(point.date) ? 0.55 : 0.18)
                         .symbolSize(20)
                     }
                     ForEach(Array(model.smoothedHistory.enumerated()), id: \.offset) { _, point in
@@ -955,7 +1035,7 @@ struct GoalView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                } else if targetWeightLb != nil, !goalReached {
+                } else if targetWeightLb != nil, !finishLine.isAtOrNearTarget {
                     Text("No steady downward trend yet — a projection appears after a week of weigh-ins trending down.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -1099,10 +1179,24 @@ struct GoalView: View {
         // target-changed re-stamp, so the bar reads 22 of 27 rather than
         // re-zeroing at the moment it was earned. Editing a target by
         // hand is still a new journey.
+        // A target moved DOWN by hand is the same journey with a further
+        // destination — 210 reached, 200 next — so it keeps its start
+        // too. Only the celebration used to do this, which left the
+        // commonest edit there is re-stamping the start to today and
+        // re-zeroing the bar (2026-08-14, `JourneyContinuity`).
+        let lowersTarget = JourneyContinuity.continuesJourney(
+            oldTargetLb: goals.first?.targetWeightLb ?? 0,
+            newTargetLb: target,
+            progressLb: progress?.lostLb ?? 0
+        )
+        // A start the user steered themselves outranks the inference,
+        // so `startEdited` is tested BEFORE the lowered-target rule.
         let startChange: GoalUpsert.StartChange? = if continuing {
             .keep
         } else if startEdited {
             formStart.map { .manual(at: $0.date, weightLb: $0.weightLb) } ?? .automatic
+        } else if lowersTarget {
+            .keep
         } else {
             nil
         }

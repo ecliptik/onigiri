@@ -31,7 +31,22 @@ final class GoalModel {
     /// load, not per keystroke (typing a target re-evaluates the view
     /// body per digit, and each evaluation used to re-average ~90
     /// points and re-fit the slope).
+    ///
+    /// Averaged over the DAILY LOWS, not the raw samples. It was the
+    /// only weight series in the app derived from raw readings, so the
+    /// line the eye reads ended ~2 lb above the number the budget plans
+    /// from — 212 drawn against a 209.8 weigh-in and a ~210.8 basis
+    /// (the user, 2026-08-14) — and a day weighed twice pulled it up
+    /// more than a day weighed once, which measures weighing habits
+    /// rather than body mass (`WeightTrend.dailyLows`). Its last point
+    /// now equals `WeightTrend.targetBasisLb`, which is the property
+    /// `GoalFinishLineTests` pins.
     private(set) var smoothedHistory: [WeightTrend.Point] = []
+    /// Timestamps of the readings that were their day's low — so the
+    /// scatter can draw the rest of the cloud back without pretending
+    /// every dot carries equal weight. A Set because the chart iterates
+    /// the raw history and asks per point.
+    private(set) var dailyLowDates: Set<Date> = []
     /// The chart's derived numbers, cached for the same reason.
     private(set) var trend = GoalTrendStats.empty
     /// Staleness stamp for the loads (see loadIfStale).
@@ -70,7 +85,9 @@ final class GoalModel {
         dailyTotals = (try? await totalsRead) ?? []
         let today = (try? await todayRead) ?? .zero
         todayIntakeKcal = today.intakeKcal
-        smoothedHistory = WeightTrend.movingAverage(weightHistory, windowDays: 7)
+        let lows = WeightTrend.dailyLows(weightHistory)
+        dailyLowDates = Set(lows.map(\.date))
+        smoothedHistory = WeightTrend.movingAverage(lows, windowDays: 7)
         // The weight the DEFICIT TARGET rides — free here, since the
         // history is already loaded. Kept SEPARATE from healthWeightLb:
         // the Weight field, validation and "use current as target" must

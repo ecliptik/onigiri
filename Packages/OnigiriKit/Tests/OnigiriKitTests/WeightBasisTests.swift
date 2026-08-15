@@ -185,6 +185,11 @@ struct WeightBasisTests {
 
     /// The sensitivity that makes the basis matter, stated as a test:
     /// 3500 / daysRemaining kcal per pound, growing as the date nears.
+    ///
+    /// A 1 lb gap sits exactly ON `GoalFinishLine.bandLb`, which is
+    /// inclusive-above by design — inside the last pound the deficit is
+    /// 0 (see `GoalFinishLineTests.theBandIsExclusiveAtItsEdge`). Don't
+    /// shrink this fixture's gap without moving the band with it.
     @Test func sensitivityGrowsAsTheTargetDateApproaches() {
         func perPound(days: Int) -> Double {
             CalorieBudget.requiredDailyDeficit(currentWeightLb: 211, targetWeightLb: 210, daysRemaining: days)

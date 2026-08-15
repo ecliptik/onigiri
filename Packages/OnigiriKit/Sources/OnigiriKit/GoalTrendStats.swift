@@ -169,10 +169,28 @@ public struct GoalTrendStats: Equatable, Sendable {
         // The target line (lose) or hold-near anchor (maintenance)
         // belongs in the domain whenever it's drawn; 0 means no anchor.
         let anchor = (targetWeightLb ?? 0) > 0 ? targetWeightLb : nil
-        let weights = weightHistory.map(\.weightLb) + [anchor].compactMap(\.self)
+        // The DAILY LOWS set the scale, not the raw cloud. An evening
+        // weigh-in runs 2–3 lb above that morning's reading, so sourcing
+        // the axis from raw samples let the noisiest readings on record
+        // decide how tall the chart was — and the trend the chart exists
+        // to show got squashed by the spread around it (2026-08-14).
+        let lows = WeightTrend.dailyLows(weightHistory, calendar: calendar).map(\.weightLb)
+        let scaleSetting = lows + [anchor].compactMap(\.self)
         let domain: ClosedRange<Double>
-        if let lo = weights.min(), let hi = weights.max() {
-            domain = (lo - 2)...(hi + 2)
+        if let lo = scaleSetting.min(), let hi = scaleSetting.max() {
+            var lower = lo - domainPadLb
+            var upper = hi + domainPadLb
+            // The raw cloud is still let in — points that clip read as
+            // missing data — but only so far. One reading may push the
+            // axis by a normal same-day rise past the lows, never more.
+            let raw = weightHistory.map(\.weightLb)
+            if let rawLo = raw.min(), let lowsLo = lows.min() {
+                lower = min(lower, max(rawLo, lowsLo - WeightTrend.sameDayRiseLb))
+            }
+            if let rawHi = raw.max(), let lowsHi = lows.max() {
+                upper = max(upper, min(rawHi, lowsHi + WeightTrend.sameDayRiseLb))
+            }
+            domain = lower...upper
         } else {
             domain = 0...1
         }
@@ -202,6 +220,9 @@ public struct GoalTrendStats: Equatable, Sendable {
 
     /// How wide the finish window is, and the grid it snaps to.
     public static let projectionWindowDays = 5
+
+    /// Breathing room above and below the series the chart is scaled to.
+    static let domainPadLb = 2.0
 
     /// The finish window containing `daysOut`, snapped to a fixed grid.
     /// Snapping is what makes it hold still: an estimate that wanders

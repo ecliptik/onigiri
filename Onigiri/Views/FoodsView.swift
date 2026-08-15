@@ -247,7 +247,7 @@ struct FoodsView: View {
                                 // MIXES types; the Meals header already
                                 // says it otherwise.
                                 case .meal(let meal):
-                                    mealRow(meal, badged: group.group == .favorites)
+                                    mealRow(meal)
                                 case .food(let food):
                                     foodRow(food)
                                 }
@@ -280,7 +280,7 @@ struct FoodsView: View {
                         Section {
                             ForEach(favorites) { entry in
                                 switch entry {
-                                case .meal(let meal): mealRow(meal, badged: true)
+                                case .meal(let meal): mealRow(meal)
                                 case .food(let food): foodRow(food)
                                 }
                             }
@@ -455,6 +455,10 @@ struct FoodsView: View {
                 MealFormView(meal: meal)
             case .portion(let target):
                 PortionSheet(target: target) { quantity, category, _ in
+                    // Only reached on confirm — a cancelled sheet never
+                    // runs this, which is exactly why the recency bump
+                    // belongs here and not at present time.
+                    markUsed(target.source)
                     log(name: target.name, kcal: target.kcal,
                         sodiumMg: target.sodiumMg, nutrients: target.nutrients,
                         category: category, quantity: quantity,
@@ -466,8 +470,15 @@ struct FoodsView: View {
     }
 
     /// A meal row: name + totals, one-tap log, long-press for portions.
-    /// `badged` marks it "Meal" where the list mixes types (Favorites).
-    private func mealRow(_ meal: Meal, badged: Bool = false) -> some View {
+    ///
+    /// Always carries the meal mark. It used to be conditional
+    /// (`badged`), on the theory that the Meals scope's own header
+    /// already says what these are — but that made a meal look like one
+    /// thing in Foods → Meals and another in Favorites, in search
+    /// results, and in the Log sheet, which marks them unconditionally.
+    /// A row should read the same wherever it appears (the user,
+    /// 2026-08-14).
+    private func mealRow(_ meal: Meal) -> some View {
         HStack(spacing: 10) {
             // Just the meal's name — listing every member made rows
             // balloon (the user).
@@ -479,7 +490,7 @@ struct FoodsView: View {
                 metricAmount: libraryMetric.itemAmount(
                     sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients) ?? 0,
                 isFavorite: meal.isFavorite,
-                isMeal: badged,
+                isMeal: true,
                 aiGenerated: meal.aiGenerated
             )
             // Meals stay one-tap: their category rides along;
@@ -492,14 +503,16 @@ struct FoodsView: View {
                     aiGenerated: meal.aiGenerated,
                     mealItems: meal.loggedItems)
             } onLongPress: {
-                markUsed(meal)
+                // No recency bump here: this only OPENS the portion
+                // sheet. Its confirm handler stamps `source`.
                 activeSheet = .portion(PortionTarget(
                     name: meal.name, kcal: meal.totalKcal,
                     sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
                     serving: "1 meal",
                     defaultCategory: PortionTarget.category(from: meal.category),
                     aiGenerated: meal.aiGenerated,
-                    mealItems: meal.loggedItems
+                    mealItems: meal.loggedItems,
+                    source: meal.persistentModelID
                 ))
             }
         }
@@ -562,7 +575,7 @@ struct FoodsView: View {
                 aiGenerated: food.aiGenerated
             )
             LogButton(name: food.name, longPressName: "Log default portion") {
-                markUsed(food)
+                // Opens the portion sheet only — see `PortionTarget.source`.
                 activeSheet = .portion(makePortionTarget(for: food))
             } onLongPress: {
                 markUsed(food)
@@ -722,13 +735,29 @@ struct FoodsView: View {
         try? context.save()
     }
 
+    /// The same bump, from a portion target that has come back through a
+    /// sheet. Resolved against the loaded queries rather than
+    /// `context.model(for:)`: an item deleted while the sheet was up
+    /// simply isn't found, where a context lookup would hand back a
+    /// fault whose first property access kills the process (the
+    /// dangling-reference landmine).
+    private func markUsed(_ id: PersistentIdentifier?) {
+        guard let id else { return }
+        if let food = foods.first(where: { $0.persistentModelID == id }) {
+            markUsed(food)
+        } else if let meal = meals.first(where: { $0.persistentModelID == id }) {
+            markUsed(meal)
+        }
+    }
+
     private func makePortionTarget(for food: Food) -> PortionTarget {
         PortionTarget(
             name: food.name, kcal: food.kcal,
             sodiumMg: food.sodiumMg, nutrients: food.nutrients,
             serving: food.servingDescription,
             defaultCategory: PortionTarget.category(from: food.category),
-            aiGenerated: food.aiGenerated
+            aiGenerated: food.aiGenerated,
+            source: food.persistentModelID
         )
     }
 
@@ -782,6 +811,16 @@ struct PortionTarget: Identifiable {
     /// sheet's Contains section and rides into the log's metadata.
     /// Empty for plain foods.
     var mealItems: [LoggedMealItem] = []
+    /// The library row this target came from, so recency can be stamped
+    /// when the log actually HAPPENS instead of when the sheet opens.
+    ///
+    /// The bump used to fire at present time, because "the portion
+    /// sheet's log path loses the model ref" — so opening a row to look
+    /// at it, then backing out, still moved it to the top of Recent
+    /// (the user, 2026-08-14). Recent means logged, not looked at.
+    /// Carrying the identity is what makes that possible; nil for
+    /// history re-logs and form logs, which have no library twin.
+    var source: PersistentIdentifier?
 
     static func category(from stored: String?) -> FoodCategory {
         stored.flatMap(FoodCategory.init(rawValue:)) ?? .slot(for: .now)
@@ -1025,6 +1064,24 @@ struct PortionSheet: View {
                         Text("\(target.kcal * quantity, format: .number.precision(.fractionLength(0))) kcal • \(portionMetric.captionText((portionMetric.itemAmount(sodiumMg: target.sodiumMg, nutrients: target.nutrients) ?? 0) * quantity, sodium: SharedStore.sodiumUnit))")
                             .monospacedDigit()
                     }
+                    // Edit mode only: move the entry in time ("logged at
+                    // 11 pm but it was yesterday's dinner" used to mean
+                    // delete + re-log).
+                    //
+                    // Directly under Will log, beside the meal slot — the
+                    // other two things an edit changes. It sat in its own
+                    // section at the very BOTTOM, below a meal's Contains
+                    // list, where it was missed entirely: the day was
+                    // movable for releases and read as a feature the app
+                    // did not have (the user, 2026-08-14).
+                    if editDate != nil {
+                        DatePicker(
+                            "Time",
+                            selection: $entryDate,
+                            in: ...Date.now,
+                            displayedComponents: [.date, .hourAndMinute]
+                        )
+                    }
                 }
                 // A logged/library MEAL explains its total: each
                 // component's kcal share, live against the serving
@@ -1044,19 +1101,6 @@ struct PortionSheet: View {
                         if abs(partsKcal - target.kcal) > 1 {
                             Text("Values were edited after logging.")
                         }
-                    }
-                }
-                // Edit mode only: move the entry in time ("logged at
-                // 11 pm but it was yesterday's dinner" used to mean
-                // delete + re-log).
-                if editDate != nil {
-                    Section {
-                        DatePicker(
-                            "Time",
-                            selection: $entryDate,
-                            in: ...Date.now,
-                            displayedComponents: [.date, .hourAndMinute]
-                        )
                     }
                 }
             }
@@ -1202,9 +1246,10 @@ struct LibraryRow: View {
     let metric: TrackedNutrient
     let metricAmount: Double
     var isFavorite = false
-    /// Shown where meals and foods share one list (the Log sheet, the
-    /// Favorites scope) — the Foods/Meals scopes already say which is
-    /// which.
+    /// Marks a meal. Set for EVERY meal row, in every list — a scope
+    /// header saying "Meals" is not a substitute, because it leaves the
+    /// same meal looking like two different things depending on which
+    /// list you found it in (the user, 2026-08-14).
     var isMeal = false
     /// AI-estimate provenance — a small ✨ after the name.
     var aiGenerated = false

@@ -144,5 +144,48 @@ struct WatchSyncTests {
         #expect(meals[0].name == "Toast")
         #expect(meals[0].category == nil)
         #expect(meals[0].nutrients == nil)
+        // ...and predates the meal/food distinction, which the watch
+        // must render as UNMARKED rather than guessing.
+        #expect(meals[0].isMeal == nil)
+    }
+
+    // MARK: - The meal mark on the wire
+
+    /// The watch had no way to tell a meal from a food: `SyncedMeal`
+    /// carries both and nothing said which, so its rows couldn't mark
+    /// meals the way every phone list does (the user, 2026-08-14).
+    @Test func theMealFlagAndItsIconRoundTrip() throws {
+        let context = WatchSync.makeContext(
+            meals: [SyncedMeal(id: UUID(), name: "Bento", kcal: 620, sodiumMg: 900, isMeal: true)],
+            recentFoods: [SyncedMeal(id: UUID(), name: "Apple", kcal: 95, sodiumMg: 2, isMeal: false)],
+            favorites: [
+                SyncedMeal(id: UUID(), name: "Bento", kcal: 620, sodiumMg: 900, isMeal: true),
+                SyncedMeal(id: UUID(), name: "Apple", kcal: 95, sodiumMg: 2, isMeal: false),
+            ],
+            goal: nil, waterServingOz: 12, waterGoalOz: 64,
+            mealIcon: "bento"
+        )
+        let payload = WatchSync.parse(context)
+        #expect(payload.meals?.first?.isMeal == true)
+        #expect(payload.recentFoods?.first?.isMeal == false)
+        // Favorites is the list that MIXES them, so it is the one that
+        // actually needed this.
+        #expect(payload.favorites?.map(\.isMeal) == [true, false])
+        #expect(payload.mealIcon == "bento")
+    }
+
+    /// A food must send `false`, never nil: nil is reserved for "an old
+    /// phone couldn't say", and the watch treats the two differently.
+    @Test func aFoodSaysSoRatherThanStayingSilent() throws {
+        let food = SyncedMeal(id: UUID(), name: "Apple", kcal: 95, sodiumMg: 2, isMeal: false)
+        let decoded = try JSONDecoder().decode(
+            SyncedMeal.self, from: try JSONEncoder().encode(food))
+        #expect(decoded.isMeal == false)
+        #expect(decoded.isMeal != nil)
+    }
+
+    @Test func theMealIconDefaultsToThePlate() {
+        let context = WatchSync.makeContext(meals: [], goal: nil, waterServingOz: 12, waterGoalOz: 64)
+        #expect(WatchSync.parse(context).mealIcon == "plate")
     }
 }

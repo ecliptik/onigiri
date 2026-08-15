@@ -87,14 +87,18 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
             .sorted { $0.recencyDate > $1.recencyDate }
         let allFoods = ((try? context.fetch(FetchDescriptor<Food>())) ?? [])
             .sorted { $0.recencyDate > $1.recencyDate }
+        // `isMeal` rides every row so the watch can mark meals the way
+        // the phone's lists do. Set EXPLICITLY on both sides — a food
+        // sending nil would be indistinguishable from an old phone's
+        // payload, and the watch renders nil as unmarked.
         let meals = allMeals.map { SyncedMeal(
             id: $0.uuid, name: $0.name, kcal: $0.totalKcal, sodiumMg: $0.totalSodiumMg,
             category: $0.category, nutrients: $0.totalNutrients,
-            items: $0.loggedItems
+            items: $0.loggedItems, isMeal: true
         ) }
         let recentFoods = allFoods.prefix(10).map { SyncedMeal(
             id: UUID(), name: $0.name, kcal: $0.kcal, sodiumMg: $0.sodiumMg,
-            category: $0.category, nutrients: $0.nutrients
+            category: $0.category, nutrients: $0.nutrients, isMeal: false
         ) }
         // Favorites mix meals and foods like the phone's Favorites scope,
         // interleaved by recency before the cap.
@@ -103,13 +107,13 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
                 (meal.recencyDate, SyncedMeal(
                     id: meal.uuid, name: meal.name, kcal: meal.totalKcal, sodiumMg: meal.totalSodiumMg,
                     category: meal.category, nutrients: meal.totalNutrients,
-                    items: meal.loggedItems
+                    items: meal.loggedItems, isMeal: true
                 ))
             }
             + allFoods.filter(\.isFavorite).map { food in
                 (food.recencyDate, SyncedMeal(
                     id: UUID(), name: food.name, kcal: food.kcal, sodiumMg: food.sodiumMg,
-                    category: food.category, nutrients: food.nutrients
+                    category: food.category, nutrients: food.nutrients, isMeal: false
                 ))
             }
         ).sorted { $0.0 > $1.0 }.prefix(10).map(\.1)
@@ -125,6 +129,7 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         let foodIcon = SharedStore.defaults.string(forKey: SharedStore.foodIconKey) ?? "sfFork"
         let waterIcon = SharedStore.defaults.string(forKey: SharedStore.waterIconKey) ?? "sfDrop"
         let rewardIcon = SharedStore.defaults.string(forKey: SharedStore.rewardIconKey) ?? "onigiri"
+        let mealIcon = SharedStore.defaults.string(forKey: SharedStore.mealIconKey) ?? "plate"
         // The tracked-metric slots ride verbatim (targets stringified);
         // the watch's metrics page mirrors the phone's configuration.
         // Unit preferences ride the same dict, always sent ("auto" when
@@ -188,6 +193,7 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
             foodIcon: foodIcon,
             waterIcon: waterIcon,
             rewardIcon: rewardIcon,
+            mealIcon: mealIcon,
             trackedMetricSettings: trackedSettings,
             sodiumLimitMg: SharedStore.sodiumLimitMg,
             planWeightLb: planWeight?.lb,
@@ -207,6 +213,7 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         settingsHasher.combine(mirrorPayload.foodIcon)
         settingsHasher.combine(mirrorPayload.waterIcon)
         settingsHasher.combine(mirrorPayload.rewardIcon)
+        settingsHasher.combine(mirrorPayload.mealIcon)
         settingsHasher.combine(mirrorPayload.trackedMetricSettings)
         settingsHasher.combine(mirrorPayload.sodiumLimitMg)
         // planWeight/lastLogAt deliberately excluded: the phone's
@@ -261,6 +268,7 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
                 foodIcon: foodIcon,
                 waterIcon: waterIcon,
                 rewardIcon: rewardIcon,
+                mealIcon: mealIcon,
                 trackedMetricSettings: trackedSettings,
                 sodiumLimitMg: SharedStore.sodiumLimitMg,
                 planWeightLb: planWeight?.lb,

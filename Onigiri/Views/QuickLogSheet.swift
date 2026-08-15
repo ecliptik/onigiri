@@ -522,6 +522,10 @@ struct QuickLogSheet: View {
                 switch sheet {
                 case .portion(let target):
                     PortionSheet(target: target) { quantity, category, _ in
+                        // Confirm only. The reconstructed Item below has
+                        // no model refs, so `log`'s own bump can't reach
+                        // the library row — this is what does.
+                        markUsed(target.source)
                         log(
                             Item(id: target.name, name: target.name, detail: target.serving,
                                  kcal: target.kcal, sodiumMg: target.sodiumMg,
@@ -721,16 +725,15 @@ struct QuickLogSheet: View {
                 if item.isMeal {
                     log(item, quantity: 1, category: PortionTarget.category(from: item.category))
                 } else {
-                    // The portion sheet's log path loses the model ref —
-                    // bump recency at pick time.
-                    markUsed(item)
+                    // No bump: the sheet's confirm handler stamps
+                    // `PortionTarget.source` once something is logged.
                     activeSheet = .portion(makePortionTarget(for: item))
                 }
             } onLongPress: {
                 // Each type's long press is the other's tap: meals get
                 // the portion sheet, foods skip it and log the default
-                // portion (matching the Foods screen).
-                markUsed(item)
+                // portion (matching the Foods screen). `log` bumps
+                // recency itself, so neither branch does it here.
                 if item.isMeal {
                     activeSheet = .portion(makePortionTarget(for: item))
                 } else {
@@ -740,7 +743,8 @@ struct QuickLogSheet: View {
         }
         .contentShape(.rect)
         .onTapGesture {
-            markUsed(item)
+            // Opening the portion sheet is how you LOOK at a row here,
+            // and it used to reorder the list underneath you.
             activeSheet = .portion(makePortionTarget(for: item))
         }
         .swipeActions(edge: .leading) {
@@ -778,6 +782,21 @@ struct QuickLogSheet: View {
         try? context.save()
     }
 
+    /// The same bump, from a portion target that has come back through
+    /// the sheet. Resolved against the loaded queries rather than
+    /// `context.model(for:)` — see FoodsView's twin for why.
+    private func markUsed(_ id: PersistentIdentifier?) {
+        guard let id else { return }
+        if let food = foods.first(where: { $0.persistentModelID == id }) {
+            food.lastUsedAt = .now
+        } else if let meal = meals.first(where: { $0.persistentModelID == id }) {
+            meal.lastUsedAt = .now
+        } else {
+            return
+        }
+        try? context.save()
+    }
+
     private func makePortionTarget(for item: Item) -> PortionTarget {
         PortionTarget(
             name: item.name, kcal: item.kcal, sodiumMg: item.sodiumMg,
@@ -787,7 +806,9 @@ struct QuickLogSheet: View {
             defaultCategory: PortionTarget.category(from: item.category),
             aiGenerated: item.aiGenerated,
             baseQuantity: item.baseQuantity,
-            mealItems: item.mealItems
+            mealItems: item.mealItems,
+            // nil for a history row: it has no library twin to bump.
+            source: item.food?.persistentModelID ?? item.meal?.persistentModelID
         )
     }
 

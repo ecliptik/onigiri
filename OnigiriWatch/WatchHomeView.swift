@@ -210,6 +210,10 @@ private struct LogItemRow: View {
     // and every synced item carries its nutrients.
     @AppStorage(SharedStore.trackedMetric1Key, store: SharedStore.defaults) private var trackedMetric1 = "sodium"
     @AppStorage(SharedStore.trackedMetric2Key, store: SharedStore.defaults) private var trackedMetric2 = "water"
+    // Same mark, same source of truth as the phone's rows — it rides the
+    // sync context like the other three icons. @AppStorage rather than a
+    // static read so changing it on the phone repaints visible rows.
+    @AppStorage(SharedStore.mealIconKey, store: SharedStore.defaults) private var mealIconRaw = "plate"
 
     private var metric: TrackedNutrient {
         .firstFoodMetric(slot1: trackedMetric1, slot2: trackedMetric2)
@@ -228,7 +232,18 @@ private struct LogItemRow: View {
             }
         } label: {
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.name)
+                // The meal mark, in the same place and grammar as the
+                // phone's LibraryRow — this list mixes meals and foods
+                // (Favorites does especially), and until 2026-08-14 the
+                // watch had no way to tell them apart at all. `nil` is
+                // an older phone's payload: unmarked, as before.
+                HStack(spacing: 4) {
+                    Text(item.name)
+                    if item.isMeal == true {
+                        Text(verbatim: SharedStore.mealEmoji(for: mealIconRaw))
+                            .accessibilityLabel("Meal")
+                    }
+                }
                 Text("\(item.kcal, format: .number.precision(.fractionLength(0))) kcal • \(metricAmount, format: .number.precision(.fractionLength(0...1))) \(metric.captionUnit)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)

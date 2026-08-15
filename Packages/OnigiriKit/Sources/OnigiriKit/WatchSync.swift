@@ -15,11 +15,23 @@ public struct SyncedMeal: Codable, Identifiable, Sendable, Hashable {
     /// payloads survive version skew in both directions (an old watch
     /// just logs meals without a breakdown; foods never carry it).
     public let items: [LoggedMealItem]?
+    /// Whether this row is a MEAL rather than a food. The type carries
+    /// both — `recentFoods` and half of `favorites` are foods — and
+    /// until 2026-08-14 nothing on the wire said which, so watch rows
+    /// could not mark meals the way every phone list does.
+    ///
+    /// Optional for version skew in both directions, and nil renders as
+    /// unmarked: a watch running ahead of its phone shows what it always
+    /// showed rather than guessing. Do NOT infer this from `items` —
+    /// an old phone sends nil there for meals too, and a meal with no
+    /// members is legal.
+    public let isMeal: Bool?
 
     public init(
         id: UUID, name: String, kcal: Double, sodiumMg: Double,
         category: String? = nil, nutrients: NutrientValues? = nil,
-        items: [LoggedMealItem]? = nil
+        items: [LoggedMealItem]? = nil,
+        isMeal: Bool? = nil
     ) {
         self.id = id
         self.name = name
@@ -28,6 +40,7 @@ public struct SyncedMeal: Codable, Identifiable, Sendable, Hashable {
         self.category = category
         self.nutrients = nutrients
         self.items = items
+        self.isMeal = isMeal
     }
 }
 
@@ -90,6 +103,10 @@ public struct SyncPayload: Sendable, Hashable {
     public let foodIcon: String?
     public let waterIcon: String?
     public let rewardIcon: String?
+    /// The meal mark. It travels for the same reason the others do —
+    /// the watch draws it beside meal names, and without it the watch
+    /// would have to hardcode a default the phone may have changed.
+    public let mealIcon: String?
     /// The tracked-metric slots and the sodium limit their targets can
     /// reference — the watch's metrics page mirrors the phone's slots.
     /// Keyed by the SharedStore key, stored verbatim.
@@ -128,6 +145,7 @@ public struct SyncPayload: Sendable, Hashable {
         foodIcon: String? = nil,
         waterIcon: String? = nil,
         rewardIcon: String? = nil,
+        mealIcon: String? = nil,
         trackedMetricSettings: [String: String]? = nil,
         sodiumLimitMg: Double? = nil,
         planWeightLb: Double? = nil,
@@ -144,6 +162,7 @@ public struct SyncPayload: Sendable, Hashable {
         self.foodIcon = foodIcon
         self.waterIcon = waterIcon
         self.rewardIcon = rewardIcon
+        self.mealIcon = mealIcon
         self.trackedMetricSettings = trackedMetricSettings
         self.sodiumLimitMg = sodiumLimitMg
         self.planWeightLb = planWeightLb
@@ -244,6 +263,7 @@ public enum WatchSync {
         foodIcon: String = "sfFork",
         waterIcon: String = "sfDrop",
         rewardIcon: String = "onigiri",
+        mealIcon: String = "plate",
         trackedMetricSettings: [String: String] = [:],
         sodiumLimitMg: Double = 2300,
         planWeightLb: Double? = nil,
@@ -257,6 +277,7 @@ public enum WatchSync {
             SharedStore.foodIconKey: foodIcon,
             SharedStore.waterIconKey: waterIcon,
             SharedStore.rewardIconKey: rewardIcon,
+            SharedStore.mealIconKey: mealIcon,
             trackedKey: trackedMetricSettings,
             SharedStore.sodiumLimitKey: sodiumLimitMg,
         ]
@@ -309,6 +330,7 @@ public enum WatchSync {
             foodIcon: context[SharedStore.foodIconKey] as? String,
             waterIcon: context[SharedStore.waterIconKey] as? String,
             rewardIcon: context[SharedStore.rewardIconKey] as? String,
+            mealIcon: context[SharedStore.mealIconKey] as? String,
             trackedMetricSettings: context[trackedKey] as? [String: String],
             sodiumLimitMg: context[SharedStore.sodiumLimitKey] as? Double,
             planWeightLb: context[planWeightKey] as? Double,
@@ -355,6 +377,9 @@ public enum WatchSync {
         }
         if let rewardIcon = payload.rewardIcon {
             defaults.set(rewardIcon, forKey: SharedStore.rewardIconKey)
+        }
+        if let mealIcon = payload.mealIcon {
+            defaults.set(mealIcon, forKey: SharedStore.mealIconKey)
         }
         if let tracked = payload.trackedMetricSettings {
             for (key, value) in tracked {

@@ -808,6 +808,15 @@ struct FoodFormView: View {
     }
 
     private func log(_ target: PortionTarget, quantity: Double, category: FoodCategory) {
+        // The form's own log path stamps recency too, or "Recent" would
+        // mean "logged from a list" rather than "logged" — an edited
+        // food logged straight from Save & Log stayed where it was.
+        // `createdFood` covers Save & Log on a brand-new row; the
+        // logging-only route has no library twin and stamps nothing.
+        if let row = food ?? createdFood {
+            row.lastUsedAt = .now
+            try? context.save()
+        }
         Task {
             let logged = await LogActions.logFood(
                 name: target.name,

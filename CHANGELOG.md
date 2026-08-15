@@ -8,6 +8,76 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.21.0 — the last pound
+
+_2026-08-15_ · [changes since v2.20.8](https://github.com/ecliptik/onigiri/compare/v2.20.8...v2.21.0)
+
+A 209.8 lb morning against a 210 lb target made the Goal screen say four
+things at once: a full progress bar reading **8.9 of 8.7 lb**, a projection
+promising the target in five days, an orange **Target must be below your current
+weight.**, and no congratulations anywhere.
+
+None of them was wrong on its own. Each was reading a *different weight*, and
+nothing on screen said which. Three notions of "now" were in play — the raw last
+weigh-in, the seven-day average of your daily lows, and a fitted trend — and the
+only one your budget is actually built from was visible solely inside a
+collapsed disclosure.
+
+Now anything that reaches a **verdict** — the progress bar, the celebration,
+whether a target is even valid — runs on that same seven-day average. The raw
+weigh-in is left to the one row that reports a measurement: **Current weight**.
+
+The app knew "under way" and "reached" and nothing in between, which is why an
+arrival rendered as a form error. There is a third state now:
+
+> ⚑ **Almost there — 0.8 lb to go.**
+> Your target is judged on the 7-day average of your daily lows, now 210.8 lb.
+> A few more mornings at this weight finishes it.
+
+The **Keep going** chips appear there too, not just after the celebration. They
+are the only route that keeps your journey intact, and needing to hand-edit
+instead re-stamped the start and re-zeroed a bar with nearly nine pounds behind
+it. Editing a target by hand now keeps the journey as well, as long as you are
+moving it *down* — same journey, further destination.
+
+Its blue line averaged raw weigh-ins, the last weight series in the app that
+did. So it ended about two pounds above the figure your budget is built from,
+and a day you weighed twice pulled it up more than a day you weighed once —
+which measures weighing habits more than body mass. It follows your **daily
+lows** now, and its right-hand end equals the weight under *How budget is set*,
+to the digit.
+
+Evening weigh-ins fade into the background of the scatter, and the vertical
+scale is set by the lows, so one late-night reading can no longer decide how
+tall the chart is.
+
+Inside a pound of your target the required deficit is simply **0**. It works out
+to 3,500 ÷ days-remaining calories per pound — about 194 kcal/day at eighteen
+days out — so the final pound used to swing the day's allowance on water weight
+and then fall off a cliff. And when there is no deficit left to hit, the Today
+section says so, including the part that was always true and never stated: any
+deficit earns the day.
+
+Tapping a food to look at it marked it **recent** and floated it to the top of
+the list, so backing out without logging left everything reordered underneath
+you. Recent means logged now — not looked at.
+
+A meal drew its mark in Favorites, in search results and in the Log sheet, but
+not in Foods → Meals, so the same meal looked like two different things
+depending on where you found it. It is marked everywhere.
+
+**The watch could not tell meals from foods at all** — nothing in the sync
+payload said which — so its rows now carry the mark too, drawn with whichever
+icon you have chosen on the phone.
+
+**Tapping Today goes to today.** Paging back through the week used to leave the
+navigation bar as the only way home.
+
+**Moving a log to another day is findable.** That has worked for several
+releases, but the row sat at the very bottom of the edit sheet, below a meal's
+entire ingredient list, and read as a feature the app did not have. It is
+directly under **Will log** now, beside the meal slot.
+
 ## v2.20.8 — call it what you like
 
 _2026-08-13_ · [changes since v2.20.7](https://github.com/ecliptik/onigiri/compare/v2.20.7...v2.20.8)

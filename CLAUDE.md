@@ -35,12 +35,19 @@ here. Roadmap: `plans/PLAN.md`.
   faults render wrong ONLY in a browser while sips/Finder/QuickTime show them
   fine — an empty edit list (`elst` `media time: -1`, left by `-ss` BEFORE
   `-i`) loops through black, and an EXIF orientation tag (which `sips -r`
-  writes) stands a landscape PNG on its side. Both bit 2026-08-02; probes and
-  fixes are in the screenshot-recipe notes.
+  writes) stands a landscape PNG on its side. Both bit 2026-08-02.
+- `plans/PLAN-site-and-media.md` has the rest: the site's theme contract, the
+  wiki's push quirks, and the full capture recipe for the stills and clips —
+  including the probes for the two faults above, which device the committed
+  assets come from, and why the calendar shot must be taken mid-month.
 - License: PolyForm Noncommercial 1.0.0 since the commit after the v2.2.0
-  tag (≤ v2.2.0 remains MIT). Say "source-available", not "open source".
-  LICENSE is verbatim PolyForm text — never edit it. External PRs are
-  declined by policy (CONTRIBUTING.md) to keep commercial rights clean.
+  tag (≤ v2.2.0 remains MIT, irrevocably). Say "source-available, free for
+  noncommercial use", never "open source". LICENSE is verbatim PolyForm text —
+  never edit or paraphrase it, and the Required Notice line in the README's
+  License section must survive edits. External PRs are declined by policy
+  (CONTRIBUTING.md) so no CLA machinery is needed; if one is ever accepted,
+  rights have to be resolved first. The branding clause reserves the Onigiri
+  name and icon — forks must rename.
 
 ## Build and test
 

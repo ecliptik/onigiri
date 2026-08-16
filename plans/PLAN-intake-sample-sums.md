@@ -68,7 +68,15 @@ re-architecture floated earlier.
 
 Two constraints on any such design:
 
-1. It needs the merge window's width first, which is unmeasured.
+1. It needs the merge window's width first, which is unmeasured. Measure it
+   OPPORTUNISTICALLY rather than in a dedicated session: whenever a log happens
+   from both devices, ask the spacing and read `water merged=… samples=…` out of
+   `diagnoseIntake`.
 2. It must work BLIND. At write time neither device reliably sees the other's
    recent sample (the watch writes to its own store and syncs later), so a
-   pre-write "is anything near?" query cannot be trusted.
+   pre-write "is anything near?" query cannot be trusted. That points at
+   deterministic per-device lanes, not lookups.
+
+**Re-state the trade before building anything.** It buys agreement with Apple
+Health at the cost of slightly false log timestamps, and Onigiri is already the
+one that is correct. This is a cosmetic fix to someone else's arithmetic.

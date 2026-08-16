@@ -572,6 +572,97 @@ Each cost a debugging session.
   caught a confabulated food during the eval run), and the sign prompt DELIMITS
   the text as photographed data — without that framing an "Allergen Warning!
   Contains:…" line refuses every time with "May contain sensitive content".
+- A WHOLE MENU is a fourth door (`plans/PLAN-menu-import.md`, 2026-08-16) and it
+  is PARSED, never prompted. `MenuDocumentReader` (app) → `MenuTableParser`
+  (kit) reads 113 rows off the reference guide with AI off; the picker is a
+  `.searchable` list, because the "Which item?" confirmationDialog is sized for
+  a handful. Nothing persists but a food actually saved, and no URL is ever
+  fetched — Safari's Share → Options → PDF makes a nutrition PAGE into a PDF,
+  which is the vetoed URL-fetch avoided rather than reinstated. Landmines:
+  - **`CFBundleDocumentTypes` does NOT put an app in Safari's share sheet.**
+    Verified on device 2026-08-16 with a correct, correctly-signed PDF
+    declaration at rank Alternate: absent for both a web page and a PDF.
+    Document types feed the Files app's "Open With"; the share sheet is
+    populated by EXTENSIONS, and the "Open in …" rows next to it are other
+    apps' action extensions. `OnigiriShare` (share-services) is the door. The
+    declaration is kept anyway — it is free and covers Files.
+  - **The share extension does not open the app, by design.**
+    `extensionContext.open` is unsupported from this extension point and the
+    responder-chain walk to `UIApplication` is the rejection trick, so the
+    extension is a DROPBOX: it writes to `MenuInbox` (app group) and
+    `ContentView` drains it on launch AND on foreground. The foreground drain
+    IS the delivery path, not a fallback — losing it strands every share.
+  - **`NSExtensionActivationRule` MUST be nested under
+    `NSExtensionAttributes`.** Placed directly under `NSExtension` it is
+    ignored, the extension matches nothing, and it never appears in any share
+    sheet — no build error, no runtime log, nothing anywhere says so. Verify
+    the BUILT `.appex` plist (`plutil -p …/PlugIns/OnigiriShare.appex/
+    Info.plist`), not the YAML, since a silently-dropped key looks identical
+    to a correct one in `project.yml`.
+  - **A PDF-only activation predicate looked right and was useless.** Safari
+    hands the share sheet a `public.url` for a REMOTE PDF, so a predicate on
+    `com.adobe.pdf` never matched the very document the feature was built for,
+    and a web page needed Share → Options → PDF, which nobody finds. The rule
+    is the dictionary form — web URL + image + file. It matches any file (a
+    `.zip` offers Onigiri too); the extension answers "Nothing here Onigiri
+    can read" rather than pretending, and the user prunes the sheet in Edit
+    Actions.
+  - A shared LINK is resolved by the APP, never the extension:
+    `MenuLinkLoader` downloads it when it is a PDF and otherwise renders the
+    page with `WKWebView.createPDF()`, which the same `MenuTableParser` then
+    reads. That is not the URL-fetch `PLAN-screenshot-nutrition` vetoed —
+    there is no HTML parsing at all, no selectors and nothing per-site to rot.
+    Render at a DESKTOP width (1280): a phone-width web view reflows a
+    nutrition table into one narrow column, which parses as prose.
+  - **`import WebKit` from Swift raised the iOS floor to 18.6.** The overlay
+    `/usr/lib/swift/libswiftWebKit.dylib` first ships in 18.6, no SDK carries
+    an embeddable copy, and on 18.0–18.5 the app does not launch at all
+    (dyld "Library missing"). The iOS 18.5 simulator reproduces it; 18.6 and
+    26.5 do not.
+  - A shared IMAGE runs `FoodImageReader` with `.imported` — the paste door's
+    cascade, unforked. A shared screenshot must read the way a pasted one does.
+  - **`PDFPage.characterBounds(at:)` is unusable on a print-design PDF.** The
+    "i" in "Spicy" reports 68 pt wide, and 185 of 2,133 glyphs come back
+    ZERO-HEIGHT (every "f" among them) — runs built from it both mis-measure
+    and silently DROP letters. `selectionsByLine()` returns correct text and
+    correct bounds, already one run per table cell. `page.string` does index-
+    align with `characterBounds`; that was never the problem.
+  - **Header cells assemble by X-RANGE across the stacked header lines, and
+    match WHOLE.** `Cal.` appears twice (the calorie column, and the top half
+    of `Cal. from Fat`) and three columns contain "fat", so substring matching
+    reads every row's calories off the wrong column.
+  - **Values map by COUNT first, geometry only as a fallback.** A row prints
+    one number per value column in column order, so when the counts agree the
+    mapping is positional. Geometry alone gets it wrong: on the Chick-fil-A
+    page the header words and their numbers have different extents ("FIBER
+    (G)" spans 0.841–0.859, its data starts at 0.860), so a run holding two
+    values put both on one column — fibre nil, sugar holding fibre's figure.
+    The fallback still handles runs that merge two cells ("0 105", "7 7").
+  - **A visual row is not always one baseline.** Chick-fil-A puts an item's
+    name a hair BELOW its numbers and wraps long names below that — three
+    bands, one row. `joinSubPitch` merges bands closer than 0.35 × the table's
+    own data pitch (never two data bands). Left split, a name band reads as a
+    numberless row and gets glued to the row above it.
+  - **The name column is found by MODAL x, not "everything to the left."**
+    That page carries a category sidebar at the far left whose entries share
+    bands with table rows; "Kid's Meals (nutrition per entrée only) Egg White
+    Grill" was a real parsed name.
+  - A SERVING column is recognized as a field so it lands in
+    `servingDescription`. Unrecognized, it sits left of the numbers and is
+    swept into the name — every item read as "Spicy Chicken Biscuit 153g".
+  - A page with no header of its own INHERITS the previous page's columns
+    (`parse(pages:)` only). The Kwik Trip guide reprints its header per page
+    so a page's own header always wins; a rendered web page does not, and its
+    tail would otherwise be dropped silently.
+  - **Source detection usually FAILS and that is the designed path** — the
+    guide names its restaurant nowhere (PDF title is the InDesign job code,
+    footer the same, logo is artwork), so the sheet ASKS and the answer
+    prefixes each name. Never fall back to the filename: it is not the
+    document speaking, and "menu-kwiktrip — Greek Chicken" is what that buys.
+  `MenuDocument.swift` and `scripts/dump-pdf-text.swift` must stay identical
+  (the `LabelScan`/`dump-label-ocr` rule); `MenuDocumentTests` pins it by
+  re-reading the PDF and diffing against the committed fixture, so a drift
+  fails there while every parser test still passes.
 
 ## Library rows
 

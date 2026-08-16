@@ -10,7 +10,16 @@ options:
   # losing APIs (see plans/archive/PLAN-1.8.md). 26-era APIs live behind
   # #available gates — the compiler enforces every new one.
   deploymentTarget:
-    iOS: "18.0"
+    # 18.6, not 18.0, since 2026-08-16: MenuLinkLoader renders a shared
+    # web page with WKWebView, and `import WebKit` from Swift pulls in
+    # /usr/lib/swift/libswiftWebKit.dylib, which FIRST SHIPS IN 18.6.
+    # On 18.0–18.5 the app does not launch at all — dyld "Library
+    # missing" before any of our code runs, the worst failure in
+    # CLAUDE.md's app-launch list. It cannot be back-deployed either:
+    # no iOS SDK carries an embeddable copy, so swiftStdLibTool has
+    # nothing to bundle. Raising the floor makes the OS refuse to
+    # install rather than install and crash.
+    iOS: "18.6"
     watchOS: "10.0"
   createIntermediateGroups: true
 
@@ -45,6 +54,7 @@ targets:
       - package: OnigiriKit
       - target: OnigiriWatch
       - target: OnigiriWidgets
+      - target: OnigiriShare
     info:
       path: Onigiri/Info.plist
       properties:
@@ -79,6 +89,19 @@ targets:
         # Backups live in Documents/Backups — visible in the Files app.
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
+        # Puts Onigiri in the share sheet for a PDF, which is the whole
+        # door for menu import (plans/PLAN-menu-import.md): a restaurant's
+        # nutrition guide is a PDF, and Safari's Share → Options → PDF
+        # turns a nutrition PAGE into one too — so both arrive here and
+        # no URL is ever fetched. Alternate rank, not Owner: Onigiri is
+        # somewhere you can send a PDF, never the app that should open
+        # every PDF on the phone.
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Nutrition Menu
+            LSItemContentTypes:
+              - com.adobe.pdf
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
         NSHealthShareUsageDescription: Onigiri reads your energy burn, weight, and nutrition history to show your daily calorie balance and goal progress.
         NSHealthUpdateUsageDescription: Onigiri saves the food, sodium, and water you log to Apple Health.
         NSCameraUsageDescription: Onigiri uses the camera to scan food barcodes and photograph nutrition labels.
@@ -143,6 +166,56 @@ targets:
       path: OnigiriWidgets/OnigiriWidgets.entitlements
       properties:
         com.apple.developer.healthkit: true
+        com.apple.security.application-groups:
+          - group.com.ecliptik.Onigiri
+
+  # The share-sheet door for menu import (plans/PLAN-menu-import.md).
+  # A share EXTENSION is required and CFBundleDocumentTypes is not enough:
+  # document types put the app in the Files app's "Open With", while
+  # Safari's share sheet is populated by extensions — verified on device
+  # 2026-08-16, where a correctly-declared PDF handler never appeared.
+  OnigiriShare:
+    type: app-extension
+    platform: iOS
+    sources: [OnigiriShare]
+    dependencies:
+      - package: OnigiriKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ecliptik.Onigiri.share
+    info:
+      path: OnigiriShare/Info.plist
+      properties:
+        CFBundleDisplayName: Onigiri
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          # The DICTIONARY form, not a predicate. A PDF-only predicate
+          # shipped first and was wrong twice over: Safari hands a share
+          # sheet a URL for a remote PDF (so Onigiri never appeared for
+          # the very document it was built for), and a web page could
+          # only reach it via Share → Options → PDF, which is a gesture
+          # nobody finds. Web URL + image + file covers all three doors,
+          # and the user manages the clutter in Edit Actions (their call,
+          # 2026-08-16).
+          #
+          # SupportsFile matches ANY file, so Onigiri also appears for,
+          # say, a .zip. Accepted: the extension answers "Nothing here
+          # Onigiri can read" rather than pretending.
+          # NESTED UNDER NSExtensionAttributes, which is not optional
+          # decoration: put NSExtensionActivationRule directly under
+          # NSExtension and it is ignored entirely, the extension matches
+          # NOTHING, and it never appears in any share sheet — with no
+          # error anywhere to say so (2026-08-16, cost a deploy round).
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsImageWithMaxCount: 1
+              NSExtensionActivationSupportsFileWithMaxCount: 1
+    entitlements:
+      path: OnigiriShare/OnigiriShare.entitlements
+      properties:
         com.apple.security.application-groups:
           - group.com.ecliptik.Onigiri
 

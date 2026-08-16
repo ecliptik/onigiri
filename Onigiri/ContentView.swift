@@ -34,6 +34,13 @@ struct ContentView: View {
     /// skips routing inside this window so a tap that somehow ALSO selected
     /// the tab can't open the add flow twice.
     @State private var lastInterceptedAdd: Date?
+    /// A nutrition document shared into the app, awaiting its picker.
+    /// An Optional request rather than a Bool, the same consumable
+    /// pattern the quick actions use.
+    @State private var sharedImport: SharedImport?
+    /// Held so the working copy can be deleted on dismiss — by then the
+    /// binding itself is already nil.
+    @State private var lastSharedImport: SharedImport?
     @Query private var foods: [Food]
 
     var body: some View {
@@ -104,6 +111,7 @@ struct ContentView: View {
                 quickActions.pending = nil
                 handle(action)
             }
+            drainMenuInbox()
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
@@ -129,6 +137,11 @@ struct ContentView: View {
                     quickActions.pending = nil
                     handle(action)
                 }
+                // A menu shared while the app was away. The share
+                // extension cannot open us, so the foreground IS the
+                // delivery — and this is the ordinary path, not the
+                // fallback.
+                drainMenuInbox()
             } else {
                 // Leaving the foreground: run pending debounced work now —
                 // a suspended process never runs its sleeping flush tasks.
@@ -155,6 +168,21 @@ struct ContentView: View {
         // the widget was showing (backfill included). No day parameter
         // means today.
         .onOpenURL { url in
+            // A FILE arriving from elsewhere — Safari's share sheet, the
+            // Files app — is a nutrition document to import
+            // (plans/PLAN-menu-import.md). It comes through the same
+            // callback as the widget deep links because the app declares
+            // the PDF document type rather than shipping a share
+            // extension: no new target, no app-group hand-off, and the
+            // parse runs in the foreground app with its full memory.
+            if url.isFileURL {
+                // Opened in place from Files — the user's own file, so
+                // isOurs stays false and it survives being read.
+                sharedImport = SharedImport(
+                    item: url.pathExtension.lowercased() == "pdf"
+                        ? .document(url) : .image(url))
+                return
+            }
             guard url.scheme == "onigiri" else { return }
             switch url.host() {
             case "log":
@@ -173,6 +201,29 @@ struct ContentView: View {
                 break
             }
         }
+        // On the outer Group, deliberately NOT on `mainTabs` — that view
+        // already carries the add-to-library sheet, and two .sheet
+        // modifiers on one view compete.
+        .sheet(item: $sharedImport, onDismiss: { lastSharedImport?.cleanUp(); lastSharedImport = nil }) { request in
+            Group {
+                switch request.item {
+                case .document, .link:
+                    MenuImportSheet(shared: request.item)
+                case .image(let url):
+                    SharedImageSheet(url: url)
+                }
+            }
+            .onAppear { lastSharedImport = request }
+        }
+    }
+
+    /// Take one waiting document from the share extension, if any. Only
+    /// one: a second sheet cannot present over the first, and `take()`
+    /// leaves the rest in place for the next foreground rather than
+    /// dropping them.
+    private func drainMenuInbox() {
+        guard sharedImport == nil, let item = ShareInbox.take() else { return }
+        sharedImport = SharedImport(item: item, isOurs: true)
     }
 
     private static let deepLinkDay: DateFormatter = {

@@ -8,6 +8,54 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.22.0 — the whole menu
+
+_2026-08-16_ · [changes since v2.21.0](https://github.com/ecliptik/onigiri/compare/v2.21.0...v2.22.0)
+
+Eating out, the restaurant has already done the work: every item, every
+number, published. Getting one row of it into Onigiri meant screenshotting a
+slice of the table and watching the app pick some arbitrary food out of it.
+
+**Share the menu to Onigiri instead.** A nutrition PDF, a nutrition page, or a
+photo — Safari, Files, Photos, anywhere the share sheet reaches. What comes
+back is the whole menu, searchable:
+
+> **Search 113 items**
+> CURATED BOWLS
+> Spicy Lamb + Avocado Bowl — 800 kcal
+> Steak + Harissa Bowl — 620 kcal
+
+Tap one and the food form opens filled in. Nothing else is kept: the document
+is read once and discarded, and the only thing that survives is a food you
+actually saved.
+
+The old screenshot path asked a language model to read the table, and a table
+is the one thing that survives least well as flat text — the column headers end
+up dozens of lines above their numbers with nothing left to say which is which.
+It could also only ever return six items, and quietly returned none at all past
+6,000 characters. Hence "it just picks the first one".
+
+This reads the document's own geometry instead: rows, columns, header cells
+matched whole. **No AI is involved at any point** — it works with every AI
+setting off, there is no six-item cap, and the numbers are the printed ones
+rather than an estimate of them.
+
+A shared *page* is rendered the way a browser would draw it and then read the
+same way, so a restaurant that publishes HTML rather than a PDF works too, with
+no site-specific knowledge that could rot.
+
+Menus rarely say. The guide this was built against names its restaurant nowhere
+at all — its title is the design department's job code. So Onigiri asks once,
+and what you type goes in front of each item: **Kwik Trip — Greek Chicken**, so
+that six months later it still means something.
+
+A photo shared into Onigiri reads exactly the way a pasted one does — same
+label reading, same "which item?" question when a picture shows several.
+
+This release raises the minimum to **iOS 18.6**. Rendering a shared page needs a
+system library that does not exist before 18.6, and cannot be shipped inside the
+app.
+
 ## v2.21.0 — the last pound
 
 _2026-08-15_ · [changes since v2.20.8](https://github.com/ecliptik/onigiri/compare/v2.20.8...v2.21.0)

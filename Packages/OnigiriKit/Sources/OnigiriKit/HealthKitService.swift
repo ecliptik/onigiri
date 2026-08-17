@@ -18,7 +18,9 @@ public final class HealthKitService {
 
     // MARK: - Authorization
 
-    private static let shareTypes: Set<HKSampleType> = {
+    // Internal rather than private so `HealthAuthorizationScopeTests` can
+    // pin the core-vs-full invariant (see `setupCoreShareTypes`).
+    static let shareTypes: Set<HKSampleType> = {
         var types: Set<HKSampleType> = [
             HKQuantityType(.dietaryEnergyConsumed),
             HKQuantityType(.dietarySodium),
@@ -44,7 +46,7 @@ public final class HealthKitService {
     /// device (unlike the simulator) strips never-requested-for-read
     /// sample types out of read-back correlations — the day detail came
     /// back with no macros/micros on hardware until read was requested.
-    private static let readTypes: Set<HKObjectType> = {
+    static let readTypes: Set<HKObjectType> = {
         var types: Set<HKObjectType> = [
             HKQuantityType(.activeEnergyBurned),
             HKQuantityType(.basalEnergyBurned),
@@ -64,10 +66,44 @@ public final class HealthKitService {
         return types
     }()
 
+    /// The types "is this app set up?" is allowed to ask about — and
+    /// deliberately NOT `shareTypes`/`readTypes`.
+    ///
+    /// `statusForAuthorizationRequest` answers `.shouldRequest` when ANY
+    /// type in the sets has never been asked for, and `PlanCache.needsSetup`
+    /// reads exactly that: so adding one type to `readTypes` flips every
+    /// existing install to "not set up" until the user is re-prompted, and
+    /// every widget and complication paints "Open Onigiri to set up" over a
+    /// working setup. That regression is why `HKWorkoutType` was rejected
+    /// for the burn observer (see `startObservingBurnChanges`) — the cost
+    /// of a new type was a visible lie on the home screen, which left the
+    /// app with a permission set that could never grow again.
+    ///
+    /// So the question splits. `requestAuthorization` still asks for
+    /// everything; this set is only what a widget genuinely cannot render
+    /// WITHOUT — the day's burn and the fact that we may write food. It is
+    /// FROZEN: every type in it shipped in v1.0, so no existing install can
+    /// be missing one, and nothing may be added
+    /// (`HealthAuthorizationScopeTests.theSetupCoreIsFrozen` pins it). A
+    /// new optional read now costs nothing when it's absent.
+    static let setupCoreShareTypes: Set<HKSampleType> = [
+        HKQuantityType(.dietaryEnergyConsumed),
+    ]
+    static let setupCoreReadTypes: Set<HKObjectType> = [
+        HKQuantityType(.dietaryEnergyConsumed),
+        HKQuantityType(.activeEnergyBurned),
+        HKQuantityType(.basalEnergyBurned),
+    ]
+
     /// Whether the system would show the permission sheet if we asked.
+    ///
+    /// Asked about the frozen core only — see `setupCoreShareTypes`. This
+    /// can therefore answer "set up" while some LATER-added optional type
+    /// has never been requested, and that is the point: an optional type
+    /// must degrade to absent, never to "the app is unconfigured".
     public func shouldRequestAuthorization() async throws -> Bool {
         let status = try await store.statusForAuthorizationRequest(
-            toShare: Self.shareTypes, read: Self.readTypes
+            toShare: Self.setupCoreShareTypes, read: Self.setupCoreReadTypes
         )
         return status == .shouldRequest
     }
@@ -862,17 +898,29 @@ public final class HealthKitService {
         async let activeTotals = dailyTotals(.activeEnergyBurned, start: start, end: end)
         async let basalTotals = dailyTotals(.basalEnergyBurned, start: start, end: end)
         let (intake, active, basal) = try await (intakeTotals, activeTotals, basalTotals)
-        let latestWeightLb = try? await latestBodyMassLb()
         // Resting up front, active earned (the user's rule, 2026-08-02).
         // The estimate floors RESTING only, so an unworn day still gets
         // its baseline but earns no activity — which is the point: the
         // watch is how active energy is earned. One profile read covers
         // every day in the range; body metrics don't move day to day at
         // a resolution this equation can see.
-        let profile = await bodyProfile()
+        //
+        // The BASIS weight, not the raw last weigh-in. This read is what
+        // the calendar, the badges, the streak and `bankedKcal` all judge
+        // days by, while Today and `DailyPlanLoader` floor the same
+        // estimate from `targetBasisWeightLb` — so an evening weigh-in
+        // (2–3 lb high, hence `dailyLows`) moved this figure and not
+        // theirs, and the two surfaces disagreed about one day's burn.
+        // Mifflin-St Jeor's weight term is 10 kcal/kg, so the gap was
+        // only ~14 kcal — but it RAISED the budget off the reading the
+        // basis exists to discard, and the estimate wins the `max` for
+        // most of the day, so it was live most of the day (2026-08-16).
+        async let weightRead = targetBasisWeightLb()
+        async let profileRead = bodyProfile()
+        let (basisWeightLb, profile) = await (weightRead, profileRead)
         let estimatedResting: Double? = {
             guard let heightCm = profile.heightCm, let age = profile.ageYears,
-                  let weightLb = latestWeightLb
+                  let weightLb = basisWeightLb
             else { return nil }
             return BasalEstimate.restingKcal(
                 weightLb: weightLb, heightCm: heightCm,

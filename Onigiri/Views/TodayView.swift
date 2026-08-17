@@ -768,7 +768,8 @@ struct TodayView: View {
                     // Today only: a rung belongs to the day it was
                     // crossed, and browsing back to Tuesday shouldn't
                     // re-announce it.
-                    milestoneText: model.isToday ? milestoneLine : nil
+                    milestoneText: model.isToday ? milestoneLine : nil,
+                    showsPaceWarning: showsPaceWarning(for: goal)
                 )
                 .equatable()
             } else {
@@ -818,6 +819,37 @@ struct TodayView: View {
             dayBurnKcal: dayBurn,
             requiredDailyDeficit: requiredDeficit(for: goal)
         )
+    }
+
+    /// Whether TODAY's plan is an aggressive one.
+    ///
+    /// Asked SEPARATELY from `plan(for:)`, and that separation is the
+    /// whole point: that one is `completedDayPlan`, which hardcodes
+    /// `isAggressive: false` because a past day can't be talked out of
+    /// what it already was. Correct for a past day — and it left the
+    /// card's pace warning UNREACHABLE, on the default tab, for every
+    /// day including today. The warning had never once rendered
+    /// (2026-08-16). Goal and onboarding derive real plans and were
+    /// never affected, which is why this went unnoticed: the same
+    /// sentence appears on Goal, where it works.
+    ///
+    /// Routed through `derivePlan` rather than re-deriving the rule
+    /// here, so Today and Goal cannot reach different verdicts about
+    /// the same goal — they now run the identical call with the
+    /// identical inputs.
+    ///
+    /// Today only, like `milestoneText` above: browsing back to Tuesday
+    /// shouldn't offer to move a target date on Tuesday's behalf.
+    private func showsPaceWarning(for goal: GoalSettings) -> Bool {
+        guard model.isToday else { return false }
+        return CalorieBudget.derivePlan(
+            isMaintenance: goal.isMaintenance,
+            currentWeightLb: model.currentWeightLb ?? goal.fallbackCurrentWeightLb,
+            targetWeightLb: goal.targetWeightLb,
+            targetDate: goal.targetDate,
+            averageDailyBurnKcal: model.averageBurnKcal,
+            restingFloorKcal: model.estimatedRestingKcal
+        )?.isAggressive ?? false
     }
 
     /// The target the browsed day is judged by.
@@ -1914,6 +1946,9 @@ struct DailyGoalCard: View, Equatable {
     /// "5 lb down · 2 lb to your target", on the day that rung is
     /// crossed and no other. nil the rest of the time.
     var milestoneText: String? = nil
+    /// Passed in rather than read off `plan`, which is a completed-day
+    /// plan and always says false — see `showsPaceWarning(for:)`.
+    var showsPaceWarning = false
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
     // Display-only (like the reward icon, uncompared in ==): its own
     // observation re-renders the scale line when the unit changes.
@@ -1941,6 +1976,7 @@ struct DailyGoalCard: View, Equatable {
             && lhs.showsRemaining == rhs.showsRemaining
             && lhs.weeklyTrendLb == rhs.weeklyTrendLb
             && lhs.milestoneText == rhs.milestoneText
+            && lhs.showsPaceWarning == rhs.showsPaceWarning
     }
 
     /// A zero-deficit plan is maintenance: the gauge tracks budget left
@@ -2064,7 +2100,7 @@ struct DailyGoalCard: View, Equatable {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
-                if plan.isAggressive {
+                if showsPaceWarning {
                     Label("Aggressive pace — consider a later date", systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
                         .foregroundStyle(.orange)

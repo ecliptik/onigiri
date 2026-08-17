@@ -251,7 +251,10 @@ struct GoalView: View {
             currentWeightLb: planWeightLb,
             targetWeightLb: targetWeightLb,
             targetDate: targetDate,
-            averageDailyBurnKcal: model.averageBurnKcal
+            averageDailyBurnKcal: model.averageBurnKcal,
+            // The resting row two sections down is the same figure: a
+            // budget under it is the red line the flat 1,500 can't see.
+            restingFloorKcal: model.estimatedRestingKcal
         )
     }
 

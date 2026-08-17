@@ -32,6 +32,80 @@ struct CalorieBudgetTests {
         #expect(plan.isAggressive)
     }
 
+    /// The gap the flat 1,500 could not see: a budget above it and below
+    /// the body's own resting energy.
+    ///
+    /// Deliberately a REACHABLE plan, not a pathological one — 10 lb in
+    /// 44 days is an 800 kcal/day deficit, which against a 2,400 kcal
+    /// average burn leaves 1,600 to eat. That clears `minReasonableBudget`
+    /// by 100 and sits 142 UNDER the ~1,742 resting estimate for the
+    /// body the seeder describes (178 cm, 40 years, 200 lb).
+    @Test func aBudgetUnderTheBodysRestingEnergyIsAggressive() {
+        let restingKcal = BasalEstimate.restingKcal(
+            weightLb: 200, heightCm: 178, ageYears: 40, sex: .unspecified)
+        #expect(abs((restingKcal ?? 0) - 1741.7) < 0.5)
+
+        let inputs = (currentWeightLb: 200.0, targetWeightLb: 190.0,
+                      daysRemaining: 44, averageDailyBurn: 2400.0)
+        let unguarded = CalorieBudget.plan(
+            currentWeightLb: inputs.currentWeightLb, targetWeightLb: inputs.targetWeightLb,
+            daysRemaining: inputs.daysRemaining, averageDailyBurn: inputs.averageDailyBurn
+        )
+        // The budget that used to pass silently.
+        #expect(abs(unguarded.dailyBudget - 1604.5) < 1)
+        #expect(unguarded.dailyBudget > CalorieBudget.minReasonableBudget)
+        #expect(unguarded.dailyBudget < (restingKcal ?? 0))
+        #expect(!unguarded.isAggressive)
+
+        let guarded = CalorieBudget.plan(
+            currentWeightLb: inputs.currentWeightLb, targetWeightLb: inputs.targetWeightLb,
+            daysRemaining: inputs.daysRemaining, averageDailyBurn: inputs.averageDailyBurn,
+            restingFloorKcal: restingKcal
+        )
+        #expect(guarded.isAggressive)
+        // Same plan, same numbers — only the verdict moved.
+        #expect(guarded.dailyBudget == unguarded.dailyBudget)
+        #expect(guarded.requiredDailyDeficit == unguarded.requiredDailyDeficit)
+    }
+
+    /// nil resting — Health can't describe the body — must reproduce the
+    /// old behaviour exactly, or the guardrail vanishes with its input on
+    /// every device that never granted the body reads.
+    @Test func withoutARestingEstimateTheFlatFloorStillHolds() {
+        let comfortable = CalorieBudget.plan(
+            currentWeightLb: 200, targetWeightLb: 190,
+            daysRemaining: 44, averageDailyBurn: 2400, restingFloorKcal: nil
+        )
+        #expect(!comfortable.isAggressive)
+        let tooLow = CalorieBudget.plan(
+            currentWeightLb: 200, targetWeightLb: 180,
+            daysRemaining: 120, averageDailyBurn: 2000, restingFloorKcal: nil
+        )
+        #expect(tooLow.isAggressive)
+    }
+
+    /// The resting floor RAISES the bar and never lowers it: a body with
+    /// a small resting figure must not talk the flat 1,500 down.
+    @Test func aLowRestingEstimateNeverRelaxesTheFlatFloor() {
+        let plan = CalorieBudget.plan(
+            currentWeightLb: 200, targetWeightLb: 180,
+            daysRemaining: 120, averageDailyBurn: 2000, restingFloorKcal: 1200
+        )
+        #expect(plan.dailyBudget < CalorieBudget.minReasonableBudget)
+        #expect(plan.isAggressive)
+    }
+
+    /// A COMPLETED day is never aggressive, whatever the floor says —
+    /// the property Today's card reads. It is why the card needs its own
+    /// pace-warning input rather than `plan.isAggressive`, and why that
+    /// warning was unreachable until 2026-08-16.
+    @Test func aCompletedDayIsNeverTalkedOutOfWhatItWas() {
+        let plan = CalorieBudget.completedDayPlan(
+            dayBurnKcal: 2000, requiredDailyDeficit: 1200)
+        #expect(plan.dailyBudget == 800)
+        #expect(!plan.isAggressive)
+    }
+
     @Test func maintenancePlanBudgetIsTheBurn() {
         let plan = CalorieBudget.maintenancePlan(averageDailyBurn: 2450)
         #expect(plan.requiredDailyDeficit == 0)

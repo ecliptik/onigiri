@@ -9,6 +9,20 @@ public enum CalorieBudget {
     public static let maxSafeDailyDeficit: Double = 1000
 
     /// Daily budgets below this are flagged as too aggressive.
+    ///
+    /// A FLOOR under the floor: the real red line is the body's own
+    /// resting energy, which this flat number cannot see. It is the same
+    /// 1,500 for every body, while `BasalEstimate.restingKcal` — which
+    /// the app already computes for the budget's resting credit — is
+    /// specific to this one. For the seeder's reference body (178 cm,
+    /// 40 years, ~200 lb) resting is ~1,742, so a 1,600 kcal budget
+    /// passed this guardrail silently while sitting 142 kcal UNDER the
+    /// body's baseline — and that budget is reachable, not pathological:
+    /// an 800 kcal/day deficit against a 2,400 kcal burn (2026-08-16).
+    ///
+    /// Kept rather than replaced, because the resting estimate is nil
+    /// whenever Health can't describe the body (see `BasalEstimate`), and
+    /// a guardrail that disappears with its input is not a guardrail.
     public static let minReasonableBudget: Double = 1500
 
     public struct Plan: Sendable, Equatable {
@@ -88,6 +102,7 @@ public enum CalorieBudget {
         targetWeightLb: Double? = nil,
         targetDate: Date? = nil,
         averageDailyBurnKcal: Double?,
+        restingFloorKcal: Double? = nil,
         calendar: Calendar = .current,
         now: Date = .now
     ) -> Plan? {
@@ -102,7 +117,8 @@ public enum CalorieBudget {
             currentWeightLb: current,
             targetWeightLb: target,
             daysRemaining: days,
-            averageDailyBurn: burn
+            averageDailyBurn: burn,
+            restingFloorKcal: restingFloorKcal
         )
     }
 
@@ -145,11 +161,16 @@ public enum CalorieBudget {
         return remaining * kcalPerPound / Double(max(1, daysRemaining))
     }
 
+    /// `restingFloorKcal` is `BasalEstimate.restingKcal` — the body's own
+    /// baseline, nil when Health can't describe it well enough to guess.
+    /// nil reproduces the pre-2026-08-16 behaviour exactly: the flat
+    /// `minReasonableBudget` alone.
     public static func plan(
         currentWeightLb: Double,
         targetWeightLb: Double,
         daysRemaining: Int,
-        averageDailyBurn: Double
+        averageDailyBurn: Double,
+        restingFloorKcal: Double? = nil
     ) -> Plan {
         let deficit = requiredDailyDeficit(
             currentWeightLb: currentWeightLb,
@@ -160,7 +181,10 @@ public enum CalorieBudget {
         return Plan(
             requiredDailyDeficit: deficit,
             dailyBudget: budget,
-            isAggressive: deficit > maxSafeDailyDeficit || budget < minReasonableBudget
+            // The greater of the two floors — see `minReasonableBudget`
+            // for why both exist rather than one replacing the other.
+            isAggressive: deficit > maxSafeDailyDeficit
+                || budget < max(minReasonableBudget, restingFloorKcal ?? 0)
         )
     }
 }

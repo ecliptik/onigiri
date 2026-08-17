@@ -209,5 +209,25 @@ question deferred again.
   (text search and the AI estimate door cover the same foods today).
 - Watch complication-freshness verification over a normal week
   (1.9 batch A).
+- Budget/goal-model review, 2026-08-16 — `PLAN-beyond-the-scale.md`
+  (prompted by the JACC central-adiposity paper and its HN thread).
+  SHIPPED from it: the two raw-weight resting-estimate call sites now
+  ride the basis (F1), and `shouldRequestAuthorization` is decoupled
+  from `readTypes` via a frozen core set (F2) — **adding a Health read
+  type is no longer a widget regression**, which had made the
+  permission set unable to grow. ALSO shipped: the below-resting
+  guardrail (F3 — a budget over the flat 1,500 but under the body's own
+  resting energy used to pass silently), and with it a defect it
+  uncovered — **Today's "Aggressive pace" warning could never render**,
+  because the card read `isAggressive` off a `completedDayPlan`, which
+  hardcodes it false. The default tab's warning had never once appeared
+  while Goal's identical sentence worked. VERDICT on what remains
+  (2026-08-16): F4/F5 restate a signal `predicted30Lb` vs `actual30Lb`
+  already shows, F7's bioimpedance input error swamps its gain, and the
+  proportional half of F3 changes nothing at ~200 lb — the accuracy
+  left on the table is in logging fidelity, not budget math. DECLINED
+  (don't re-propose without the data actually arriving in Health):
+  waist circumference as a tracked measure — the user doesn't take the
+  measurements, so the row and chart series would be fed by nothing.
 - The paid-developer-account question: CloudKit library sync,
   TestFlight.

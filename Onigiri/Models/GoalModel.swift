@@ -95,9 +95,19 @@ final class GoalModel {
         basisWeightLb = WeightTrend.basisLb(
             SharedStore.weightBasis, history: weightHistory, latestLb: healthWeightLb)
         let body = await health.bodyProfile()
+        // `basisWeightLb`, not `healthWeightLb`. This estimate floors the
+        // resting half of `todayDayBurnKcal` below, which IS this
+        // screen's `Budget` row — a verdict-shaped number, so it runs on
+        // the sustained basis like every other one. Reading the raw
+        // weigh-in here let an evening reading raise Goal's budget while
+        // Today's (floored from `targetBasisWeightLb`) held still: ~14
+        // kcal at 3 lb, since the equation's weight term is 10 kcal/kg,
+        // but off the very reading the basis exists to discard
+        // (2026-08-16). The Weight field and validation still show
+        // `healthWeightLb` — those report a measurement.
         estimatedRestingKcal = {
             guard let heightCm = body.heightCm, let age = body.ageYears,
-                  let weightLb = healthWeightLb else { return nil }
+                  let weightLb = basisWeightLb else { return nil }
             return BasalEstimate.restingKcal(
                 weightLb: weightLb, heightCm: heightCm, ageYears: age, sex: body.sex)
         }()

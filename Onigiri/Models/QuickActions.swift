@@ -53,6 +53,16 @@ final class QuickActions {
     /// Goal card). Consumable Optional, not a Bool: a stuck `true` never
     /// re-fires onChange.
     var goalRequest: Bool?
+
+    /// One-shot request for CalendarView to pop back to its OWN root.
+    ///
+    /// The month-stats widget means "the calendar", and a month-detail
+    /// screen left pushed from last time is not it — switching the tab
+    /// alone landed the deep link on the stale push (audit,
+    /// 2026-08-17). TodayView has always done this for itself
+    /// (`navPath.removeAll()` before acting on a request); Calendar had
+    /// no path to clear until now. Consumable Optional, same pattern.
+    var calendarRootRequest: Bool?
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
@@ -60,9 +70,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     /// finishes — Apple's explicit contract, and it was being set from
     /// ContentView's `.task` instead (i.e. once a view appeared, long
     /// after launch). Everything the reminder tap is supposed to do
-    /// lives in `didReceive`: tapping a water nag logs a serving,
-    /// tapping a meal/streak nag opens the Log sheet. Registered late,
-    /// that response is delivered to nobody and the tap does nothing.
+    /// lives in `didReceive`: a water nag opens Today, a meal/streak nag
+    /// opens the Log sheet — neither LOGS, since 2026-08-04. Registered
+    /// late, that response is delivered to nobody and the tap does
+    /// nothing.
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?

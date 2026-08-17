@@ -195,7 +195,10 @@ struct ContentView: View {
                 QuickActions.shared.quickLogRequest = .all
             case "calendar":
                 // The month-stats widget: land on the Calendar tab, not
-                // wherever the app happened to be.
+                // wherever the app happened to be — and on the calendar
+                // itself, not on a month-detail screen left pushed from
+                // last time.
+                QuickActions.shared.calendarRootRequest = true
                 selectedTab = .calendar
             default:
                 break

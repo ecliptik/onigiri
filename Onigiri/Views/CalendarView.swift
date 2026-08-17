@@ -6,6 +6,14 @@ import OnigiriKit
 /// earned an onigiri, with the current streak at the bottom.
 struct CalendarView: View {
     @State private var model = CalendarModel()
+    @State private var quickActions = QuickActions.shared
+    /// The one thing this tab pushes. A bound path rather than a bare
+    /// destination `NavigationLink` so a deep link can POP it: the
+    /// month-stats widget says "the calendar", and it used to land on
+    /// whatever detail screen happened to be pushed (audit,
+    /// 2026-08-17). TodayView has always worked this way.
+    private enum Route: Hashable { case monthDetail(Date) }
+    @State private var navPath: [Route] = []
     @State private var displayedMonth = Calendar.current.startOfMonth(for: .now)
     @State private var selectedDay = Calendar.current.startOfDay(for: .now)
     @Query private var goals: [GoalSettings]
@@ -27,7 +35,7 @@ struct CalendarView: View {
     private let calendar = Calendar.current
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navPath) {
             ScrollView {
                 VStack(spacing: Layout.screenSpacing) {
                     // Stats first — they were below the fold at the bottom.
@@ -92,6 +100,21 @@ struct CalendarView: View {
             }
         }
         .task { await refresh() }
+        .navigationDestination(for: Route.self) { route in
+            switch route {
+            case .monthDetail(let month):
+                MonthDetailView(model: model, month: month)
+            }
+        }
+        // onChange covers the live case (the app is foregrounded by the
+        // widget tap itself, so the request arrives while this view is
+        // mounted); onAppear covers the cold launch, where the request
+        // is set before this view exists. No scenePhase hook: the
+        // foreground IS what delivered the request.
+        .onChange(of: quickActions.calendarRootRequest) { _, request in
+            consumeRootRequest(request)
+        }
+        .onAppear { consumeRootRequest(quickActions.calendarRootRequest) }
         .refreshable { await refresh(forceWeights: true) }
         // Months beyond the preloaded window load on demand — otherwise
         // they render every day as "goal not met" with a "—" day card.
@@ -439,10 +462,16 @@ struct CalendarView: View {
     /// Highlights only — the full month story (deficit, predicted vs
     /// scale, best streak) lives one tap deeper. The screen was getting
     /// crowded with all six stats on the card.
+    /// Pop to this tab's root for a deep link that means "the calendar".
+    /// Consumed (set back to nil) so it can't fire twice.
+    private func consumeRootRequest(_ request: Bool?) {
+        guard request == true else { return }
+        quickActions.calendarRootRequest = nil
+        navPath.removeAll()
+    }
+
     private var summaryCard: some View {
-        NavigationLink {
-            MonthDetailView(model: model, month: displayedMonth)
-        } label: {
+        NavigationLink(value: Route.monthDetail(displayedMonth)) {
             VStack(spacing: 8) {
                 HStack(spacing: 0) {
                     // "this month" while browsing March claimed the

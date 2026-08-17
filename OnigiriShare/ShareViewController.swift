@@ -39,6 +39,9 @@ final class ShareViewController: UIViewController {
     /// mis-shared video can't be read into an extension's memory.
     private static let sizeLimitBytes = 40 * 1024 * 1024
 
+    /// Keeps the claim alive while this sheet is up — see `renewClaim`.
+    private var claimRenewal: Task<Void, Never>?
+
     override func viewDidLoad() {
         super.viewDidLoad()
         buildCard()
@@ -46,7 +49,30 @@ final class ShareViewController: UIViewController {
         // deposit alone rather than opening a second copy of the same
         // import beside it.
         ShareInbox.claim()
+        renewClaim()
         Task { await handleShare() }
+    }
+
+    /// Re-stamp the claim while the sheet is still up.
+    ///
+    /// `ShareInbox.claimSeconds` is 120 and has to expire on its own —
+    /// the case the deposit exists for is an extension that DIED, and a
+    /// dead process releases nothing. But `ShareFlow` is built for
+    /// exactly the session that outlives two minutes: "a nutrition guide
+    /// is read once and ordered from several times". Claimed only at
+    /// load, a user still reading a long menu lost the claim, and
+    /// foregrounding Onigiri then opened the same import a second time —
+    /// the duplicate this mechanism was added to prevent (2026-08-16),
+    /// resurfacing on the long sessions rather than the short ones
+    /// (audit, 2026-08-17).
+    private func renewClaim() {
+        claimRenewal = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                guard !Task.isCancelled else { return }
+                ShareInbox.claim()
+            }
+        }
     }
 
     private func handleShare() async {
@@ -146,6 +172,7 @@ final class ShareViewController: UIViewController {
             // Logged OR cancelled, the deposit goes: the net exists for a
             // process that died, and this one didn't. Cancelling here has
             // to cancel it everywhere, which was the whole complaint.
+            self.claimRenewal?.cancel()
             ShareInbox.clear()
             ShareInbox.releaseClaim()
             self.extensionContext?.completeRequest(returningItems: [])

@@ -51,11 +51,22 @@ struct SharedImageSheet: View {
         .task { await read() }
         // The same chooser the paste door and the scan sheet raise, so a
         // multi-item photo behaves identically wherever it arrived from.
+        // Both handoffs are deferred a turn. `menuPhotoPicker` IS a
+        // `.sheet`, and its onPick empties `rows` — starting that sheet's
+        // dismissal — before handing the row over, so assigning `pick`
+        // synchronously asked this view to tear one sheet down and raise
+        // another in the same turn. That is the 2026-07-22 race, and it
+        // left the picker on a blank hand-off screen with no way on but
+        // backing out and re-sharing. The other doors already do this
+        // (FoodFormView, QuickLogSheet); this one was missed (audit,
+        // 2026-08-17). The candidates dialog is lower risk — a
+        // confirmationDialog is not a sheet — but it hands off to the
+        // same `.sheet`, so it takes the same turn.
         .screenshotCandidates($candidates) { picked in
-            pick = Pick(product: picked.scannedProduct())
+            Task { pick = Pick(product: picked.scannedProduct()) }
         }
         .menuPhotoPicker($menuItems, suggestedSource: menuSource) { picked in
-            pick = Pick(product: picked.scannedProduct())
+            Task { pick = Pick(product: picked.scannedProduct()) }
         }
         .sheet(item: $pick, onDismiss: { dismiss() }) { pick in
             FoodFormView(food: nil, prefill: pick.product)

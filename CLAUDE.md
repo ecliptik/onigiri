@@ -369,7 +369,13 @@ Each cost a debugging session.
   once a view appeared) until 2026-08-03, so a reminder tapped from a
   cold launch had no delegate to deliver its response to and the tap
   did nothing. Everything a reminder tap is supposed to do lives in
-  `didReceive` (water → log a serving, meal/streak → the Log sheet).
+  `didReceive` — and a tap NEVER logs: water opens Today, meal/streak
+  open the Log sheet. Water used to log a serving outright, matching the
+  shortcut and the Control Center button, and that symmetry was the bug:
+  tapping a banner is also just how a notification gets dismissed, so a
+  half-awake tap wrote a phantom 12 oz to Health with only a transient
+  undo toast in the way (2026-08-04). Deliberate invocations — shortcut,
+  widget, Siri — still log immediately; a nag is not one.
   It now registers from `AppDelegate.application(_:didFinishLaunching‑
   WithOptions:)`; `activate()` still calls it (idempotent) and keeps
   the replan.

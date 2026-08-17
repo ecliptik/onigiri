@@ -396,13 +396,21 @@ struct MealFormView: View {
             // one-field decision from PLAN-unified-search, not a second
             // door (2026-07-29).
             .searchable(text: $foodFilter, prompt: "Search foods or describe a meal")
-            .onDisappear { suggestTask?.cancel() }
+            // The cancel used to live in an `.onDisappear` right here,
+            // on the searchable List itself — which fires on the
+            // TRANSIENT teardown every keyboard dismissal produces
+            // (CLAUDE.md), not just on leaving the form. So any tap that
+            // put the keyboard away killed an in-flight ✨ name
+            // suggestion and threw the answer away, after the provider
+            // had already billed for it. It now hangs off the three real
+            // exits instead (audit, 2026-08-17).
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         if isDirty {
                             confirmDiscard = true
                         } else {
+                            suggestTask?.cancel()
                             dismiss()
                         }
                     }
@@ -451,7 +459,10 @@ struct MealFormView: View {
                 DispatchQueue.main.async { field.selectAll(nil) }
             }
             .alert("Discard changes?", isPresented: $confirmDiscard) {
-                Button("Discard", role: .destructive) { dismiss() }
+                Button("Discard", role: .destructive) {
+                    suggestTask?.cancel()
+                    dismiss()
+                }
                 Button("Keep Editing", role: .cancel) {}
             }
             .interactiveDismissDisabled(isDirty)
@@ -783,6 +794,9 @@ struct MealFormView: View {
         } else {
             context.insert(Meal(name: trimmed, items: items, isFavorite: isFavorite, category: category, aiGenerated: aiNamed || aiComposed))
         }
+        // The name is settled now, so a suggestion still in flight can
+        // only answer a question nobody is asking.
+        suggestTask?.cancel()
         // Explicit save (GoalUpsert's discipline) — see FoodFormView.
         context.saveOrReport("Couldn't save this meal")
         PhoneSyncService.shared.push(from: context)

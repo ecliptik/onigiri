@@ -439,6 +439,7 @@ struct FoodFormView: View {
                         if isDirty {
                             confirmDiscard = true
                         } else {
+                            offerTask?.cancel()
                             dismiss()
                         }
                     }
@@ -522,7 +523,10 @@ struct FoodFormView: View {
                 }
             }
             .alert("Discard changes?", isPresented: $confirmDiscard) {
-                Button("Discard", role: .destructive) { dismiss() }
+                Button("Discard", role: .destructive) {
+                    offerTask?.cancel()
+                    dismiss()
+                }
                 Button("Keep Editing", role: .cancel) {}
             }
             .interactiveDismissDisabled(isDirty)
@@ -852,6 +856,14 @@ struct FoodFormView: View {
     }
 
     private func save() {
+        // The figures are committed; a published-values offer arriving
+        // now has nothing left to offer against. Cancelled HERE and at
+        // Cancel rather than in an `.onDisappear` — this form is
+        // `.searchable`, and that modifier's transient teardown is what
+        // turned two sibling cancels into silent dropped work (audit,
+        // 2026-08-17). The cost of the paths not covered is one bounded
+        // lookup writing into @State that SwiftUI discards.
+        offerTask?.cancel()
         persist()
         // Every log confirms loudly; a silent edit-save read as a dead
         // button.

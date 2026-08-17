@@ -312,6 +312,17 @@ final class OnlineFoodSearch {
         fdcHasMore = false
         rejected = []
         autoBackfills = 0
+        // These two were left behind by every previous clear (audit,
+        // 2026-08-17). This object is `@State` on the Foods TAB, so it
+        // lives as long as the app does — and `products` gained an entry
+        // per row whose detail was ever fetched, `detailFailures` one per
+        // barcode that ever failed, with nothing evicting either. The
+        // rows they serve are being emptied on the line above, so the
+        // only cost of dropping them is a re-fetch on a repeated search
+        // — and `ProductCache` (bounded, 200, FIFO) already answers most
+        // of those without touching the network.
+        products = [:]
+        detailFailures = []
     }
 
     /// Unstructured on purpose: the row's .task would cancel the fetch

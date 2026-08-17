@@ -127,9 +127,34 @@ struct EntryDoorsSection: View {
         // the dead-Bool landmine in CLAUDE.md.
         .onAppear { refreshClipboard() }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { refreshClipboard() }
+            if phase == .active {
+                refreshClipboard()
+            } else if phase == .background {
+                // Suspension is the one unambiguous "stop" this section
+                // gets: a cascade mid-flight when the app suspends either
+                // burns background time or dies unrecoverably (ScanSheet's
+                // rule). `.background` specifically, not any non-active
+                // phase — an `.inactive` blip from a system overlay is
+                // not the user walking away.
+                readTask?.cancel()
+            }
         }
-        .onDisappear { readTask?.cancel() }
+        // NO `.onDisappear { readTask?.cancel() }`, and that absence is
+        // the fix (audit, 2026-08-17). This section is inside a
+        // `.searchable` container at every call site — the food form and
+        // the Log sheet — and CLAUDE.md records that such sections get a
+        // TRANSIENT onDisappear/onAppear pair when the keyboard
+        // dismisses. Tapping the paste row is itself what dismisses that
+        // keyboard, so the cancel landed on the very read the tap had
+        // just started: `FoodImageReader` honours `Task.isCancelled`, so
+        // the read really died, and `case .cancelled: break` meant it
+        // died in silence, indistinguishable from nothing happening.
+        //
+        // `EstimateRow`'s cancel-then-resume-on-reappear can't rescue
+        // this one: the image came from an item provider that has
+        // already been consumed, so there is nothing left to restart
+        // from. Letting an abandoned read finish costs one bounded OCR
+        // pass whose results land in discarded @State.
         .screenshotCandidates($candidates) { picked in
             onLabel?(picked)
         }

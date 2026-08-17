@@ -152,7 +152,13 @@ struct ScanSheet: View {
             // sheet raises the same chooser the entry doors do.
             .fileImporter(isPresented: $showingMenuFile, allowedContentTypes: [.pdf]) { result in
                 guard case .success(let url) = result else { return }
-                Task { await readMenuDocument(url) }
+                // Through `readTask` like every other trigger in this
+                // file: a bare `Task` here was invisible to the Cancel
+                // button and to the scenePhase handler, so neither
+                // actually stopped a menu read — contrary to what the
+                // property's own comment promises (audit, 2026-08-17).
+                readTask?.cancel()
+                readTask = Task { await readMenuDocument(url) }
             }
             .menuPhotoPicker($menuItems, suggestedSource: menuSource) { picked in
             delivered = true

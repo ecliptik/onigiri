@@ -8,6 +8,46 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.25.0 — it checks the number before you do
+
+_2026-08-17_ · [changes since v2.24.0](https://github.com/ecliptik/onigiri/compare/v2.24.0...v2.25.0)
+
+2.24.0 closed one way a shared page could invent a sodium figure. This is the
+general case: **every nutrition figure now passes one check on its way in**, no
+matter which door it came through — a web page, a menu PDF, a photographed
+label, an online database, or an AI estimate.
+
+**A figure that isn't food gets left out, and Onigiri says which and why.** Not
+the whole reading — the Salt & Straw dessert's 300 calories were correct, and
+throwing them away would have punished you for the parser's mistake. Only the
+field that can't be:
+
+> Sodium was left out — 810,400 mg is beyond any real food.
+
+**A figure that's unusual but real is kept, and marked.** Shake Shack's Triple
+SmokeShack™ genuinely carries 3,930 mg of sodium; a Chick-fil-A catering tray
+genuinely carries 13,030. Those are yours to log, so they're logged — with a
+note beside them, in the share sheet and in the food form:
+
+> ⚠ 3,930 mg in one serving is unusually high.
+
+Macros that don't add up to the calories get the same treatment, which is how
+CAVA's Pita Crisps turn out to print figures working out to 127 kcal beside a
+stated 70.
+
+**The limits were set against real food, then tested against it.** Every
+threshold sits deliberately above the saltiest things people actually eat — a
+bouillon cube is about 200 mg of sodium per calorie, soy sauce 90, a dill
+pickle 60 — so the check can only ever catch arithmetic, never a cuisine. Run
+across 297 items from six real chain nutrition guides, it drops nothing at all,
+and flags seven items that deserve it.
+
+**Read figures and estimated ones are treated differently, on purpose.** A read
+loses just the field that's impossible, because the rest of the page was
+probably printed correctly. An estimate has no page — every number came out of
+the same guess — so one impossible figure discards the whole estimate and
+Onigiri falls back to what it can read.
+
 ## v2.24.0 — nothing logged that you didn't see
 
 _2026-08-17_ · [changes since v2.23.0](https://github.com/ecliptik/onigiri/compare/v2.23.0...v2.24.0)

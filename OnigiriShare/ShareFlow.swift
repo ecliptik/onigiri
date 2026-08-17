@@ -338,6 +338,52 @@ private struct ShareLogSheet: View {
     @Binding var quantity: Double
     let logging: Bool
 
+    @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults)
+    private var sodiumUnitRaw = SharedStore.unitAutomatic
+    private var sodiumUnit: SodiumUnit { SodiumUnit.resolve(sodiumUnitRaw) }
+
+    /// Everything the Log button is about to write, scaled to the
+    /// portion — the RECEIPT for it.
+    ///
+    /// This sheet showed the name, the calories and the serving while
+    /// `logFood` wrote sodium and five macros beside them, so a figure
+    /// read wrongly off a page could not be caught before it was in
+    /// Health: a shared product page logged 810,400 mg of sodium and the
+    /// only place that number ever appeared was the log itself
+    /// (2026-08-16, `plans/PLAN-nutrition-plausibility.md`). One button,
+    /// one write, one list — a value not shown here is a value nobody
+    /// agreed to.
+    private var written: [(id: String, name: String, amount: String)] {
+        var rows: [(String, String, String)] = []
+        func add(_ id: String, _ name: String, _ value: Double?, _ unit: String,
+                 digits: ClosedRange<Int> = 0...1) {
+            guard let value else { return }
+            rows.append((id, name,
+                "\(value.formatted(.number.precision(.fractionLength(digits)))) \(unit)"))
+        }
+        if let sodiumMg = label.sodiumMg {
+            let digits = sodiumUnit.fractionDigits
+            add("sodium", sodiumUnit.nutrientName, sodiumUnit.fromMg(sodiumMg * quantity),
+                sodiumUnit.symbol, digits: digits...digits)
+        }
+        let n = label.nutrients.scaled(by: quantity)
+        add("fat", "Fat", n.fatG, "g")
+        add("saturatedFat", "Saturated fat", n.saturatedFatG, "g")
+        add("transFat", "Trans fat", n.transFatG, "g")
+        add("polyunsaturatedFat", "Polyunsaturated fat", n.polyunsaturatedFatG, "g")
+        add("monounsaturatedFat", "Monounsaturated fat", n.monounsaturatedFatG, "g")
+        add("cholesterol", "Cholesterol", n.cholesterolMg, "mg")
+        add("carbs", "Carbohydrates", n.carbsG, "g")
+        add("fiber", "Fiber", n.fiberG, "g")
+        add("sugar", "Sugar", n.sugarG, "g")
+        add("protein", "Protein", n.proteinG, "g")
+        add("caffeine", "Caffeine", n.caffeineMg, "mg")
+        for micro in Micronutrient.allCases {
+            add(micro.rawValue, micro.displayName, n[micro], micro.unit.symbol)
+        }
+        return rows
+    }
+
     var body: some View {
         Form {
             Section {
@@ -355,6 +401,22 @@ private struct ShareLogSheet: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+            }
+            Section {
+                if written.isEmpty {
+                    Text("Calories only — nothing else was published for this item.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(written, id: \.id) { row in
+                        LabeledContent(row.name) {
+                            Text(row.amount).monospacedDigit()
+                        }
+                    }
+                }
+            } header: {
+                Text("Also logged")
+            } footer: {
+                Text("Everything Onigiri will write to Health, for this portion.")
             }
             Section {
                 Picker("Meal", selection: $category) {

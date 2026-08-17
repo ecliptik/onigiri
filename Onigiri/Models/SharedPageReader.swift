@@ -23,24 +23,23 @@ enum SharedPageReader {
     /// accordion. Lines become observations stacked top to bottom;
     /// prose has no columns, and the label parser only needs order.
     static func singleFood(fromPageText text: String) async -> ParsedLabel? {
-        let lines = text.split(separator: "\n").prefix(400)
-        guard !lines.isEmpty else { return nil }
-        let runs = lines.enumerated().map { index, line in
-            LabelObservation(
-                text: String(line), x: 0.05,
-                y: 0.98 - (Double(index) / Double(max(lines.count, 1))) * 0.96,
-                w: 0.9, h: 0.9 / Double(max(lines.count, 1)))
-        }
-        return await singleFood(from: [runs])
+        let runs = PageText.observations(from: text)
+        guard !runs.isEmpty else { return nil }
+        // PROSE: these coordinates are made up, so the parser reads
+        // words rather than a table. Without that, a keyword anywhere on
+        // the page claims any number below it — "Salt & Straw © 2026"
+        // logged 810,400 mg of sodium (2026-08-16,
+        // `plans/PLAN-nutrition-plausibility.md`).
+        return await singleFood(from: [runs], prose: true)
     }
 
-    static func singleFood(from pages: [[LabelObservation]]) async -> ParsedLabel? {
+    static func singleFood(from pages: [[LabelObservation]], prose: Bool = false) async -> ParsedLabel? {
         // The first pages only: a product page states its nutrition near
         // the item, and a long site footer is all navigation.
         let transcript = Array(pages.prefix(3).joined())
         guard !transcript.isEmpty else { return nil }
 
-        var parsed = LabelParser.parse(transcript)
+        var parsed = LabelParser.parse(transcript, prose: prose)
         // Same guard the photo cascade uses: with nothing nutritional in
         // the text there is nothing to read, and a model asked anyway
         // invents.

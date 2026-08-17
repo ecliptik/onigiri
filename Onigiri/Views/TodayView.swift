@@ -1815,12 +1815,7 @@ private struct WaterEditSheet: View {
                             oz = max(1, unit.toOz(ml - 50))
                         }
                     }
-                    DatePicker(
-                        "Time",
-                        selection: $date,
-                        in: ...Date.now,
-                        displayedComponents: [.date, .hourAndMinute]
-                    )
+                    LogTimeRow(date: $date)
                 }
             }
             .navigationTitle("Edit Water")

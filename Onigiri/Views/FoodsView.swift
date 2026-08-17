@@ -1079,12 +1079,7 @@ struct PortionSheet: View {
                     // movable for releases and read as a feature the app
                     // did not have (the user, 2026-08-14).
                     if editDate != nil {
-                        DatePicker(
-                            "Time",
-                            selection: $entryDate,
-                            in: ...Date.now,
-                            displayedComponents: [.date, .hourAndMinute]
-                        )
+                        LogTimeRow(date: $entryDate)
                     }
                 }
                 // A logged/library MEAL explains its total: each

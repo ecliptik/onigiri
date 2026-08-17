@@ -29,4 +29,24 @@ public enum PageText {
             .filter { !$0.isEmpty }
             .joined(separator: "\n")
     }
+
+    /// The page's lines as observations stacked top to bottom, for the
+    /// label parser — which wants geometry and here has none to want.
+    /// Prose has no columns, so the coordinates are FABRICATED and only
+    /// their order carries meaning; that is exactly why the parse runs
+    /// in `prose` mode (`LabelParser.parse(_:prose:)`).
+    ///
+    /// Lives in the kit rather than beside its one caller so the
+    /// regression fixtures parse the same runs the app does — the
+    /// `LabelScan`/`dump-label-ocr` rule, one implementation.
+    public static func observations(from text: String, limit: Int = 400) -> [LabelObservation] {
+        let lines = text.split(separator: "\n").prefix(limit)
+        guard !lines.isEmpty else { return [] }
+        return lines.enumerated().map { index, line in
+            LabelObservation(
+                text: String(line), x: 0.05,
+                y: 0.98 - (Double(index) / Double(lines.count)) * 0.96,
+                w: 0.9, h: 0.9 / Double(lines.count))
+        }
+    }
 }

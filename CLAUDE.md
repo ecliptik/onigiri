@@ -287,6 +287,19 @@ Each cost a debugging session.
   transient onDisappear/onAppear pair (@State intact) when the keyboard
   dismisses, so an onDisappear that cancels work needs an onAppear that
   resumes it, or the section wedges in its in-flight state forever.
+- **A compact `DatePicker` inside a `.medium` detent sheet cannot be
+  finished.** Its calendar is a floating overlay with no controls of its own —
+  you dismiss it by tapping OUTSIDE, and outside a half-height sheet is the
+  backdrop, which closes the whole edit. A date could be chosen and then
+  neither confirmed nor abandoned (the user, 2026-08-17, moving a log entry to
+  yesterday). Expanding the picker inline instead only moves the problem: at
+  the medium detent it unrolls below the fold, so the tap looks inert until
+  you scroll, and the month header then slides under the sheet's own toolbar.
+  `LogTimeRow` gives the picker its own sheet with Cancel/Done, and writes the
+  binding only on Done — which is what makes Cancel mean anything. In UI
+  tests, wait for the picker's navigation bar to be GONE before tapping the
+  next chip: sheets-over-sheets transform the parent while they dismiss, so a
+  tap at the chip's last-known frame lands on the backdrop and closes the edit.
 - SwiftUI writes a `TabView` selection binding when you tap the tab you are
   ALREADY on. That is what makes "tapping Today goes to today's date" possible
   (a proxy `Binding` on the selection), and it is an assumption no build can
@@ -689,6 +702,18 @@ Each cost a debugging session.
   (the `LabelScan`/`dump-label-ocr` rule); `MenuDocumentTests` pins it by
   re-reading the PDF and diffing against the committed fixture, so a drift
   fails there while every parser test still passes.
+- **A nutrition keyword in PROSE is not a nutrition row**
+  (`plans/PLAN-nutrition-plausibility.md`, 2026-08-16). A shared page with no
+  table is read by `SharedPageReader`, which FABRICATES a coordinate per line
+  — so every safeguard in `LabelParser`'s geometry is inert and any number on
+  the page can answer any keyword above it. `Salt & Straw © 2026 All Rights
+  Reserved` logged **810,400 mg** of sodium (2026 × 0.4 × 1000, the salt→
+  sodium conversion) and a `$15` price on a sibling page logged 6,000 mg —
+  both silently, because the share extension's Log button shows only calories
+  and a READ carries no ✨ to warn on. `LabelParser.parse(_:prose:)` requires
+  an explicit unit and drops the wrapped-name carry-forward. NEVER make those
+  rules unconditional: EU panels state the unit once in the column header, and
+  `euPer100gPanel`/`euTableRows` fail the moment you do.
 
 ## Library rows
 

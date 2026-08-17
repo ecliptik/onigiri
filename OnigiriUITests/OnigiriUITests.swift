@@ -2582,4 +2582,106 @@ final class OnigiriUITests: XCTestCase {
             evaluatedWith: dayTitle
         )], timeout: 10)
     }
+
+    /// Moving a log entry in time must be finishable and abandonable.
+    ///
+    /// The compact `DatePicker` this replaced opened a floating calendar
+    /// with no controls of its own — dismissed only by tapping OUTSIDE,
+    /// which on a `.medium` sheet is the backdrop that closes the whole
+    /// edit. So a date could be chosen and never committed (the user,
+    /// 2026-08-17).
+    ///
+    /// The assertions are on what could not be true before: a confirm
+    /// control EXISTS, using it collapses the picker while the edit
+    /// sheet stays up, and Cancel leaves the entry's own date alone.
+    @MainActor
+    func testLogTimePickerConfirmsAndCancels() throws {
+        guard ProcessInfo.processInfo.environment["LOG_TIME_ROW"] == "1" else {
+            throw XCTSkip("Set LOG_TIME_ROW=1 to run the log time-picker test")
+        }
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--seed-sample-data"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+        switchTab(in: app, to: "Today")
+
+        // Down to the Log, which arrives COLLAPSED — the groups have to
+        // be opened before any entry is on screen to tap.
+        let group = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS 'collapsed' AND NOT (label BEGINSWITH 'Water')")
+        ).firstMatch
+        for _ in 0..<6 where !group.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(group.waitForExistence(timeout: 10), "a collapsed meal group")
+        group.tap()
+
+        // An ENTRY row, told from its group by the time it carries.
+        let entry = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS 'kcal' AND (label CONTAINS 'AM' OR label CONTAINS 'PM')")
+        ).firstMatch
+        XCTAssertTrue(entry.waitForExistence(timeout: 10), "a logged entry")
+        entry.tap()
+
+        // LabeledContent folds the row's own label into its controls, so
+        // the chip reads "Time, Date, Aug 17, 2026".
+        let dateChip = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS 'Date, '")
+        ).firstMatch
+        XCTAssertTrue(dateChip.waitForExistence(timeout: 10), "the entry's date chip")
+        let before = dateChip.label
+
+        // Days are addressed the way the calendar names them to
+        // VoiceOver ("Sunday, August 16"). Across a month boundary the
+        // picker opens on a month that has neither, so the day-moving
+        // half is skipped rather than faked.
+        let dayFormat = DateFormatter()
+        dayFormat.dateFormat = "EEEE, MMMM d"
+        func day(_ offset: Int) -> XCUIElement? {
+            guard let date = Calendar.current.date(byAdding: .day, value: offset, to: .now),
+                  Calendar.current.isDate(date, equalTo: .now, toGranularity: .month)
+            else { return nil }
+            return app.buttons[dayFormat.string(from: date)]
+        }
+        let bar = app.navigationBars["Date"]
+        func openCalendar() {
+            // The previous sheet's dismissal is ANIMATED, and a chip
+            // tapped mid-transition lands on a backdrop that is still
+            // there — which closes the edit itself. Wait for the picker
+            // to be really gone before asking for it again.
+            if bar.exists {
+                wait(for: [expectation(for: NSPredicate(format: "exists == false"),
+                                       evaluatedWith: bar)], timeout: 10)
+            }
+            dateChip.tap()
+            XCTAssertTrue(bar.waitForExistence(timeout: 10), "the calendar opens on its own sheet")
+        }
+
+        // CONFIRM: the controls that did not exist at all, and a day
+        // that actually moves — the whole point of the row.
+        openCalendar()
+        XCTAssertTrue(app.buttons["logTime.done"].exists, "a way to confirm")
+        XCTAssertTrue(app.buttons["logTime.cancel"].exists, "a way out")
+        let yesterday = day(-1)
+        if let yesterday, yesterday.waitForExistence(timeout: 3) { yesterday.tap() }
+        app.buttons["logTime.done"].tap()
+        XCTAssertTrue(dateChip.waitForExistence(timeout: 10),
+                      "confirming leaves the edit sheet up")
+        let afterDone = dateChip.label
+        if yesterday != nil {
+            XCTAssertNotEqual(afterDone, before, "Done commits the day that was chosen")
+        }
+
+        // CANCEL: a real change, discarded. Weaker phrasings pass
+        // vacuously — cancelling a calendar nobody touched changes
+        // nothing either way.
+        openCalendar()
+        if let earlier = day(-2), earlier.waitForExistence(timeout: 3) { earlier.tap() }
+        app.buttons["logTime.cancel"].tap()
+        XCTAssertTrue(dateChip.waitForExistence(timeout: 10),
+                      "cancelling leaves the edit sheet up")
+        XCTAssertEqual(dateChip.label, afterDone, "…and the entry keeps the date it had")
+    }
 }

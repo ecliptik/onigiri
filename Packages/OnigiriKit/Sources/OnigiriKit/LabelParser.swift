@@ -331,7 +331,34 @@ public enum LabelParser {
 
     // MARK: Parse
 
-    public static func parse(_ observations: [LabelObservation]) -> ParsedLabel {
+    /// `prose` reads a web page's WORDS, where this parser's geometry
+    /// does not exist (`SharedPageReader` fabricates a coordinate per
+    /// line, so every safeguard below is inert and every number on the
+    /// page is a candidate for every keyword above it).
+    ///
+    /// Three rules change, and each one has a corpse behind it
+    /// (2026-08-16, `plans/PLAN-nutrition-plausibility.md`):
+    ///
+    /// - An amount must carry its own unit. A panel states the unit once
+    ///   in the column header; prose has no header, so a bare number
+    ///   near a keyword is just a number — a price, a year, a quantity.
+    /// - No `pending` carry-forward. Wrapped nutrient names are a panel
+    ///   phenomenon; in prose it means "Made with Bitterman Salt"
+    ///   adopts the `$15` on the next line.
+    /// - Salt → sodium needs that unit specifically, because it is the
+    ///   one conversion with a ×400 amplifier and the one keyword that
+    ///   is also a brand name, an ingredient-list entry and an ordinary
+    ///   English word. `Salt & Straw © 2026 All Rights Reserved` logged
+    ///   810,400 mg of sodium: 2026 × 0.4 × 1000.
+    ///
+    /// **Do not make these unconditional.** EU panels print the unit in
+    /// the column header and the value cell bare (`Sel/Zout/Salz` │
+    /// `(g)` │ `0,107`) — `euPer100gPanel` and `euTableRows` fail
+    /// immediately, which is the check that this belongs to prose alone.
+    /// Calories are untouched either way: energy has its own column
+    /// logic, and a bare number after the word is the convention there
+    /// (`Calories per serving: 300` is the whole reason a page is read).
+    public static func parse(_ observations: [LabelObservation], prose: Bool = false) -> ParsedLabel {
         var label = ParsedLabel()
         let trimmed = observations.compactMap { obs -> LabelObservation? in
             let text = obs.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -450,7 +477,9 @@ public enum LabelParser {
                 } else {
                     candidates = amounts(in: cell.text)
                 }
-                if let amount = candidates.first { return amount }
+                // In prose the unit is the only thing separating an
+                // amount from a price, a year, or a street number.
+                if let amount = candidates.first(where: { !prose || $0.unit != nil }) { return amount }
             }
             return nil
         }
@@ -486,7 +515,10 @@ public enum LabelParser {
                 values[field] = amount
                 pending = nil
             } else {
-                pending = (field, 2)
+                // A keyword with no amount is a wrapped label name on a
+                // panel and an ordinary sentence in prose, where holding
+                // the field open just means the next number wins.
+                pending = prose ? nil : (field, 2)
             }
         }
 
@@ -581,7 +613,11 @@ public enum LabelParser {
 
         label.kcal = values[.energy]?.value
         label.sodiumMg = milligrams(.sodium)
-        if label.sodiumMg == nil, let saltG = grams(.salt) {
+        // ×400 from grams of salt to milligrams of sodium: the largest
+        // amplifier in the parser, on its most ambiguous keyword. In
+        // prose it fires only on a stated mass.
+        if label.sodiumMg == nil, !prose || values[.salt]?.unit != nil,
+           let saltG = grams(.salt) {
             label.sodiumMg = saltG * 0.4 * 1_000
         }
         label.nutrients.fatG = grams(.fat)

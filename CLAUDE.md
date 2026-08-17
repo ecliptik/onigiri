@@ -268,6 +268,16 @@ Each cost a debugging session.
   first — `objectIDs(forRelationshipNamed:)` reads references without firing
   faults — and must set `NSPersistentHistoryTrackingKey` or the store mounts
   read-only and the save silently fails.
+- **That repair is one-directional ON PURPOSE, and it looks like a bug.**
+  An audit flagged the missing `Meal.items` half on 2026-08-17; measuring
+  the store refuted it. A TO-ONE (`MealItem.food`) is a foreign key ON the
+  MealItem row, so the row it names can vanish and the key still points
+  there — that dangles. A TO-MANY is stored as the CHILD's foreign key
+  (`ZMEALITEM.ZMEAL`; the store has no `Z_*ITEMS` join table), so `items`
+  is a QUERY for children pointing back, and a deleted child is simply not
+  returned. There is no reference left to dangle. Core Data won't even let
+  you build the state to test it — a batch delete refuses with "mandatory
+  OTO nullify inverse on MealItem/meal". Don't add the second pass.
 - **Never resolve a `PersistentIdentifier` with `context.model(for:)` when the
   row may have been deleted** — it hands back a fault whose first property
   access is that same process kill. Look it up in the loaded `@Query` arrays

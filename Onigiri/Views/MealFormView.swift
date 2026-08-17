@@ -784,7 +784,7 @@ struct MealFormView: View {
             context.insert(Meal(name: trimmed, items: items, isFavorite: isFavorite, category: category, aiGenerated: aiNamed || aiComposed))
         }
         // Explicit save (GoalUpsert's discipline) — see FoodFormView.
-        try? context.save()
+        context.saveOrReport("Couldn't save this meal")
         PhoneSyncService.shared.push(from: context)
         dismiss()
     }

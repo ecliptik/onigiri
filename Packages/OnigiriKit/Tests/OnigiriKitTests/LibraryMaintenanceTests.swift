@@ -121,4 +121,43 @@ struct LibraryMaintenanceTests {
         #expect(meal.items.count == 1)
         #expect(meal.totalKcal == 150)
     }
+
+    /// The repair must be inert on a healthy store: a pass that "fixes"
+    /// intact data is worse than one that never runs.
+    @Test func storeRepairLeavesAHealthyStoreAlone() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("Healthy.sqlite")
+
+        do {
+            let config = ModelConfiguration(url: url)
+            let container = try ModelContainer(
+                for: Food.self, Meal.self, GoalSettings.self,
+                configurations: config
+            )
+            let context = container.mainContext
+            let oats = Food(name: "Oats", kcal: 150, sodiumMg: 2)
+            let milk = Food(name: "Milk", kcal: 90, sodiumMg: 40)
+            context.insert(oats)
+            context.insert(milk)
+            context.insert(Meal(name: "Breakfast", items: [
+                MealItem(food: oats), MealItem(food: milk),
+            ]))
+            try context.save()
+        }
+
+        LibraryMaintenance.repairStore(at: url)
+
+        let config = ModelConfiguration(url: url)
+        let container = try ModelContainer(
+            for: Food.self, Meal.self, GoalSettings.self,
+            configurations: config
+        )
+        let meals = try container.mainContext.fetch(FetchDescriptor<Meal>())
+        let meal = try #require(meals.first)
+        #expect(meal.items.count == 2)
+        #expect(meal.totalKcal == 240)
+    }
 }

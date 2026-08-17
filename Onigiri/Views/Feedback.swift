@@ -1,5 +1,53 @@
 import SwiftUI
+import SwiftData
 import OnigiriKit
+import os
+
+private let persistenceLog =
+    Logger(subsystem: "com.ecliptik.Onigiri", category: "persistence")
+
+extension ModelContext {
+    /// Save something the user explicitly asked for, and SAY SO when it
+    /// fails.
+    ///
+    /// The explicit save is not the questionable part — it was added
+    /// deliberately, because autosave's crash window silently reverted
+    /// edits and resurrected a removed goal. What `try?` added was
+    /// discarding the VERDICT: every one of these sites follows the save
+    /// with something that claims success (a toast, a haptic, a dismiss,
+    /// a watch push carrying state that was never persisted), so a
+    /// rejected write left the app insisting it had worked. That is the
+    /// one failure a user cannot discover on their own.
+    ///
+    /// Pass the sentence to show — several of these are deletes, where
+    /// "Couldn't save" would name the wrong action.
+    @MainActor
+    func saveOrReport(_ failure: String) {
+        do {
+            try save()
+        } catch {
+            persistenceLog.error("save failed (\(failure, privacy: .public)): \(error)")
+            ToastCenter.shared.show(failure)
+        }
+    }
+
+    /// Save bookkeeping whose loss costs only sort order — recency
+    /// stamps and favorite flags.
+    ///
+    /// Deliberately quiet: a toast here would interrupt with news about a
+    /// write the user never asked for, and the visible cost of losing one
+    /// is that "Recent" is ordered slightly wrong until the next tap. The
+    /// trace is still worth keeping, because that is exactly the symptom
+    /// nobody would otherwise be able to explain.
+    @MainActor
+    func saveOrLog(_ what: String) {
+        do {
+            try save()
+        } catch {
+            persistenceLog.error("\(what, privacy: .public) save failed: \(error)")
+        }
+    }
+}
 
 /// One toast for the whole app, hosted at the root so every surface —
 /// tabs, sheets that dismiss on log, undo taps — reports the same way.

@@ -407,7 +407,7 @@ struct FoodsView: View {
                     pendingMealDeletes.forEach(context.delete)
                     pendingMealDeletes = []
                     // Explicit save (GoalUpsert's discipline) — see FoodFormView.
-                    try? context.save()
+                    context.saveOrReport("Couldn't delete those meals")
                     PhoneSyncService.shared.push(from: context)
                 }
                 Button("Cancel", role: .cancel) {}
@@ -428,7 +428,7 @@ struct FoodsView: View {
                     // used the deleted foods.
                     LibraryMaintenance.repairDanglingFoodReferences(context: context)
                     // Explicit save (GoalUpsert's discipline) — see FoodFormView.
-                    try? context.save()
+                    context.saveOrReport("Couldn't delete those foods")
                     PhoneSyncService.shared.push(from: context)
                 }
                 Button("Cancel", role: .cancel) {}
@@ -534,7 +534,7 @@ struct FoodsView: View {
             .tint(.riceToast)
             Button {
                 meal.isFavorite.toggle()
-                try? context.save()
+                context.saveOrLog("meal favorite")
                 // A light tap: the neighboring delete confirms loudly,
                 // this was silent.
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -601,7 +601,7 @@ struct FoodsView: View {
             .tint(.riceToast)
             Button {
                 food.isFavorite.toggle()
-                try? context.save()
+                context.saveOrLog("food favorite")
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 PhoneSyncService.shared.push(from: context)
             } label: {
@@ -730,12 +730,12 @@ struct FoodsView: View {
     /// this discipline in v2.2.0, these sites never did).
     private func markUsed(_ food: Food) {
         food.lastUsedAt = .now
-        try? context.save()
+        context.saveOrLog("recency")
     }
 
     private func markUsed(_ meal: Meal) {
         meal.lastUsedAt = .now
-        try? context.save()
+        context.saveOrLog("recency")
     }
 
     /// The same bump, from a portion target that has come back through a

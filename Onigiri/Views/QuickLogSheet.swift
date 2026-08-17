@@ -779,7 +779,7 @@ struct QuickLogSheet: View {
     private func markUsed(_ item: Item) {
         item.food?.lastUsedAt = .now
         item.meal?.lastUsedAt = .now
-        try? context.save()
+        context.saveOrLog("recency")
     }
 
     /// The same bump, from a portion target that has come back through
@@ -794,7 +794,7 @@ struct QuickLogSheet: View {
         } else {
             return
         }
-        try? context.save()
+        context.saveOrLog("recency")
     }
 
     private func makePortionTarget(for item: Item) -> PortionTarget {

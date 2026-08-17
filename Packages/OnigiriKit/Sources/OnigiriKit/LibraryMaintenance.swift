@@ -16,6 +16,13 @@ public enum LibraryMaintenance {
     /// `objectIDs(forRelationshipNamed:)` reads the stored reference
     /// without firing the fault, and `existingObject(with:)` throws
     /// instead of trapping when the target row is gone.
+    ///
+    /// `@MainActor` states the contract the single call site already
+    /// keeps (`OnigiriApp.init`). `viewContext` is main-queue-confined and
+    /// nothing here is wrapped in `perform`, so an off-main caller would
+    /// produce exactly the wrong-thread crash class this function exists
+    /// to prevent — now a compile error rather than a convention.
+    @MainActor
     public static func repairStore(at url: URL) {
         guard FileManager.default.fileExists(atPath: url.path),
               let model = NSManagedObjectModel.makeManagedObjectModel(
@@ -62,6 +69,18 @@ public enum LibraryMaintenance {
             context.delete(item)
             repaired = true
         }
+
+        // No second pass over `Meal.items`, and the asymmetry is
+        // deliberate — an audit proposed one on 2026-08-17 and measuring
+        // the store refuted it. A TO-ONE (`MealItem.food`) is a foreign
+        // key on the MealItem row, so the row it names can be deleted out
+        // from under it and the key still points there: that dangles, and
+        // that is the crash this function exists for. A TO-MANY is stored
+        // as the child's foreign key (`ZMEALITEM.ZMEAL` — verified: the
+        // store has no `Z_*ITEMS` join table), so `items` is a QUERY for
+        // children pointing back. A deleted child is simply not returned.
+        // There is no reference left to dangle, which is why the repair
+        // is one-directional. Don't add the other half.
         if repaired {
             do { try context.save() } catch {
                 maintenanceLog.error("repairStore: save failed, repairs not persisted: \(error)")
@@ -92,21 +111,12 @@ public enum LibraryMaintenance {
         }
     }
 
-    /// Delete meal items whose food was removed out from under them.
-    ///
-    /// Stores written before Food↔MealItem had an inverse relationship can
-    /// hold items whose food row no longer exists; resolving such an item's
-    /// food and touching any property traps SwiftData with "backing data
-    /// could no longer be found". Identifiers are safe to read without
-    /// firing the fault, so membership in the live-food set is the test.
-    /// Items already nullified (food == nil) are dropped too — a food-less
-    /// item only contributes a phantom 0 kcal line to its meal.
-    @MainActor
     /// Settings' library reset. INSTANCE deletes, not `delete(model:)`:
     /// batch deletes bypass relationship maintenance and die on the
     /// mandatory nullify inverse ("Constraint trigger violation …
     /// MealItem/food" — caught by the reset round-trip E2E). Items go
     /// first so nothing ever dangles mid-wipe.
+    @MainActor
     public static func wipeLibrary(context: ModelContext) throws {
         for item in try context.fetch(FetchDescriptor<MealItem>()) { context.delete(item) }
         for meal in try context.fetch(FetchDescriptor<Meal>()) { context.delete(meal) }
@@ -121,6 +131,20 @@ public enum LibraryMaintenance {
         try context.save()
     }
 
+    /// Delete meal items whose food was removed out from under them.
+    ///
+    /// Stores written before Food↔MealItem had an inverse relationship can
+    /// hold items whose food row no longer exists; resolving such an item's
+    /// food and touching any property traps SwiftData with "backing data
+    /// could no longer be found". Identifiers are safe to read without
+    /// firing the fault, so membership in the live-food set is the test.
+    /// Items already nullified (food == nil) are dropped too — a food-less
+    /// item only contributes a phantom 0 kcal line to its meal.
+    ///
+    /// The SwiftData-level twin of `repairStore`'s first pass, for damage
+    /// this process causes (a food deleted in Foods) rather than damage it
+    /// inherits. It cannot replace that pass: by the time SwiftData is
+    /// open, an inherited dangling reference has already trapped.
     public static func repairDanglingFoodReferences(context: ModelContext) {
         guard let meals = try? context.fetch(FetchDescriptor<Meal>()),
               let foods = try? context.fetch(FetchDescriptor<Food>()) else { return }
@@ -136,6 +160,15 @@ public enum LibraryMaintenance {
             dangling.forEach(context.delete)
             repaired = true
         }
-        if repaired { try? context.save() }
+        // Traced like `repairStore`'s save: a repair that silently failed
+        // to persist looks identical to one that found nothing wrong, and
+        // the difference is whether the next launch still crashes.
+        if repaired {
+            do { try context.save() } catch {
+                maintenanceLog.error(
+                    "repairDanglingFoodReferences: save failed, repairs not persisted: \(error)"
+                )
+            }
+        }
     }
 }

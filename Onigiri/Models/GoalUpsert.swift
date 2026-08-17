@@ -132,7 +132,7 @@ enum GoalUpsert {
                 startIsManual: start?.manual == true ? true : nil
             ))
         }
-        try? context.save()
+        context.saveOrReport("Couldn't save your goal")
         PhoneSyncService.shared.push(from: context)
         // A new target changes tonight's streak-warning math.
         ReminderScheduler.shared.replan()

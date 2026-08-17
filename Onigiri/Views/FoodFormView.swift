@@ -926,7 +926,7 @@ struct FoodFormView: View {
         // logging-only route has no library twin and stamps nothing.
         if let row = food ?? createdFood {
             row.lastUsedAt = .now
-            try? context.save()
+            context.saveOrLog("recency")
         }
         Task {
             let logged = await LogActions.logFood(
@@ -976,7 +976,7 @@ struct FoodFormView: View {
         // Explicit save (GoalUpsert's discipline): autosave usually
         // lands this, but a crash/force-quit in the window loses the
         // edit — and the sync push below should read persisted state.
-        try? context.save()
+        context.saveOrReport("Couldn't save this food")
         PhoneSyncService.shared.push(from: context)
     }
 }

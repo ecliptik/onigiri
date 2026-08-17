@@ -70,7 +70,7 @@ Onigiri reads your weight, what you eat, and what you burn from Apple Health, th
 - **Over budget** → you'll fall short of the pace for your target date (you may still lose, just slower).
 - Eat nothing more and the deficit only grows — you'd *stop* losing only if you ate all the way up to your full burn (~2,800).
 
-The **Daily goal** card shows the same thing from the deficit side: "245 of 350 kcal deficit" is what you've banked *so far* — the rest of the day's burn is still coming, which is why "245 banked" and "150 left to eat" both point at the same 350 target.
+The **Daily goal** card shows the same thing from the deficit side: "245 of 350 kcal deficit" is what counts *so far* — the rest of the day's burn is still coming, which is why that reading and "150 kcal left" point at the same 350 target.
 
 ## Architecture at a glance
 

@@ -153,8 +153,22 @@ struct FoodsView: View {
     /// so "snack" still pulls up all snacks — shared with the Log sheet
     /// so the two fields can't answer differently.
     private func matches(_ item: some LibrarySearchable) -> Bool {
-        if let filter = categoryFilter, item.searchCategory != filter.rawValue { return false }
-        return LibrarySearch.matches(item, query: searchText)
+        inSelectedCategory(item) && LibrarySearch.matches(item, query: searchText)
+    }
+
+    /// The CATEGORY half of `matches`, on its own.
+    ///
+    /// The search path needs it without the query, because
+    /// `LibrarySearch.groups` applies the query itself — feeding it
+    /// `matches`-filtered rows ran the same predicate and the same sort
+    /// twice per keystroke (audit, 2026-08-17). It has to stay a
+    /// separate step rather than passing the raw arrays through: the
+    /// category picker lives in the toolbar and is reachable WHILE
+    /// searching, so dropping it here would quietly widen a filtered
+    /// search back out to the whole library.
+    private func inSelectedCategory(_ item: some LibrarySearchable) -> Bool {
+        guard let filter = categoryFilter else { return true }
+        return item.searchCategory == filter.rawValue
     }
 
     /// The Favorites scope pool: everybody here is starred, so rank by
@@ -185,7 +199,15 @@ struct FoodsView: View {
         // ONE search-active predicate: the scope bar, the estimate row,
         // and which list shape renders all have to agree.
         let searching = !searchText.trimmingCharacters(in: .whitespaces).isEmpty
-        let groups = searching ? searchGroups(meals: visibleMeals, foods: visibleFoods) : []
+        // Category-filtered but NOT query-filtered: the grouper does the
+        // query, so handing it `visibleMeals`/`visibleFoods` filtered and
+        // sorted it a second time for the same answer.
+        let groups = searching
+            ? searchGroups(
+                meals: meals.filter { inSelectedCategory($0) },
+                foods: foods.filter { inSelectedCategory($0) }
+            )
+            : []
         NavigationStack {
             List {
                 // The scope picker rides IN the list, not a pinned

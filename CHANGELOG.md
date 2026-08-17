@@ -8,6 +8,54 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.27.0 — a reminder that can't be wrong
+
+_2026-08-17_ · [changes since v2.26.0](https://github.com/ecliptik/onigiri/compare/v2.26.0...v2.27.0)
+
+Log 24 oz of water on your watch in the morning, and the 11 AM check-in would
+still tell you **"You're at 0 of 64 oz."** It had done this before — the same
+sentence, off by the same morning, in July. Both times the fix went to the
+machinery that keeps a reminder fresh. Both times the machinery lost, because
+it cannot win: a notification's text is written when it is *scheduled*, and iOS
+delivers those words verbatim hours later, whatever has happened since.
+
+So the words stopped making claims that can go stale.
+
+**Water check-ins no longer count.** The nudge is now just a nudge — *"Time for
+a glass of water."* Nothing in it can be contradicted by a glass you already
+drank. The streak warning drops its day count for the same reason: it said
+"Your 3-day streak" from a number decided hours earlier.
+
+**And they only fire on a day with no water logged at all.** They used to fire
+whenever you were behind an even pace toward your goal, which is a claim any
+sip in the meantime disproves. "You haven't logged any water" is a much harder
+thing to be wrong about. The trade is deliberate and worth stating plainly: log
+one glass and stop, and Onigiri won't nudge you again that day. Three check-in
+times still stand for the days that are genuinely dry.
+
+**Your watch now tells your phone when you log.** This was the actual distance
+between a 7 AM glass of water and an 11 AM reminder — nothing travelled that
+way. Health syncs the sample eventually, but watchOS holds those deliveries to
+roughly hourly. Water, meals, edits and deletions logged on the wrist now send
+word directly, waking the phone to hear it, so reminders and widgets can catch
+up in seconds instead of an hour.
+
+---
+
+**Elsewhere, a pass over the words.** Settings had labels that named a category
+rather than the control under them. "Source" governed typed searches only,
+which made the barcode note beneath it read as a contradiction — it's "Text
+search" now. "Energy stats / Beside balance" asked you to guess at both halves;
+it's "Burn and intake / Compact". A reset alert titled "Reset all?" now matches
+the "Reset All" button you tapped to reach it.
+
+Captions that repeated the rows above them are gone rather than reworded — Goal
+had a budget explainer restating the two figures beside it, both empty Food
+Library screens explained the Import button rendered directly below, and the AI
+provider descriptions each ran to three sentences to say what the line under
+them already said. Goal's almost-there message no longer says your target is
+"judged"; it measures, and now it says so.
+
 ## v2.26.0 — when a database already knows
 
 _2026-08-17_ · [changes since v2.25.0](https://github.com/ecliptik/onigiri/compare/v2.25.0...v2.26.0)

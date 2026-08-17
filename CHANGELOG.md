@@ -8,6 +8,42 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.27.3 — sharing a menu, all the way through
+
+_2026-08-17_ · [changes since v2.27.2](https://github.com/ecliptik/onigiri/compare/v2.27.2...v2.27.3)
+
+Most of this release is one journey: share a restaurant's nutrition PDF into
+Onigiri and log something off it. Three separate things could go wrong along
+that path, and each failed quietly.
+
+**A scanned menu read as an empty one.** Plenty of restaurants publish their
+nutrition guide as pictures of tables rather than as text. Opened from inside
+Onigiri those read fine — it falls back to reading the page visually. Shared in
+from Safari or Files, they didn't: that door used the plain reader, found no
+text, and suggested you photograph the nutrition instead, which was neither the
+cause nor the cure. Both doors read the same way now.
+
+**Picking an item could land on nothing.** Choosing a dish from a shared menu
+asked one panel to close and another to open in the same instant, and sometimes
+the second one lost — leaving a blank screen with no way on but backing out and
+sharing the file again.
+
+**A long menu could open twice.** Onigiri deliberately keeps a shared guide open
+so you can order several things off it. After two minutes it stopped treating
+that session as live, so switching to the app opened a second copy of the same
+import beside the first — and cancelling one left the other behind. It now
+holds the session for as long as you are in it.
+
+**And the month-stats widget lands on the calendar.** If you had left a month's
+detail screen open, tapping the widget put you back on that instead of on the
+calendar it promises.
+
+Underneath, four rules that a single screen had been keeping to itself moved to
+where they can be tested: how a goal's start date is decided when you change a
+target, which milestone counts as reached, which meals would lose a food you're
+deleting, and how the library sorts. Every one of them had already caused a bug
+worth remembering. 25 new tests, 608 in total.
+
 ## v2.27.2 — the things that quietly did nothing
 
 _2026-08-17_ · [changes since v2.27.1](https://github.com/ecliptik/onigiri/compare/v2.27.1...v2.27.2)

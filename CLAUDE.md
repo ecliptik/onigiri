@@ -108,6 +108,15 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   Fix: `pkill -f CoreDeviceService` (no sudo needed), wait ~15 s for the
   watch to reach "connecting/connected", then install. Don't send the user
   chasing watch reboots until this is ruled out.
+- **That timeout message is sufficient, NOT necessary — its absence rules
+  nothing out** (2026-08-17). A deploy failed all 12 attempts with the
+  watch reading a clean `available (paired)` and `list devices` printing
+  no timeout line at all; `pkill -f CoreDeviceService` then made the very
+  next install succeed on attempt 1. The same watch had installed on
+  attempt 1 twice earlier the same day. So run the pkill whenever the
+  retry loop is exhausted, whatever `list devices` claims — it costs one
+  command and no sudo, and the healthy-looking listing is not evidence
+  against it.
 - **4000 / RemotePairingError-1001 / 3002 / `IXRemoteErrorDomain code 6`
   on the first attempts are normal — the install attempt itself is what
   wakes the channel.** deploy-phone.sh runs that retry loop, so don't

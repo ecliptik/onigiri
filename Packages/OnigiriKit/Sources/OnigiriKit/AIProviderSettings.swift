@@ -207,6 +207,15 @@ public enum AIProviderSettings {
     public static var openAIAPIKey: String { readSecret(openAIKeyAccount) ?? "" }
     public static var localAIToken: String { readSecret(localTokenAccount) ?? "" }
 
+    /// Read by account, mirroring `saveSecret(_:account:)`.
+    ///
+    /// Settings needs the symmetric reader to answer "has a key changed
+    /// since the sheet opened?" — the question its Cancel depends on, and
+    /// which it could not ask while only the three named getters existed.
+    public static func secret(account: String) -> String {
+        readSecret(account) ?? ""
+    }
+
     /// Save (non-empty) or clear (empty). Trimmed like the FDC key.
     @discardableResult
     public static func saveSecret(_ raw: String, account: String) -> Bool {

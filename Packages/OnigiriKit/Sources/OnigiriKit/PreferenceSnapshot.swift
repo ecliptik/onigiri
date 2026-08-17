@@ -84,6 +84,14 @@ public extension SharedStore {
         untrackedBelowKey, energyStatsStyleKey,
         textSearchSourceKey, onlineLookupsKey,
         holdToLogWaterKey,
+        // Three that were written by Settings but never swept (found
+        // 2026-08-17 by diffing every @AppStorage key in SettingsView
+        // against this list). Being absent meant Cancel didn't put them
+        // back, Reset Settings didn't clear them, and changing ONLY one
+        // of them left `hasSessionEdits` false — so the sheet let you
+        // swipe away and Cancel dismissed without so much as a prompt.
+        intakeWordKey, foodsDefaultScopeKey,
+        AIProviderSettings.estimateNutritionKey,
         weightUnitKey, waterUnitKey, sodiumUnitKey, weightBasisKey,
         AIProviderSettings.enabledKey, AIProviderSettings.hintDismissedKey,
         AIProviderSettings.fallbackOnDeviceKey,

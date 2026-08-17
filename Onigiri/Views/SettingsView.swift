@@ -534,16 +534,32 @@ struct SettingsView: View {
     }
 
     /// Anything changed since the sheet opened? Drives the swipe gate
-    /// and the Cancel confirmation. Defaults reads are in-memory-cached
-    /// (cheap per render); the Keychain-backed secrets are deliberately
-    /// NOT polled here — a key-only edit can still swipe away, which
-    /// errs on the KEEP side (nothing is lost; Cancel still catches it
-    /// at tap time via the same snapshot restore).
+    /// and the Cancel confirmation.
+    ///
+    /// The Keychain secrets are polled HERE, and that is load-bearing.
+    /// They used to be left out on the theory that a key-only edit
+    /// "errs on the KEEP side — Cancel still catches it at tap time via
+    /// the same snapshot restore". It doesn't: Cancel only reaches
+    /// `revertToEntrySnapshot()` through the confirmation this property
+    /// gates, so with it false, Cancel just dismissed. Blank the FDC key
+    /// to read the empty-field copy, tap Cancel, and the key was gone
+    /// with no way back — it is write-only storage, so there is nothing
+    /// to retype from (the user, 2026-08-17).
     private var hasSessionEdits: Bool {
         guard !entrySnapshot.isEmpty else { return false }
         return PreferenceSnapshot.differs(
             from: entrySnapshot, keys: SharedStore.settingsSweepKeys, in: SharedStore.defaults
-        )
+        ) || hasSecretEdits
+    }
+
+    /// The Keychain half of the question above: four small reads, on a
+    /// settings sheet that re-renders on interaction rather than
+    /// continuously.
+    private var hasSecretEdits: Bool {
+        if SharedStore.fdcAPIKey != fdcKeyAtOpen { return true }
+        return aiSecretsAtOpen.contains { account, atOpen in
+            AIProviderSettings.secret(account: account) != atOpen
+        }
     }
 
     /// The permission-banner inputs, shared by the open-time task and
@@ -1332,13 +1348,13 @@ private struct AISettingsScreen: View {
                     // the remote cases silently hid every AI affordance
                     // until a key arrived (2026-07-22 audit).
                     if !AIProviderSettings.selectedRemoteIsConfigured {
-                        WarningFootnote("Enter an API key below to turn AI features on.")
+                        WarningFootnote("Enter your \(AIProviderSettings.selected.displayName) API key below to turn AI features on.")
                     }
                     aiKeyField("\(AIProviderSettings.selected.displayName) API key")
                     aiModelField($aiAnthropicModel, prompt: AIProviderSettings.defaultAnthropicModel)
                 case .openAI:
                     if !AIProviderSettings.selectedRemoteIsConfigured {
-                        WarningFootnote("Enter an API key below to turn AI features on.")
+                        WarningFootnote("Enter your \(AIProviderSettings.selected.displayName) API key below to turn AI features on.")
                     }
                     aiKeyField("\(AIProviderSettings.selected.displayName) API key")
                     aiModelField($aiOpenAIModel, prompt: AIProviderSettings.defaultOpenAIModel)

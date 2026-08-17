@@ -108,6 +108,21 @@ struct PreferenceSnapshotTests {
         #expect(keys.contains(SharedStore.retiredActivityCreditKey))
         // Onboarding deliberately stays OUT (reset must not replay it).
         #expect(!keys.contains(SharedStore.hasOnboardedKey))
-        #expect(keys.count == 50)
+        // The three that were missing until 2026-08-17. Each is written
+        // by a Settings subscreen — Appearance's two pickers and the AI
+        // screen's Estimate toggle — and being absent from this list
+        // meant Cancel didn't restore them, Reset Settings didn't clear
+        // them, and editing only one of them left the sheet thinking
+        // nothing had changed.
+        #expect(keys.contains(SharedStore.intakeWordKey))
+        #expect(keys.contains(SharedStore.foodsDefaultScopeKey))
+        #expect(keys.contains(AIProviderSettings.estimateNutritionKey))
+        // A tripwire for edits to THIS list, and deliberately not more
+        // than that: it cannot see a setting that never joined the list
+        // in the first place, which is exactly how the three above hid.
+        // That check is a diff of every `@AppStorage` key in
+        // SettingsView against this array, and it lives in no test —
+        // run it by hand when adding a setting.
+        #expect(keys.count == 53)
     }
 }

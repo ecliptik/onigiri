@@ -134,7 +134,8 @@ extension FoodIntelligence {
             system: Prompts.describeInstructions, user: user) else { return .unavailable }
         guard let estimate = decode(RemoteFoodEstimate.self, from: data) else { return .answered(nil) }
         let name = estimate.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let nutrients = macroNutrients(
+        let nutrients = estimateMacros(
+            kcal: estimate.kcal,
             fatG: estimate.fatG, carbsG: estimate.carbsG,
             proteinG: estimate.proteinG, fiberG: estimate.fiberG,
             sugarG: estimate.sugarG)
@@ -194,7 +195,8 @@ extension FoodIntelligence {
             DescribedMeal.Component(
                 name: $0.name, portion: $0.portion ?? "",
                 kcal: $0.kcal, sodiumMg: $0.sodiumMg ?? 0,
-                nutrients: macroNutrients(
+                nutrients: estimateMacros(
+                    kcal: $0.kcal,
                     fatG: $0.fatG, carbsG: $0.carbsG, proteinG: $0.proteinG,
                     fiberG: $0.fiberG, sugarG: $0.sugarG))
         })
@@ -499,7 +501,8 @@ extension FoodIntelligence {
                 serving: (item.serving ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
                 kcal: item.kcal,
                 sodiumMg: item.sodiumMg,
-                nutrients: macroNutrients(
+                nutrients: estimateMacros(
+                    kcal: item.kcal,
                     fatG: item.fatG, carbsG: item.carbsG, proteinG: item.proteinG,
                     fiberG: nil, sugarG: nil))
         }, text: text))

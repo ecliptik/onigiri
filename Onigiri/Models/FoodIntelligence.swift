@@ -116,6 +116,37 @@ enum FoodIntelligence {
         var engine: AIProvider = .onDevice
     }
 
+    /// Macros for an ESTIMATE: assembled, then kept only if they account
+    /// for the calorie figure the same answer stated.
+    ///
+    /// Measured on the menu-dish path (2026-08-16): asked for macros in
+    /// the same call — even told outright that protein and carbohydrate
+    /// run 4 kcal per gram and fat 9 — the on-device model returned
+    /// macros implying ~290 kcal beside its own stated 1,000, on every
+    /// row of every pass, 65–71% adrift. That path answered by not
+    /// asking at all. The other estimate paths do ask, and this is what
+    /// becomes of an answer that contradicts itself: the CALORIE figure
+    /// survives, because the evals show it is the number the model
+    /// usually gets right, and the macros that disagree with it go.
+    ///
+    /// A READ never comes here. A printed panel whose macros don't add
+    /// up is the panel's business — Layer 2 flags it and keeps every
+    /// figure, because those numbers exist on paper and this app is not
+    /// the arbiter of them.
+    static func estimateMacros(
+        kcal: Double, fatG: Double?, carbsG: Double?, proteinG: Double?,
+        fiberG: Double?, sugarG: Double?
+    ) -> NutrientValues {
+        let macros = macroNutrients(
+            fatG: fatG, carbsG: carbsG, proteinG: proteinG,
+            fiberG: fiberG, sugarG: sugarG)
+        guard !NutritionPlausibility.macrosAgreeWithEnergy(kcal: kcal, nutrients: macros) else {
+            return macros
+        }
+        log.notice("estimate macros dropped — they do not account for \(kcal, privacy: .public) kcal")
+        return NutrientValues()
+    }
+
     /// Does an ESTIMATE survive the plausibility gate whole?
     ///
     /// The split that matters (`NutritionPlausibility`): a READ of
@@ -1069,7 +1100,8 @@ enum FoodIntelligence {
                 options: GenerationOptions(sampling: .greedy)
             ).content
             let name = estimate.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            let nutrients = macroNutrients(
+            let nutrients = estimateMacros(
+                kcal: estimate.kcal,
                 fatG: estimate.fatG, carbsG: estimate.carbsG,
                 proteinG: estimate.proteinG, fiberG: estimate.fiberG,
                 sugarG: estimate.sugarG)
@@ -1148,7 +1180,8 @@ enum FoodIntelligence {
                 DescribedMeal.Component(
                     name: $0.name, portion: $0.portion,
                     kcal: $0.kcal, sodiumMg: $0.sodiumMg,
-                    nutrients: macroNutrients(
+                    nutrients: estimateMacros(
+                        kcal: $0.kcal,
                         fatG: $0.fatG, carbsG: $0.carbsG, proteinG: $0.proteinG,
                         fiberG: $0.fiberG, sugarG: $0.sugarG))
             })
@@ -1310,7 +1343,8 @@ enum FoodIntelligence {
                     serving: $0.serving.trimmingCharacters(in: .whitespacesAndNewlines),
                     kcal: $0.kcal,
                     sodiumMg: $0.sodiumMg,
-                    nutrients: macroNutrients(
+                    nutrients: estimateMacros(
+                        kcal: $0.kcal,
                         fatG: $0.fatG, carbsG: $0.carbsG, proteinG: $0.proteinG,
                         fiberG: nil, sugarG: nil))
             }, text: text)

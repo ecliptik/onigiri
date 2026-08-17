@@ -199,6 +199,27 @@ struct NutritionPlausibilityTests {
                 "\(suspects.count) of \(rowCount) rows flagged — too noisy to mean anything")
     }
 
+    // MARK: What an estimate does with the same arithmetic
+
+    /// `FoodIntelligence.estimateMacros` acts on this rather than
+    /// reporting it: a model that contradicts its own calorie figure has
+    /// answered badly, and the calorie figure is the part the evals show
+    /// it usually gets right.
+    @Test func macroAgreementIsTheEnergyFindingInverted() {
+        #expect(NutritionPlausibility.macrosAgreeWithEnergy(
+            kcal: 280, nutrients: NutrientValues(fatG: 9, carbsG: 34, proteinG: 15)),
+            "4·34 + 9·9 + 4·15 = 277, beside a stated 280")
+        #expect(!NutritionPlausibility.macrosAgreeWithEnergy(
+            kcal: 190, nutrients: NutrientValues(fatG: 20, carbsG: 60, proteinG: 30)),
+            "540 kcal of macros beside a stated 190")
+        #expect(NutritionPlausibility.macrosAgreeWithEnergy(
+            kcal: 500, nutrients: NutrientValues(fatG: 2)),
+            "one macro is not disagreement — there is nothing to compare")
+        #expect(NutritionPlausibility.macrosAgreeWithEnergy(
+            kcal: nil, nutrients: NutrientValues(fatG: 9, carbsG: 34, proteinG: 15)),
+            "and neither is a missing calorie figure")
+    }
+
     // MARK: The label door
 
     @Test func checkedLabelCarriesItsWarnings() {

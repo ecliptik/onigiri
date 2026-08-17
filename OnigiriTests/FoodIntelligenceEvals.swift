@@ -37,13 +37,21 @@ final class FoodIntelligenceEvals: XCTestCase {
     private enum Gate {
         static let produced = 1.0
         static let kcalInRange = 0.8
-        /// Deliberately below the original 0.8 aim: the 2026-07-16
-        /// greedy baseline is 7/9, and both misses are model-knowledge
-        /// errors (cola 300 mg, Big Mac 2500 mg — consistent
-        /// overestimates), not prompt bugs. This floor means "never
-        /// worse than today"; re-aim at 0.8 after the next OS model
-        /// update or when the golden set grows.
-        static let sodiumInRange = 0.75
+        /// Re-aimed 0.75 → 0.8 on 2026-08-17, on the trigger the old
+        /// comment named: the golden set grew (13 → 20 samples, seven of
+        /// them sodium calibration). Measured that day, greedy, iOS 26.5
+        /// sim: **16/19 = 0.842**. The three misses are the two
+        /// long-standing model-knowledge errors (Big Mac 2,400 mg where
+        /// ~1,010 is published, cola 300 mg where ~40 is) plus one in the
+        /// other direction — American cheese at 100 mg, which is UNDER.
+        /// So "the model over-estimates sodium" is not the whole story,
+        /// and the five deliberately low-sodium additions (blueberries,
+        /// black coffee, almonds, potato, milk) all landed.
+        ///
+        /// Headroom is one sample: a fourth miss reads 0.789 and fails.
+        /// That is the point of a floor, but it means an OS model update
+        /// needs a re-baseline rather than a shrug.
+        static let sodiumInRange = 0.8
         static let nameFormat = 0.8
         static let mealNameFormat = 1.0
         static let labelFill = 0.8
@@ -123,8 +131,36 @@ final class FoodIntelligenceEvals: XCTestCase {
         .init(description: "I had two slices of pepperoni pizza", kcal: 350...900, sodiumMg: 400...2000),
         .init(description: "I ate a bowl of oatmeal with honey", kcal: 120...500, sodiumMg: 0...400),
         .init(description: "I drank a large iced latte with whole milk", kcal: 80...400, sodiumMg: 30...350),
+        // SODIUM CALIBRATION (2026-08-17, Layer 4 of
+        // PLAN-nutrition-plausibility). The measured failure on this set
+        // was never "it doesn't know salty" — soy sauce and miso have
+        // always landed — it was consistent OVER-estimation on things
+        // that carry almost none (cola 300 mg, Big Mac 2,500). So the
+        // additions are weighted toward foods whose right answer is a
+        // SMALL number, which is the half the set could not see.
+        .init(description: "a cup of fresh blueberries", kcal: 50...130, sodiumMg: 0...25),
+        .init(description: "a plain baked potato", kcal: 120...350, sodiumMg: 0...100),
+        .init(description: "a cup of black coffee", kcal: 0...15, sodiumMg: 0...25),
+        .init(description: "1 oz unsalted almonds", kcal: 130...220, sodiumMg: 0...30),
+        .init(description: "an 8 oz glass of whole milk", kcal: 110...220, sodiumMg: 70...220),
+        // …and the genuinely salty end, so tightening the gate later
+        // cannot be done by simply predicting "low".
+        .init(description: "a cup of instant ramen noodles", kcal: 250...550, sodiumMg: 700...2400),
+        .init(description: "a slice of American cheese", kcal: 40...130, sodiumMg: 150...500),
     ]
 
+    /// BASELINE, 2026-08-17 (greedy, iOS 26.5 sim, 20 samples): produced
+    /// 20/20 with one known refusal, kcal 16/19, sodium 16/19, names
+    /// 19/19. kcal misses are all UNDER — white rice 110, two pizza
+    /// slices 250, instant ramen 150 — which is a different failure from
+    /// sodium's and has no gate change behind it yet.
+    ///
+    /// `estimateMacros` (Layer 4) dropped exactly ONE sample's macros:
+    /// "half cup cooked white rice and a fried egg", the only COMPOSED
+    /// description in the set. 18/19 survived, which is the number that
+    /// matters — a filter that took most of them would be a prompt
+    /// problem wearing a filter's clothes.
+    ///
     /// Known-failures register: inputs the OS guardrails refuse today
     /// through no fault of the prompt. "6 oz grilled chicken breast"
     /// trips the input safety classifier on "breast" (iOS 26.5,
@@ -140,6 +176,11 @@ final class FoodIntelligenceEvals: XCTestCase {
     func testDescribeFoodGoldenSet() async throws {
         try requireEvalRun()
         var produced = 0, answered = 0, kcalOK = 0, sodiumOK = 0, nameOK = 0
+        // How often the model's macros SURVIVE `estimateMacros` — i.e.
+        // account for the calorie figure the same answer stated. Logged,
+        // not gated: the calibrate-then-gate rule, and this is the run
+        // that produces the baseline to gate against.
+        var macrosKept = 0
         var report: [String] = []
 
         for sample in Self.describeGolden {
@@ -173,13 +214,20 @@ final class FoodIntelligenceEvals: XCTestCase {
             // gated — Gates get set from this data in their own commit
             // (the calibrate-then-gate rule). Blank = model omitted.
             let macros = food.nutrients
+            if !macros.isEmpty { macrosKept += 1 }
             report.append(
                 "     macros: fat \(macros.fatG.map { "\($0)g" } ?? "—"), "
                 + "carbs \(macros.carbsG.map { "\($0)g" } ?? "—"), "
                 + "protein \(macros.proteinG.map { "\($0)g" } ?? "—"), "
                 + "fiber \(macros.fiberG.map { "\($0)g" } ?? "—"), "
-                + "sugar \(macros.sugarG.map { "\($0)g" } ?? "—")")
+                + "sugar \(macros.sugarG.map { "\($0)g" } ?? "—")"
+                + (macros.isEmpty ? "  ← dropped or omitted" : ""))
         }
+        report.append("""
+            macros survived: \(macrosKept)/\(answered) \
+            (estimateMacros keeps them only when 4·carbs + 9·fat + 4·protein \
+            accounts for the stated kcal)
+            """)
 
         attachAndPrint(report, name: "describeFood-eval")
         // Produced is the guardrail: a nil here is a refusal/failure on a

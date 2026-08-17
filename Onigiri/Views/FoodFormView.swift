@@ -58,6 +58,13 @@ struct FoodFormView: View {
     /// What the plausibility gate said about the prefill this form
     /// opened on — empty for anything typed by hand.
     @State private var warnings: [NutritionPlausibility.Finding] = []
+    /// A database row that carries the same name as an ESTIMATE this
+    /// form was prefilled with, when one exists and online lookups are
+    /// on. Offered, never applied on its own (`PublishedLookup`).
+    @State private var publishedOffer: ScannedProduct?
+    /// Kept so a second prefill cancels the first's lookup — an offer
+    /// arriving for the food you already replaced is worse than none.
+    @State private var offerTask: Task<Void, Never>?
     /// Sodium's display unit; the field state above stays canonical mg.
     @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults) private var sodiumUnitRaw = SharedStore.unitAutomatic
     private var sodiumUnit: SodiumUnit { SodiumUnit.resolve(sodiumUnitRaw) }
@@ -314,6 +321,31 @@ struct FoodFormView: View {
                     LabeledContent("Serving") {
                         TextField("e.g. 1 cup, 8 oz", text: $serving)
                             .multilineTextAlignment(.trailing)
+                    }
+                }
+
+                // Published figures for a food the model only ESTIMATED
+                // — offered, never substituted (`PublishedLookup`).
+                // Accuracy comes from data: the evals' worst sodium miss
+                // is a Big Mac at 2,400 mg where McDonald's publishes
+                // ~1,010, and no prompt fixes a number the model does
+                // not know.
+                if let offer = publishedOffer {
+                    Section {
+                        Button {
+                            applyPublished(offer)
+                        } label: {
+                            publishedRow(offer)
+                        }
+                        .buttonStyle(.plain)
+                    } header: {
+                        Text("Published values")
+                    } footer: {
+                        // The SERVING is part of the offer and has to be
+                        // read: a per-100 g row is a different portion
+                        // from "1 Big Mac", and swapping one for the
+                        // other silently would be its own bug.
+                        Text("A database has this name. Tap to use its figures and serving instead of the estimate.")
                     }
                 }
 
@@ -726,6 +758,45 @@ struct FoodFormView: View {
             : "Got the name. Turn on AI in Settings to estimate nutrition from a photo."
     }
 
+    /// The offer's own row: name, serving, and the two figures the app
+    /// grades a day on, in the online-result grammar.
+    private func publishedRow(_ offer: ScannedProduct) -> some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(offer.name)
+                    .foregroundStyle(.primary)
+                Text(offer.servingDescription.isEmpty ? "published" : offer.servingDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                if let kcal = offer.kcal {
+                    Text("\(kcal, format: .number.precision(.fractionLength(0))) kcal")
+                        .monospacedDigit()
+                }
+                if let sodiumMg = offer.sodiumMg {
+                    Text(TrackedNutrient.sodium.captionText(sodiumMg, sodium: sodiumUnit))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+        }
+        .contentShape(.rect)
+    }
+
+    /// Taking the published figures REPLACES the estimate, provenance
+    /// included: ✨ says "these numbers came from a model", and once they
+    /// have been swapped wholesale for a database's, that is no longer
+    /// true. (Editing an estimate by hand still keeps the mark — that
+    /// changes a number, not where it came from.)
+    private func applyPublished(_ offer: ScannedProduct) {
+        apply(offer)
+        aiGenerated = false
+        publishedOffer = nil
+    }
+
     /// Said about the READ, not about the field as it stands now — so it
     /// stays true after the user types the right number in.
     private func caption(for finding: NutritionPlausibility.Finding) -> String {
@@ -757,6 +828,19 @@ struct FoodFormView: View {
         // Provenance sticks once set — reviewing/editing an estimate's
         // numbers doesn't change where they came from.
         if product.aiGenerated { aiGenerated = true }
+        // An ESTIMATE prefill asks whether a database simply holds this
+        // food. One request, silent on failure, and the previous ask is
+        // cancelled so a stale offer cannot land on a new food.
+        offerTask?.cancel()
+        publishedOffer = nil
+        if product.aiGenerated, !product.name.isEmpty {
+            let name = product.name
+            offerTask = Task {
+                let match = await PublishedLookup.match(for: name)
+                guard !Task.isCancelled else { return }
+                publishedOffer = match
+            }
+        }
         // Only for real lookups (barcode present): a manual "Add Food"
         // prefill carries just the searched name, which isn't a finding.
         lookupMessage = product.kcal == nil && !product.barcode.isEmpty

@@ -235,6 +235,23 @@ public enum NutritionPlausibility {
         return reading
     }
 
+    /// Do the macros account for the energy stated beside them?
+    ///
+    /// The same arithmetic as the `.energy` suspect finding, exposed
+    /// because an ESTIMATE acts on it rather than merely reporting it: a
+    /// label that contradicts itself is the label's business and gets
+    /// flagged, but a model contradicting its own calorie figure has
+    /// simply answered badly, and the answer it got right is the one to
+    /// keep (`FoodIntelligence.estimateMacros`).
+    ///
+    /// True when there is nothing to compare — fewer than all three of
+    /// fat, carbohydrate and protein makes the sum meaningless rather
+    /// than wrong.
+    public static func macrosAgreeWithEnergy(kcal: Double?, nutrients: NutrientValues) -> Bool {
+        !check(kcal: kcal, sodiumMg: nil, nutrients: nutrients)
+            .suspect.contains { $0.field == .energy }
+    }
+
     /// The label-shaped door onto the same gate. Impossible fields come
     /// back empty and every finding rides along in `warnings`, so the
     /// form and the share sheet can say what happened to a number the

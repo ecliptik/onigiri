@@ -4,8 +4,9 @@ A shared Salt & Straw product page logged a 300 kcal dessert carrying
 **810,400 mg of sodium** — 810 grams of sodium, about 2 kg of table salt,
 352× the daily limit — into HealthKit, silently.
 
-> **STATUS — Layers 1–3 BUILT 2026-08-17 (Layer 1 shipped in v2.24.0;
-> Layers 2–3 uncommitted). Layer 4 planned.**
+> **STATUS — ALL FOUR LAYERS BUILT 2026-08-17.** Layer 1 shipped in
+> v2.24.0, Layers 2–3 in v2.25.0, Layer 4 uncommitted at the time of
+> writing.
 > Decisions taken with the user are marked **[decided]**. The layers are
 > ordered so each ships alone; Layer 1 is the reported bug, Layers 2–4
 > are the class of bug behind it.
@@ -275,7 +276,7 @@ cases that will show it in the wild are a mis-mapped menu column, a bad
 OpenFoodFacts row, and any genuinely salty item (a Shake Shack triple
 flags at 3,310 mg).
 
-### Layer 4 — the estimates themselves
+### Layer 4 — the estimates themselves  ✅ BUILT 2026-08-17
 
 The estimate paths are, on the evidence, in better shape than the reader
 — which is worth saying plainly, because the report that started this
@@ -305,6 +306,62 @@ text. Changes worth making, in order of value:
 4. **Grow the eval golden set** with the sodium cases specifically, and
    re-run per the CLAUDE.md rule (any prompt change, any OS model
    update). Thresholds move only in a commit that says why.
+
+**What shipped, and what it measured.**
+
+`FoodIntelligence.estimateMacros` replaces `macroNutrients` at the six
+ESTIMATE assembly points (describe-it and describe-a-meal on both
+engines, the sign read on both). The two READ points keep the unfiltered
+assembly, deliberately: a printed panel that disagrees with itself is
+the panel's business, and Layer 2 flags it rather than editing it. The
+Atwater arithmetic itself lives once, in
+`NutritionPlausibility.macrosAgreeWithEnergy`.
+
+Measured on the golden set the same day (greedy, iOS 26.5 sim): **18 of
+19 answers kept their macros.** The single drop is "half cup cooked white
+rice and a fried egg" — the only COMPOSED description in the set, which
+is exactly where a model's macros go wrong. A filter that had taken most
+of them would have been a prompt problem wearing a filter's clothes.
+
+The golden set grew 13 → 20, seven of them sodium calibration weighted
+toward foods whose right answer is a SMALL number — because the
+long-standing failure was over-estimation, and the set could not see
+that half. Baseline: produced 20/20 (one known OS refusal), kcal 16/19,
+sodium **16/19 = 0.842**, names 19/19. The new low-sodium samples all
+landed; the three sodium misses are Big Mac (2,400 mg where ~1,010 is
+published), cola (300 where ~40 is), and — in the other direction —
+American cheese at 100 mg, which is UNDER. "The model over-estimates
+sodium" was not the whole story.
+
+`Gate.sodiumInRange` therefore moved 0.75 → 0.8, on the trigger its own
+comment had named ("when the golden set grows"). Headroom is one sample.
+
+**Published values, offered rather than substituted** (decided with the
+user): `PublishedLookup` asks OpenFoodFacts or FDC whether a database
+simply HOLDS the food an estimate named, and the food form shows it as a
+"Published values" row. Accuracy comes from data — no prompt work fixes
+a number the model does not know. Taking the offer replaces the figures,
+the serving AND the provenance: ✨ means "a model produced these", and
+after a wholesale swap for a database's row that is no longer true.
+
+The match rule (`PublishedNameMatch`, kit, pure) is deliberately
+lopsided: every significant word the estimate used must appear in the
+candidate, and what the candidate ADDS must not change the food. A brand
+prefix is the case worth having ("Big Mac" → "McDonald's Big Mac"); "Big
+Mac Sauce" is refused, and so is any composed dish reaching for an
+ingredient row ("two large scrambled eggs" ↛ "Eggs"), which is precisely
+the class describe-it exists to serve.
+
+Verified end to end on the simulator, real network: the estimate came
+back 550 kcal / **2,400 mg**, the offer read *Big Mac (McDonald's), 530
+kcal, 920 mg, 232 g*, and taking it filled nine macros plus minerals and
+vitamins while the ✨ caption became "Source: OpenFoodFacts".
+
+Costs, stated plainly: one request when FDC answers (its rows carry
+nutrients inline), two when OpenFoodFacts does (its search index carries
+none), gated on the user's own online-lookups switch — an estimate is
+otherwise answerable entirely on-device, and this is the only part of it
+that leaves the phone.
 
 ## What must NOT change
 

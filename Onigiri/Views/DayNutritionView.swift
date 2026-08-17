@@ -7,6 +7,13 @@ import OnigiriKit
 /// app's own entries, so food logged by other apps counts up top but not
 /// in the breakdown.
 struct DayNutritionView: View {
+    /// Scaled with the row's own text, for the reason MonthGrid's cell
+    /// is: an icon inherits the ambient font, so at accessibility sizes
+    /// it renders far larger than a fixed slot reserves — and `.frame`
+    /// does not clip, so the glyph overflows CENTRE-OUT and lands on the
+    /// label beside it. Verified at AX5 on an iPhone 16, where the
+    /// fork-and-knife ran straight into "Eaten" (audit, 2026-08-17).
+    @ScaledMetric(relativeTo: .body) private var iconSlot = 24.0
     let model: TodayModel
     /// Calories available to eat that day and stay on the goal
     /// (`CalorieBudget.Plan.dailyBudget`). nil hides the row (no goal set).
@@ -227,7 +234,7 @@ struct DayNutritionView: View {
         } label: {
             HStack(spacing: 8) {
                 icon()
-                    .frame(width: 24, alignment: .center)
+                    .frame(width: iconSlot, alignment: .center)
                 Text(title)
             }
         }

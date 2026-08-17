@@ -7,6 +7,10 @@ import OnigiriKit
 struct CalendarView: View {
     @State private var model = CalendarModel()
     @State private var quickActions = QuickActions.shared
+    /// Same reason as DayNutritionView's: an unscaled slot lets the
+    /// glyph overflow onto the text at accessibility sizes. Tighter here
+    /// — the day card is three columns at `spacing: 0`.
+    @ScaledMetric(relativeTo: .caption) private var iconSlot = 22.0
     /// The one thing this tab pushes. A bound path rather than a bare
     /// destination `NavigationLink` so a deep link can POP it: the
     /// month-stats widget says "the calendar", and it used to land on
@@ -400,7 +404,7 @@ struct CalendarView: View {
     ) -> some View {
         HStack(spacing: 6) {
             icon()
-                .frame(width: 22, alignment: .center)
+                .frame(width: iconSlot, alignment: .center)
             Text(text).foregroundStyle(color)
             // Differentiate Without Color's glyph twin of the status
             // hue; callers pass it only under that setting.

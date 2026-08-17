@@ -83,6 +83,9 @@ struct EmojiPromptSheet: View {
     /// fixed sizes exactly when the user asked for bigger text.
     @ScaledMetric(relativeTo: .largeTitle) private var previewSize = 56.0
     @ScaledMetric(relativeTo: .title2) private var fieldHeight = 44.0
+    /// Scaled alongside `fieldHeight` — it was the one literal left in a
+    /// field whose every other dimension already scaled.
+    @ScaledMetric(relativeTo: .title2) private var fieldWidth = 96.0
 
     var body: some View {
         NavigationStack {
@@ -93,7 +96,7 @@ struct EmojiPromptSheet: View {
                 Text(input.isEmpty ? " " : input)
                     .font(.system(size: previewSize))
                 EmojiTextField(text: $input, onSubmit: onUse)
-                    .frame(width: 96, height: fieldHeight)
+                    .frame(width: fieldWidth, height: fieldHeight)
                 Spacer(minLength: 0)
             }
             .padding()

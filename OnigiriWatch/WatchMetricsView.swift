@@ -5,6 +5,10 @@ import OnigiriKit
 /// metric slots, same read as Today's row — limit mode shows the total
 /// colored toward the ceiling, goal mode "x / target", green when met.
 struct WatchMetricsView: View {
+    /// Scaled with the card's text — a 41mm face has the least lateral
+    /// room in the app, so an overflowing glyph lands on the value
+    /// soonest here.
+    @ScaledMetric(relativeTo: .body) private var iconSlot = 24.0
     let model: WatchModel
 
     // AppStorage so a slot sync re-renders immediately (values land in
@@ -107,7 +111,7 @@ struct WatchMetricsView: View {
 
         return HStack(spacing: 8) {
             metricIcon(slot: slot, nutrient: nutrient)
-                .frame(width: 24, alignment: .center)
+                .frame(width: iconSlot, alignment: .center)
                 // The caption below already names the metric inside the
                 // combined element — letting VoiceOver also pronounce a
                 // user-chosen emoji ("salt shaker") is noise at best,

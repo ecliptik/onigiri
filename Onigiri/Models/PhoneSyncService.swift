@@ -82,9 +82,25 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
     @MainActor
     private func pushNow(from context: ModelContext) {
         // Recency order everywhere, matching the phone Log sheet's sort —
-        // the watch pages show the first ten of each list.
-        let allMeals = ((try? context.fetch(FetchDescriptor<Meal>())) ?? [])
+        // the watch pages show the first ten of each list. `recencyDate`
+        // is `lastUsedAt ?? createdAt`, so the sort itself touches no
+        // relationship; the mapping below is what does.
+        var mealFetch = FetchDescriptor<Meal>()
+        // Every figure taken off a meal here — totalKcal, totalSodiumMg,
+        // totalNutrients, loggedItems — reduces over `items`, so without
+        // prefetching, each meal pays its own round trip to fault that
+        // relationship in. This runs on every foreground and every
+        // debounced log, over the WHOLE library (the 10-row caps below
+        // apply to the payload, not to this walk).
+        mealFetch.relationshipKeyPathsForPrefetching = [\.items]
+        let allMeals = ((try? context.fetch(mealFetch)) ?? [])
             .sorted { $0.recencyDate > $1.recencyDate }
+        // Fetched BEFORE the mapping below, and that ordering is load
+        // bearing: `MealItem.kcal` reads through to its food, and these
+        // rows are registered in the context by the time it does. Moving
+        // this after the map restores the second level of the same N+1,
+        // which no prefetch keypath can express — `\Meal.items.food`
+        // isn't sayable, `items` being an array.
         let allFoods = ((try? context.fetch(FetchDescriptor<Food>())) ?? [])
             .sorted { $0.recencyDate > $1.recencyDate }
         // `isMeal` rides every row so the watch can mark meals the way

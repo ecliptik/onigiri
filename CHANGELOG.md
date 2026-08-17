@@ -8,6 +8,47 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.24.0 — nothing logged that you didn't see
+
+_2026-08-17_ · [changes since v2.23.0](https://github.com/ecliptik/onigiri/compare/v2.23.0...v2.24.0)
+
+Sharing a Salt & Straw product page logged a 300 kcal dessert carrying
+**810,400 mg of sodium** — 810 grams of it, about two kilos of table salt, 352x
+the daily limit — and no screen in that flow ever showed the number. Three
+things had to fail for that, and all three are fixed here.
+
+**A page's words are now read as words.** The number came from the page's last
+line, `Salt & Straw © 2026 All Rights Reserved`:
+
+    810,400 = 2026 × 0.4 × 1000
+              ^^^^   ^^^^^^^^^^
+              the    salt → sodium, by mass
+              copyright year
+
+The nutrition parser is built for the panel on the back of a package, where
+geometry ties a name to its amount. A web page has no such geometry, so a
+keyword anywhere could claim any number below it — the same page's sibling
+flavour turned a `$15` price into 6,000 mg. Reading prose now requires each
+amount to state its own unit, which a footer, a price and a copyright line
+never do. Nothing published changes: `Calories per serving: 300` still reads,
+and so does a label that spells out `Sodium 105mg`.
+
+**The share sheet shows every figure before it logs one.** Its confirm step used
+to show the name, the calories and the serving while writing sodium and five
+macros to Health beside them. It now lists all of them, scaled to the portion
+and in your sodium unit — and says so plainly when a menu published calories
+alone. A value that isn't shown there is a value nobody agreed to.
+
+**A logged item can be moved to yesterday.** Editing an entry's date opened a
+calendar with no way to confirm it: the only dismissal was a tap outside, which
+on a half-height sheet is the gesture that throws the whole edit away. The date
+and time pickers now open with **Cancel** and **Done**, and the entry changes
+only when you tap Done.
+
+Under the hood, the regression tests read the real text of real pages — both
+Salt & Straw flavours, a recipe page that must yield nothing, and two prose
+panels that must still read — so what the tests parse is what the app parses.
+
 ## v2.23.0 — order the second thing too
 
 _2026-08-16_ · [changes since v2.22.0](https://github.com/ecliptik/onigiri/compare/v2.22.0...v2.23.0)

@@ -109,14 +109,19 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   watch to reach "connecting/connected", then install. Don't send the user
   chasing watch reboots until this is ruled out.
 - **That timeout message is sufficient, NOT necessary — its absence rules
-  nothing out** (2026-08-17). A deploy failed all 12 attempts with the
-  watch reading a clean `available (paired)` and `list devices` printing
-  no timeout line at all; `pkill -f CoreDeviceService` then made the very
-  next install succeed on attempt 1. The same watch had installed on
-  attempt 1 twice earlier the same day. So run the pkill whenever the
-  retry loop is exhausted, whatever `list devices` claims — it costs one
-  command and no sudo, and the healthy-looking listing is not evidence
+  nothing out, and this is not watch-specific** (both 2026-08-17). Twice
+  in one afternoon a deploy failed against a device reading a clean
+  `available (paired)` with `list devices` printing no timeout line, and
+  `pkill -f CoreDeviceService` fixed it immediately both times: once the
+  WATCH, losing all 12 attempts with `CoreDeviceError 4000`, and once the
+  PHONE, dying on the first attempt with `NWError 60` (tunnel timed out)
+  — different device, different error, same cure. So: **any** install
+  failure that isn't `unavailable`, run the pkill before anything else.
+  One command, no sudo, and a healthy-looking listing is no evidence
   against it.
+- `deploy-phone.sh` retries the WATCH install 12 times but the phone
+  install is one-shot, so a phone-side tunnel timeout ends the whole
+  script with the watch never attempted. Re-run it after the pkill.
 - **4000 / RemotePairingError-1001 / 3002 / `IXRemoteErrorDomain code 6`
   on the first attempts are normal — the install attempt itself is what
   wakes the channel.** deploy-phone.sh runs that retry loop, so don't

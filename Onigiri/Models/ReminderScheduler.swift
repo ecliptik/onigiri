@@ -98,8 +98,7 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
             plan: plan, isMaintenance: goal?.isMaintenance ?? false
         ) else { return }
         for reminder in ReminderPlanner.plan(
-            state: state, enabled: enabled, times: SharedStore.reminderTimes,
-            waterUnit: SharedStore.waterUnit
+            state: state, enabled: enabled, times: SharedStore.reminderTimes
         ) {
             let content = UNMutableNotificationContent()
             content.title = reminder.title
@@ -153,7 +152,6 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
         return ReminderPlanner.DayState(
             hasLoggedFood: !loadedEntries.isEmpty,
             waterOz: plan.summary.waterOz,
-            waterGoalOz: SharedStore.waterGoalOz,
             streak: StreakCalendar.currentStreak(earned: earned),
             todayGoalMet: todayGoalMet
         )
@@ -177,10 +175,14 @@ final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
         default:
             break
         }
+        // Verbatim copies of the planner's bodies — a preview that says
+        // something the real reminder doesn't is worse than no preview.
+        // They used to interpolate 12 and 64 oz, which is exactly the
+        // kind of live figure the planner no longer prints.
         let samples: [(PlannedReminder.Kind, String, String)] = [
             (.meals, "Nothing logged yet", "Log your meals to keep today's balance up to date."),
-            (.water, "Water check-in", "You're at \(SharedStore.waterUnit.value(fromOz: 12)) of \(SharedStore.waterUnit.text(fromOz: 64))."),
-            (.streak, "Keep your streak going", "Your 3-day streak ends at midnight — log your day."),
+            (.water, "Water check-in", "Time for a glass of water."),
+            (.streak, "Keep your streak going", "Your streak ends at midnight — log your day."),
         ]
         for (index, sample) in samples.enumerated() {
             let content = UNMutableNotificationContent()

@@ -186,6 +186,22 @@ public enum WatchSync {
     /// different stores.
     public static let lastLogAtKey = "sync.lastLogAt"
 
+    /// The watch → phone `transferUserInfo` payload key, carrying the
+    /// moment of a watch-side log.
+    ///
+    /// The ONLY channel that runs this direction. The application context
+    /// is phone → watch and nothing came back, so the phone learned about
+    /// a watch log solely through HealthKit's own sync — and watchOS caps
+    /// its background delivery at roughly hourly, which is how a 7 AM
+    /// watch-logged glass of water was still invisible to the 11 AM
+    /// reminder replan (the user, 2026-08-17; `plans/PLAN-reminders.md`).
+    ///
+    /// `transferUserInfo` is the right primitive: queued, guaranteed, and
+    /// it WAKES the phone app in the background to receive. It is still
+    /// only best-effort in time — a queued transfer arrives when it
+    /// arrives — so nothing may depend on its promptness.
+    public static let watchLogNoticeKey = "sync.watchLoggedAt"
+
     /// The one place the sync wire format is configured. Every encode and
     /// decode in this file must use these — SyncedGoal.targetDate crosses
     /// devices and app versions, so a single call site drifting to its own

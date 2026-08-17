@@ -318,6 +318,36 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         }
     }
 
+    /// A log happened ON THE WATCH.
+    ///
+    /// The only inbound WatchConnectivity traffic. HealthKit carries the
+    /// sample itself, but watchOS caps its background delivery at roughly
+    /// hourly, so this arrives first — and reminders bake their text at
+    /// planning time, which is how a 7 AM watch-logged glass of water
+    /// left the 11 AM check-in insisting nothing had been logged (the
+    /// user, 2026-08-17; `plans/PLAN-reminders.md`).
+    ///
+    /// The ARRIVAL is the signal; the timestamp inside only keeps
+    /// successive transfers distinct. Health may not have synced the
+    /// sample yet when this lands — the replan re-queries and the
+    /// foreground replan still backstops it, so an early wake costs one
+    /// replan and nothing else.
+    nonisolated func session(
+        _ session: WCSession,
+        didReceiveUserInfo userInfo: [String: Any] = [:]
+    ) {
+        guard userInfo[WatchSync.watchLogNoticeKey] != nil else { return }
+        Task { @MainActor in
+            Self.log.notice("watch log notice — replanning reminders")
+            WidgetReloader.requestReload(kinds: WidgetKinds.phoneLogAffected)
+            // Awaited, not fired-and-forgotten: this may be a background
+            // wake, and the process re-suspends once the delegate's work
+            // settles — a merely-scheduled replan would be stranded.
+            await ReminderScheduler.shared.replanNow(afterMutation: true)
+            WidgetReloader.flushNow()
+        }
+    }
+
     nonisolated func sessionDidBecomeInactive(_ session: WCSession) {}
 
     nonisolated func sessionDidDeactivate(_ session: WCSession) {

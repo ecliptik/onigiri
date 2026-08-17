@@ -27,8 +27,10 @@ public struct PlannedReminder: Sendable, Equatable, Identifiable {
 public enum ReminderPlanner {
     public struct DayState: Sendable, Equatable {
         public var hasLoggedFood: Bool
+        /// Only ever compared against zero — the water nudge asks
+        /// "anything logged?", not "how far along?". The goal it used to
+        /// be paced against is deliberately absent.
         public var waterOz: Double
-        public var waterGoalOz: Double
         /// Current streak; an unfinished today doesn't break it, and an
         /// earned today counts (StreakCalendar semantics).
         public var streak: Int
@@ -37,13 +39,11 @@ public enum ReminderPlanner {
         public init(
             hasLoggedFood: Bool = false,
             waterOz: Double = 0,
-            waterGoalOz: Double = 64,
             streak: Int = 0,
             todayGoalMet: Bool = false
         ) {
             self.hasLoggedFood = hasLoggedFood
             self.waterOz = waterOz
-            self.waterGoalOz = waterGoalOz
             self.streak = streak
             self.todayGoalMet = todayGoalMet
         }
@@ -69,11 +69,9 @@ public enum ReminderPlanner {
     public struct Times: Sendable, Equatable {
         public var mealMinute: Int
         public var streakMinute: Int
-        /// The water check-ins. Pacing expectations attach in
-        /// CHRONOLOGICAL order — the earliest check-in always expects
-        /// the least — and same-time duplicates collapse, with the
-        /// expectations re-paced evenly over what remains (N distinct
-        /// times expect 1/N, 2/N, … of the goal).
+        /// The water check-ins. Same-time duplicates collapse; the
+        /// pacing expectations that used to attach to them in
+        /// chronological order are gone with the pacing gate itself.
         public var waterMinutes: [Int]
 
         public init(
@@ -96,8 +94,7 @@ public enum ReminderPlanner {
         enabled: Enabled,
         times: Times = Times(),
         now: Date = .now,
-        calendar: Calendar = .current,
-        waterUnit: WaterUnit = .fluidOunces
+        calendar: Calendar = .current
     ) -> [PlannedReminder] {
         var planned: [PlannedReminder] = []
         let todayStart = calendar.startOfDay(for: now)
@@ -114,18 +111,19 @@ public enum ReminderPlanner {
            let fire = at(minute: times.mealMinute, dayOffset: 0), fire > now {
             planned.append(mealNudge(at: fire))
         }
-        if enabled.water, state.waterGoalOz > 0, state.waterOz < state.waterGoalOz {
-            let checkpoints = Set(times.waterMinutes).sorted()
-            for (index, minute) in checkpoints.enumerated() {
-                let expectedShare = Double(index + 1) / Double(checkpoints.count)
-                guard let fire = at(minute: minute, dayOffset: 0), fire > now,
-                      state.waterOz < state.waterGoalOz * expectedShare
+        // Gated on "nothing logged", NOT on pace (the user, 2026-08-17 —
+        // `plans/PLAN-reminders.md`). A pacing claim is falsified by any
+        // log in the gap between planning and firing; "you haven't logged
+        // any water" is falsified only by a log in that same gap AND is
+        // the one thing a reminder can say that stays true all day on the
+        // days it is for. The pacing shares it replaces put a live figure
+        // in the body, which is what read "0 of 64 oz" after a morning of
+        // watch-logged water.
+        if enabled.water, state.waterOz == 0 {
+            for minute in Set(times.waterMinutes).sorted() {
+                guard let fire = at(minute: minute, dayOffset: 0), fire > now
                 else { continue }
-                planned.append(PlannedReminder(
-                    kind: .water, fireDate: fire,
-                    title: "Water check-in",
-                    body: "You're at \(waterUnit.value(fromOz: state.waterOz)) of \(waterUnit.text(fromOz: state.waterGoalOz))."
-                ))
+                planned.append(waterNudge(at: fire))
             }
         }
         // Gated on LOGGING, not on the goal: todayGoalMet judges with
@@ -136,15 +134,16 @@ public enum ReminderPlanner {
         // matching its own copy; goal math stays out of it.
         if enabled.streak, !state.hasLoggedFood, state.streak >= 2,
            let fire = at(minute: times.streakMinute, dayOffset: 0), fire > now {
-            planned.append(streakWarning(at: fire, streak: state.streak))
+            planned.append(streakWarning(at: fire))
         }
         // Tomorrow's streak warning is safe to pre-plan only when today is
-        // already earned — otherwise the streak may be dead by then. By
-        // the time it fires, the earned today has JOINED the streak:
-        // say N+1, not today's N.
+        // already earned — otherwise the streak may be dead by then. It
+        // used to have to say N+1 rather than today's N, because the body
+        // printed the count; with the count gone the two warnings are the
+        // same sentence and the arithmetic went with it.
         if enabled.streak, state.todayGoalMet, state.streak >= 2,
            let fire = at(minute: times.streakMinute, dayOffset: 1) {
-            planned.append(streakWarning(at: fire, streak: state.streak + 1))
+            planned.append(streakWarning(at: fire))
         }
         if enabled.meals {
             for day in 1...horizonDays {
@@ -164,11 +163,22 @@ public enum ReminderPlanner {
         )
     }
 
-    private static func streakWarning(at fire: Date, streak: Int) -> PlannedReminder {
+    private static func waterNudge(at fire: Date) -> PlannedReminder {
+        PlannedReminder(
+            kind: .water, fireDate: fire,
+            title: "Water check-in",
+            body: "Time for a glass of water."
+        )
+    }
+
+    /// No day count: the number is decided at planning time and the
+    /// warning fires hours later, so a streak that ends in between made
+    /// the body a lie. Nothing here can be falsified by the clock.
+    private static func streakWarning(at fire: Date) -> PlannedReminder {
         PlannedReminder(
             kind: .streak, fireDate: fire,
             title: "Keep your streak going",
-            body: "Your \(streak)-day streak ends at midnight — log your day."
+            body: "Your streak ends at midnight — log your day."
         )
     }
 }

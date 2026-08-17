@@ -156,6 +156,7 @@ final class WatchModel {
             }
             WKInterfaceDevice.current().play(.success)
             showFlash("✓ \(entry.name) updated", isError: false)
+            sync.notifyPhoneOfLog()
             await refresh()
             return true
         } catch {
@@ -183,6 +184,7 @@ final class WatchModel {
             try await health.deleteFoodEntry(id: entry.id)
             WKInterfaceDevice.current().play(.success)
             showFlash("Removed \(entry.name)", isError: false)
+            sync.notifyPhoneOfLog()
             await refresh()
             return true
         } catch {
@@ -204,6 +206,7 @@ final class WatchModel {
                 "+\(SharedStore.waterUnit.text(fromOz: waterServingOz)) ✓",
                 isError: false
             )
+            sync.notifyPhoneOfLog()
             await refresh()
             return true
         } catch {
@@ -230,6 +233,7 @@ final class WatchModel {
             )
             WKInterfaceDevice.current().play(.success)
             showFlash("✓ \(meal.name)", isError: false)
+            sync.notifyPhoneOfLog()
             await refresh()
             return true
         } catch {

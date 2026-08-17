@@ -62,36 +62,58 @@ struct ReminderPlannerTests {
         #expect(fireHours(planned, kind: .meals).isEmpty)
     }
 
-    @Test func waterCheckpointsOnlyWhereBehindPace() {
-        // 30 of 64 oz at 8 AM: past 1/3 of goal (21.3), so 11 AM is
-        // satisfied; behind 2/3 (42.7) and the full goal, so 3 PM and
-        // 7 PM check in.
+    @Test func waterChecksInOnADayWithNothingLogged() {
         let planned = ReminderPlanner.plan(
-            state: .init(waterOz: 30, waterGoalOz: 64),
+            state: .init(waterOz: 0),
             enabled: .init(water: true),
             now: today(at: 8)
         )
-        #expect(fireHours(planned, kind: .water) == [15, 19])
+        #expect(fireHours(planned, kind: .water) == [11, 15, 19])
     }
 
-    @Test func waterSilentOnceGoalMet() {
-        let planned = ReminderPlanner.plan(
-            state: .init(waterOz: 64, waterGoalOz: 64),
-            enabled: .init(water: true),
-            now: today(at: 8)
-        )
-        #expect(fireHours(planned, kind: .water).isEmpty)
+    /// The 2026-08-17 report: 24 oz logged on the watch in the morning,
+    /// and the 11 AM check-in still read "You're at 0 of 64 oz."
+    /// ANY water silences every remaining check-in — the gate is
+    /// "nothing logged", not a pace, precisely because a pace is what a
+    /// stale snapshot gets wrong.
+    @Test func anyWaterAtAllSilencesTheDay() {
+        for logged in [1.0, 8.0, 24.0, 200.0] {
+            let planned = ReminderPlanner.plan(
+                state: .init(waterOz: logged),
+                enabled: .init(water: true),
+                now: today(at: 8)
+            )
+            #expect(fireHours(planned, kind: .water).isEmpty)
+        }
     }
 
     @Test func waterOnlyPlansCheckpointsStillAhead() {
         let planned = ReminderPlanner.plan(
-            state: .init(waterOz: 0, waterGoalOz: 64),
+            state: .init(waterOz: 0),
             enabled: .init(water: true),
             now: today(at: 16)
         )
         #expect(fireHours(planned, kind: .water) == [19])
-        // Never for future days — water pacing is stateful.
+        // Never for future days — tomorrow's water state is unknowable.
         #expect(planned.filter { $0.kind == .water }.count == 1)
+    }
+
+    /// Layer 1 of `plans/PLAN-reminders.md`: a body is delivered exactly
+    /// as it was written hours earlier, so it may not assert anything
+    /// that can change in between. A digit is the tell — every figure
+    /// these used to carry (water progress, the streak's day count) was
+    /// live state.
+    @Test func noReminderBodyCarriesALiveFigure() {
+        let planned = ReminderPlanner.plan(
+            state: .init(hasLoggedFood: false, waterOz: 0, streak: 5),
+            enabled: .init(meals: true, water: true, streak: true),
+            now: today(at: 7)
+        )
+        #expect(!planned.isEmpty)
+        for reminder in planned {
+            let hasDigit = (reminder.title + reminder.body).contains { $0.isNumber }
+            #expect(hasDigit == false, "\(reminder.title) / \(reminder.body)")
+        }
     }
 
     @Test func streakWarningWhenNothingLoggedYet() {
@@ -101,7 +123,6 @@ struct ReminderPlannerTests {
             now: today(at: 8)
         )
         #expect(fireHours(planned, kind: .streak) == [20])
-        #expect(planned.first { $0.kind == .streak }?.body.contains("5-day") == true)
         // Tomorrow is not pre-planned — today may end unearned.
         #expect(fireHours(planned, kind: .streak, dayOffset: 1).isEmpty)
     }
@@ -129,10 +150,6 @@ struct ReminderPlannerTests {
         )
         #expect(fireHours(planned, kind: .streak).isEmpty)
         #expect(fireHours(planned, kind: .streak, dayOffset: 1) == [20])
-        // By the time tomorrow's warning fires, the earned today has
-        // joined the streak: 6 + today = "7-day streak".
-        let tomorrow = planned.first { $0.kind == .streak }
-        #expect(tomorrow?.body.contains("7-day streak") == true)
     }
 
     @Test func noStreakWarningForShortStreaks() {
@@ -146,7 +163,7 @@ struct ReminderPlannerTests {
 
     @Test func plansAreSortedAndIdsUnique() {
         let planned = ReminderPlanner.plan(
-            state: .init(waterOz: 0, waterGoalOz: 64, streak: 3),
+            state: .init(waterOz: 0, streak: 3),
             enabled: .init(meals: true, water: true, streak: true),
             now: today(at: 7)
         )
@@ -177,37 +194,27 @@ struct ReminderPlannerTests {
         #expect(fireHours(planned, kind: .meals, dayOffset: 2) == [10])
     }
 
-    @Test func waterExpectationsFollowChronologicalOrder() {
-        // Times entered out of order: the earliest check-in must expect
-        // the least. Chronologically 9 AM expects 1/3 (21.3 oz) — 30 oz
-        // satisfies it — while 1 PM (2/3) and 7 PM (all) still nudge.
+    @Test func customWaterTimesMoveTheCheckIns() {
+        // Entered out of order; the plan comes back chronological.
         let times = ReminderPlanner.Times(waterMinutes: [19 * 60, 13 * 60, 9 * 60])
         let planned = ReminderPlanner.plan(
-            state: .init(waterOz: 30, waterGoalOz: 64),
+            state: .init(waterOz: 0),
             enabled: .init(water: true),
             times: times, now: today(at: 6)
         )
-        #expect(fireHours(planned, kind: .water) == [13, 19])
+        #expect(fireHours(planned, kind: .water) == [9, 13, 19])
     }
 
-    @Test func duplicateWaterTimesCollapseAndRepace() {
-        // Two check-ins on the same minute collapse: 2 distinct times
-        // remain and expectations re-pace to 1/2 and all. 30 of 64 oz is
-        // under the halfway 32, so both nudge…
+    @Test func duplicateWaterTimesCollapse() {
+        // Two check-ins on the same minute are one notification, not two
+        // stacked at 3 PM.
         let times = ReminderPlanner.Times(waterMinutes: [15 * 60, 15 * 60, 19 * 60])
         let planned = ReminderPlanner.plan(
-            state: .init(waterOz: 30, waterGoalOz: 64),
+            state: .init(waterOz: 0),
             enabled: .init(water: true),
             times: times, now: today(at: 8)
         )
         #expect(fireHours(planned, kind: .water) == [15, 19])
         #expect(planned.filter { $0.kind == .water }.count == 2)
-        // …and 33 oz clears halfway, leaving only the full-goal check.
-        let ahead = ReminderPlanner.plan(
-            state: .init(waterOz: 33, waterGoalOz: 64),
-            enabled: .init(water: true),
-            times: times, now: today(at: 8)
-        )
-        #expect(fireHours(ahead, kind: .water) == [19])
     }
 }

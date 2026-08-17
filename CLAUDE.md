@@ -12,7 +12,8 @@ here. Roadmap: `plans/PLAN.md`.
 [Build](#build-and-test) · [Deploy](#deploying-to-devices) ·
 [Simulator](#simulator-automation) · [Widgets](#widget-timelines) ·
 [SwiftData/SwiftUI](#swiftdata-and-swiftui-landmines) ·
-[App launch](#app-launch-landmines)
+[App launch](#app-launch-landmines) ·
+[Reminders](#reminders-the-text-is-frozen-at-schedule-time)
 **Rules of the app:** [Where code lives](#where-code-lives) ·
 [Logging](#logging-healthkit-is-the-store) ·
 [Budget](#the-budget-and-what-may-judge-a-day) ·
@@ -357,6 +358,41 @@ Each cost a debugging session.
   icon, a notification, or a complication — is usually the lapsed
   7-day provisioning profile, not code. Redeploy before debugging.
 
+## Reminders: the text is frozen at schedule time
+
+`plans/PLAN-reminders.md` (2026-08-17). This bug shipped TWICE — the same
+"0 of N oz" after a morning of watch-logged water, 2026-07-16 and again
+2026-08-17 — because both times the fix went to the freshness machinery.
+
+- **A `UNNotificationRequest`'s body is written hours before it fires and
+  iOS delivers it verbatim.** So a reminder may not assert ANYTHING that
+  can change in between. No live figures: not water progress, not the
+  streak's day count. `ReminderPlannerTests.noReminderBodyCarriesALive‑
+  Figure` scans every planned title and body for a digit — that guard is
+  the point, don't relax it to let one "harmless" number through. The
+  DEBUG preview samples in `ReminderScheduler` are hand-copied duplicates
+  of the planner's bodies and must move with them.
+- The snapshot decides IF each reminder exists too, so this was never
+  water-specific: the meal nudge and streak warning both gate on
+  `!hasLoggedFood` at plan time and will happily nag about a day you
+  already logged. Water was just the kind that printed a number.
+- **Water fires on `waterOz == 0`, not on pace.** Pacing was deleted, not
+  disabled — a pace claim is falsified by any log in the gap. The
+  accepted cost is real and was chosen: log 8 oz and stop, get no further
+  nudge that day. Don't "fix" it by restoring pacing.
+- Three replans exist (foreground, `Feedback.didMutate`, the HealthKit
+  observer) and **none is reliable for a WATCH log** — watchOS caps its
+  own background delivery at roughly hourly. `WatchSyncReceiver.notify‑
+  PhoneOfLog()` → `PhoneSyncService.didReceiveUserInfo` is the only
+  watch → phone channel in the app (everything else is phone → watch
+  application context). It is `transferUserInfo` because that queues and
+  WAKES the phone; it is still best-effort, so nothing may depend on it
+  having landed.
+- `SharedIntents/` cannot call `ReminderScheduler` (it compiles into the
+  widget and watch targets, which don't have it) — and doesn't need to:
+  `startObservingLogChanges` uses `predicate: nil`, so any in-process
+  write already triggers a replan.
+
 ## Where code lives
 
 - Shared models/logic go in `Packages/OnigiriKit`, pure and unit-tested where
@@ -441,7 +477,7 @@ Each cost a debugging session.
   contradiction (726 kcal apart at lunchtime, 2026-08-02). Since 2026-08-11 the
   SECTION carries that distinction, not the row labels: `Budget` under `Today`
   (live `dayBurn − deficit`, as eaten/budget) and `Budget, average day` inside
-  the collapsed "How budget is set". Don't put two rows called "Budget" side by
+  the collapsed "How the budget is set". Don't put two rows called "Budget" side by
   side again, and don't re-add a today-floor to the projection to close the gap
   — that was tried, it made the average neither one thing nor the other, and it
   didn't close it.
@@ -479,7 +515,7 @@ Each cost a debugging session.
   — the sensitivity is `3500 / daysRemaining` kcal per pound (194 kcal/day at
   18 days out), so the last pound otherwise swings on water weight.
 - The chart's trend line has a checkable invariant: **its right-hand end EQUALS
-  the "Weight" row under "How budget is set", to the digit**
+  the "Weight" row under "How the budget is set", to the digit**
   (`GoalFinishLineTests.theSmoothedLineEndsOnTheBudgetBasis`). It averages
   daily lows for that reason; on raw samples it ended ~2 lb high, and a day
   weighed twice outvoted a day weighed once — which measures weighing habits

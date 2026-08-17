@@ -106,6 +106,31 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         return hasher.finalize()
     }
 
+    /// Tell the phone something was logged HERE.
+    ///
+    /// The only watch → phone traffic in the app. HealthKit syncs the
+    /// sample itself, but watchOS caps its background delivery at roughly
+    /// hourly, so the phone could not replan its reminders around a watch
+    /// log in time — a 7 AM glass of water left the 11 AM check-in still
+    /// saying nothing had been logged (the user, 2026-08-17).
+    ///
+    /// `transferUserInfo`, not `sendMessage`: it queues, it is delivered
+    /// even when the phone app is not running, and it wakes the phone in
+    /// the background to receive. The timestamp is only there to keep
+    /// successive transfers distinct — the phone reads the ARRIVAL as the
+    /// signal, not the value.
+    ///
+    /// Best-effort by construction: a queued transfer arrives when it
+    /// arrives, so the planner must never depend on this having landed.
+    func notifyPhoneOfLog(at date: Date = .now) {
+        guard WCSession.isSupported() else { return }
+        let session = WCSession.default
+        guard session.activationState == .activated else { return }
+        session.transferUserInfo([
+            WatchSync.watchLogNoticeKey: date.timeIntervalSince1970
+        ])
+    }
+
     // MARK: - WCSessionDelegate
 
     nonisolated func session(

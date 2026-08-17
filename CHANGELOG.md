@@ -8,6 +8,50 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.26.0 — when a database already knows
+
+_2026-08-17_ · [changes since v2.25.0](https://github.com/ecliptik/onigiri/compare/v2.25.0...v2.26.0)
+
+The last three releases stopped wrong numbers reaching your log. None of them
+made an estimate any *better*. This one does, by asking a question the app
+wasn't asking: **does a database already hold this food?**
+
+**Published values, offered beside an estimate.** Ask Onigiri to estimate "a
+Big Mac" and Apple Intelligence answers 550 kcal and 2,400 mg of sodium.
+McDonald's publishes about 1,010. No amount of prompt-writing fixes a number
+the model doesn't know — a lookup does. So when a database plainly holds the
+food an estimate just named, the food form now shows it:
+
+> **Published values**
+> Big Mac (McDonald's) · 232 g — 530 kcal · 920 mg Na
+> _A database has this name. Tap to use its figures and serving instead of the estimate._
+
+It offers and never substitutes. The estimate stays exactly as it was until you
+tap; a name match isn't proof. Taking the offer brings the whole row across —
+nine macros, minerals and vitamins in the case above — and the ✨ mark becomes
+"Source: OpenFoodFacts", because those numbers are no longer a guess.
+
+The matching is deliberately strict, since a published figure carries more
+authority than an estimate and a wrong offer is worse than none. A brand prefix
+matches ("Big Mac" → "McDonald's Big Mac"); "Big Mac Sauce" doesn't, and
+neither does a dish reaching for an ingredient — "two large scrambled eggs" is
+never "Eggs". It only runs when your online lookups are already on: an estimate
+is otherwise answered entirely on your phone, and this is the only part of it
+that leaves.
+
+**Macros that contradict their own calorie count are dropped.** Asked for
+protein, carbs and fat beside its calories, the model sometimes returns numbers
+that add up to something else entirely. Now they're checked against the calorie
+figure it gave, and dropped when they disagree — one number you can trust beats
+four that argue. Measured across the golden set, 18 of 19 estimates keep their
+macros; the one that doesn't is a composed dish, which is exactly where they go
+wrong.
+
+**And the sodium yardstick got harder.** The test set that grades estimates grew
+by half, weighted toward foods whose right answer is a *small* number — because
+over-estimation was the known failure and the old set couldn't see it. The pass
+mark went up with it.
+
 ## v2.25.0 — it checks the number before you do
 
 _2026-08-17_ · [changes since v2.24.0](https://github.com/ecliptik/onigiri/compare/v2.24.0...v2.25.0)

@@ -8,6 +8,50 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.27.1 — the failures that were keeping quiet
+
+_2026-08-17_ · [changes since v2.27.0](https://github.com/ecliptik/onigiri/compare/v2.27.0...v2.27.1)
+
+A maintenance release, from a run of audits over the data layer. Most of it
+you will never see, which is the point. One part you might.
+
+**A save that fails now says so.** Adding a food, editing a meal, saving or
+removing a goal, deleting either — all of these wrote to the store, threw the
+result away, and then showed you a checkmark. If the write had been rejected,
+the toast still said it worked, the sheet still closed, and the change was
+simply gone. Nothing logged it and nothing surfaced it, which made it the one
+kind of failure you could not find out about.
+
+Those writes now report. The everyday bookkeeping — a recency stamp, a
+favorite star — deliberately stays quiet and only leaves a trace in the log:
+interrupting you about a write you never asked for would be worse than the
+failure it announces.
+
+**Two foods with the same name should be one food.** The rule the app uses to
+recognise a name it already has trims spaces and ignores capitals. Two other
+places had quietly grown their own version — restoring a backup only ignored
+capitals, and saving a dish from a shared menu matched the name exactly. So a
+backup holding " Oats" restored a second *Oats*, and sharing the same item
+twice with different capitalisation made a twin. There is one rule now, in two
+forms that cannot disagree.
+
+**A restored meal keeps its identity only if it is still free.** Meal widgets
+and Shortcuts find a meal by a hidden identifier, so restoring a backup
+preserves it. If you had renamed that meal since the backup was written, the
+restore created a second meal and handed it the same identifier — and a widget
+pointed at it would log whichever one it found first. The identifier is now
+only reused when nothing else holds it.
+
+**Your watch's logs reach your phone more reliably.** The channel added in
+2.27.0 — the watch telling the phone it logged something, so reminders can
+catch up in seconds rather than an hour — could be cut short when the phone was
+woken in the background with nothing holding it awake. It now asks iOS for the
+time to finish.
+
+Under all of it: the launch-time store repair, meal syncing, and a handful of
+globals were tightened so that assumptions the code relied on are now checked
+by the compiler instead of by convention. Seven new tests, 583 in total.
+
 ## v2.27.0 — a reminder that can't be wrong
 
 _2026-08-17_ · [changes since v2.26.0](https://github.com/ecliptik/onigiri/compare/v2.26.0...v2.27.0)

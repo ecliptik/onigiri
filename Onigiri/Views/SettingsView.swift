@@ -184,10 +184,13 @@ struct SettingsView: View {
 
         var title: String {
             switch self {
+            // Each title repeats its own button's words, capitalization
+            // included — three of the four used to drop into sentence
+            // case and read as a different action than the one tapped.
             case .library: "Reset Food Library?"
-            case .goals: "Reset goals?"
-            case .settings: "Reset settings?"
-            case .all: "Reset all?"
+            case .goals: "Reset Goals?"
+            case .settings: "Reset Settings?"
+            case .all: "Reset All?"
             }
         }
 
@@ -443,7 +446,7 @@ struct SettingsView: View {
                 if BackupService.backupIfDue(context: context, force: true) != nil {
                     ToastCenter.shared.show("Backed up ✓")
                 } else {
-                    ToastCenter.shared.show("Backup failed.")
+                    ToastCenter.shared.show("Backup failed")
                 }
             }
             Text(backupCaption)
@@ -844,7 +847,7 @@ struct SettingsView: View {
                 }
                 Button("Keep Editing", role: .cancel) {}
             } message: {
-                Text("Every change made in Settings since it opened goes back to how it was.")
+                Text("Every change made since Settings opened goes back to how it was.")
             }
             .onAppear {
                 if entrySnapshot.isEmpty {
@@ -971,22 +974,27 @@ private struct AppearanceSettingsScreen: View {
                 // named — Today's meter and budget card, Goal, Details.
                 // The app had four (the user, 2026-08-13); this settles
                 // it without imposing a choice.
-                Picker("Call it", selection: $intakeWordRaw) {
+                // Not "Word for intake": one of the three choices IS
+                // "Intake", so that label read as its own tautology.
+                Picker("Food logged is called", selection: $intakeWordRaw) {
                     ForEach(IntakeWord.allCases, id: \.rawValue) { word in
                         Text(word.label).tag(word.rawValue)
                     }
                 }
                 // "Compact" trades the Intake/Active/Resting cards for
                 // Burned/Eaten beside the headline — more room for the log.
-                Picker("Energy stats", selection: $energyStatsStyle) {
+                // The row names WHAT it lays out and the options name the
+                // layout; "Energy stats / Beside balance" made the reader
+                // guess at both halves.
+                Picker("Burn and intake", selection: $energyStatsStyle) {
                     Text("Cards").tag("cards")
-                    Text("Beside balance").tag("compact")
+                    Text("Compact").tag("compact")
                 }
                 Toggle("Progress gauges", isOn: $progressGauges)
                 // Which scope the Foods tab opens on. Favorites led from
                 // 2026-07-14; the user asked for Foods on 2026-08-05 —
                 // a setting rather than a third hardcoded reversal.
-                Picker("Foods opens on", selection: $foodsDefaultScope) {
+                Picker("Foods tab opens on", selection: $foodsDefaultScope) {
                     Text("Foods").tag("Foods")
                     Text("Favorites").tag("Favorites")
                     Text("Meals").tag("Meals")
@@ -1035,7 +1043,10 @@ private struct RemindersSettingsScreen: View {
                 if remindMeals {
                     ReminderTimeRow(label: "Remind at", minute: $remindMealsMinute)
                 }
-                Toggle("Water pacing", isOn: $remindWater)
+                // Not "Water pacing" — pacing is the mechanism that was
+                // removed, and each toggle here now names its CONDITION
+                // ("Not logged by 2:00 PM", "Streak about to lapse").
+                Toggle("No water logged", isOn: $remindWater)
                 if remindWater {
                     ReminderTimeRow(label: "First check-in", minute: $remindWaterMinute1)
                     ReminderTimeRow(label: "Second check-in", minute: $remindWaterMinute2)
@@ -1072,7 +1083,7 @@ private struct RemindersSettingsScreen: View {
             } footer: {
                 // The times live in the rows now; only what they can't say
                 // rides here.
-                Text("Water check-ins nudge only while you're behind an even pace toward the Water section's goal; the streak check warns before a streak lapses at midnight.")
+                Text("Water check-ins only fire on days with nothing logged. The streak check warns before midnight.")
             }
         }
         .compactSections()
@@ -1118,7 +1129,12 @@ private struct OnlineDatabaseSettingsScreen: View {
                 // library-only and the scanner reads labels only.
                 Toggle("Online lookups", isOn: $onlineLookups)
                 if onlineLookups {
-                Picker("Source", selection: $textSearchSource) {
+                // "Text search", not "Source": the picker governs TYPED
+                // searches only, and named vaguely it made the barcode
+                // footer below read as a contradiction (the user,
+                // 2026-08-17 — "it still says it even if only USDA is
+                // the source").
+                Picker("Text search", selection: $textSearchSource) {
                     Text("OpenFoodFacts").tag(SharedStore.textSearchSourceOFF)
                     Text("USDA FoodData Central").tag(SharedStore.textSearchSourceFDC)
                     Text("Both").tag(SharedStore.textSearchSourceBoth)
@@ -1132,11 +1148,14 @@ private struct OnlineDatabaseSettingsScreen: View {
                         // Masked by default (it's a credential), revealed by
                         // the eye toggle. Both edit the same draft, so paste
                         // and the plausibility gate work either way.
+                        // The empty-field placeholder names WHOSE key it
+                        // wants — this screen can hold two sources and a
+                        // bare "API key" said neither.
                         Group {
                             if showFDCKey {
-                                TextField("API key", text: $fdcAPIKeyDraft)
+                                TextField("USDA FoodData API key", text: $fdcAPIKeyDraft)
                             } else {
-                                SecureField("API key", text: $fdcAPIKeyDraft)
+                                SecureField("USDA FoodData API key", text: $fdcAPIKeyDraft)
                             }
                         }
                         .autocorrectionDisabled()
@@ -1163,11 +1182,13 @@ private struct OnlineDatabaseSettingsScreen: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
-                        .accessibilityLabel(showFDCKey ? "Hide API key" : "Show API key")
+                        // Same words as the AI screen's eye toggle: two
+                        // doors doing one job shouldn't name it twice.
+                        .accessibilityLabel(showFDCKey ? "Hide key" : "Show key")
                     }
                     let draft = fdcAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
                     if draft.isEmpty {
-                        WarningFootnote("An API key is required to use the USDA FoodData Central, go to [fdc.nal.usda.gov/api-guide](https://fdc.nal.usda.gov/api-guide) to request a key")
+                        WarningFootnote("USDA FoodData Central needs an API key. Request one at [fdc.nal.usda.gov/api-guide](https://fdc.nal.usda.gov/api-guide).")
                     } else if !SharedStore.isPlausibleFDCKey(draft) {
                         WarningFootnote("API keys are 40 letters and digits — this one is \(draft.count) and won't be saved.")
                     }
@@ -1175,7 +1196,7 @@ private struct OnlineDatabaseSettingsScreen: View {
                         // Answers "is this key REAL?" at entry time — the
                         // shape check above can't know, and without this the
                         // first failed search is the messenger.
-                        Button("Test API key") { testFDCKey(draft) }
+                        Button("Test key") { testFDCKey(draft) }
                             .disabled(!SharedStore.isPlausibleFDCKey(draft) || fdcKeyTest == .testing)
                         Spacer()
                         switch fdcKeyTest {
@@ -1199,9 +1220,11 @@ private struct OnlineDatabaseSettingsScreen: View {
                 }
             } footer: {
                 if onlineLookups {
-                    Text("[OpenFoodFacts](https://world.openfoodfacts.org) is always used for barcode scanning")
+                    Text("Barcode scans always use [OpenFoodFacts](https://world.openfoodfacts.org).")
                 } else {
-                    Text("Online lookups are off — searches use your Food Library only, and the scanner reads nutrition labels on-device. Everything remains local to your device.")
+                    // "on-device" already IS the promise — a trailing
+                    // "nothing leaves your iPhone" only said it twice.
+                    Text("Online lookups are off — searches use your Food Library only, and the scanner reads labels on-device.")
                 }
             }
         }
@@ -1302,7 +1325,7 @@ private struct AISettingsScreen: View {
                 switch AIProviderSettings.selected {
                 case .onDevice:
                     if !FoodIntelligence.onDeviceAvailable {
-                        WarningFootnote("Apple Intelligence isn't available on this iPhone — AI features are unavailable. Pick a provider above to bring your own.")
+                        WarningFootnote("Apple Intelligence isn't available on this iPhone, so AI features are off. Pick a provider above to bring your own.")
                     }
                 case .anthropic:
                     // The on-device case always said WHY nothing works;
@@ -1311,13 +1334,13 @@ private struct AISettingsScreen: View {
                     if !AIProviderSettings.selectedRemoteIsConfigured {
                         WarningFootnote("Enter an API key below to turn AI features on.")
                     }
-                    aiKeyField("API key")
+                    aiKeyField("\(AIProviderSettings.selected.displayName) API key")
                     aiModelField($aiAnthropicModel, prompt: AIProviderSettings.defaultAnthropicModel)
                 case .openAI:
                     if !AIProviderSettings.selectedRemoteIsConfigured {
                         WarningFootnote("Enter an API key below to turn AI features on.")
                     }
-                    aiKeyField("API key")
+                    aiKeyField("\(AIProviderSettings.selected.displayName) API key")
                     aiModelField($aiOpenAIModel, prompt: AIProviderSettings.defaultOpenAIModel)
                 case .local:
                     if !AIProviderSettings.selectedRemoteIsConfigured {
@@ -1345,7 +1368,7 @@ private struct AISettingsScreen: View {
                 // fallback row rather than inside the bring-your-own
                 // branch.
                 Toggle("Estimate nutrition", isOn: $aiEstimate)
-                Text("Estimates fill in figures nothing printed — a meal you describe, a photo, a menu item with no calories on it. They are marked as estimates and can be edited before saving. Reading a label, a nutrition screenshot or a menu's own printed calories is unaffected.")
+                Text("Fills in figures nothing printed — a described meal, a photo, a menu item with no calories — marked as estimates you can edit before saving.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 // Nothing to fall back FROM when Apple Intelligence is
@@ -1392,8 +1415,8 @@ private struct AISettingsScreen: View {
                         // Formal register, like every settings footer.
                         if AIProviderSettings.selected != .onDevice, FoodIntelligence.onDeviceAvailable {
                             Text(aiFallback
-                                 ? "When \(AIProviderSettings.selected.displayName) can't be reached — no signal, or a temporary outage — Onigiri estimates on this iPhone instead. Nothing is sent anywhere in that case."
-                                 : "When \(AIProviderSettings.selected.displayName) can't be reached, the estimate is skipped.")
+                                 ? "If \(AIProviderSettings.selected.displayName) can't be reached, Apple Intelligence fills in."
+                                 : "If \(AIProviderSettings.selected.displayName) can't be reached, the estimate is skipped.")
                         }
                     }
                     // Deep links to each doc's AI section specifically
@@ -1592,7 +1615,7 @@ private struct MetricsSettingsScreen: View {
                 }
                 .accessibilityLabel("Counts as untracked")
                 .accessibilityValue(untrackedValueText)
-                Text("For days you forgot to log — not light ones. Days below this break the streak and stay out of the month's totals. 0 turns it off.")
+                Text("Days below this break the streak and stay out of the month's totals. 0 turns it off.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {
@@ -1683,14 +1706,6 @@ private struct MetricsSettingsScreen: View {
             }
         } header: {
             Text(slot == 1 ? "First tracked metric" : "Second tracked metric")
-        } footer: {
-            // Slot 1 only, and only when it applies to a FOOD:
-            // TrackedNutrient.firstFoodMetric skips water (it isn't a
-            // property of a food and falls through to slot 2), so the
-            // sentence would be false on a water slot.
-            if slot == 1, let nutrient, nutrient != .water {
-                Text("Shown alongside calories on food, meal, and log rows.")
-            }
         }
         // Sodium's limit keeps coloring the calendar, day details, and
         // Today's log even when no slot tracks it — keep its knob
@@ -1858,7 +1873,7 @@ private struct WaterSettingsScreen: View {
                 .accessibilityValue(waterAmountText(waterGoalOz))
                 // Opt-out (default on) — and the row doubles as the
                 // feature's signpost (the user).
-                Toggle("Long press + logs water", isOn: $holdToLogWater)
+                Toggle("Hold + to log water", isOn: $holdToLogWater)
                 // The app-wide water icon (Today, log buttons, watch) —
                 // here unconditionally: one home for every water setting.
                 Picker("Water icon", selection: $waterIcon) {

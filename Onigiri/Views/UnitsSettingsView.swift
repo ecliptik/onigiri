@@ -38,7 +38,7 @@ struct UnitsSettingsView: View {
                     Text("Salt (g)").tag(SodiumUnit.saltGrams.rawValue)
                 }
             } footer: {
-                Text("Automatic follows your region. Logged data never changes — only how values are shown and entered.")
+                Text("Automatic picks units by region. Logged data never changes — only how values are shown and entered.")
             }
         }
         .compactSections()

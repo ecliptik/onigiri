@@ -479,7 +479,7 @@ struct QuickLogSheet: View {
                     // jarring (the user).
                     //
                     // Favorites here is deliberate and NOT the Foods tab's
-                    // setting (Appearance → "Foods opens on", which the
+                    // setting (Appearance → "Foods tab opens on", which the
                     // user moved to Foods on 2026-08-05). This is a
                     // LOGGING surface: what you reach for is usually
                     // something you've eaten before. Don't wire the two
@@ -593,7 +593,7 @@ struct QuickLogSheet: View {
                 ContentUnavailableView {
                     Label("No saved foods yet", systemImage: "fork.knife")
                 } description: {
-                    Text("Scan a barcode or search online — logged foods are saved to your Food Library.\n\nOr bring your Food Library from another device: export it there (Settings → Export Food Library) and import the file here.")
+                    Text("Scan a barcode or search online — logged foods are saved to your Food Library.")
                 } actions: {
                     // Text-only: with a systemImage, iOS 26 collapses
                     // the label to a bare icon here.

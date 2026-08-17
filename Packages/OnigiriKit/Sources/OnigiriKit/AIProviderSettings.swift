@@ -23,19 +23,22 @@ public enum AIProvider: String, CaseIterable, Sendable {
         }
     }
 
-    /// One-line Settings description per provider — the user's copy
-    /// (2026-07-19), tight and parallel: same three verbs everywhere,
-    /// one extra trust sentence only where it's true.
+    /// One-line Settings description per provider — tight and parallel:
+    /// same three verbs everywhere, and ONE sentence each (the user,
+    /// 2026-08-17). The on-device case keeps its trust clause because
+    /// staying on the phone is the whole difference; the remote cases
+    /// say nothing about where data goes, since the fallback line
+    /// below them already does.
     public var providerDescription: String {
         switch self {
         case .onDevice:
-            "Use Apple Intelligence on this iPhone to estimate nutrition, read labels, and identify food. No data is sent to third parties — everything remains on this iPhone."
+            "Apple Intelligence estimates nutrition, reads labels, and identifies food on this iPhone."
         case .anthropic:
-            "Use your Anthropic account to estimate nutrition, read labels, and identify food."
+            "Anthropic estimates nutrition, reads labels, and identifies food."
         case .openAI:
-            "Use your OpenAI account to estimate nutrition, read labels, and identify food."
+            "OpenAI estimates nutrition, reads labels, and identifies food."
         case .local:
-            "Use a local OpenAI-compatible service — Ollama or LM Studio, running Gemma, Qwen, or any model — to estimate nutrition, read labels, and identify food."
+            "A local OpenAI-compatible service — Ollama, LM Studio — estimates nutrition, reads labels, and identifies food."
         }
     }
 

@@ -84,7 +84,7 @@ struct FoodsView: View {
 
     /// Which scope opens first. Favorites led from 2026-07-14; the user
     /// asked for Foods on 2026-08-05. It is a SETTING now rather than a
-    /// third hardcoded reversal — Appearance → "Foods opens on".
+    /// third hardcoded reversal — Appearance → "Foods tab opens on".
     /// Segment order is unchanged (Favorites still reads first in the
     /// bar); only the initial selection follows this.
     @AppStorage(SharedStore.foodsDefaultScopeKey, store: SharedStore.defaults)
@@ -627,7 +627,10 @@ struct FoodsView: View {
                 ContentUnavailableView {
                     Label("No saved foods yet", systemImage: "fork.knife")
                 } description: {
-                    Text("Add a food once — calories and nutrients off the label, then log it with a tap.\n\nAlready tracking on another device? Export its Food Library (Settings → Export Food Library), save the file, and import it here.")
+                    // The migration paragraph that used to sit here
+                    // explained the Import button rendered directly
+                    // below it.
+                    Text("Add a food once — calories and nutrients off the label, then log it with a tap.")
                 } actions: {
                     // Text-only: with a systemImage, iOS 26 collapses
                     // the label to a bare icon here (as in toolbars).

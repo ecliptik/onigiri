@@ -315,7 +315,8 @@ struct ScanSheet: View {
                 // generic copy made a revoked permission read as
                 // missing hardware with no way back.
                 if cameraAuthDenied {
-                    Text("Camera access is turned off, so scanning can't run. You can still enter the barcode digits manually or read a label from a photo.")
+                    // One sentence, matching the no-camera message below.
+                    Text("Camera access is off — enter the barcode digits manually, or read a label from a photo.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     Button {

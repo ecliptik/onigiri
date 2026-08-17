@@ -111,7 +111,10 @@ struct OnboardingView: View {
                 .foregroundStyle(Color.nori)
             Text("Private by default")
                 .font(.title2.bold())
-            Text("Everything remains on your iPhone by default. Want online lookups or AI estimates? Turn them on here — or later in Settings.")
+            // The title above already says "Private by default", and the
+            // toggles below are the answer to the rhetorical question
+            // this used to ask.
+            Text("Online lookups and AI estimates are off. Turn them on here, or later in Settings.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -247,7 +250,7 @@ struct OnboardingView: View {
                 }
                 .multilineTextAlignment(.center)
             }
-            Text("Days that hit the daily deficit earn an onigiri. You can adjust your goal anytime in the Goal tab.")
+            Text("Days that hit the daily deficit earn an onigiri.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

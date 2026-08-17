@@ -135,7 +135,7 @@ struct GoalFinishLineTests {
     // MARK: - The chart line and the budget basis are the same number
 
     /// The property the drawn line had never had. Its right-hand end
-    /// must equal the "Weight" figure under "How budget is set", or the
+    /// must equal the "Weight" figure under "How the budget is set", or the
     /// eye reads one number while the plan uses another — 212 drawn
     /// against a ~210.8 basis (the user, 2026-08-14).
     ///

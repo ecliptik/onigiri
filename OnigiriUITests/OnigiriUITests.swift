@@ -816,7 +816,7 @@ final class OnigiriUITests: XCTestCase {
         // has to be checked with the group OPEN or it passes merely
         // because the group is shut.
         let howSet = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == 'How budget is set'")).firstMatch
+            .matching(NSPredicate(format: "label == 'How the budget is set'")).firstMatch
         // Below the fold, and a Form's rows don't exist in the tree until
         // scrolled near — waiting on one that isn't there just times out.
         XCTAssertTrue(scroll(app, until: howSet), "The budget explainer is reachable")
@@ -939,7 +939,7 @@ final class OnigiriUITests: XCTestCase {
         }
         XCTAssertTrue(resetAll.waitForExistence(timeout: 5), "Reset All row")
         resetAll.tap()
-        let alert = app.alerts["Reset all?"]
+        let alert = app.alerts["Reset All?"]
         XCTAssertTrue(alert.waitForExistence(timeout: 5), "Reset confirm alert")
         alert.buttons["Reset"].tap()
         XCTAssertTrue(

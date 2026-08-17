@@ -313,10 +313,14 @@ struct GoalView: View {
                 // Worded for BOTH cases it fires in — at or under the
                 // target, and inside the band a pound above it. "You're
                 // at your target" would be a small lie in the second.
+                // ONLY the at-target exception speaks now (the user,
+                // 2026-08-17). The ordinary caption restated the two
+                // rows above it; this one says something they can't —
+                // that a zero deficit target makes `DayBadgeRule.current`
+                // return `.anyDeficit`, grading more permissively than
+                // either real mode.
                 if !isMaintenance, plan.requiredDailyDeficit == 0 {
-                    Text("\(intakeWord.label) against today's budget. At this weight there's no deficit left to hit, so it's your whole burn — and any deficit earns the day.")
-                } else {
-                    Text("\(intakeWord.label) against today's budget. It grows as you move.")
+                    Text("No deficit left to hit at this weight, so the budget is your whole burn — any deficit earns the day.")
                 }
             }
         }
@@ -396,7 +400,7 @@ struct GoalView: View {
     @ViewBuilder
     private func budgetCompositionSection(_ plan: CalorieBudget.Plan?) -> some View {
         Section {
-            DisclosureGroup("How budget is set") {
+            DisclosureGroup("How the budget is set") {
                 if !isMaintenance, let current = planWeightLb, let target = targetWeightLb {
                     weightBasisRow(basisLb: current)
                     LabeledContent("To lose") {
@@ -415,7 +419,7 @@ struct GoalView: View {
                 LabeledContent("Average daily burn") {
                     Text(model.averageBurnKcal.map {
                         "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
-                    } ?? "≈ 2000 kcal/day (assumed)")
+                    } ?? "≈ 2,000 kcal/day (assumed)")
                         .monospacedDigit()
                 }
                 if let plan {
@@ -445,12 +449,12 @@ struct GoalView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if model.estimatedRestingKcal == nil {
-                    Text("Add your height and date of birth in Health to estimate your resting burn. Without it, only the resting energy Health has already recorded counts.")
+                    Text("Add your height and date of birth in Health to estimate your resting burn. Without them, only the resting energy Health has already recorded counts.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 if model.averageBurnKcal == nil {
-                    Text("No burn history in Health yet — the plan above assumes 2000 kcal/day until there is some.")
+                    Text("No burn history in Health yet — the plan above assumes 2,000 kcal/day until there is some.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -568,8 +572,6 @@ struct GoalView: View {
                         Button("Remove Goal", role: .destructive) {
                             confirmingGoalRemoval = true
                         }
-                    } footer: {
-                        Text("If no goal is set, any deficit earns a daily badge.")
                     }
                 }
             }
@@ -763,7 +765,7 @@ struct GoalView: View {
         Label {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Almost there — \(unit.fromLb(remainingLb), format: .number.precision(.fractionLength(1))) \(unit.symbol) to go.")
-                Text("Your target is judged on the 7-day average of your daily lows, now \(unit.fromLb(basisLb), format: .number.precision(.fractionLength(1))) \(unit.symbol). A few more mornings at this weight finishes it.")
+                Text("Measured on the 7-day average of your daily lows, now \(unit.fromLb(basisLb), format: .number.precision(.fractionLength(1))) \(unit.symbol). A few more mornings here and you're there.")
                     .foregroundStyle(.secondary)
             }
         } icon: {
@@ -844,7 +846,7 @@ struct GoalView: View {
                     // the default under labels that already read plainly
                     // was noise (the user, 2026-08-10).
                     if !startIsAutomatic {
-                        Text("The progress bar and the chart's milestones measure from here. The weight is your weigh-in nearest this date.")
+                        Text("The progress bar and the chart's milestones measure from here — the weight is your weigh-in nearest this date.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -909,7 +911,10 @@ struct GoalView: View {
         } header: {
             Text("Hold near")
         } footer: {
-            Text("The chart's reference line. The badge judges eating within what you burn, not the scale.")
+            // The badge rule is stated ONCE, with its number, under the
+            // Maintain picker. Restating it here without the number said
+            // less and read as a second, vaguer rule.
+            Text("The chart's reference line.")
         }
     }
 
@@ -999,7 +1004,7 @@ struct GoalView: View {
                 .padding(.vertical, 4)
 
             } else {
-                Text("Weigh-ins from your scale will chart here once Apple Health has a few days of data.")
+                Text("Weigh-ins from your scale appear here once Apple Health has a few days of data.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -1039,7 +1044,7 @@ struct GoalView: View {
                         }
                     }
                 } else if targetWeightLb != nil, !finishLine.isAtOrNearTarget {
-                    Text("No steady downward trend yet — a projection appears after a week of weigh-ins trending down.")
+                    Text("No steady downward trend yet — a projection appears after a week of weigh-ins heading down.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

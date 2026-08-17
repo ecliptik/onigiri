@@ -8,6 +8,29 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.27.4 — bigger text, and room to put it
+
+_2026-08-17_ · [changes since v2.27.3](https://github.com/ecliptik/onigiri/compare/v2.27.3...v2.27.4)
+
+A small release, for anyone who turns text size up.
+
+At the larger accessibility sizes, icons grew with the text around them but the
+space reserved for them didn't — so they simply rendered over their own labels.
+On the day-detail screen behind "Details ›" the knife and fork landed on the
+word "Eaten", the pie chart sat across "Calories", and because each icon is
+centred in its slot they also spilled leftwards past the edge of the card. The
+same thing was waiting on the Calendar tab's day card, where three of those
+columns share one row, and on the watch's metrics page, which has the least
+room of anywhere in the app.
+
+Those slots now grow with the text they sit beside — which is what the calendar
+grid already did, after the same thing happened to the onigiri marks a few
+weeks ago. Checked at the largest accessibility size before and after, on a
+screen where it was plainly wrong and is now plainly right.
+
+Also: the custom-emoji field in the icon picker grows sideways as well as
+downwards now.
+
 ## v2.27.3 — sharing a menu, all the way through
 
 _2026-08-17_ · [changes since v2.27.2](https://github.com/ecliptik/onigiri/compare/v2.27.2...v2.27.3)

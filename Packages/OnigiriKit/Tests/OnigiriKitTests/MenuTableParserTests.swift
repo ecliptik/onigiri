@@ -181,4 +181,138 @@ struct MenuTableParserTests {
     @Test func nothingIsReadOffAnEmptyPage() {
         #expect(MenuTableParser.parse([]).isEmpty)
     }
+    /// Shake Shack's guide, a THIRD table shape and the one that broke
+    /// three assumptions at once: it sets each item's name, its allergen
+    /// notice and its calories as a SINGLE text run, so the band had no
+    /// run that ended in the name column, no run without a number in it,
+    /// and no value at all under "Calories". Fourteen burgers parsed as
+    /// one row (2026-08-16).
+    @Test func aMergedNameAndValueCellStillParses() throws {
+        let rows = MenuTableParser.parse(try fixture("menu-shakeshack-p1"))
+        #expect(rows.count >= 25, "page 1 lists ~27 items, got \(rows.count)")
+
+        let single = try #require(rows.first { $0.name == "Single ShackBurger®" })
+        expectEqual(single.kcal, 500)
+        expectEqual(single.sodiumMg, 1250)
+        expectEqual(single.nutrients.proteinG, 29)
+        expectEqual(single.nutrients.fatG, 30)
+
+        // The calories were rescued from the END of the name cell, so a
+        // row that keeps its allergen clause has kept the number too.
+        #expect(!rows.contains { $0.name.localizedCaseInsensitiveContains("contains:") },
+                "the allergen notice is not part of the food's name")
+        #expect(rows.allSatisfy { $0.kcal != nil })
+    }
+
+    @Test func aUnitIsNotAWord() {
+        #expect(!MenuTableParser.looksLikeProse("662g"))
+        #expect(!MenuTableParser.looksLikeProse("12 mg"))
+        #expect(!MenuTableParser.looksLikeProse("1.5"))
+        #expect(MenuTableParser.looksLikeProse("Sesame"))
+        #expect(MenuTableParser.looksLikeProse("5 Ct Nuggets"))
+    }
+
+    @Test func aTrailingNumberComesOffAMergedNameCell() {
+        let split = MenuTableParser.splitTrailingNumber(from: "Big Shack Contains: Milk, Sesame 900")
+        #expect(split?.name == "Big Shack Contains: Milk, Sesame")
+        #expect(split?.value == 900)
+        // Nothing left but a number is a stray run, not an item.
+        #expect(MenuTableParser.splitTrailingNumber(from: "900") == nil)
+    }
+
+    /// McDonald's guide, and the reason the sweep of real menus was
+    /// worth running: its right-hand columns are micronutrients, and
+    /// "CALCIUM" contains "cal". It matched the calorie column, sat to
+    /// the RIGHT of the real one, and overwrote it — every row read 25
+    /// kcal instead of 740, which is wrong data rather than missing
+    /// data and would have been logged (2026-08-16).
+    @Test func aMicronutrientColumnIsNotCalories() throws {
+        let rows = MenuTableParser.parse(try fixture("menu-mcdonalds-p1"))
+        #expect(rows.count >= 10)
+        let burger = try #require(rows.first { $0.name == "Bacon Clubhouse Burger" })
+        expectEqual(burger.kcal, 740)
+        expectEqual(burger.sodiumMg, 1480)
+        // The %DV columns beside them must not be read as nutrients.
+        #expect(rows.allSatisfy { ($0.kcal ?? 0) > 30 })
+    }
+
+    @Test func aFieldStatedTwiceKeepsItsLeftmostColumn() {
+        let columns = [
+            MenuTableParser.Column(minX: 0.1, maxX: 0.2, text: "Calories", field: .energy, unit: nil),
+            MenuTableParser.Column(minX: 0.8, maxX: 0.9, text: "Calories", field: .energy, unit: nil),
+        ]
+        let deduped = MenuTableParser.deduplicated(columns)
+        #expect(deduped[0].field == .energy)
+        #expect(deduped[1].field == nil)
+    }
+
+    /// Chipotle's paper menu — a plain, well-behaved table, kept as the
+    /// control in the set: if a change breaks THIS, it broke parsing
+    /// itself rather than some document's quirk.
+    @Test func anOrdinaryTableStaysOrdinary() throws {
+        let rows = MenuTableParser.parse(try fixture("menu-chipotle-p1"))
+        #expect(rows.count >= 30)
+        let beans = try #require(rows.first { $0.name == "Black Beans" })
+        expectEqual(beans.kcal, 130)
+        expectEqual(beans.sodiumMg, 210)
+        #expect(rows.allSatisfy { $0.kcal != nil })
+    }
+
+    /// A page whose columns did not survive mapping returns NOTHING.
+    /// The alternative is what the Cheesecake Factory booklet produced
+    /// before this gate: 171 rows of "HUMMUS, 10 kcal".
+    @Test func aBrokenMappingReturnsNothing() throws {
+        let good = try fixture("menu-chipotle-p1")
+        #expect(!MenuTableParser.parse(good).isEmpty)
+        // Same runs, numbers stripped: the header still promises its
+        // columns and no row can fill them.
+        let hollowed = good.map { run in
+            LabelObservation(text: run.text.filter { !$0.isNumber }, x: run.x, y: run.y, w: run.w, h: run.h)
+        }
+        #expect(MenuTableParser.parse(hollowed).isEmpty)
+    }
+
+    /// A shop's PRODUCT page states its figures in a sentence, not a
+    /// table: Salt & Straw's reads "Three (3) servings per pint. Each
+    /// serving 2/3 cup. Calories per serving: 300". The table parser
+    /// correctly finds nothing; the label parser must still find 300, or
+    /// the share fails on a page with the number right on it (the user,
+    /// 2026-08-16).
+    /// The figure lives inside a COLLAPSED accordion, so it is in the
+    /// document and never on the rendered page. Reading the text is the
+    /// only route to it.
+    @Test func aCollapsedAccordionStillYieldsItsCalories() throws {
+        let url = try #require(Bundle.module.url(
+            forResource: "page-saltandstraw", withExtension: "html", subdirectory: "Fixtures"))
+        let html = try String(contentsOf: url, encoding: .utf8)
+        let text = PageText.stripped(from: html)
+        #expect(text.contains("Calories per serving: 300"))
+        // Script and style are stripped, or their numbers read as food.
+        #expect(!text.contains("</script"))
+        #expect(!text.localizedCaseInsensitiveContains("function("))
+
+        // …and the whole point: the label parser finds the number in
+        // that stripped text, exactly as it would in a screenshot.
+        let lines = text.split(separator: "\n").prefix(400)
+        let runs = lines.enumerated().map { index, line in
+            LabelObservation(
+                text: String(line), x: 0.05,
+                y: 0.98 - (Double(index) / Double(max(lines.count, 1))) * 0.96,
+                w: 0.9, h: 0.9 / Double(max(lines.count, 1)))
+        }
+        expectEqual(LabelParser.parse(runs).kcal, 300)
+    }
+
+    @Test func proseNutritionOnAProductPageStillReads() {
+        let runs = [
+            "Peaches and Cream Galette",
+            "NUTRITIONAL FACTS",
+            "Three (3) servings per pint. Each serving 2/3 cup. Calories per serving: 300",
+        ].enumerated().map { index, text in
+            LabelObservation(text: text, x: 0.1, y: 0.9 - Double(index) * 0.05, w: 0.6, h: 0.02)
+        }
+        #expect(MenuTableParser.parse(runs).isEmpty, "one food is not a menu")
+        let label = LabelParser.parse(runs)
+        expectEqual(label.kcal, 300)
+    }
 }

@@ -96,6 +96,24 @@ public enum AIProviderSettings {
         return SharedStore.defaults.bool(forKey: fallbackOnDeviceKey)
     }
 
+    /// Whether AI may ESTIMATE nutrition it cannot read — a described
+    /// meal, an identified photo, a menu dish with no figures printed.
+    /// Reading stays on either way: a scanned label, a nutrition
+    /// screenshot and a menu's own printed calories are transcription,
+    /// not guesswork, and switching estimates off must not cost them.
+    ///
+    /// ON by default, like the fallback and unlike everything else AI:
+    /// by the time this can fire the user has already opted into AI, and
+    /// an estimate is most of what the feature is for. Hence the
+    /// explicit absent check — `bool(forKey:)` alone reads false for an
+    /// unset key, which would ship every install with it off (the user,
+    /// 2026-08-16: "turn them on by default").
+    public static let estimateNutritionKey = "aiEstimateNutrition"
+    public static var estimateNutrition: Bool {
+        guard SharedStore.defaults.object(forKey: estimateNutritionKey) != nil else { return true }
+        return SharedStore.defaults.bool(forKey: estimateNutritionKey)
+    }
+
     public static let providerKey = "aiProvider"
     public static let anthropicModelKey = "aiAnthropicModel"
     public static let openAIModelKey = "aiOpenAIModel"
@@ -191,7 +209,10 @@ public enum AIProviderSettings {
     public static func saveSecret(_ raw: String, account: String) -> Bool {
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if value.isEmpty {
+            // BOTH groups: a key entered before the move may still have
+            // a copy in the old one, and "cleared" has to mean cleared.
             SecItemDelete(query(account) as CFDictionary)
+            SecItemDelete(legacyQuery(account) as CFDictionary)
             return true
         }
         // Upsert (update-then-add), never delete-then-add — the latter
@@ -209,7 +230,23 @@ public enum AIProviderSettings {
         return status == errSecSuccess
     }
 
+    /// The APP GROUP doubles as the keychain access group, which is what
+    /// lets the share extension read these at all: keychain items with
+    /// no access group land in the app's own, keyed to its bundle id,
+    /// and an extension has a different one. An app-group identifier is
+    /// valid here without a team prefix — the
+    /// `com.apple.security.application-groups` entitlement both targets
+    /// already carry is what authorises it — so this needs no new
+    /// entitlement and no build-time knowledge of the team ID.
     private static func query(_ account: String) -> [String: Any] {
+        var q = legacyQuery(account)
+        q[kSecAttrAccessGroup as String] = SharedStore.appGroupID
+        return q
+    }
+
+    /// Where secrets lived before the extension needed them: the app's
+    /// default access group.
+    private static func legacyQuery(_ account: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
@@ -217,8 +254,34 @@ public enum AIProviderSettings {
         ]
     }
 
+    /// Read-through migration, the shape `fdcAPIKey` already uses for its
+    /// own move: look in the shared group, and on a miss look where the
+    /// key USED to live, copy it across, and delete the original. A key
+    /// entered before this change keeps working without being re-typed
+    /// — silently re-entering credentials is the failure this avoids.
+    /// Test seam: the real accounts are the provider keys, and a test
+    /// must not touch those.
+    public static func readSecretForTesting(_ account: String) -> String? {
+        readSecret(account)
+    }
+
     private static func readSecret(_ account: String) -> String? {
-        var q = query(account)
+        if let found = read(query(account)) { return found }
+        guard let legacy = read(legacyQuery(account)) else { return nil }
+        // The legacy copy is deliberately LEFT IN PLACE. Deleting it
+        // took the key with it: a keychain query that omits
+        // kSecAttrAccessGroup matches every group the app can reach, so
+        // `SecItemDelete(legacyQuery)` deleted the copy just written to
+        // the shared group as well — and an Anthropic key vanished,
+        // reading in Settings as "not set up" (2026-08-16). A duplicate
+        // in the app's own group is harmless: reads prefer the shared
+        // one, and clearing a secret already deletes from both.
+        _ = saveSecret(legacy, account: account)
+        return legacy
+    }
+
+    private static func read(_ base: [String: Any]) -> String? {
+        var q = base
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: CFTypeRef?

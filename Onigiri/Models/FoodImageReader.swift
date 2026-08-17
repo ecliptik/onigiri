@@ -19,6 +19,13 @@ enum FoodImageOutcome {
     /// guessing logs the wrong burger, so the host asks. Never produced
     /// for a camera still (PLAN-screenshot-nutrition Part C).
     case candidates([ParsedLabel])
+    /// A photographed MENU whose items carry printed calories — a board
+    /// over the counter, a card on the table. Dozens of rows, so the
+    /// host opens the searchable picker rather than the "Which item?"
+    /// dialog, which is sized for a handful.
+    /// `source` is the restaurant the menu named itself after, when it
+    /// did — so the picker can prefill rather than ask.
+    case menu([MenuRow], source: String?)
     /// Nothing usable; `message` is the user-facing retry copy.
     case nothing(message: String)
     /// Superseded or backed out of — deliver NOTHING. An orphaned
@@ -45,6 +52,22 @@ enum FoodImageSource {
 
 @MainActor
 enum FoodImageReader {
+    /// Words a published nutrition table cannot avoid. A menu board
+    /// carries dish names and prices and none of these.
+    private static let nutritionWords = [
+        "calorie", "kcal", "cal.", "nutrition", "sodium", "protein",
+        "carbohydrate", "saturated", "cholesterol", "serving size",
+        "total fat", "dietary fiber",
+        // NOT "allergen": plenty of menus carry an allergen notice and
+        // no figures at all, and the guides that do have both say
+        // "Cal." anyway.
+    ]
+
+    static func mentionsNutrition(_ transcript: [LabelObservation]) -> Bool {
+        let text = transcript.map(\.text).joined(separator: " ").lowercased()
+        return nutritionWords.contains { text.contains($0) }
+    }
+
     /// `status` reports the current stage for a progress label; it fires
     /// on the main actor and may be ignored.
     static func read(
@@ -77,8 +100,25 @@ enum FoodImageReader {
             // iOS 26 + Apple Intelligence: the model fills whatever the
             // deterministic parse left blank — invisible, and every
             // model failure keeps the deterministic result.
-            parsed = await FoodIntelligence.refine(result.parsed, transcript: result.transcript)
-            guard !Task.isCancelled else { return .cancelled }
+            //
+            // Gated on the text MENTIONING nutrition, for the same
+            // reason the screenshot read below is, and learned the hard
+            // way twice. Refine exists to fill gaps in a panel that was
+            // photographed badly; handed a restaurant menu with no
+            // panel at all, the on-device 3B model answered anyway and
+            // invented 211 kcal from prices. That satisfied the
+            // `parsed.kcal != nil` gate below, which returned a
+            // nameless one-item label and never let the MENU question
+            // be asked — the photo came back as an empty Log Food sheet
+            // (the user, 2026-08-16; the Console log shows exactly one
+            // inference, then "Label parsed"). A remote model declined
+            // to invent and the same photo worked, which is why this
+            // looked like an Apple Intelligence problem and was not.
+            if mentionsNutrition(result.transcript) {
+                parsed = await FoodIntelligence.refine(
+                    result.parsed, transcript: result.transcript)
+                guard !Task.isCancelled else { return .cancelled }
+            }
             // An imported image is usually a screenshot of a published
             // nutrition page, which carries the one thing a
             // photographed panel never does: the food's NAME. Read it —
@@ -86,7 +126,18 @@ enum FoodImageReader {
             // a web table is not the FDA panel LabelParser was built
             // for. Printed values always win over the model's
             // (PLAN-screenshot-nutrition Part B).
-            if source == .imported, FoodIntelligence.isAvailable {
+            // …but ONLY when the text actually mentions nutrition. This
+            // read reports PRINTED figures, so a picture with none to
+            // report has nothing for it to do — and asked anyway, it
+            // invents: a photographed restaurant menu came back as one
+            // nameless 1,150 kcal food with four macros, which then
+            // satisfied the calorie gate below and returned before
+            // anything could ask whether the picture was a MENU (the
+            // user, 2026-08-16). Cheap, deterministic, and it saves an
+            // inference on every picture that was never a nutrition
+            // page.
+            if source == .imported, FoodIntelligence.isAvailable,
+               mentionsNutrition(result.transcript) {
                 status("Analyzing screenshot…")
                 let foods = await FoodIntelligence.readNutritionScreenshot(
                     transcript: result.transcript)
@@ -128,8 +179,72 @@ enum FoodImageReader {
             imageLog.error("Label OCR failed: \(String(describing: error))")
             return .nothing(message: "Couldn't read that photo — try another.")
         }
-        // No nutrition panel. Two things are still worth asking, in this
-        // order, because they answer different pictures.
+        // No nutrition panel — but the picture may be a MENU whose items
+        // carry printed calories, which calorie labeling now requires of
+        // chains in much of the US.
+        //
+        // BEFORE the sign read below, and that order is the whole point:
+        // `readFoodSign` is prompted to ESTIMATE and marks its answers
+        // with the AI dot, so left first it would guess at numbers that
+        // are printed right there — against the rule the rest of the app
+        // runs on. This path is deterministic, uncapped, and works with
+        // AI off (PLAN-menu-import).
+        let boardItems = MenuBoardParser.parse(transcript)
+        if boardItems.count > 1 {
+            imageLog.notice("Menu board: \(boardItems.count) item(s)")
+            // A printed-calorie board is read deterministically and no
+            // model saw it, so there is no name to offer.
+            return .menu(boardItems, source: nil)
+        }
+        // Exactly one priced dish is not a menu worth a picker — it is a
+        // food, and it goes straight to the form.
+        if let only = boardItems.first {
+            imageLog.notice("Menu board: one item")
+            return .label(only.parsedLabel)
+        }
+        // Still nothing printed — which is the ORDINARY case for a
+        // restaurant menu, not the exception: US calorie labeling binds
+        // chains of 20+ locations, so an independent's board carries
+        // names, descriptions and prices and nothing else. Seven real
+        // menus supplied 2026-08-16 had calories on none of them.
+        //
+        // So ask what the menu OFFERS — WITH a calorie estimate per
+        // dish, in the one call. A list of bare names is not something
+        // anyone can choose from: the number is the whole reason for
+        // opening the list (the user, 2026-08-16). One prompt answering
+        // thirty dishes also costs less than thirty prompts answering
+        // one, which is what estimating-on-selection was.
+        //
+        // Gated on the transcript being BOARD-SIZED, and that gate earns
+        // its keep on the common photo rather than the rare one: someone
+        // at a table photographs the ONE dish they are ordering, and for
+        // that picture this read can only come back short, be discarded,
+        // and leave the sign read below to do the work — two inferences
+        // and two waits where one was needed. A cropped item is a
+        // handful of text runs; a menu is dozens.
+        if FoodIntelligence.isAvailable, transcript.count >= 20 {
+            status("Reading the menu…")
+            let reading = await FoodIntelligence.readMenuDishes(transcript: transcript)
+            let dishes = reading.dishes
+            guard !Task.isCancelled else { return .cancelled }
+            // Logged UNCONDITIONALLY, including zero: "did the model get
+            // asked, and what did it say" is the question three rounds
+            // of guessing could not answer from the UI alone.
+            imageLog.notice("Menu dishes: \(dishes.count) from \(transcript.count) runs, engine \(AIProviderSettings.selected.rawValue, privacy: .public)")
+            // A high bar on purpose. A shelf sign or a bakery case names
+            // a few things and belongs to the sign read below, which
+            // estimates them outright; only a long list is a MENU.
+            if dishes.count >= 4 {
+                return .menu(dishes.enumerated().map { index, dish in
+                    MenuRow(
+                        id: index, name: dish.name, section: dish.section,
+                        serving: nil, kcal: dish.kcal, sodiumMg: nil,
+                        nutrients: NutrientValues(), aiGenerated: dish.kcal != nil)
+                }, source: reading.restaurant)
+            }
+        }
+        // Two more things are worth asking, in this order, because they
+        // answer different pictures.
         if FoodIntelligence.isAvailable {
             status("Identifying food…")
             // 1. Does the picture SAY what the food is? A bakery-case
@@ -206,9 +321,39 @@ private extension FoodImageReader {
 }
 
 extension UIImage {
+    /// Decode STRAIGHT to the target size, never full-size first.
+    ///
+    /// `UIImage(data:)` then `downsampled` has to materialise the whole
+    /// picture: a 48 MP HEIC is ~190 MB as pixels, and a share extension
+    /// is given 220 MB in total. That is not a tight fit, it is a
+    /// guaranteed kill — jetsam took the extension 219 ms after launch,
+    /// during the decode, before any of this file's code ran
+    /// (2026-08-16, `per-process-limit`, on a Live Photo with an HDR
+    /// gain map). ImageIO reads the header, then decodes once at the
+    /// size asked for.
+    ///
+    /// `kCGImageSourceCreateThumbnailWithTransform` bakes the
+    /// orientation upright, which is what the renderer used to do.
+    static func downsampled(data: Data, maxEdge: CGFloat) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(
+            data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary)
+        else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxEdge,
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(
+            source, 0, options as CFDictionary) else { return nil }
+        return UIImage(cgImage: image)
+    }
+
     /// Cap the long edge before Vision: OCR wants legible text, not
     /// sensor resolution. Draws through a renderer, which also bakes
-    /// the orientation upright.
+    /// the orientation upright. Prefer `downsampled(data:maxEdge:)`
+    /// when the bytes are still to hand — this one needs the full image
+    /// decoded already.
     func downsampled(maxEdge: CGFloat) -> UIImage {
         let longest = max(size.width, size.height)
         guard longest > maxEdge, longest > 0 else { return self }

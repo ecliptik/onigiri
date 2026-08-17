@@ -837,9 +837,13 @@ struct PortionTarget: Identifiable {
 struct ScanRowLabel: View {
     var body: some View {
         DoorRowLabel(
+            // "Menu" rides in BOTH variants: a menu document is read by
+            // the deterministic table parser, so that door is open with
+            // AI switched off — unlike "Food", which is the identify
+            // cascade and only ever promised when it can be kept.
             title: FoodIntelligence.isAvailable
-                ? "Scan Barcode, Label, or Food"
-                : "Scan Barcode or Nutrition Label",
+                ? "Scan Barcode, Label, Menu, or Food"
+                : "Scan Barcode, Label, or Menu",
             // A CAMERA, not a barcode (the user, 2026-08-02): the row
             // has read labels and identified food for two releases, and
             // the barcode glyph kept promising only the first of the

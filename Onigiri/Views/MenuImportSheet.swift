@@ -46,11 +46,14 @@ struct MenuImportSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var phase = Phase.reading
     @State private var rows: [MenuRow] = []
-    @State private var source = ""
-    @State private var askingSource = false
-    @State private var query = ""
+    @State private var detectedSource: String?
+    /// The host of a SHARED LINK, when the import came from one — a web
+    /// address names the business more reliably than a PDF's metadata.
+    @State private var linkHost: String?
+    @State private var linkURL: URL?
     @State private var pick: Pick?
-    @State private var readingStatus = "Reading the menu…"
+    @State private var picks = 0
+    @State private var readingStatus = "Looking for nutrition…"
 
     private enum Phase: Equatable {
         case reading
@@ -69,7 +72,7 @@ struct MenuImportSheet: View {
     var body: some View {
         NavigationStack {
             content
-                .navigationTitle("Add from Menu")
+                .navigationTitle("Choose an Item")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     // Cancel on the left beside Done, matching the forms:
@@ -84,16 +87,6 @@ struct MenuImportSheet: View {
                 }
         }
         .task { await load() }
-        // A dialog, not a form field buried in the list: the source is
-        // asked once per import and the answer prefixes every name.
-        .alert("Where is this menu from?", isPresented: $askingSource) {
-            TextField("Restaurant", text: $source)
-                .textInputAutocapitalization(.words)
-            Button("Use") {}
-            Button("Skip", role: .cancel) { source = "" }
-        } message: {
-            Text("Onigiri couldn't find a name in this document. What you enter goes in front of each item, so \"Greek Chicken\" saves as \"Kwik Trip — Greek Chicken\".")
-        }
         .sheet(item: $pick) { pick in
             FoodFormView(food: nil, prefill: pick.product)
         }
@@ -110,7 +103,7 @@ struct MenuImportSheet: View {
             }
         case .failed(let message):
             ContentUnavailableView {
-                Label("Couldn't read that menu", systemImage: "doc.questionmark")
+                Label("No nutrition found", systemImage: "doc.questionmark")
             } description: {
                 Text(message)
             }
@@ -120,77 +113,13 @@ struct MenuImportSheet: View {
     }
 
     private var list: some View {
-        List {
-            ForEach(sections, id: \.title) { section in
-                Section(section.title ?? "Menu") {
-                    ForEach(section.rows) { row in
-                        Button { choose(row) } label: { MenuItemRow(row: row) }
-                            .buttonStyle(.plain)
-                    }
-                }
-            }
-            if visible.isEmpty {
-                Text("No items match “\(query)”.")
-                    .foregroundStyle(.secondary)
-            }
+        MenuPicker(rows: rows, suggestedSource: detectedSource) { picked in
+            // A fresh id per pick, not one derived from the row: two
+            // rows can share a name, and .sheet(item:) would then refuse
+            // to re-present for the second.
+            picks += 1
+            pick = Pick(id: picks, product: picked.scannedProduct())
         }
-        .searchable(text: $query, prompt: "Search \(rows.count) items")
-        .safeAreaInset(edge: .top) { sourceBanner }
-    }
-
-    /// The source is editable after the fact too — a detected name can
-    /// be wrong, and retyping it beats re-importing.
-    @ViewBuilder
-    private var sourceBanner: some View {
-        if !source.isEmpty {
-            HStack {
-                Text("Saving as")
-                    .foregroundStyle(.secondary)
-                Text("\(source) — …")
-                    .fontWeight(.medium)
-                Spacer()
-                Button("Change") { askingSource = true }
-                    .font(.subheadline)
-            }
-            .font(.footnote)
-            .padding(.horizontal)
-            .padding(.vertical, 6)
-            .background(.bar)
-        }
-    }
-
-    private struct MenuSection {
-        let title: String?
-        let rows: [MenuRow]
-    }
-
-    private var visible: [MenuRow] {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return rows }
-        return rows.filter {
-            $0.name.localizedStandardContains(trimmed)
-                || ($0.section?.localizedStandardContains(trimmed) ?? false)
-        }
-    }
-
-    /// Grouped in the order the menu prints, not alphabetically — the
-    /// document's own order is information ("BASES" after "CURATED
-    /// BOWLS"), and sorting throws it away.
-    private var sections: [MenuSection] {
-        var titles: [String?] = []
-        var grouped: [String?: [MenuRow]] = [:]
-        for row in visible {
-            if grouped[row.section] == nil { titles.append(row.section) }
-            grouped[row.section, default: []].append(row)
-        }
-        return titles.map { MenuSection(title: $0, rows: grouped[$0] ?? []) }
-    }
-
-    private func choose(_ row: MenuRow) {
-        let name = source.isEmpty
-            ? row.name
-            : "\(source) — \(row.name)"
-        pick = Pick(id: row.id, product: row.parsedLabel.scannedProduct(name: name))
     }
 
     private func load() async {
@@ -203,8 +132,10 @@ struct MenuImportSheet: View {
         case .document(let local), .image(let local):
             url = local
         case .link(let remote):
-            readingStatus = "Processing menu…"
+            readingStatus = "Looking for nutrition…"
             do {
+                linkHost = remote.host()
+                linkURL = remote
                 let rendered = try await MenuLinkLoader.pdf(for: remote)
                 temporary = rendered
                 url = rendered
@@ -215,25 +146,53 @@ struct MenuImportSheet: View {
         }
         defer { if let temporary { try? FileManager.default.removeItem(at: temporary) } }
 
-        let outcome = await Task.detached(priority: .userInitiated) { () -> Result<MenuDocument, Error> in
-            do { return .success(try MenuDocumentReader.read(url)) } catch { return .failure(error) }
+        // Read AND parse off the main actor — see ShareFlow.
+        let outcome = await Task.detached(priority: .userInitiated) {
+            () -> Result<(MenuDocument, [MenuRow]), Error> in
+            do {
+                let document = try await MenuDocumentReader.readOCR(url)
+                return .success((document, MenuTableParser.parse(pages: document.pages)))
+            } catch { return .failure(error) }
         }.value
 
         switch outcome {
         case .failure(let error):
             phase = .failed(Self.message(for: error))
-        case .success(let document):
-            let parsed = MenuTableParser.parse(pages: document.pages)
+        case .success(let (document, parsed)):
             guard !parsed.isEmpty else {
-                phase = .failed("No nutrition table in that document. A menu with pictures instead of a table can't be read this way — a screenshot of one item still can, from Foods.")
+                var single = await SharedPageReader.singleFood(from: document.pages)
+                if single == nil, let linkURL,
+                   let text = await MenuLinkLoader.pageText(for: linkURL) {
+                    single = await SharedPageReader.singleFood(fromPageText: text)
+                }
+                if let single {
+                    rows = [MenuRow(
+                        id: 0, name: single.name ?? "Food", section: nil,
+                        serving: single.servingDescription, kcal: single.kcal,
+                        sodiumMg: single.sodiumMg, nutrients: single.nutrients,
+                        aiGenerated: single.aiGenerated)]
+                    detectedSource = detectedSource ?? linkHost.flatMap(MenuDocumentReader.source(fromHost:))
+                    phase = .ready
+                    return
+                }
+                phase = .failed("Try a photo or screenshot of one item instead.")
                 return
             }
             rows = parsed
-            source = document.suggestedSource ?? ""
+            // The PDF's own metadata first — it costs nothing and it is
+            // the document SPEAKING. Only when that says nothing does
+            // the model read the name out of the text.
+            detectedSource = document.suggestedSource
+            // BEFORE the picker appears, not after. MenuPicker raises
+            // the "Where is this menu from?" dialog from its own
+            // .task, so a name that arrives later cannot stop it — the
+            // sheet asked about a document that had already said (the
+            // user, 2026-08-16). Nothing is waited on when AI is off:
+            // readMenuSource returns immediately.
+            if detectedSource == nil {
+                detectedSource = await FoodIntelligence.readMenuSource(pages: document.pages, host: linkHost)
+            }
             phase = .ready
-            // Ask only when the document didn't say. Detection is the
-            // optimisation; this prompt is the contract.
-            if document.suggestedSource == nil { askingSource = true }
         }
     }
 
@@ -246,25 +205,5 @@ struct MenuImportSheet: View {
         default:
             "Onigiri couldn't open that file."
         }
-    }
-}
-
-/// One menu row: the dish, and what logging it would cost — the grammar
-/// the "Which item?" dialog already uses.
-private struct MenuItemRow: View {
-    let row: MenuRow
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(row.name)
-            Spacer(minLength: 12)
-            if let kcal = row.kcal {
-                Text("\(kcal.formatted(.number.precision(.fractionLength(0)))) kcal")
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-        }
-        .contentShape(.rect)
-        .accessibilityElement(children: .combine)
     }
 }

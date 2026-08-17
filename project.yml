@@ -177,7 +177,19 @@ targets:
   OnigiriShare:
     type: app-extension
     platform: iOS
-    sources: [OnigiriShare]
+    # The app's cascade is COMPILED IN rather than moved to the kit — the
+    # SharedIntents precedent. FoodIntelligence must not go in the kit
+    # (linkd rejects SPM-delivered App Shortcuts metadata, and the kit
+    # never imports FoundationModels by rule), and a share extension that
+    # finishes the job needs the same reading it does.
+    sources:
+      - OnigiriShare
+      - Onigiri/Models/FoodIntelligence.swift
+      - Onigiri/Models/FoodIntelligenceRemote.swift
+      - Onigiri/Models/FoodImageReader.swift
+      - Onigiri/Models/MenuLinkLoader.swift
+      - Onigiri/Models/SharedPageReader.swift
+      - Onigiri/Views/MenuPicker.swift
     dependencies:
       - package: OnigiriKit
     settings:
@@ -188,6 +200,15 @@ targets:
       properties:
         CFBundleDisplayName: Onigiri
         CFBundleShortVersionString: $(MARKETING_VERSION)
+        # Each BINARY that touches Health needs its own usage strings —
+        # an extension does not inherit the app's.
+        NSHealthShareUsageDescription: Onigiri reads your energy burn, weight, and nutrition history to show your daily calorie balance and goal progress.
+        NSHealthUpdateUsageDescription: Onigiri saves the food, sodium, and water you log to Apple Health.
+        # Same reason: a local AI server configured in Settings is
+        # reached from here too when a dish has to be estimated.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: Onigiri connects to your own local AI server, if you configure one in Settings, to estimate nutrition.
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
@@ -216,6 +237,9 @@ targets:
     entitlements:
       path: OnigiriShare/OnigiriShare.entitlements
       properties:
+        # The extension logs the food itself rather than handing back to
+        # the app, so it writes to Health directly.
+        com.apple.developer.healthkit: true
         com.apple.security.application-groups:
           - group.com.ecliptik.Onigiri
 

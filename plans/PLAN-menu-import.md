@@ -492,3 +492,75 @@ but is still the weakest rule here. The rendered-page fixtures are a snapshot of
 a live site and will drift. And the share sheet itself is verified by
 construction plus simulator injection of every route — the real
 Share → Onigiri tap is the outstanding device check.
+
+
+## Round 6 — a sweep of real restaurant menus (2026-08-16)
+
+Eight real documents were fetched and run through the shipping path
+(`MenuDocumentReader` → `MenuTableParser`) rather than reasoned about.
+Every defect below was found by MEASURING, and each one had produced
+plausible-looking output beforehand.
+
+| Document | Shape | Result |
+|---|---|---|
+| Kwik Trip | positional table, header per page | 113 rows (reference) |
+| Chick-fil-A | rendered web page | control fixture |
+| Shake Shack | name+allergens+calories in ONE run | 292 rows |
+| McDonald's | 22 columns incl. %DV and micronutrients | 463 rows |
+| Chipotle | plain table | 66 rows |
+| Wendy's | 4 columns only (no sodium) | 72 rows |
+| Cheesecake Factory (KSA) | per-letter text, merged header cells | rejected — see below |
+| Starbucks / Buc-ee's / Handel's | not documents at all | rejected |
+
+### What the sweep changed
+
+- **"CALCIUM" contains "cal".** McDonald's micronutrient columns matched
+  the calorie keyword, sat to the RIGHT of the real one, and overwrote
+  it: every row read 25 kcal instead of 740. Wrong data, silently, on
+  the largest chain in the country. `ignoredHeaderWords` now recognises
+  micronutrient and %DV columns in order to skip them, and
+  `deduplicated(_:)` keeps a repeated field's LEFTMOST column.
+- **A section heading is a matter of type SIZE, not capitals.** Shake
+  Shack sets sections in Title Case, so an all-caps test filed them as
+  wrapped names and glued them onto the row above. No document in the
+  sweep produced a single section. A heading measures ≥1.25× the median
+  data-row height; the marketing prose beside it measures 0.81×.
+- **Merged HEADER runs.** The Cheesecake booklet extracts
+  "Cholesterol Carbohydrates Total Sugars Added" as one run across four
+  columns. `splitMergedHeaderRun` splits a run that names two or more
+  different nutrients, apportioning x by character offset.
+- **A failed parse must return NOTHING.** That booklet sets product
+  names as individual letters, which clustered into
+  "T R I P O L A C I G G N R E E L O O C R" beside a 0 kcal — 171 rows
+  of confident nonsense. Three gates now stand between a broken mapping
+  and the picker: a name must contain a WORD (`looksLikeProse`), a page
+  must declare at least three value columns, and the rows must fill at
+  least `minimumFieldFillRate` of what the header promised. The booklet
+  drops from 171 rows to 9; Wendy's fills 4 of 4 and is untouched.
+- **An image-only PDF is now OCR'd**, not refused. `readOCR` renders any
+  page carrying fewer than `scannedPageRunLimit` runs and reads it with
+  Vision, which returns the same normalized observations PDFKit does —
+  so a scanned guide takes the ordinary path with no second parser. A
+  rasterised Wendy's guide goes from 0 rows to 47. Capped at
+  `ocrPageLimit` pages: OCR costs ~1 s a page and a share sheet that
+  thinks for half a minute reads as a hang.
+
+### What a shared LINK can be
+
+Not a PDF, often. Beyond the Widen viewer (Round 5), three of the
+"nutrition PDFs" that search engines offered were **CAPTCHA
+interstitials** served from `website-files.com` CDNs — a real risk for
+any link a user shares. They read as documents with no table, which is
+what the sheet says.
+
+### Known gaps, deliberately left
+
+- **A menu that exists only as a web calculator** (Taco Bell, Buc-ee's)
+  has no document to import. Nothing to parse; the photo and screenshot
+  doors cover it.
+- **Per-letter text layers** (Cheesecake Factory KSA) parse partially.
+  The rows that survive are real; the ones dropped are dropped quietly.
+  Fixing it properly means reassembling glyph runs into words, which is
+  the `characterBounds` road that Round 1 already found unusable.
+- **Micronutrients are not stored**, so vitamin/iron columns are read
+  only to be ignored.

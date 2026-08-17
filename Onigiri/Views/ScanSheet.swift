@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import UniformTypeIdentifiers
 import VisionKit
 import AVFoundation
 import OnigiriKit
@@ -32,6 +33,36 @@ struct ScanSheet: View {
 
     @State private var manualCode = ""
     @State private var photoItem: PhotosPickerItem?
+    /// Non-empty while the photographed-menu picker is up.
+    @State private var menuItems: [MenuRow] = []
+    @State private var showingMenuFile = false
+
+    /// A menu DOCUMENT chosen from Files, read exactly the way a shared
+    /// one is — same reader, same OCR fallback, same picker.
+    @MainActor
+    private func readMenuDocument(_ url: URL) async {
+        isReading = true
+        readingStatus = "Looking for nutrition…"
+        failureMessage = nil
+        defer { isReading = false }
+        do {
+            let document = try await MenuDocumentReader.readOCR(url)
+            let rows = MenuTableParser.parse(pages: document.pages)
+            guard !rows.isEmpty else {
+                failureMessage = "No nutrition found in that document. Try a photo or screenshot of one item."
+                return
+            }
+            var source = document.suggestedSource
+            if source == nil {
+                source = await FoodIntelligence.readMenuSource(pages: document.pages)
+            }
+            menuSource = source
+            menuItems = rows
+        } catch {
+            failureMessage = "Onigiri couldn't open that document."
+        }
+    }
+    @State private var menuSource: String?
     /// Non-empty while the "which item?" dialog is up.
     @State private var candidates: [ParsedLabel] = []
     @State private var isReading = false
@@ -119,7 +150,16 @@ struct ScanSheet: View {
             }
             // A library pick here can be a menu screenshot too, so this
             // sheet raises the same chooser the entry doors do.
-            .screenshotCandidates($candidates) { picked in
+            .fileImporter(isPresented: $showingMenuFile, allowedContentTypes: [.pdf]) { result in
+                guard case .success(let url) = result else { return }
+                Task { await readMenuDocument(url) }
+            }
+            .menuPhotoPicker($menuItems, suggestedSource: menuSource) { picked in
+            delivered = true
+            onLabel(picked)
+            dismiss()
+        }
+        .screenshotCandidates($candidates) { picked in
                 onLabel(picked)
                 dismiss()
             }
@@ -302,6 +342,16 @@ struct ScanSheet: View {
                 PhotosPicker(selection: $photoItem, matching: .images) {
                     Label("Choose Photo", systemImage: "photo.on.rectangle")
                 }
+                // The fourth door, and the one the share sheet already
+                // had: a restaurant's nutrition PDF, read into a list to
+                // choose from. Sharing a document from Files worked;
+                // reaching the same reader from inside the app meant
+                // leaving it first (the user, 2026-08-16).
+                Button {
+                    showingMenuFile = true
+                } label: {
+                    Label("Choose Menu Document", systemImage: "doc.text.magnifyingglass")
+                }
                 if Self.sampleAvailable {
                     Button {
                         useSamplePhoto()
@@ -361,6 +411,9 @@ struct ScanSheet: View {
             dismiss()
         case .candidates(let list):
             candidates = list
+        case .menu(let items, let source):
+            menuSource = source
+            menuItems = items
         case .nothing(let message):
             failureMessage = message
         case .cancelled:

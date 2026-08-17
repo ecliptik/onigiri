@@ -446,7 +446,19 @@ public enum SharedStore {
     private static let fdcKeychainService = "com.ecliptik.Onigiri.fdc"
     private static let fdcKeychainAccount = "fdcAPIKey"
 
+    /// Access-grouped on the APP GROUP for the same reason the AI keys
+    /// are (see AIProviderSettings): an ungrouped item lands in the
+    /// app's own group, keyed to its bundle id, where no extension can
+    /// reach it. Kept identical to the AI keys deliberately — one of the
+    /// two behaving differently is the asymmetry that invites a future
+    /// caller to assume the wrong thing.
     private static func fdcKeychainQuery() -> [String: Any] {
+        var query = legacyFDCKeychainQuery()
+        query[kSecAttrAccessGroup as String] = appGroupID
+        return query
+    }
+
+    private static func legacyFDCKeychainQuery() -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: fdcKeychainService,
@@ -477,13 +489,28 @@ public enum SharedStore {
         defaults.removeObject(forKey: fdcAPIKeyKey)
         if key.isEmpty {
             SecItemDelete(fdcKeychainQuery() as CFDictionary)
+            SecItemDelete(legacyFDCKeychainQuery() as CFDictionary)
             return true
         }
         return writeFDCKeychain(key)
     }
 
+    /// Read-through migration, one more layer than this key's original
+    /// defaults→Keychain move: shared group, then the app's own group,
+    /// copying across on a hit so a saved key survives the change
+    /// without being re-typed.
     private static func readFDCKeychain() -> String? {
-        var query = fdcKeychainQuery()
+        if let found = readFDCKeychain(fdcKeychainQuery()) { return found }
+        guard let legacy = readFDCKeychain(legacyFDCKeychainQuery()) else { return nil }
+        // Left in place — see AIProviderSettings.readSecret: an
+        // access-group-less delete matches every reachable group and
+        // takes the migrated copy with it.
+        _ = writeFDCKeychain(legacy)
+        return legacy
+    }
+
+    private static func readFDCKeychain(_ base: [String: Any]) -> String? {
+        var query = base
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: CFTypeRef?

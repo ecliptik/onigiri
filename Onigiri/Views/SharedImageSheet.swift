@@ -18,6 +18,8 @@ struct SharedImageSheet: View {
     @State private var phase = Phase.reading
     @State private var status = "Reading the photo…"
     @State private var candidates: [ParsedLabel] = []
+    @State private var menuItems: [MenuRow] = []
+    @State private var menuSource: String?
     @State private var pick: Pick?
 
     private enum Phase: Equatable {
@@ -52,6 +54,9 @@ struct SharedImageSheet: View {
         .screenshotCandidates($candidates) { picked in
             pick = Pick(product: picked.scannedProduct())
         }
+        .menuPhotoPicker($menuItems, suggestedSource: menuSource) { picked in
+            pick = Pick(product: picked.scannedProduct())
+        }
         .sheet(item: $pick, onDismiss: { dismiss() }) { pick in
             FoodFormView(food: nil, prefill: pick.product)
         }
@@ -68,7 +73,7 @@ struct SharedImageSheet: View {
             }
         case .failed(let message):
             ContentUnavailableView {
-                Label("Couldn't read that photo", systemImage: "photo.badge.exclamationmark")
+                Label("No nutrition found", systemImage: "photo.badge.exclamationmark")
             } description: {
                 Text(message)
             }
@@ -94,6 +99,12 @@ struct SharedImageSheet: View {
         case .candidates(let list):
             phase = .handedOff
             candidates = list
+        case .menu(let items, let source):
+            // A photographed MENU shared in — the same picker the scan
+            // door raises, for the same reason: a board lists dozens.
+            phase = .handedOff
+            menuSource = source
+            menuItems = items
         case .nothing(let message):
             phase = .failed(message)
         case .cancelled:

@@ -41,6 +41,9 @@ struct EntryDoorsSection: View {
     @State private var readTask: Task<Void, Never>?
     /// Non-empty while the "which item?" dialog is up.
     @State private var candidates: [ParsedLabel] = []
+    /// Non-empty while the photographed-menu picker is up.
+    @State private var menuItems: [MenuRow] = []
+    @State private var menuSource: String?
 
     private var imageDoors: Bool { onLabel != nil || onFood != nil }
 
@@ -130,6 +133,9 @@ struct EntryDoorsSection: View {
         .screenshotCandidates($candidates) { picked in
             onLabel?(picked)
         }
+        .menuPhotoPicker($menuItems, suggestedSource: menuSource) { picked in
+            onLabel?(picked)
+        }
     }
 
     private func refreshClipboard() {
@@ -175,6 +181,9 @@ struct EntryDoorsSection: View {
             onFood?(product)
         case .candidates(let list):
             candidates = list
+        case .menu(let items, let source):
+            menuSource = source
+            menuItems = items
         case .nothing(let message):
             failureMessage = message
         case .cancelled:

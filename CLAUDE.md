@@ -659,6 +659,32 @@ Each cost a debugging session.
     footer the same, logo is artwork), so the sheet ASKS and the answer
     prefixes each name. Never fall back to the filename: it is not the
     document speaking, and "menu-kwiktrip — Greek Chicken" is what that buys.
+  - **A parse that goes wrong must return NOTHING** (2026-08-16, a sweep
+    of eight real chain menus — `plans/PLAN-menu-import.md` Round 6 has
+    the table). A wrong column mapping does not fail loudly, it returns
+    confident nonsense: one booklet produced 171 rows of
+    "T R I P O L A C I G G N R E E L O O C R, 10 kcal". Three gates hold
+    it shut — a name must contain a three-letter WORD, a page must
+    declare ≥3 value columns, and rows must fill `minimumFieldFillRate`
+    of what the header promised. Never loosen one to make a document
+    parse; that is how false food gets logged.
+  - **"CALCIUM" contains "cal".** A micronutrient column matched the
+    calorie keyword and, sitting to its RIGHT, overwrote it: every
+    McDonald's row read 25 kcal instead of 740. `ignoredHeaderWords`
+    recognises micronutrient/%DV columns in order to SKIP them, and a
+    field stated twice keeps its leftmost column. Whole-word matching
+    alone doesn't fix this — "carb" must still match "carbohydrates".
+  - **A section heading is told by type SIZE, not capitals** — Title-Case
+    sections (Shake Shack) otherwise read as wrapped names and glue onto
+    the row above. A heading is ≥1.25x the median data-row height.
+  - **An image-only PDF is OCR'd, not refused**: `readOCR` renders pages
+    with fewer than `scannedPageRunLimit` runs and reads them with
+    Vision, whose observations the parser cannot tell from PDFKit's. A
+    rasterised guide goes 0 rows → 47. Capped at `ocrPageLimit` pages
+    because OCR costs ~1 s each.
+  - A shared "nutrition PDF" link may be a **CAPTCHA interstitial** or a
+    JS viewer shell; both render as documents with no table. Follow the
+    PDF the page names (`MenuLinkLoader`), don't trust the URL's `.pdf`.
   `MenuDocument.swift` and `scripts/dump-pdf-text.swift` must stay identical
   (the `LabelScan`/`dump-label-ocr` rule); `MenuDocumentTests` pins it by
   re-reading the PDF and diffing against the committed fixture, so a drift

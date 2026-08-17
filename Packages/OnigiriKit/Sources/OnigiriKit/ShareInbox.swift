@@ -139,6 +139,51 @@ public enum ShareInbox {
             : .image(destination)
     }
 
+    // MARK: Who owns the work
+
+    /// While the extension is on screen it OWNS what it deposited, and
+    /// the app must not also pick it up.
+    ///
+    /// Without this the safety-net deposit becomes a duplicate: leave the
+    /// share sheet open, switch to Onigiri, and the same import is
+    /// showing in both places — then cancelling one leaves the other
+    /// (the user, 2026-08-16).
+    ///
+    /// A timestamp rather than a lock, because the case this net exists
+    /// for is a process that DIES: a killed extension can release
+    /// nothing, so the claim has to expire on its own or the document is
+    /// stranded forever.
+    private static let claimKey = "shareInbox.claimedAt"
+    static let claimSeconds: TimeInterval = 120
+
+    public static func claim() {
+        SharedStore.defaults.set(Date.now.timeIntervalSince1970, forKey: claimKey)
+    }
+
+    public static func releaseClaim() {
+        SharedStore.defaults.removeObject(forKey: claimKey)
+    }
+
+    /// True while an extension is alive and working on what it left here.
+    public static var isClaimed: Bool {
+        let at = SharedStore.defaults.double(forKey: claimKey)
+        guard at > 0 else { return false }
+        return Date.now.timeIntervalSince1970 - at < claimSeconds
+    }
+
+    /// Called by the extension once it has finished the job itself:
+    /// nothing is waiting for the app, so nothing should be waiting in
+    /// the inbox. Everything, not just the newest — the deposit is a
+    /// safety net for a process that might die, and a net that keeps
+    /// what it caught after the catch succeeded re-imports it later.
+    public static func clear() {
+        guard let directory else { return }
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles])) ?? []
+        for file in files { try? FileManager.default.removeItem(at: file) }
+    }
+
     /// A shared file name is untrusted input — it comes from whatever app
     /// did the sharing — so it never reaches the filesystem unfiltered.
     static func safe(_ name: String) -> String {

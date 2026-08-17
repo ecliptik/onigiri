@@ -1273,6 +1273,7 @@ private struct AISettingsScreen: View {
     /// @AppStorage's default is what an ABSENT key reads as, so `false`
     /// here would show the switch off while the engine treated it as on.
     @AppStorage(AIProviderSettings.fallbackOnDeviceKey, store: SharedStore.defaults) private var aiFallback = true
+    @AppStorage(AIProviderSettings.estimateNutritionKey, store: SharedStore.defaults) private var aiEstimate = true
     /// The SELECTED provider's secret, drafted like the FDC key —
     /// reloaded when the picker moves (each provider keeps its own
     /// Keychain slot, so switching never clobbers another's key).
@@ -1340,6 +1341,13 @@ private struct AISettingsScreen: View {
                     // labels as text instead of the photo.
                     Toggle("Model accepts photos", isOn: $aiLocalVision)
                 }
+                // Applies to every provider, so it sits ABOVE the
+                // fallback row rather than inside the bring-your-own
+                // branch.
+                Toggle("Estimate nutrition", isOn: $aiEstimate)
+                Text("Estimates fill in figures nothing printed — a meal you describe, a photo, a menu item with no calories on it. They are marked as estimates and can be edited before saving. Reading a label, a nutrition screenshot or a menu's own printed calories is unaffected.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 // Nothing to fall back FROM when Apple Intelligence is
                 // already the engine, so the row only exists for the
                 // bring-your-own providers.
@@ -1351,7 +1359,7 @@ private struct AISettingsScreen: View {
                     }
                     HStack {
                         Button("Test connection") { testAIConnection() }
-                            .disabled(!AIProviderSettings.selectedRemoteIsConfigured || aiTest == .testing)
+                            .disabled(!aiCanTest || aiTest == .testing)
                         Spacer()
                         switch aiTest {
                         case .idle:
@@ -1428,6 +1436,28 @@ private struct AISettingsScreen: View {
     /// Masked-by-default secret field, the FDC key's grammar: plain
     /// TextField behind an eye toggle, edits a draft, saves as typed
     /// (no shape gate — provider key formats vary and change).
+    /// Driven by OBSERVABLE state, not by a Keychain read.
+    ///
+    /// `selectedRemoteIsConfigured` reads the Keychain, which SwiftUI
+    /// cannot observe, and the key field's onChange sets `aiTest = .idle`
+    /// — a no-op when it is already `.idle`. So typing a valid key
+    /// changed nothing SwiftUI was watching, and Test connection stayed
+    /// greyed out until the screen was rebuilt by leaving and coming
+    /// back (the user, 2026-08-16). The draft and the base URL are both
+    /// state, so reading THOSE re-renders.
+    private var aiCanTest: Bool {
+        switch AIProviderSettings.selected {
+        case .onDevice:
+            false
+        case .anthropic, .openAI:
+            !aiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .local:
+            // A token is optional here; the endpoint is what makes it
+            // reachable.
+            !aiLocalBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
     private func aiKeyField(_ title: String) -> some View {
         HStack {
             Group {

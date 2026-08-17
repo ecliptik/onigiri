@@ -10,6 +10,7 @@ import OnigiriKit
 ///
 /// Deliberately NOT opt-in like the eval suite beside it — no model, no
 /// network, ~50 ms.
+@MainActor
 final class MenuDocumentTests: XCTestCase {
     private func menuURL() throws -> URL {
         try XCTUnwrap(

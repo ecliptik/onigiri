@@ -43,13 +43,88 @@ enum MenuLinkLoader {
             data = downloaded
         } else {
             linkLog.notice("Shared link is a page — rendering it")
-            data = try await render(url)
+            let rendered = try await render(url)
+            // A VIEWER page renders to a document with no table in it.
+            // Shake Shack's guide is served through a JavaScript PDF
+            // viewer, which paints each page into a canvas: the render
+            // captures pictures with no text layer, and the share came
+            // back "No nutrition table in that document" for a link that
+            // really was a nutrition guide (the user, 2026-08-16).
+            //
+            // So when the render yields nothing readable, follow the PDF
+            // the page itself names. That is a single general rule —
+            // "this page points at a PDF, fetch it" — and not the
+            // per-site HTML scraping PLAN-screenshot-nutrition vetoed:
+            // no selectors, no structure, nothing per-site to rot. It
+            // costs one extra request and only on a page that already
+            // failed.
+            if yieldsMenu(rendered) {
+                data = rendered
+            } else if let embedded = await embeddedPDF(pageAt: url) {
+                linkLog.notice("Page had no table — followed the PDF it names (\(embedded.count) bytes)")
+                data = embedded
+            } else {
+                data = rendered
+            }
         }
         guard !data.isEmpty else { throw Failure.notAMenu }
         let file = FileManager.default.temporaryDirectory
             .appending(path: "shared-\(UUID().uuidString).pdf")
         try data.write(to: file, options: .atomic)
         return file
+    }
+
+    /// The page's TEXT, tags stripped.
+    ///
+    /// A rendered page only shows what CSS lets it show. Salt & Straw
+    /// states its calories inside a COLLAPSED accordion, so the figure
+    /// is in the document but not on the page, and rendering could never
+    /// have found it (the user, 2026-08-16). The text is there either
+    /// way.
+    ///
+    /// This is not the per-site scraping PLAN-screenshot-nutrition
+    /// vetoed: there are no selectors and no knowledge of any site's
+    /// markup — tags out, words left, and the same reader that handles a
+    /// screenshot takes it from there.
+    static func pageText(for url: URL) async -> String? {
+        guard let (data, response) = try? await URLSession.shared.data(from: url) else { return nil }
+        let mime = (response as? HTTPURLResponse)?.mimeType ?? response.mimeType ?? ""
+        guard mime.localizedCaseInsensitiveContains("html") else { return nil }
+        guard let html = String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .isoLatin1) else { return nil }
+        return PageText.stripped(from: html)
+    }
+
+    /// Whether a rendered page actually produced a readable table. The
+    /// parse is cheap (~0.1 s) beside the render that just ran.
+    private static func yieldsMenu(_ data: Data) -> Bool {
+        let scratch = FileManager.default.temporaryDirectory
+            .appending(path: "probe-\(UUID().uuidString).pdf")
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        guard (try? data.write(to: scratch, options: .atomic)) != nil,
+              let document = try? MenuDocumentReader.read(scratch) else { return false }
+        return !MenuTableParser.parse(pages: document.pages).isEmpty
+    }
+
+    /// The first URL the page names that really serves a PDF. Capped at
+    /// a handful of candidates so a page full of links cannot turn one
+    /// share into a crawl.
+    private static func embeddedPDF(pageAt url: URL) async -> Data? {
+        guard let (data, _) = try? await URLSession.shared.data(from: url),
+              let html = String(data: data, encoding: .utf8) else { return nil }
+        let pattern = /https?:\/\/[^\s"'<>()\\]{10,400}/
+        var seen = Set<String>()
+        var tried = 0
+        for match in html.matches(of: pattern) {
+            let text = String(match.output)
+            let lower = text.lowercased()
+            guard lower.contains(".pdf") || lower.contains("/pdf/") else { continue }
+            guard seen.insert(text).inserted, let candidate = URL(string: text) else { continue }
+            tried += 1
+            if tried > 4 { break }
+            if let pdf = try? await downloadPDF(from: candidate) { return pdf }
+        }
+        return nil
     }
 
     /// Only when the server actually says PDF — a 404 page is HTML and

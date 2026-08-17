@@ -388,6 +388,76 @@ extension FoodIntelligence {
         }))
     }
 
+    private struct RemoteMenuDishReading: Decodable {
+        struct Item: Decodable {
+            let name: String
+            let section: String?
+            /// A remote model answers "410", 410, or 410.0 depending on
+            /// the day, and a strict Double? silently drops the first —
+            /// which is a list of dishes with no calories beside them,
+            /// the one thing the list exists to show.
+            let kcal: Double?
+
+            private enum CodingKeys: String, CodingKey { case name, section, kcal }
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                name = try container.decode(String.self, forKey: .name)
+                section = try? container.decodeIfPresent(String.self, forKey: .section)
+                if let number = try? container.decodeIfPresent(Double.self, forKey: .kcal) {
+                    kcal = number
+                } else if let text = try? container.decodeIfPresent(String.self, forKey: .kcal) {
+                    kcal = Double(text.filter { $0.isNumber || $0 == "." })
+                } else {
+                    kcal = nil
+                }
+            }
+        }
+        let dishes: [Item]
+        let restaurant: String?
+    }
+
+    /// Text relay, like the reads above. Listing only — no numbers are
+    /// requested, because a menu without calorie labeling prints none,
+    /// and the one dish the person picks is estimated separately.
+    static func readMenuSourceRemote(_ text: String) async -> RemoteAnswer<String?> {
+        let system = FoodIntelligence.Prompts.menuSourceInstructions
+        let user = FoodIntelligence.Prompts.menuSourceUser(text) + """
+
+
+            Respond with ONLY a JSON object, no prose: \
+            {"restaurant": string|null}.
+            """
+        struct Reading: Decodable { let restaurant: String? }
+        switch await completeRemote(system: system, user: user) {
+        case .unavailable: return .unavailable
+        case .answered(let data):
+            guard let data, let reading = try? JSONDecoder().decode(Reading.self, from: data)
+            else { return .answered(nil) }
+            return .answered(reading.restaurant)
+        }
+    }
+
+    static func readMenuDishesRemote(_ text: String) async -> RemoteAnswer<FoodIntelligence.MenuReading> {
+        let user = Prompts.menuDishUser(text) + """
+            \n\nRespond with ONLY a JSON object, no prose: {"dishes": \
+            array of at most thirty {"name": string, "section": \
+            string|null, "kcal": number (estimated calories for one \
+            serving as sold)}, "restaurant": string|null (the business's \
+            name, never the word "Menu" alone)}. Never include a price, \
+            an item number, or a description. Return an empty array when \
+            the text is not a menu.
+            """
+        guard case .answered(let data) = await completeRemote(
+            system: Prompts.menuDishInstructions, user: user) else { return .unavailable }
+        guard let reading = decode(RemoteMenuDishReading.self, from: data) else { return .answered(nil) }
+        return .answered(FoodIntelligence.MenuReading(
+            dishes: plausibleMenuDishes(reading.dishes.prefix(30).map {
+                FoodIntelligence.MenuDish(name: $0.name, section: $0.section, kcal: $0.kcal)
+            }),
+            restaurant: plausibleRestaurant(reading.restaurant)))
+    }
+
     // MARK: Sign / menu / package-front read
 
     private struct RemoteSignReading: Decodable {

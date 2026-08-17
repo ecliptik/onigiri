@@ -222,6 +222,12 @@ struct ContentView: View {
     /// leaves the rest in place for the next foreground rather than
     /// dropping them.
     private func drainMenuInbox() {
+        // Not while the share sheet still has it. The deposit is a net
+        // for an extension that DIED, and draining it under a live one
+        // put the same import on screen twice, where cancelling either
+        // left the other (the user, 2026-08-16). The claim expires on
+        // its own, so a killed extension still hands over.
+        guard !ShareInbox.isClaimed else { return }
         guard sharedImport == nil, let item = ShareInbox.take() else { return }
         sharedImport = SharedImport(item: item, isOurs: true)
     }

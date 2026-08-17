@@ -151,6 +151,11 @@ public enum LabelParser {
     /// OCR fixups that only apply inside numeric contexts: letter O misread
     /// for zero ("Og", "16Omg", "O.5g"), comma decimals ("30,9").
     static func normalizedNumericText(_ text: String) -> String {
+        // Every rule below rewrites an O/o or a comma. A cell that has
+        // neither — "450", "1570", most of a nutrition table — cannot be
+        // changed by any of them, and five regex passes over it is pure
+        // cost. Exactly equivalent, just not paid for.
+        guard text.contains(where: { $0 == "O" || $0 == "o" || $0 == "," }) else { return text }
         var s = text
         s = s.replacing(/(\d)[Oo](?=\d)/) { "\($0.output.1)0" }
         s = s.replacing(/(\d)[Oo](?=(?:g|mg|mcg|ug|µg|kg|ml)\b)/.ignoresCase()) { "\($0.output.1)0" }

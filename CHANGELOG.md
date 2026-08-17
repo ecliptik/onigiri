@@ -8,6 +8,46 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.27.2 — the things that quietly did nothing
+
+_2026-08-17_ · [changes since v2.27.1](https://github.com/ecliptik/onigiri/compare/v2.27.1...v2.27.2)
+
+Three fixes for failures that gave you no sign they had happened. Two you
+could have run into today; the third only shows up if you ever went looking
+in a device log.
+
+**A pasted screenshot that read as a shrug.** Tap the search field, then tap
+Paste Nutrition Screenshot, and the read could die on the spot — no figures,
+no error, nothing to distinguish it from a row that simply didn't respond.
+Tapping the row is what puts the search keyboard away, and iOS briefly tears
+down and rebuilds a list section when that happens. The app took that blink
+for you leaving the screen and cancelled the work you had just started.
+
+The same blink was cancelling an AI meal-name suggestion mid-flight, which
+mattered rather more if you bring your own API key: the request had already
+been billed, and the answer was thrown away on arrival. Both now stop only
+when you actually leave.
+
+**Cancel in Settings gives your API key back.** Clearing the USDA key and
+tapping Cancel used to keep the change. Keys are stored where the app can
+write them but never read them back, so there was nothing to retype from and
+no way to undo it. Cancel now restores it, as it always claimed to.
+
+Three settings had slipped out of that safety net entirely — the two
+Appearance pickers ("Food logged is called", "Foods tab opens on") and the AI
+screen's Estimate nutrition switch. Cancel didn't undo them and Reset Settings
+didn't clear them. They're covered now.
+
+And a smaller one: the AI screen asked for "an API key" when it could name
+the provider you had picked.
+
+**Your figures are out of the device log.** Onigiri has never sent Health data
+anywhere, and that hasn't changed. But it was writing calorie and sodium
+readings — and your measured energy burn, on every widget refresh — into the
+system log in plain text, where a diagnostic report handed to a support agent
+would carry them off the device. The diagnostics that made those lines useful
+are still there; the numbers are not.
+
 ## v2.27.1 — the failures that were keeping quiet
 
 _2026-08-17_ · [changes since v2.27.0](https://github.com/ecliptik/onigiri/compare/v2.27.0...v2.27.1)

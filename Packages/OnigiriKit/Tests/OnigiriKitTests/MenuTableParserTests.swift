@@ -7,6 +7,18 @@ import Testing
 /// feature was designed against (`plans/PLAN-menu-import.md`) — the exact
 /// runs `MenuDocument` hands the parser on device, never hand-written.
 struct MenuTableParserTests {
+    /// A row becomes loggable in exactly one place — `parsedLabel` — so
+    /// that is where the plausibility gate stands. A mis-mapped column
+    /// (the "CALCIUM contains cal" family) loses the field it poisoned
+    /// and nothing else.
+    @Test func aRowsImpossibleFigureNeverReachesTheForm() {
+        let row = MenuRow(id: 0, name: "Regular Fries", kcal: 470, sodiumMg: 740_000)
+        let label = row.parsedLabel
+        #expect(label.kcal == 470, "the calories were fine and stay")
+        #expect(label.sodiumMg == nil)
+        #expect(label.warnings.map(\.severity) == [.dropped])
+    }
+
     private func fixture(_ name: String) throws -> [LabelObservation] {
         struct Dump: Decodable { let observations: [LabelObservation] }
         let url = try #require(

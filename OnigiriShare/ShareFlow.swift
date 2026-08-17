@@ -342,6 +342,26 @@ private struct ShareLogSheet: View {
     private var sodiumUnitRaw = SharedStore.unitAutomatic
     private var sodiumUnit: SodiumUnit { SodiumUnit.resolve(sodiumUnitRaw) }
 
+    /// The gate's verdict on one row, when it had one to give
+    /// (`NutritionPlausibility`). Suspect values are shown and marked;
+    /// impossible ones are already gone, and are named in the footer.
+    private func suspect(_ id: String) -> NutritionPlausibility.Finding? {
+        label.warnings.first { $0.severity == .suspect && $0.field.rawValue == id }
+    }
+
+    /// The findings that have no row to sit beside: what was removed,
+    /// and an energy figure its own macros contradict.
+    private var notes: [String] {
+        label.warnings.compactMap { finding in
+            switch finding.severity {
+            case .dropped:
+                "\(finding.field.displayName) was left out — \(finding.reason)"
+            case .suspect:
+                finding.field == .energy ? finding.reason : nil
+            }
+        }
+    }
+
     /// Everything the Log button is about to write, scaled to the
     /// portion — the RECEIPT for it.
     ///
@@ -409,14 +429,34 @@ private struct ShareLogSheet: View {
                 } else {
                     ForEach(written, id: \.id) { row in
                         LabeledContent(row.name) {
-                            Text(row.amount).monospacedDigit()
+                            HStack(spacing: 6) {
+                                if suspect(row.id) != nil {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundStyle(.orange)
+                                }
+                                Text(row.amount).monospacedDigit()
+                            }
+                        }
+                        if let reason = suspect(row.id)?.reason {
+                            Text(reason)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
             } header: {
                 Text("Also logged")
             } footer: {
-                Text("Everything Onigiri will write to Health, for this portion.")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Everything Onigiri will write to Health, for this portion.")
+                    // What was REMOVED has to be said too: a figure
+                    // silently dropped and a figure never read look
+                    // identical here, and only one of them means the
+                    // page said something Onigiri refused to believe.
+                    ForEach(notes, id: \.self) { note in
+                        Label(note, systemImage: "exclamationmark.triangle")
+                    }
+                }
             }
             Section {
                 Picker("Meal", selection: $category) {

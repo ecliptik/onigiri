@@ -134,17 +134,22 @@ extension FoodIntelligence {
             system: Prompts.describeInstructions, user: user) else { return .unavailable }
         guard let estimate = decode(RemoteFoodEstimate.self, from: data) else { return .answered(nil) }
         let name = estimate.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, estimate.kcal >= 0, estimate.kcal <= 5000,
-              estimate.sodiumMg >= 0, estimate.sodiumMg <= 20_000 else { return .answered(nil) }
+        let nutrients = macroNutrients(
+            fatG: estimate.fatG, carbsG: estimate.carbsG,
+            proteinG: estimate.proteinG, fiberG: estimate.fiberG,
+            sugarG: estimate.sugarG)
+        // The shared gate rather than local bounds — the on-device
+        // engine runs the same check, and an estimate stands or falls
+        // whole (see estimateHolds).
+        guard !name.isEmpty, estimateHolds(
+            kcal: estimate.kcal, sodiumMg: estimate.sodiumMg, nutrients: nutrients
+        ) else { return .answered(nil) }
         return .answered(DescribedFood(
             name: name,
             kcal: estimate.kcal,
             sodiumMg: estimate.sodiumMg,
             serving: estimate.serving.trimmingCharacters(in: .whitespacesAndNewlines),
-            nutrients: macroNutrients(
-                fatG: estimate.fatG, carbsG: estimate.carbsG,
-                proteinG: estimate.proteinG, fiberG: estimate.fiberG,
-                sugarG: estimate.sugarG)))
+            nutrients: nutrients))
     }
 
     // MARK: Describe-meal

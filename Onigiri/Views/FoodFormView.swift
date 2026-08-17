@@ -55,6 +55,9 @@ struct FoodFormView: View {
     @State private var name = ""
     @State private var kcal: Double?
     @State private var sodiumMg: Double?
+    /// What the plausibility gate said about the prefill this form
+    /// opened on — empty for anything typed by hand.
+    @State private var warnings: [NutritionPlausibility.Finding] = []
     /// Sodium's display unit; the field state above stays canonical mg.
     @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults) private var sodiumUnitRaw = SharedStore.unitAutomatic
     private var sodiumUnit: SodiumUnit { SodiumUnit.resolve(sodiumUnitRaw) }
@@ -352,6 +355,20 @@ struct FoodFormView: View {
                         // "Macronutrients", like the day detail and the
                         // tracked-metric picker — one taxonomy app-wide.
                         groupLabel("Macronutrients", filled: nutrientFieldCount)
+                    }
+                } footer: {
+                    // What the plausibility gate made of the prefill. A
+                    // blank field that was blanked ON PURPOSE has to say
+                    // so — otherwise "no sodium was published" and
+                    // "the sodium read was nonsense" look identical, and
+                    // only one of them is worth checking the label for
+                    // (`NutritionPlausibility`).
+                    if !warnings.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(warnings, id: \.reason) { finding in
+                                Label(caption(for: finding), systemImage: "exclamationmark.triangle")
+                            }
+                        }
                     }
                 }
 
@@ -709,10 +726,20 @@ struct FoodFormView: View {
             : "Got the name. Turn on AI in Settings to estimate nutrition from a photo."
     }
 
+    /// Said about the READ, not about the field as it stands now — so it
+    /// stays true after the user types the right number in.
+    private func caption(for finding: NutritionPlausibility.Finding) -> String {
+        switch finding.severity {
+        case .dropped: "\(finding.field.displayName) wasn't filled in — \(finding.reason)"
+        case .suspect: finding.reason
+        }
+    }
+
     private func apply(_ product: ScannedProduct) {
         name = product.name
         kcal = product.kcal
         sodiumMg = product.sodiumMg
+        warnings = product.warnings
         serving = product.servingDescription
         barcode = product.barcode.isEmpty ? nil : product.barcode
         fatG = product.nutrients.fatG

@@ -68,6 +68,15 @@ enum SharedPageReader {
                 if parsed.nutrients.proteinG == nil { parsed.nutrients.proteinG = read.proteinG }
             }
         }
+        // The gate, last: prose mode stops the manufacture, this catches
+        // what any future reader invents. Impossible fields are gone by
+        // the time anything can show them, and what was removed rides
+        // along in `warnings` so the sheet can say so
+        // (`NutritionPlausibility`).
+        parsed = NutritionPlausibility.checked(parsed)
+        for finding in parsed.warnings {
+            pageLog.notice("Page read \(finding.severity.rawValue, privacy: .public): \(finding.reason, privacy: .public)")
+        }
         guard parsed.kcal != nil else { return nil }
         return parsed
     }

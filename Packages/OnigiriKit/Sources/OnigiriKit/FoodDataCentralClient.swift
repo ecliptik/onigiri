@@ -30,7 +30,7 @@ public struct GenericFood: Sendable, Equatable, Identifiable {
             sodiumMg: sodiumMgPer100g,
             servingDescription: "per 100 g",
             nutrients: nutrientsPer100g
-        )
+        ).plausible()
     }
 
     public init(
@@ -217,7 +217,7 @@ public struct FoodDataCentralClient: Sendable {
             sodiumMg: base.sodiumMg.map { $0 * factor },
             servingDescription: "\(portion.description) (\(grams) g)",
             nutrients: base.nutrients.scaled(by: factor)
-        )
+        ).plausible()
     }
 
     /// The food's household portions, best first — fetched once when the

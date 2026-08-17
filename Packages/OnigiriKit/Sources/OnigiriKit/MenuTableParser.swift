@@ -71,7 +71,11 @@ public struct MenuRow: Sendable, Equatable, Identifiable {
         // the parser guessing, which it never does.
         parsed.servingDescription = serving
         parsed.aiGenerated = aiGenerated
-        return parsed
+        // The gate runs HERE rather than at parse time: a mis-mapped
+        // column is a per-field mistake, and this is the one place every
+        // consumer of a row — the picker, the form, the share sheet's
+        // confirm step — passes through (`NutritionPlausibility`).
+        return NutritionPlausibility.checked(parsed)
     }
 }
 

@@ -20,6 +20,10 @@ public struct ScannedProduct: Sendable, Equatable {
     /// exactly the claim that caption exists to prevent. nil for
     /// anything not AI-derived.
     public let aiEngine: AIProvider?
+    /// What `NutritionPlausibility` made of these numbers — impossible
+    /// ones are already absent from the fields above. Carried into the
+    /// form so it can say what was ignored and why.
+    public let warnings: [NutritionPlausibility.Finding]
 
     public init(
         barcode: String,
@@ -29,7 +33,8 @@ public struct ScannedProduct: Sendable, Equatable {
         servingDescription: String,
         nutrients: NutrientValues,
         aiGenerated: Bool = false,
-        aiEngine: AIProvider? = nil
+        aiEngine: AIProvider? = nil,
+        warnings: [NutritionPlausibility.Finding] = []
     ) {
         self.barcode = barcode
         self.name = name
@@ -39,6 +44,22 @@ public struct ScannedProduct: Sendable, Equatable {
         self.nutrients = nutrients
         self.aiGenerated = aiGenerated
         self.aiEngine = aiEngine
+        self.warnings = warnings
+    }
+
+    /// The gate, applied where a product ENTERS the app — a database
+    /// row is contributor-entered and a per-100 g figure in a
+    /// per-serving slot is a known class of bad row, so the online
+    /// doors get the same treatment as the parsers.
+    public func plausible() -> ScannedProduct {
+        let reading = NutritionPlausibility.check(
+            kcal: kcal, sodiumMg: sodiumMg, nutrients: nutrients)
+        guard !reading.findings.isEmpty else { return self }
+        return ScannedProduct(
+            barcode: barcode, name: name, kcal: reading.kcal,
+            sodiumMg: reading.sodiumMg, servingDescription: servingDescription,
+            nutrients: reading.nutrients, aiGenerated: aiGenerated,
+            aiEngine: aiEngine, warnings: reading.findings)
     }
 }
 
@@ -515,7 +536,7 @@ public struct OpenFoodFactsClient: Sendable {
             sodiumMg: sodiumMg,
             servingDescription: servingDescription,
             nutrients: nutrients
-        )
+        ).plausible()
     }
 }
 

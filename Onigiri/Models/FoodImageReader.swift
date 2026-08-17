@@ -75,6 +75,37 @@ enum FoodImageReader {
         source: FoodImageSource = .camera,
         status: @MainActor (String) -> Void = { _ in }
     ) async -> FoodImageOutcome {
+        gated(await cascade(image, source: source, status: status))
+    }
+
+    /// Every outcome leaves through the plausibility gate — ONE door, so
+    /// a new branch of the cascade below cannot forget to be checked
+    /// (`NutritionPlausibility`). A menu is exempt here and gated at the
+    /// pick instead: `MenuRow.parsedLabel` is where a row becomes
+    /// something loggable, and checking 113 rows nobody chose is work
+    /// for nothing.
+    private static func gated(_ outcome: FoodImageOutcome) -> FoodImageOutcome {
+        switch outcome {
+        case .label(let label):
+            let checked = NutritionPlausibility.checked(label)
+            for finding in checked.warnings {
+                imageLog.notice("image read \(finding.severity.rawValue, privacy: .public): \(finding.reason, privacy: .public)")
+            }
+            return .label(checked)
+        case .food(let product):
+            return .food(product.plausible())
+        case .candidates(let labels):
+            return .candidates(labels.map(NutritionPlausibility.checked))
+        case .menu, .nothing, .cancelled:
+            return outcome
+        }
+    }
+
+    private static func cascade(
+        _ image: UIImage,
+        source: FoodImageSource,
+        status: @MainActor (String) -> Void
+    ) async -> FoodImageOutcome {
         status("Analyzing photo…")
         // Vision needs legible text, not sensor resolution: a 48 MP
         // library pick decoded at full size spikes memory across the

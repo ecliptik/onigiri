@@ -116,6 +116,23 @@ enum FoodIntelligence {
         var engine: AIProvider = .onDevice
     }
 
+    /// Does an ESTIMATE survive the plausibility gate whole?
+    ///
+    /// The split that matters (`NutritionPlausibility`): a READ of
+    /// published figures loses the one field that cannot be, because the
+    /// rest of the page was probably right. An estimate has no page —
+    /// every number came from the same guess — so one impossible figure
+    /// impeaches all of them, and the deterministic path takes over.
+    static func estimateHolds(
+        kcal: Double, sodiumMg: Double, nutrients: NutrientValues = NutrientValues()
+    ) -> Bool {
+        let reading = NutritionPlausibility.check(
+            kcal: kcal, sodiumMg: sodiumMg, nutrients: nutrients)
+        guard let first = reading.dropped.first else { return true }
+        log.notice("estimate rejected — \(first.reason, privacy: .public)")
+        return false
+    }
+
     /// Clamped macro assembly, shared by both engines so bounds can't
     /// drift (mirrors the FM @Guide ranges).
     static func macroNutrients(
@@ -471,8 +488,18 @@ enum FoodIntelligence {
     /// food, and absurd values mean the model misread the page.
     static func plausibleScreenshotFoods(_ foods: [ScreenshotFood]) -> [ScreenshotFood] {
         foods.compactMap { food in
-            guard let kcal = food.kcal, kcal > 0, kcal <= 5000 else { return nil }
-            if let sodium = food.sodiumMg, sodium < 0 || sodium > 20_000 { return nil }
+            // A READ: the gate takes out the field that cannot be, and
+            // leaves the rest standing — the page's other figures were
+            // probably printed correctly (`NutritionPlausibility`).
+            let reading = NutritionPlausibility.check(
+                kcal: food.kcal, sodiumMg: food.sodiumMg, nutrients: food.nutrients)
+            for finding in reading.dropped {
+                log.notice("screenshot read dropped \(finding.field.rawValue, privacy: .public): \(finding.reason, privacy: .public)")
+            }
+            let food = ScreenshotFood(
+                name: food.name, serving: food.serving, kcal: reading.kcal,
+                sodiumMg: reading.sodiumMg, nutrients: reading.nutrients)
+            guard let kcal = food.kcal, kcal > 0 else { return nil }
             let name = food.name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { return nil }
             // A name that IS the serving is the model conflating the two
@@ -567,8 +594,13 @@ enum FoodIntelligence {
         let haystack = text.lowercased()
         return foods.compactMap { food in
             let name = food.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty, food.kcal > 0, food.kcal <= 5000,
-                  food.sodiumMg >= 0, food.sodiumMg <= 20_000 else { return nil }
+            // An ESTIMATE, and there the gate is all-or-nothing: nothing
+            // here was printed anywhere, so a figure it calls impossible
+            // impeaches the whole answer rather than one field of it.
+            // (A screenshot READ does the opposite, deliberately.)
+            guard estimateHolds(kcal: food.kcal, sodiumMg: food.sodiumMg,
+                                nutrients: food.nutrients) else { return nil }
+            guard !name.isEmpty, food.kcal > 0 else { return nil }
             // The screenshot read's lesson: a name that IS the serving is
             // the model conflating the two.
             let serving = food.serving.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1037,16 +1069,21 @@ enum FoodIntelligence {
                 options: GenerationOptions(sampling: .greedy)
             ).content
             let name = estimate.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty else { return nil }
+            let nutrients = macroNutrients(
+                fatG: estimate.fatG, carbsG: estimate.carbsG,
+                proteinG: estimate.proteinG, fiberG: estimate.fiberG,
+                sugarG: estimate.sugarG)
+            // The @Guide ranges bound each field alone; the gate is what
+            // sees them TOGETHER (see estimateHolds).
+            guard !name.isEmpty, estimateHolds(
+                kcal: estimate.kcal, sodiumMg: estimate.sodiumMg, nutrients: nutrients
+            ) else { return nil }
             return DescribedFood(
                 name: name,
                 kcal: estimate.kcal,
                 sodiumMg: estimate.sodiumMg,
                 serving: estimate.serving.trimmingCharacters(in: .whitespacesAndNewlines),
-                nutrients: macroNutrients(
-                    fatG: estimate.fatG, carbsG: estimate.carbsG,
-                    proteinG: estimate.proteinG, fiberG: estimate.fiberG,
-                    sugarG: estimate.sugarG))
+                nutrients: nutrients)
         } catch {
             log.notice("describe-food fell back: \(String(describing: error))")
             return nil

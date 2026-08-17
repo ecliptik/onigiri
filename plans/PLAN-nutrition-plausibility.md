@@ -4,7 +4,8 @@ A shared Salt & Straw product page logged a 300 kcal dessert carrying
 **810,400 mg of sodium** — 810 grams of sodium, about 2 kg of table salt,
 352× the daily limit — into HealthKit, silently.
 
-> **STATUS — Layer 1 BUILT 2026-08-17, uncommitted. Layers 2–4 planned.**
+> **STATUS — Layers 1–3 BUILT 2026-08-17 (Layer 1 shipped in v2.24.0;
+> Layers 2–3 uncommitted). Layer 4 planned.**
 > Decisions taken with the user are marked **[decided]**. The layers are
 > ordered so each ships alone; Layer 1 is the reported bug, Layers 2–4
 > are the class of bug behind it.
@@ -170,7 +171,7 @@ so the render yields no kcal and the path returns nil), and it is not
 verified either way. The plausibility gate is the honest fix for it;
 narrowing prose mode by guessing at the document's shape is not.
 
-### Layer 2 — one plausibility gate, on every path
+### Layer 2 — one plausibility gate, on every path  ✅ BUILT 2026-08-17
 
 A new pure kit type — `NutritionPlausibility` — with one entry point that
 takes a `ParsedLabel` (or the fields directly) and returns per-field
@@ -215,7 +216,40 @@ beside it, for the reason `FoodIntelligenceRemote` already states about
 its shared helpers: "guards and merges are the shared helpers, so the
 engines can't drift."
 
-### Layer 3 — never log a number the user has not seen
+**What shipped, exactly.** `NutritionPlausibility` (kit, pure) with the
+thresholds above and the two severities. Its doors: `check(kcal:sodiumMg:
+nutrients:servingGrams:)` for the raw fields, `checked(_ label:)` for a
+`ParsedLabel`, and `ScannedProduct.plausible()` for the online rows.
+Findings ride to the UI on `ParsedLabel.warnings` / `ScannedProduct
+.warnings`, because a value silently removed and a value never read look
+identical on a form — only one of them is worth checking the label for.
+
+Wired at every point where a number becomes loggable: `SharedPageReader`,
+`FoodImageReader` (one `gated()` on the way out, so a new cascade branch
+cannot forget), `MenuRow.parsedLabel` (the pick, not the parse — checking
+113 rows nobody chose is work for nothing), the OpenFoodFacts and FDC
+products, and the model paths — `plausibleScreenshotFoods`,
+`plausibleSignFoods`, `describeFood` on both engines.
+
+**The read/estimate split, which is the design decision inside this
+layer.** A READ loses the one field that cannot be and keeps the rest:
+the galette's 300 kcal was right, and the page's other figures were
+probably printed correctly. An ESTIMATE stands or falls whole
+(`FoodIntelligence.estimateHolds`): nothing there was printed anywhere,
+every number came out of the same guess, so one impossible figure
+impeaches all of them and the deterministic path takes over.
+
+**Calibrated against real data, not reasoning.** 297 rows from six real
+chain nutrition guides, through the parser and the gate: **0 dropped**, 7
+suspect — and every suspect is real. Shake Shack's Triple SmokeShack
+really does carry 3,930 mg; the Chick-fil-A row reading 13,030 mg is a
+catering tray; CAVA's Pita Crisps really do print macros that work out to
+127 kcal beside a stated 70. All kept, all marked. `realMenusLoseNothing`
+pins both halves — nothing dropped, and under 5% flagged, because a gate
+that argues with published data teaches the user to ignore it, which is
+the one failure this layer cannot afford.
+
+### Layer 3 — never log a number the user has not seen  ✅ BUILT 2026-08-17
 
 - `ShareLogSheet` shows every value it is about to write, not just kcal.
   It is a full HealthKit write behind one Log button; the sheet should
@@ -225,6 +259,21 @@ engines can't drift."
 - Neither blocks saving. The app's standing position is that the user
   can be right and the parser can be wrong; the flag says "look at
   this", not "you may not".
+
+**What shipped:** the share sheet's confirm step lists every value it is
+about to write (v2.24.0), and now marks a suspect one with its reason
+beside it; what was REMOVED is named in the footer, since a dropped field
+and an unpublished one are otherwise indistinguishable. The food form
+carries the same findings under Macronutrients, worded about the READ
+("Sodium wasn't filled in — …") so the caption stays true after the user
+types the right number in.
+
+**Not yet seen on a device.** Layer 1 means the two pages that started
+this now yield no sodium at all, so neither raises a warning — by design,
+and it leaves the warning UI itself exercised only by unit tests. The
+cases that will show it in the wild are a mis-mapped menu column, a bad
+OpenFoodFacts row, and any genuinely salty item (a Shake Shack triple
+flags at 3,310 mg).
 
 ### Layer 4 — the estimates themselves
 

@@ -49,6 +49,11 @@ public struct ParsedLabel: Sendable, Equatable {
     /// Rides the label so the candidates dialog and the food form keep
     /// the provenance mark; a deterministic parse never sets it.
     public var aiGenerated = false
+    /// What `NutritionPlausibility` made of these numbers. Empty is the
+    /// normal case. Anything impossible is already GONE from the fields
+    /// above — these exist to SAY so, because a value silently removed
+    /// and a value never read look identical on a form.
+    public var warnings: [NutritionPlausibility.Finding] = []
 
     public init() {}
 
@@ -68,7 +73,8 @@ public struct ParsedLabel: Sendable, Equatable {
             sodiumMg: sodiumMg,
             servingDescription: servingDescription ?? fallbackServing,
             nutrients: nutrients,
-            aiGenerated: aiGenerated)
+            aiGenerated: aiGenerated,
+            warnings: warnings)
     }
 }
 

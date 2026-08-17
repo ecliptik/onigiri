@@ -40,7 +40,9 @@ public final class Food {
     /// Inverse of MealItem.food (declared there): deleting a food nullifies
     /// the items that reference it instead of leaving a dangling pointer
     /// that traps SwiftData on the next property access.
-    public var mealItems: [MealItem]
+    /// Defaulted like `Meal.items` — every init assigns it today, so this
+    /// changes nothing now and covers the init that forgets to later.
+    public var mealItems: [MealItem] = []
 
     public init(
         name: String,
@@ -232,10 +234,53 @@ public final class GoalSettings {
 /// name is already in the library should offer editing it, not mint a
 /// twin. Case- and whitespace-insensitive equality — deliberately not
 /// fuzzy (see PLAN-1.2).
+///
+/// ONE rule in two shapes, and they agree by construction because
+/// `nameMatches` is defined in terms of `key`. Three hand-rolled
+/// variants had already drifted apart (audit, 2026-08-17): the backup
+/// import lowercased without trimming, and the share extension compared
+/// exactly, so `" Oats"` and `"oats"` each minted a twin of `"Oats"`
+/// with nothing at the store level to catch it — there is no
+/// `@Attribute(.unique)` in this schema.
+///
+/// Use `key` where a whole backup meets a whole library and the pairwise
+/// sweep would be quadratic; use `nameMatches` for one candidate against
+/// a list.
+///
+/// Locale-INDEPENDENT, unlike the `localizedCaseInsensitiveCompare` this
+/// replaces: a backup written on one device has to dedupe identically
+/// when it is restored on another.
 public enum LibraryDuplicate {
+    /// The hashable form of the rule — safe as a Dictionary/Set key.
+    public static func key(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespaces).lowercased()
+    }
+
     public static func nameMatches(_ lhs: String, _ rhs: String) -> Bool {
-        lhs.trimmingCharacters(in: .whitespaces)
-            .localizedCaseInsensitiveCompare(rhs.trimmingCharacters(in: .whitespaces)) == .orderedSame
+        key(lhs) == key(rhs)
+    }
+}
+
+/// Identity decisions made while restoring a backup.
+public enum LibraryImport {
+    /// The uuid an imported meal should carry.
+    ///
+    /// A backup's meal uuid is worth preserving — configured meal
+    /// widgets and Shortcuts resolve a meal BY it, so a restored library
+    /// keeps them working. It is only safe to preserve while nothing
+    /// live already holds it. Import guards duplicates by NAME, so a
+    /// meal renamed since the backup was written no longer matches and
+    /// a second row is created; restamping that row unconditionally gave
+    /// two meals one uuid, and `LogMealIntent` resolves with
+    /// `first(where:)` — a widget would silently log whichever came
+    /// first (audit, 2026-08-17).
+    ///
+    /// Returns nil when the row should keep the fresh uuid it was born
+    /// with. Losing a widget binding is recoverable by reconfiguring it;
+    /// two meals answering to one identifier is not detectable at all.
+    public static func mealUUID(preferring exported: UUID?, claimed: Set<UUID>) -> UUID? {
+        guard let exported, !claimed.contains(exported) else { return nil }
+        return exported
     }
 }
 

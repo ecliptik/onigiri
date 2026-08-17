@@ -51,12 +51,15 @@ enum LibraryTransfer {
         let export = try LibraryExport.decode(data)
 
         let existingFoods = try context.fetch(FetchDescriptor<Food>())
+        // `LibraryDuplicate.key`, not a bare `lowercased()`: the app's
+        // duplicate rule trims too, and this path used to skip that — so
+        // a backup holding " Oats" restored a twin of "Oats" every time.
         var foodsByName: [String: Food] = Dictionary(
-            existingFoods.map { ($0.name.lowercased(), $0) },
+            existingFoods.map { (LibraryDuplicate.key($0.name), $0) },
             uniquingKeysWith: { first, _ in first }
         )
         var addedFoods = 0
-        for item in export.foods where foodsByName[item.name.lowercased()] == nil {
+        for item in export.foods where foodsByName[LibraryDuplicate.key(item.name)] == nil {
             let food = Food(
                 name: item.name, kcal: item.kcal, sodiumMg: item.sodiumMg,
                 servingDescription: item.servingDescription, barcode: item.barcode,
@@ -74,15 +77,19 @@ enum LibraryTransfer {
             food.lastUsedAt = item.lastUsedAt
             if let createdAt = item.createdAt { food.createdAt = createdAt }
             context.insert(food)
-            foodsByName[item.name.lowercased()] = food
+            foodsByName[LibraryDuplicate.key(item.name)] = food
             addedFoods += 1
         }
 
-        let existingMealNames = Set(try context.fetch(FetchDescriptor<Meal>()).map { $0.name.lowercased() })
+        let existingMeals = try context.fetch(FetchDescriptor<Meal>())
+        let existingMealNames = Set(existingMeals.map { LibraryDuplicate.key($0.name) })
+        // Every identifier already spoken for — by a live meal, or by an
+        // earlier meal in this same import.
+        var claimedUUIDs = Set(existingMeals.map(\.uuid))
         var addedMeals = 0
-        for mealDef in export.meals where !existingMealNames.contains(mealDef.name.lowercased()) {
+        for mealDef in export.meals where !existingMealNames.contains(LibraryDuplicate.key(mealDef.name)) {
             let items = mealDef.items.compactMap { ref in
-                foodsByName[ref.foodName.lowercased()].map { MealItem(food: $0, quantity: ref.quantity) }
+                foodsByName[LibraryDuplicate.key(ref.foodName)].map { MealItem(food: $0, quantity: ref.quantity) }
             }
             guard !items.isEmpty else { continue }
             let meal = Meal(
@@ -90,8 +97,16 @@ enum LibraryTransfer {
                 isFavorite: mealDef.isFavorite ?? false, category: mealDef.category,
                 aiGenerated: mealDef.aiGenerated ?? false
             )
-            // Keep the exported identity so configured meal widgets survive.
-            if let uuid = mealDef.uuid { meal.uuid = uuid }
+            // Keep the exported identity so configured meal widgets
+            // survive — unless it is already spoken for. Restamping
+            // unconditionally gave two meals one uuid whenever a meal had
+            // been RENAMED since the backup: the name guard above stops
+            // matching, so a second row is created and used to inherit
+            // the first one's identifier.
+            if let uuid = LibraryImport.mealUUID(preferring: mealDef.uuid, claimed: claimedUUIDs) {
+                meal.uuid = uuid
+            }
+            claimedUUIDs.insert(meal.uuid)
             meal.lastUsedAt = mealDef.lastUsedAt
             if let createdAt = mealDef.createdAt { meal.createdAt = createdAt }
             context.insert(meal)

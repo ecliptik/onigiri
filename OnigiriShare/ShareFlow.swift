@@ -314,9 +314,15 @@ struct ShareFlow: View {
     private func saveToLibrary(_ label: ParsedLabel, name: String) {
         guard let container = try? SharedStore.modelContainer() else { return }
         let context = ModelContext(container)
-        let existing = try? context.fetch(
-            FetchDescriptor<Food>(predicate: #Predicate { $0.name == name }))
-        guard existing?.isEmpty ?? true else { return }
+        // The app's duplicate rule trims and case-folds; an exact-match
+        // predicate did neither, so sharing the same dish twice with any
+        // difference in capitalisation minted a twin (audit,
+        // 2026-08-17). `nameMatches` can't be expressed as a `#Predicate`
+        // — SwiftData can't compile the trim or the case fold — so the
+        // sweep happens here instead, over a hand-entered library.
+        let existing = (try? context.fetch(FetchDescriptor<Food>())) ?? []
+        guard !existing.contains(where: { LibraryDuplicate.nameMatches($0.name, name) })
+        else { return }
         let food = Food(name: name, kcal: label.kcal ?? 0, sodiumMg: label.sodiumMg ?? 0)
         food.nutrients = label.nutrients
         food.servingDescription = label.servingDescription ?? ""

@@ -763,6 +763,22 @@ Each cost a debugging session.
 
 ## Library rows
 
+- **`LibraryDuplicate` is the ONLY name-matching rule, and nothing at the
+  store level backs it up** — this schema has no `@Attribute(.unique)`
+  anywhere, so a path that rolls its own comparison creates twins in
+  silence. Three had drifted by 2026-08-17: the backup import lowercased
+  without trimming, the share extension compared exactly. Use
+  `nameMatches` for one candidate against a list and `key` where a whole
+  backup meets a whole library (it is the same rule as a hashable key —
+  `nameMatches` is defined in terms of it, and a test pins that they
+  agree). Adding `.unique` later is NOT a lightweight migration: existing
+  duplicates must be merged in a custom stage first.
+- **A restored meal keeps its uuid only if nothing holds it**
+  (`LibraryImport.mealUUID`). Import guards duplicates by NAME, so a meal
+  renamed since the backup makes a second row — and restamping that row
+  unconditionally gave two meals one identifier, which `LogMealIntent`
+  resolves with `first(where:)`. A rebound widget is recoverable; two
+  meals answering to one uuid is not detectable.
 - **Recency means LOGGED, never looked at** (2026-08-14). `lastUsedAt` may only
   be stamped where something is actually logged. It used to fire when the
   portion sheet OPENED, because `PortionTarget` carried no reference back to

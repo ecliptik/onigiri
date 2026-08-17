@@ -8,7 +8,7 @@ struct MenuDocumentSourceTests {
     @Test func aHostNamesTheBusinessBehindTheDocument() {
         #expect(MenuDocumentReader.source(fromHost: "shakeshack.widen.net") == "Shakeshack")
         #expect(MenuDocumentReader.source(fromHost: "www.chick-fil-a.com") == "Chick Fil A")
-        #expect(MenuDocumentReader.source(fromHost: "kwiktrip.com") == "Kwiktrip")
+        #expect(MenuDocumentReader.source(fromHost: "cava.com") == "Cava")
     }
 
     @Test func infrastructureIsNotARestaurant() {

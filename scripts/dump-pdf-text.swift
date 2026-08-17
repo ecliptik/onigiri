@@ -18,7 +18,7 @@
 // WHY selectionsByLine AND NOT characterBounds. The obvious approach —
 // walk 0..<numberOfCharacters, take each glyph's box, group them into
 // runs — does not survive contact with a real print-design PDF.
-// `characterBounds(at:)` on the Kwik Trip guide reports the "i" in
+// `characterBounds(at:)` on the CAVA guide reports the "i" in
 // "Spicy" as 68 pt wide and hands back ZERO-HEIGHT boxes for 185 of
 // 2,133 glyphs (every "f" among them), so runs both mis-measure and
 // silently lose letters. `selectionsByLine()` returns each positioned

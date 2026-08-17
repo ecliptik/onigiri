@@ -26,7 +26,7 @@ struct SharedImport: Identifiable {
 
 /// The picker for a whole imported menu (`plans/PLAN-menu-import.md`).
 ///
-/// A restaurant publishes every item at once — the Kwik Trip guide runs
+/// A restaurant publishes every item at once — the CAVA guide runs
 /// to 113 rows — so this deliberately does NOT reuse the "Which item?"
 /// confirmationDialog a screenshot read raises. That control is sized for
 /// a handful. What makes a long menu usable is the same thing that makes

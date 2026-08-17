@@ -181,7 +181,7 @@ public nonisolated enum MenuDocumentReader {
     ]
 
     /// Best-effort, and it fails on the very first document this feature
-    /// was built against: the Kwik Trip guide's PDF title is the InDesign
+    /// was built against: the CAVA guide's PDF title is the InDesign
     /// filename `KT5_26_AN_STND_RECAN11148.indd`, its footer is the same
     /// job code, and its logo is artwork. So nil is an ordinary answer
     /// here and the import sheet ASKS — detection is the optimisation,
@@ -194,7 +194,7 @@ public nonisolated enum MenuDocumentReader {
     ///
     /// The TITLE only — never the filename. A filename is not the
     /// document saying who it belongs to, it is whatever the download
-    /// was called, and "menu-kwiktrip — Greek Chicken" is the kind of
+    /// was called, and "menu-cava — Greek Chicken" is the kind of
     /// wrong that a prompt would have avoided. Where a filename would
     /// have helped (Safari's export) the title already carries the same
     /// text.
@@ -215,7 +215,7 @@ public nonisolated enum MenuDocumentReader {
     /// first that is not infrastructure — a document host, a CDN, a site
     /// builder — because those name the SERVICE, not its customer.
     ///
-    /// Squashed brand labels ("shakeshack", "kwiktrip") come back
+    /// Squashed brand labels ("shakeshack", "cava") come back
     /// squashed; splitting them needs to know the words. This is the
     /// floor when nothing better is available, not the preferred answer.
     public static func source(fromHost host: String) -> String? {

@@ -651,14 +651,14 @@ Each cost a debugging session.
     `servingDescription`. Unrecognized, it sits left of the numbers and is
     swept into the name — every item read as "Spicy Chicken Biscuit 153g".
   - A page with no header of its own INHERITS the previous page's columns
-    (`parse(pages:)` only). The Kwik Trip guide reprints its header per page
+    (`parse(pages:)` only). The CAVA guide reprints its header per page
     so a page's own header always wins; a rendered web page does not, and its
     tail would otherwise be dropped silently.
   - **Source detection usually FAILS and that is the designed path** — the
     guide names its restaurant nowhere (PDF title is the InDesign job code,
     footer the same, logo is artwork), so the sheet ASKS and the answer
     prefixes each name. Never fall back to the filename: it is not the
-    document speaking, and "menu-kwiktrip — Greek Chicken" is what that buys.
+    document speaking, and "menu-cava — Greek Chicken" is what that buys.
   - **A parse that goes wrong must return NOTHING** (2026-08-16, a sweep
     of eight real chain menus — `plans/PLAN-menu-import.md` Round 6 has
     the table). A wrong column mapping does not fail loudly, it returns

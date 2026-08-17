@@ -3,7 +3,7 @@ import Testing
 @testable import OnigiriKit
 
 /// Fixtures are real PDF text layers captured with
-/// `scripts/dump-pdf-text.swift` from the Kwik Trip nutrition guide the
+/// `scripts/dump-pdf-text.swift` from the CAVA nutrition guide the
 /// feature was designed against (`plans/PLAN-menu-import.md`) — the exact
 /// runs `MenuDocument` hands the parser on device, never hand-written.
 struct MenuTableParserTests {
@@ -27,7 +27,7 @@ struct MenuTableParserTests {
     // MARK: The document it was designed against
 
     @Test func readsEveryColumnOfARow() throws {
-        let rows = MenuTableParser.parse(try fixture("menu-kwiktrip-p1"))
+        let rows = MenuTableParser.parse(try fixture("menu-cava-p1"))
         let bowl = try #require(
             rows.first { $0.name == "Spicy Lamb + Avocado Bowl" },
             "the guide's first item; got \(rows.prefix(3).map(\.name))")
@@ -48,7 +48,7 @@ struct MenuTableParserTests {
     /// wrong one, and every item in the document would be wrong by the
     /// same mechanism.
     @Test func caloriesFromFatNeverBecomesCalories() throws {
-        let rows = MenuTableParser.parse(try fixture("menu-kwiktrip-p1"))
+        let rows = MenuTableParser.parse(try fixture("menu-cava-p1"))
         let steak = try #require(rows.first { $0.name == "Steak + Harissa Bowl" })
         expectEqual(steak.kcal, 620)
         #expect(steak.kcal != 310, "310 is this row's Cal. from Fat")
@@ -56,7 +56,7 @@ struct MenuTableParserTests {
 
     /// THREE columns on this page contain the word "fat".
     @Test func theThreeFatColumnsStaySeparate() throws {
-        let rows = MenuTableParser.parse(try fixture("menu-kwiktrip-p1"))
+        let rows = MenuTableParser.parse(try fixture("menu-cava-p1"))
         let falafel = try #require(rows.first { $0.name == "Falafel Crunch Bowl" })
         expectEqual(falafel.nutrients.fatG, 56)
         expectEqual(falafel.nutrients.saturatedFatG, 9)
@@ -68,7 +68,7 @@ struct MenuTableParserTests {
     /// which column centres the run spans is what keeps trans fat and
     /// cholesterol apart.
     @Test func aRunCoveringTwoColumnsSplitsBetweenThem() throws {
-        let rows = MenuTableParser.parse(try fixture("menu-kwiktrip-p1"))
+        let rows = MenuTableParser.parse(try fixture("menu-cava-p1"))
         let steak = try #require(rows.first { $0.name == "Steak + Harissa Bowl" })
         expectEqual(steak.nutrients.transFatG, 0, "the first half of the merged \"0 105\" run")
         expectEqual(steak.nutrients.cholesterolMg, 105, "the second half")
@@ -77,7 +77,7 @@ struct MenuTableParserTests {
     }
 
     @Test func headingsGroupRowsAndAreNotThemselvesItems() throws {
-        let rows = MenuTableParser.parse(try fixture("menu-kwiktrip-p1"))
+        let rows = MenuTableParser.parse(try fixture("menu-cava-p1"))
         #expect(!rows.contains { $0.name == "CURATED BOWLS" }, "a heading is not a food")
         let bowl = try #require(rows.first { $0.name == "Spicy Lamb + Avocado Bowl" })
         #expect(bowl.section == "CURATED BOWLS")
@@ -87,7 +87,7 @@ struct MenuTableParserTests {
 
     /// The whole point of the feature: one document, many items.
     @Test func readsTheWholePage() throws {
-        let rows = MenuTableParser.parse(try fixture("menu-kwiktrip-p1"))
+        let rows = MenuTableParser.parse(try fixture("menu-cava-p1"))
         #expect(rows.count > 30, "page 1 lists dozens of items, got \(rows.count)")
         #expect(rows.allSatisfy { $0.kcal != nil }, "a row without calories is not a food")
         #expect(rows.allSatisfy { !$0.name.isEmpty })
@@ -97,7 +97,7 @@ struct MenuTableParserTests {
     /// positions. Columns detected once and reused would misread
     /// everything after page 1.
     @Test func columnsAreDetectedPerPage() throws {
-        let page2 = MenuTableParser.parse(try fixture("menu-kwiktrip-p2"))
+        let page2 = MenuTableParser.parse(try fixture("menu-cava-p2"))
         #expect(page2.count > 20, "page 2 parsed \(page2.count) rows")
         #expect(page2.allSatisfy { $0.kcal != nil })
     }
@@ -106,14 +106,14 @@ struct MenuTableParserTests {
     /// exclude themselves. Without this the parser would emit a row per
     /// allergen mark.
     @Test func aPageWithNoNutritionTableYieldsNothing() throws {
-        #expect(MenuTableParser.parse(try fixture("menu-kwiktrip-allergens")).isEmpty)
+        #expect(MenuTableParser.parse(try fixture("menu-cava-allergens")).isEmpty)
     }
 
     /// The invariant `PLAN-menu-import` asks for, and the shape of the
     /// bug that shipped on the AI path once (four salads all reading 490
     /// kcal): a row's numbers must come from that row's own band.
     @Test func everyRowsNumbersComeFromItsOwnBand() throws {
-        let rows = MenuTableParser.parse(try fixture("menu-kwiktrip-p1"))
+        let rows = MenuTableParser.parse(try fixture("menu-cava-p1"))
         let bowls = rows.filter { $0.section == "CURATED BOWLS" }
         #expect(bowls.count >= 8)
         let calories = Set(bowls.compactMap(\.kcal))
@@ -122,7 +122,7 @@ struct MenuTableParserTests {
     }
 
     @Test func rowsFoldIntoTheLabelTheFoodFormAlreadyConsumes() throws {
-        let rows = MenuTableParser.parse(try fixture("menu-kwiktrip-p1"))
+        let rows = MenuTableParser.parse(try fixture("menu-cava-p1"))
         let bowl = try #require(rows.first { $0.name == "Spicy Lamb + Avocado Bowl" })
         let label = bowl.parsedLabel
         #expect(label.name == "Spicy Lamb + Avocado Bowl")
@@ -135,10 +135,10 @@ struct MenuTableParserTests {
     /// the picker's row identity, and a repeat would make two different
     /// items select as one.
     @Test func pagesParseIntoOneDocument() throws {
-        let one = MenuTableParser.parse(try fixture("menu-kwiktrip-p1"))
-        let two = MenuTableParser.parse(try fixture("menu-kwiktrip-p2"))
+        let one = MenuTableParser.parse(try fixture("menu-cava-p1"))
+        let two = MenuTableParser.parse(try fixture("menu-cava-p2"))
         let both = MenuTableParser.parse(pages: [
-            try fixture("menu-kwiktrip-p1"), try fixture("menu-kwiktrip-p2"),
+            try fixture("menu-cava-p1"), try fixture("menu-cava-p2"),
         ])
         #expect(both.count == one.count + two.count)
         #expect(Set(both.map(\.id)).count == both.count, "ids are unique across pages")
@@ -150,10 +150,10 @@ struct MenuTableParserTests {
     /// above the next heading loses its grouping.
     @Test func aSectionCarriesAcrossAPageBreak() throws {
         let both = MenuTableParser.parse(pages: [
-            try fixture("menu-kwiktrip-p1"), try fixture("menu-kwiktrip-p2"),
+            try fixture("menu-cava-p1"), try fixture("menu-cava-p2"),
         ])
         let firstOnPageTwo = try #require(
-            both.dropFirst(MenuTableParser.parse(try fixture("menu-kwiktrip-p1")).count).first)
+            both.dropFirst(MenuTableParser.parse(try fixture("menu-cava-p1")).count).first)
         #expect(firstOnPageTwo.section != nil, "inherited from page 1's last heading")
     }
 

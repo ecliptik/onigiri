@@ -35,7 +35,7 @@ is visible:
    `guard !text.isEmpty, text.count < 6_000 else { return [] }`
    (`FoodIntelligence.swift:285`). It was written to stop a page of prose
    blowing the on-device context window, and it is correct for that. A menu is
-   the other thing over 6,000 characters. One page of the Kwik Trip PDF is
+   the other thing over 6,000 characters. One page of the CAVA PDF is
    ~8,000; the whole document is 25,140.
 3. **At most six foods can come back.** `@Guide(..., .count(0...6))` on
    `ScreenshotReading.foods` (`FoodIntelligence.swift:1092`). Sized for "a menu
@@ -128,7 +128,7 @@ Files picker, no text paste, no URL handling.
 
 This covers both examples, because Safari's Share sheet can hand over a web
 page **as a PDF**: Share → *Options* → PDF (or Reader PDF, which strips the
-navigation furniture). So the Chick-fil-A page and the Kwik Trip guide arrive as
+navigation furniture). So the Chick-fil-A page and the CAVA guide arrive as
 the same kind of object, and no URL is ever fetched — which keeps
 `PLAN-screenshot-nutrition`'s veto on URL fetching and per-site HTML parsing
 intact. The document, not the link, stays the interface.
@@ -264,11 +264,11 @@ sheet-to-sheet swap one turn (the 2026-07-22 dismissal race).
 
 ## Part D — naming
 
-**[decided]** Prefix imported items with their source: *Kwik Trip — Greek
+**[decided]** Prefix imported items with their source: *CAVA — Greek
 Chicken*. A bare "Greek Chicken" is ambiguous the moment a second restaurant has
 one.
 
-**The source often cannot be detected, and this was checked.** The Kwik Trip PDF
+**The source often cannot be detected, and this was checked.** The CAVA PDF
 contains no brand name anywhere in its text — the title is the InDesign filename
 `KT5_26_AN_STND_RECAN11148.indd`, the footer is the same job code, and the logo
 is artwork, not text. A detector built on this feature's first real document
@@ -310,7 +310,7 @@ silent: distinguish "too long" from "nothing found" so the caller can say which.
   fixtures carry. Extend `scripts/dump-label-ocr.swift` (or add a sibling) to
   dump `[LabelObservation]` from a PDF page, and never hand-transcribe, per
   CLAUDE.md.
-- Commit both example documents' first nutrition page as fixtures. The Kwik Trip
+- Commit both example documents' first nutrition page as fixtures. The CAVA
   page pins: 113 rows across the document, `Cal.` mapping to calories and not to
   calories-from-fat, the three Fat columns landing separately, `CURATED BOWLS`
   read as a section and not an item, and the allergen page yielding **nothing**.
@@ -363,7 +363,7 @@ silent: distinguish "too long" from "nothing found" so the caller can say which.
   not a failure.
 - Does the wrapped-name-versus-section-heading rule survive a second document?
   It is the one rule here with no evidence behind it yet.
-- Serving size. The Kwik Trip guide prints none — the row is the item as sold.
+- Serving size. The CAVA guide prints none — the row is the item as sold.
   Chick-fil-A prints grams. `ParsedLabel.servingDescription` should stay nil
   rather than invent "1 serving", but the form's behaviour with a nil serving on
   a menu row wants checking before it surprises someone.
@@ -371,7 +371,7 @@ silent: distinguish "too long" from "nothing found" so the caller can say which.
 ## What shipped
 
 Verified end to end on the simulator against the real guide: 113 items,
-sections intact, "Kwik Trip — Spicy Lamb + Avocado Bowl" at 800 kcal with 8
+sections intact, "CAVA — Spicy Lamb + Avocado Bowl" at 800 kcal with 8
 macros filled and the serving correctly blank.
 
 **A1 was tried first and FAILED the device check; A2 was required after all.**
@@ -421,7 +421,7 @@ data — every item in the opening section came out unlabelled. The body starts
 below the HEADER, not at the data.
 
 **Source detection was cut back after it failed its own test.** A filename
-fallback made `suggestedSource` return "menu-kwiktrip" — passing the test for
+fallback made `suggestedSource` return "menu-cava" — passing the test for
 the wrong reason and prefixing items with whatever the download was called. The
 title is the only source now, and nil is the ordinary answer.
 
@@ -429,7 +429,7 @@ title is the only source now, and nil is the ordinary answer.
 
 The PDF-only activation predicate was wrong for a second reason, found only by
 trying it: **Safari hands the share sheet a `public.url` for a remote PDF**, so
-the predicate never matched the Kwik Trip guide either, and a web page needed
+the predicate never matched the CAVA guide either, and a web page needed
 Share → Options → PDF, a control the user could not find. The rule is now the
 dictionary form (web URL + image + file). The clutter that argued against it is
 the user's to prune in Edit Actions — their call, and it removes the only
@@ -503,7 +503,7 @@ plausible-looking output beforehand.
 
 | Document | Shape | Result |
 |---|---|---|
-| Kwik Trip | positional table, header per page | 113 rows (reference) |
+| CAVA | positional table, header per page | 113 rows (reference) |
 | Chick-fil-A | rendered web page | control fixture |
 | Shake Shack | name+allergens+calories in ONE run | 292 rows |
 | McDonald's | 22 columns incl. %DV and micronutrients | 463 rows |
@@ -564,3 +564,25 @@ what the sheet says.
   the `characterBounds` road that Round 1 already found unusable.
 - **Micronutrients are not stored**, so vitamin/iron columns are read
   only to be ignored.
+
+
+## A correction: the reference document is CAVA's, not Kwik Trip's
+
+The PDF this parser was built against was called "Kwik Trip" throughout
+the code, the fixtures and this plan from the first commit until
+2026-08-16. It is CAVA's. The document sells `Crazy Feta`, `Harissa`,
+`Tzatziki`, `Falafel` and `Braised Lamb` under a "CURATED BOWLS"
+heading; a Midwest filling-station chain sells none of that.
+
+The mistake is instructive, because the feature documents its own cause.
+The link supplied was a Contentful asset ending
+`KT5_26_AN_STND_RECAN11148`, and the PDF names its restaurant NOWHERE —
+title, footer and logo are all that job code or artwork, which is
+precisely why `source(in:)` returns nil and the sheet asks. Somebody
+read `KT5` as "Kwik Trip", and because detection was already expected to
+fail, nothing ever contradicted it. An inference that no test can
+disprove is worth less than the file it was written into.
+
+Fixtures and references are renamed to `menu-cava-*`. `CHANGELOG.md` is
+left alone: it is regenerated from tag messages and records what the
+release notes actually said at the time.

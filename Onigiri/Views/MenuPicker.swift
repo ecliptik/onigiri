@@ -71,7 +71,7 @@ struct MenuPicker: View {
             Button("Use") {}
             Button("Skip", role: .cancel) { source = "" }
         } message: {
-            Text("Onigiri couldn't find a name here. What you enter goes after each item, so \"Greek Chicken\" saves as \"Greek Chicken (Kwik Trip)\".")
+            Text("Onigiri couldn't find a name here. What you enter goes after each item, so \"Greek Chicken\" saves as \"Greek Chicken (CAVA)\".")
         }
     }
 

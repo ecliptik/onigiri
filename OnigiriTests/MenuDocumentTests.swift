@@ -14,7 +14,7 @@ import OnigiriKit
 final class MenuDocumentTests: XCTestCase {
     private func menuURL() throws -> URL {
         try XCTUnwrap(
-            Bundle(for: Self.self).url(forResource: "menu-kwiktrip", withExtension: "pdf"),
+            Bundle(for: Self.self).url(forResource: "menu-cava", withExtension: "pdf"),
             "missing PDF fixture")
     }
 
@@ -26,7 +26,7 @@ final class MenuDocumentTests: XCTestCase {
         let document = try MenuDocumentReader.read(try menuURL())
         XCTAssertEqual(document.pages.count, 6)
 
-        let captured = try fixtureObservations("menu-kwiktrip-p1")
+        let captured = try fixtureObservations("menu-cava-p1")
         let read = try XCTUnwrap(document.pages.first)
         XCTAssertEqual(read.count, captured.count, "run count drifted from the captured fixture")
         for (a, b) in zip(read, captured) {
@@ -62,7 +62,7 @@ final class MenuDocumentTests: XCTestCase {
 
     func testWhatCountsAsARestaurantName() {
         XCTAssertTrue(MenuDocumentReader.isPlausibleSource("Chick-fil-A"))
-        XCTAssertTrue(MenuDocumentReader.isPlausibleSource("Kwik Trip"))
+        XCTAssertTrue(MenuDocumentReader.isPlausibleSource("CAVA"))
         // Job codes, export filenames, and words that name the document
         // rather than the place.
         XCTAssertFalse(MenuDocumentReader.isPlausibleSource("KT5_26_AN_STND_RECAN11148"))

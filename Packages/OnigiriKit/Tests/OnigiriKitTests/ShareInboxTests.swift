@@ -15,7 +15,7 @@ struct ShareInboxTests {
     }
 
     @Test func anOrdinaryNameSurvivesLegibly() {
-        #expect(ShareInbox.safe("Kwik Trip Guide.pdf") == "Kwik-Trip-Guide")
+        #expect(ShareInbox.safe("CAVA Guide.pdf") == "CAVA-Guide")
         #expect(ShareInbox.safe("menu.PDF") == "menu")
         #expect(ShareInbox.safe("IMG_0421.HEIC") == "IMG-0421")
         #expect(ShareInbox.safe("photo.jpeg") == "photo")

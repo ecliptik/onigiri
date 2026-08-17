@@ -107,7 +107,7 @@ public enum MenuTableParser {
     /// Match order is specificity order, exactly as `LabelParser`'s table
     /// is, and here it is load-bearing twice over on one real document:
     ///
-    /// - `Cal.` appears TWICE in the Kwik Trip header — once as the
+    /// - `Cal.` appears TWICE in the CAVA header — once as the
     ///   calorie column and once as the first half of `Cal. from Fat`.
     ///   `energyFromFat` must be tested first or the calories column is
     ///   read off the wrong number.
@@ -358,7 +358,7 @@ public enum MenuTableParser {
         var rows: [MenuRow] = []
         // Both carry across a page break, because the table does: a
         // heading is printed once, and a CONTINUATION page may reprint
-        // no header at all. (The Kwik Trip guide reprints its header on
+        // no header at all. (The CAVA guide reprints its header on
         // every page — at different x positions — so a page's own header
         // always wins; this only fills in when there is none.)
         var section: String?
@@ -774,7 +774,7 @@ public enum MenuTableParser {
             guard !found.isEmpty else { continue }
             // A run can span TWO columns: adjacent cells whose gap is
             // narrow come back as one selection ("0 105", "7 7" on the
-            // Kwik Trip page). Columns whose centre falls inside the
+            // CAVA page). Columns whose centre falls inside the
             // run's span, in order, are the cells it covers.
             let spanned = columns.filter { $0.center >= run.x && $0.center <= run.maxX }
             let targets: [Column]

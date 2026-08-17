@@ -8,6 +8,80 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.23.0 — order the second thing too
+
+_2026-08-16_ · [changes since v2.22.0](https://github.com/ecliptik/onigiri/compare/v2.22.0...v2.23.0)
+
+Sharing a menu into Onigiri landed in 2.22. Using it revealed how much of the job
+was still left on the table: logging a burger meant re-sharing the whole document
+to add the fries, half the restaurants on the internet don't publish a PDF at all,
+and — quietly, on the largest chain in the country — every calorie was wrong.
+
+**Log as many items as you like from one menu.** Pick, log, and the list is still
+there, restaurant filled in, ready for the next one. Done closes it when you're
+finished.
+
+> ✓ Logged Single ShackBurger®. Choose another, or tap Done.
+
+**The share sheet does the whole job now**, rather than handing off to the app: read
+the document, choose an item, log it to Health, without Onigiri ever opening.
+
+**And the menu reader is a door inside the app** — Scan Barcode, Label, Menu, or
+Food — so a PDF you already have doesn't require leaving to share it back in.
+
+Eight real chain menus were run through the parser rather than reasoned about.
+"CALCIUM" contains "cal", so the micronutrient column matched the calorie
+keyword, and sitting to the right of the real one, it overwrote it. **A Bacon
+Clubhouse Burger read 740 kcal as 25** — 3% of the truth, and completely
+plausible on screen.
+
+That is the failure this release is most concerned with. A wrong column mapping
+doesn't fail loudly; it returns confident nonsense. One booklet produced 171 rows
+of letter-soup names with 10 kcal beside them, all ready to log. Three gates now
+stand in the way: a name must contain a real word, a page must declare at least
+three columns, and rows must fill what the header promised. A parse that has gone
+wrong returns nothing, and nothing is honest.
+
+Also from the sweep: section headings turn out to be a matter of type size rather
+than capitals (Title-Case sections were being glued onto the row above), and a
+guide that prints an item's name, allergens and calories as a single run — 27
+rows on one Shake Shack page — now parses.
+
+- **A viewer link** that ends in `.pdf` but serves a JavaScript page: Onigiri
+  follows the document the page names.
+- **A product page** whose figures sit inside a collapsed accordion, present in
+  the text and absent from anything drawn on screen. Read as one food.
+- **A scanned PDF** with no text layer at all is read with OCR instead of refused.
+- **A CAPTCHA page** pretending to be a nutrition guide is not mistaken for one.
+
+Menus also name themselves now, from the web address or from the document's own
+small print, so the restaurant is usually filled in before you're asked.
+
+- **Today's "Aggressive pace" warning could never appear.** The card read a plan
+  that hardcodes the flag false — correct for a past day, and it silenced today
+  too. The same sentence on Goal worked, which is why it went unnoticed.
+- **A budget below your own resting energy passed silently.** The guardrail was a
+  flat 1,500 for every body; it now also tests the body's own resting estimate.
+  For a 200 lb body that's around 1,742, so a 1,600 kcal budget sat under the
+  baseline and said nothing.
+- **An evening weigh-in no longer moves the budget.** Two places floored the
+  resting estimate off the raw last reading while Today used the sustained basis,
+  so Goal and the calendar drifted from Today by the very reading the basis exists
+  to discard.
+
+- **A missing key no longer switches AI off entirely.** With a provider selected
+  but unconfigured, availability said no before the "Fall back to Apple
+  Intelligence" setting was ever consulted, leaving every AI feature dark with
+  nothing to explain it.
+- **Settings → AI → Estimate nutrition**, on by default. It governs guessing only:
+  reading a label, a screenshot, or a menu's printed calories is transcription and
+  keeps working with it off.
+- **Menu calorie estimates are calibrated and repeatable.** The instructions used
+  to forbid estimating nutrition while the schema demanded a number, and the same
+  dish came back 352, 2210 and 1200 kcal across three reads of one photo.
+- **A keychain fix**: a saved API key could be deleted during an upgrade and read
+  afterwards as "not set up".
+
 ## v2.22.0 — the whole menu
 
 _2026-08-16_ · [changes since v2.21.0](https://github.com/ecliptik/onigiri/compare/v2.21.0...v2.22.0)

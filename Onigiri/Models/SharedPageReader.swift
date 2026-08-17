@@ -2,7 +2,7 @@ import Foundation
 import OnigiriKit
 import os
 
-private nonisolated(unsafe) let pageLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "shared-page")
+private nonisolated let pageLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "shared-page")
 
 /// A shared page that turns out to hold ONE food rather than a menu.
 ///

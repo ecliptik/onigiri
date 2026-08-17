@@ -391,8 +391,9 @@ public struct NutrientValues: Sendable, Equatable, Hashable, Codable {
     /// Stored, not computed: every +/scaled/isEmpty/encode/decode hit
     /// rebuilt this array (amplified by sync pushes iterating the whole
     /// library). Key paths aren't formally Sendable, but these are
-    /// immutable instances — the codebase's documented
-    /// nonisolated(unsafe) case (Logger, UserDefaults).
+    /// immutable instances — the same case as `SharedStore.defaults`,
+    /// and the only two `nonisolated(unsafe)` constants left now that
+    /// Logger is itself Sendable.
     private nonisolated(unsafe) static let scalarFields: [(WritableKeyPath<NutrientValues, Double?>, CodingKeys)] = [
         (\.fatG, .fatG),
         (\.saturatedFatG, .saturatedFatG),

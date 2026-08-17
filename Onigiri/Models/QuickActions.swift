@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 import os
 
-private nonisolated(unsafe) let quickActionLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "quickactions")
+private nonisolated let quickActionLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "quickactions")
 
 /// Home-screen quick actions (long-press the app icon), routed from the
 /// scene delegate into SwiftUI.

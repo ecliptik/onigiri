@@ -3,11 +3,10 @@ import UserNotifications
 import OnigiriKit
 import os
 
-// Logger is thread-safe; opt out of any MainActor default. Reminder taps
-// are unobservable otherwise — nothing about a tap reaches any UI, so a
-// tap that opens nothing and a tap that never arrives look identical
-// from the outside (2026-08-04).
-nonisolated(unsafe) let reminderLog =
+// Reminder taps are unobservable without this — nothing about a tap
+// reaches any UI, so a tap that opens nothing and a tap that never
+// arrives look identical from the outside (2026-08-04).
+nonisolated let reminderLog =
     Logger(subsystem: "com.ecliptik.Onigiri", category: "reminders")
 
 /// Schedules the ReminderPlanner's output as local notifications.

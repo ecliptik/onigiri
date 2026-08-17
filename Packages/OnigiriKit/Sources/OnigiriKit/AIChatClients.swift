@@ -1,8 +1,7 @@
 import Foundation
 import os
 
-// Logger is thread-safe; opt out of any MainActor default.
-private nonisolated(unsafe) let aiLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "ai-client")
+private nonisolated let aiLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "ai-client")
 
 /// Errors from the bring-your-own-AI chat clients. Callers treat every
 /// one the same way — log and fall back to the deterministic path — but

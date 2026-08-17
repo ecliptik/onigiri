@@ -1,8 +1,7 @@
 import Foundation
 import os
 
-// Logger is thread-safe; opt out of any MainActor default.
-private nonisolated(unsafe) let fdcLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "fdc")
+private nonisolated let fdcLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "fdc")
 
 /// A generic food from USDA FoodData Central. Unlike OFF's search index,
 /// FDC search responses embed the full per-100 g nutrient table — a row

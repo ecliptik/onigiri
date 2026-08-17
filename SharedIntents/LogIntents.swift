@@ -6,8 +6,7 @@ import Foundation
 import OnigiriKit
 import os
 
-// Logger is thread-safe; opt out of any MainActor default.
-private nonisolated(unsafe) let intentLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "intents")
+private nonisolated let intentLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "intents")
 
 /// One tap or one Siri phrase: log a saved meal to Apple Health.
 struct LogMealIntent: AppIntent {

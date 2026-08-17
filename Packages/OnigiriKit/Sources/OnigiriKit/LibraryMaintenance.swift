@@ -3,8 +3,7 @@ import SwiftData
 import CoreData
 import os
 
-// Logger is thread-safe; opt out of any MainActor default.
-private nonisolated(unsafe) let maintenanceLog =
+private nonisolated let maintenanceLog =
     Logger(subsystem: "com.ecliptik.Onigiri", category: "maintenance")
 
 /// One-time store repairs run at app launch.
@@ -126,6 +125,7 @@ public enum LibraryMaintenance {
 
     /// Settings' goals reset (the deficit history is the caller's job —
     /// it lives in defaults, not the store).
+    @MainActor
     public static func wipeGoals(context: ModelContext) throws {
         for goal in try context.fetch(FetchDescriptor<GoalSettings>()) { context.delete(goal) }
         try context.save()
@@ -145,6 +145,11 @@ public enum LibraryMaintenance {
     /// this process causes (a food deleted in Foods) rather than damage it
     /// inherits. It cannot replace that pass: by the time SwiftData is
     /// open, an inherited dangling reference has already trapped.
+    ///
+    /// `@MainActor` for the reason `repairStore` states: this store is
+    /// main-context-only, and the annotation makes that a compile error
+    /// rather than a convention every future caller has to know.
+    @MainActor
     public static func repairDanglingFoodReferences(context: ModelContext) {
         guard let meals = try? context.fetch(FetchDescriptor<Meal>()),
               let foods = try? context.fetch(FetchDescriptor<Food>()) else { return }

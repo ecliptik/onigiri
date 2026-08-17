@@ -3,7 +3,7 @@ import WebKit
 import OnigiriKit
 import os
 
-private nonisolated(unsafe) let linkLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "menu")
+private nonisolated let linkLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "menu")
 
 /// Turns a shared LINK into a PDF the menu parser can read
 /// (`plans/PLAN-menu-import.md`).

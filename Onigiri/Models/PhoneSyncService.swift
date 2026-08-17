@@ -1,8 +1,33 @@
 import Foundation
 import OSLog
 import SwiftData
+import UIKit
 import WatchConnectivity
 import OnigiriKit
+
+/// One background-task assertion, ended exactly once.
+///
+/// For work a background WAKE starts that has no completion handler of
+/// its own to hold the process open. Ending it is idempotent, because
+/// both the normal path and iOS's expiry callback have to be able to —
+/// and an assertion left open past expiry is a termination, not a
+/// warning.
+@MainActor
+private final class BackgroundAssertion {
+    private var token: UIBackgroundTaskIdentifier = .invalid
+
+    init(_ name: String) {
+        token = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            self?.end()
+        }
+    }
+
+    func end() {
+        guard token != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(token)
+        token = .invalid
+    }
+}
 
 /// Pushes the library + settings to the watch as the WatchConnectivity
 /// application context (latest-wins; delivered when the watch is reachable).
@@ -355,6 +380,14 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         guard userInfo[WatchSync.watchLogNoticeKey] != nil else { return }
         Task { @MainActor in
             Self.log.notice("watch log notice — replanning reminders")
+            // This is usually a BACKGROUND wake, and unlike HKObserverQuery
+            // — which gates on an explicit completion handler — this
+            // delegate method has nothing to hold the process open with:
+            // it returns the instant the Task above is created. Without an
+            // assertion the replan can be suspended away, which is the very
+            // gap this channel exists to close.
+            let assertion = BackgroundAssertion("watch-log-replan")
+            defer { assertion.end() }
             WidgetReloader.requestReload(kinds: WidgetKinds.phoneLogAffected)
             // Awaited, not fired-and-forgotten: this may be a background
             // wake, and the process re-suspends once the delegate's work

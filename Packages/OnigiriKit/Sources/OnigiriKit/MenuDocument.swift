@@ -6,9 +6,10 @@ import Foundation
 import PDFKit
 import os
 
-// nonisolated(unsafe) matching quickActionLog: the reader runs off the
-// main actor, and Logger is thread-safe.
-private nonisolated(unsafe) let menuLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "menu")
+// `nonisolated`, not `nonisolated(unsafe)`: the opt-out from the app
+// target's main-actor default is the load-bearing half (the reader runs
+// detached); Logger is Sendable, so the unsafe half is now a warning.
+private nonisolated let menuLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "menu")
 
 /// A nutrition document taken apart into the currency `MenuTableParser`
 /// reads (`plans/PLAN-menu-import.md`).

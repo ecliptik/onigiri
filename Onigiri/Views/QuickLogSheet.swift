@@ -208,8 +208,10 @@ struct QuickLogSheet: View {
             }
         }
         return scoped.sorted { lhs, rhs in
-            if librarySort != .name, lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
-            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            LibrarySearch.isOrderedBefore(
+                (lhs.recency, lhs.name), (rhs.recency, rhs.name),
+                byRecency: librarySort == .recent
+            )
         }
     }
 

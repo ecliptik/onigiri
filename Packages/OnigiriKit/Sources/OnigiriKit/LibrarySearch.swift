@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 /// The buckets a library search sorts its matches into, in display
 /// order.
@@ -93,6 +94,52 @@ public enum LibrarySearch {
             return lhs.searchRecency > rhs.searchRecency
         }
         return lhs.searchName.localizedCaseInsensitiveCompare(rhs.searchName) == .orderedAscending
+    }
+}
+
+extension LibrarySearch {
+    /// The library list order: recency first unless the user asked for
+    /// Name, and alphabetical as the tie-break either way.
+    ///
+    /// One rule, one implementation. Foods and the Log sheet each had
+    /// their own spelling of it — `switch librarySort { case .recent }`
+    /// in one, `if librarySort != .name` in the other — which is the
+    /// same setup that let the menu-PDF read diverge between call sites
+    /// (audit, 2026-08-17). Takes a Bool rather than the sort enum
+    /// because that enum is a view-layer type and this is the only part
+    /// of the rule worth sharing.
+    public static func isOrderedBefore(
+        _ lhs: (recency: Date, name: String),
+        _ rhs: (recency: Date, name: String),
+        byRecency: Bool
+    ) -> Bool {
+        if byRecency, lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
+        return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+    }
+}
+
+/// Which library rows point at which others.
+public enum LibraryReferences {
+    /// The names of meals that hold any of these foods — sorted, unique.
+    ///
+    /// Behind the delete confirmation, which warns before a food
+    /// vanishes out of meals that were built from it. Worth testing
+    /// rather than eyeballing: a wrong answer here degrades to a warning
+    /// that is quietly incorrect rather than to a crash, so nothing else
+    /// would catch it. An item whose food is already nil counts for
+    /// nothing — it references no food to lose.
+    public static func mealNames(
+        referencing foodIDs: Set<PersistentIdentifier>, in meals: [Meal]
+    ) -> [String] {
+        Set(
+            meals
+                .filter { meal in
+                    meal.items.contains { item in
+                        item.food.map { foodIDs.contains($0.persistentModelID) } ?? false
+                    }
+                }
+                .map(\.name)
+        ).sorted()
     }
 }
 

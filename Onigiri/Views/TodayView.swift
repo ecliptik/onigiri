@@ -679,10 +679,7 @@ struct TodayView: View {
         guard reading.weighInDays >= GoalCompletion.minimumWeighInDays,
               let basis = reading.basisLb
         else { return nil }
-        // Crossing two rungs at once reports the deeper one only.
-        return progress.milestones
-            .filter { basis <= $0.weightLb }
-            .max { $0.lostLb < $1.lostLb }
+        return progress.deepestMilestone(reachedAtOrBelow: basis)
     }
 
     /// The rung line for the Daily goal card, or nil.

@@ -27,23 +27,34 @@ enum GoalUpsert {
         return target < current ? .valid : .targetNotBelowCurrent
     }
 
-    /// What this save does to the journey's start point. `nil` (the
-    /// default) leaves the stored start alone — most saves are about the
-    /// target, and only the stamp rule below may touch it.
-    enum StartChange {
-        /// The user picked a start themselves. Sticky: no later target
-        /// change re-stamps over it.
-        case manual(at: Date, weightLb: Double)
-        /// Back to inferring it from the earliest weigh-in on record.
-        case automatic
-        /// Continuing past a target that was REACHED: the same journey,
-        /// extended. Leaves the stored start alone AND suppresses the
-        /// target-changed re-stamp below, so the progress bar keeps
-        /// measuring the whole arc (22 of 27 lb) instead of re-zeroing
-        /// at the moment it was earned. Only the goal-reached flow
-        /// passes this — editing a target by hand is still a new
-        /// journey.
-        case keep
+    /// The rule itself lives in the kit as `GoalStartChange` /
+    /// `GoalStartStamp`, where it is unit-tested — it had shipped several
+    /// regressions from being tangled with the write below and therefore
+    /// untestable (audit, 2026-08-17). Kept as an alias so every call
+    /// site still reads `GoalUpsert.StartChange`.
+    typealias StartChange = GoalStartChange
+
+    /// Write a start decision onto the stored goal. The rule that
+    /// produced it is `GoalStartStamp`; this only applies it.
+    private static func apply(_ decision: GoalStartStamp.Decision, to goal: GoalSettings) {
+        switch decision.outcome {
+        case .keep:
+            break
+        case .clear:
+            goal.startWeightLb = nil
+            goal.startedAt = nil
+            goal.startIsManual = nil
+        case .set(let lb, let at, let manual):
+            goal.startWeightLb = lb
+            goal.startedAt = at
+            goal.startIsManual = manual ? true : nil
+        }
+        // Deliberately NOT reset when continuing past a reached target
+        // (`.keep`): that journey's marks carry on from the same start,
+        // and re-announcing "20 lb down" would be a lie about news.
+        if decision.resetsMilestone {
+            SharedStore.recordMilestoneSeen(lostLb: 0)
+        }
     }
 
     /// Update the existing goal or insert one, then push sync (which
@@ -74,53 +85,26 @@ enum GoalUpsert {
             goal.targetDate = targetDate
             goal.fallbackCurrentWeightLb = fallback
             goal.mode = mode
-            switch startChange {
-            case .manual(let at, let weightLb):
-                goal.startWeightLb = weightLb
-                goal.startedAt = at
-                goal.startIsManual = true
-            case .automatic:
-                goal.startWeightLb = nil
-                goal.startedAt = nil
-                goal.startIsManual = nil
-            case .keep, nil:
-                // `.keep` differs from nil only below: it is NOT `nil`,
-                // so the re-stamp guard skips it and the journey
-                // survives the new target.
-                break
-            }
-            // The stamp is for goals whose start nobody is steering: a
-            // start the user just set, or set earlier and never
-            // revoked, outranks it. `startChange == nil` matters as much
-            // as the flag — someone who asked for automatic IN THIS SAVE
-            // shouldn't be handed today's date back.
-            if targetChanged, startChange == nil, goal.startIsManual != true,
-               mode != GoalMode.maintain, let currentLb {
-                goal.startWeightLb = currentLb
-                goal.startedAt = .now
-                // A new journey re-derives its marks from a new start, so
-                // the deepest one already announced no longer describes
-                // anything. Left alone, a 20 lb ack would silently settle
-                // every mark of the next journey. Deliberately NOT reset
-                // for `.keep` (continuing past a reached target): that
-                // journey's marks carry on from the same start, and
-                // re-announcing "20 lb down" would be a lie about news.
-                SharedStore.recordMilestoneSeen(lostLb: 0)
-            }
+            apply(
+                GoalStartStamp.existing(
+                    change: startChange,
+                    targetChanged: targetChanged,
+                    startIsManual: goal.startIsManual,
+                    mode: mode,
+                    currentLb: currentLb,
+                    now: .now
+                ),
+                to: goal
+            )
         } else {
-            // Maintenance has no journey to measure; its "target" is a
-            // hold-near anchor, and stamping one would mint a start the
-            // moment someone nudged the anchor.
-            let stamped: (lb: Double, at: Date)? = mode == GoalMode.maintain
-                ? nil
-                : currentLb.map { ($0, .now) }
-            let start: (lb: Double, at: Date, manual: Bool)? = switch startChange {
-            case .manual(let at, let weightLb): (weightLb, at, true)
-            case .automatic: nil
-            // `.keep` can't reach here in practice (continuing implies a
-            // goal that was already reached), and a first goal has no
-            // journey to preserve — so it stamps like any other.
-            case .keep, nil: stamped.map { ($0.lb, $0.at, false) }
+            let start: (lb: Double, at: Date, manual: Bool)?
+            switch GoalStartStamp.first(
+                change: startChange, mode: mode, currentLb: currentLb, now: .now
+            ).outcome {
+            case .set(let lb, let at, let manual): start = (lb, at, manual)
+            // A goal being inserted has nothing stored to keep, so both
+            // of these mean the same thing here.
+            case .clear, .keep: start = nil
             }
             context.insert(GoalSettings(
                 targetWeightLb: targetLb,

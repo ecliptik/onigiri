@@ -57,6 +57,26 @@ public struct GoalProgress: Equatable, Sendable {
         public let isReached: Bool
     }
 
+    /// The deepest mark a given weight has passed, or nil.
+    ///
+    /// Takes the basis EXPLICITLY rather than reading `currentLb`,
+    /// because the two answer different questions and this one is a
+    /// VERDICT: `Milestone.isReached` is computed against the raw
+    /// weigh-in, and a mark reached by one light morning isn't reached.
+    /// Callers pass `GoalCompletion.evaluate(...).basisLb` — the same
+    /// sustained basis the target itself is judged on (CLAUDE.md's
+    /// weight rule, learned twice).
+    ///
+    /// Lived inline in `TodayView` until 2026-08-17, which left the one
+    /// verdict rule in this family with no test while `GoalCompletion`,
+    /// `WeightTrend` and `GoalFinishLine` all had them.
+    public func deepestMilestone(reachedAtOrBelow basisLb: Double) -> Milestone? {
+        // Crossing two rungs at once reports the deeper one only.
+        milestones
+            .filter { basisLb <= $0.weightLb }
+            .max { $0.lostLb < $1.lostLb }
+    }
+
     /// Pounds off the start so far, floored at zero: a gain reads as no
     /// progress, never as negative progress.
     public var lostLb: Double { max(0, startLb - currentLb) }

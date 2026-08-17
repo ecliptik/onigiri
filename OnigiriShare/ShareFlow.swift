@@ -161,7 +161,23 @@ struct ShareFlow: View {
         // drawing the spinner.
         let outcome = await Task.detached(priority: .userInitiated) {
             () -> (MenuDocument, [MenuRow])? in
-            guard let document = try? MenuDocumentReader.read(url) else { return nil }
+            // `readOCR`, matching ScanSheet and MenuImportSheet. Plain
+            // `read` returned NOTHING for a rasterised guide — the whole
+            // table is artwork, so PDFKit has no runs to hand the parser
+            // (Starbucks: 3 pages, 22 runs between them) — and this path
+            // then told the user to screenshot it instead, which is not
+            // the problem and not the cure. It cost only the share sheet:
+            // the same file opened inside the app read fine (audit,
+            // 2026-08-17).
+            //
+            // Affordable here because it renders only pages below
+            // `scannedPageRunLimit`, so a text PDF pays nothing, and it
+            // is capped at `ocrPageLimit`. And if a huge scanned guide
+            // does get this extension jetsammed, the `ShareInbox` deposit
+            // outlives it and the app drains it into `MenuImportSheet` —
+            // which OCRs. That net is what makes the expensive read safe
+            // to attempt from a memory-capped process.
+            guard let document = try? await MenuDocumentReader.readOCR(url) else { return nil }
             return (document, MenuTableParser.parse(pages: document.pages))
         }.value
         guard let (document, parsed) = outcome else {

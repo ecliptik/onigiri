@@ -130,13 +130,10 @@ struct FoodsView: View {
         _ lhs: (isFavorite: Bool, recency: Date, name: String),
         _ rhs: (isFavorite: Bool, recency: Date, name: String)
     ) -> Bool {
-        switch librarySort {
-        case .recent:
-            if lhs.recency != rhs.recency { return lhs.recency > rhs.recency }
-        case .name:
-            break
-        }
-        return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        LibrarySearch.isOrderedBefore(
+            (lhs.recency, lhs.name), (rhs.recency, rhs.name),
+            byRecency: librarySort == .recent
+        )
     }
 
     private var filteredMeals: [Meal] {
@@ -715,13 +712,9 @@ struct FoodsView: View {
 
     private var deleteFoodsMessage: String {
         let foodIDs = Set(pendingFoodDeletes.map(\.persistentModelID))
-        let affectedMeals = Set(meals.filter { meal in
-            meal.items.contains { item in
-                item.food.map { foodIDs.contains($0.persistentModelID) } ?? false
-            }
-        }.map(\.name))
+        let affectedMeals = LibraryReferences.mealNames(referencing: foodIDs, in: meals)
         guard !affectedMeals.isEmpty else { return "This can't be undone." }
-        return "It will also be removed from \(affectedMeals.sorted().joined(separator: ", ")). This can't be undone."
+        return "It will also be removed from \(affectedMeals.joined(separator: ", ")). This can't be undone."
     }
 
     /// Recency bump + explicit save: log taps are the app's most

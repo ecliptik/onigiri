@@ -18,9 +18,19 @@ public enum WidgetLog {
     public static func timelineBuilt(
         kind: String, dayBurnKcal: Double?, nextPoll: TimeInterval, cached: Bool
     ) {
+        // The SHAPE of the timeline is public — which provider, how far
+        // out the next poll is, whether it came from cache. The kcal is
+        // not: it is a measured HealthKit figure about the person using
+        // the app, and this line fires on every timeline build, so
+        // leaving it public wrote a running record of their energy burn
+        // into a log any sysdiagnose carries off the device.
+        //
+        // Numeric interpolations default to public, so this needs saying
+        // explicitly rather than merely leaving the annotation off. A
+        // debugger still shows it, which is where it was ever read.
         timeline.notice("""
             timeline kind=\(kind, privacy: .public) \
-            dayBurn=\(dayBurnKcal ?? -1, format: .fixed(precision: 0), privacy: .public) \
+            dayBurn=\(dayBurnKcal ?? -1, format: .fixed(precision: 0), privacy: .private) \
             nextPollMin=\(nextPoll / 60, format: .fixed(precision: 1), privacy: .public) \
             cached=\(cached, privacy: .public)
             """)
@@ -29,9 +39,12 @@ public enum WidgetLog {
     /// One line per burn-observer fire, gate verdict included — this is
     /// what says whether `.immediate` delivery is honored or capped.
     public static func burnObserved(activeKcal: Double, lastRendered: Double?, reloading: Bool) {
+        // `reloading` is the gate VERDICT and stays public — it is the
+        // whole diagnostic point of this line (PLAN-widget-burn-freshness).
+        // The two kcal readings behind it are health data.
         timeline.notice("""
-            burn active=\(activeKcal, format: .fixed(precision: 0), privacy: .public) \
-            lastRendered=\(lastRendered ?? -1, format: .fixed(precision: 0), privacy: .public) \
+            burn active=\(activeKcal, format: .fixed(precision: 0), privacy: .private) \
+            lastRendered=\(lastRendered ?? -1, format: .fixed(precision: 0), privacy: .private) \
             reloading=\(reloading, privacy: .public)
             """)
     }

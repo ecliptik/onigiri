@@ -75,7 +75,7 @@ enum SharedPageReader {
         // (`NutritionPlausibility`).
         parsed = NutritionPlausibility.checked(parsed)
         for finding in parsed.warnings {
-            pageLog.notice("Page read \(finding.severity.rawValue, privacy: .public): \(finding.reason, privacy: .public)")
+            pageLog.notice("Page read \(finding.severity.rawValue, privacy: .public): \(finding.reason, privacy: .private)")
         }
         guard parsed.kcal != nil else { return nil }
         return parsed

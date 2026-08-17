@@ -143,7 +143,7 @@ enum FoodIntelligence {
         guard !NutritionPlausibility.macrosAgreeWithEnergy(kcal: kcal, nutrients: macros) else {
             return macros
         }
-        log.notice("estimate macros dropped — they do not account for \(kcal, privacy: .public) kcal")
+        log.notice("estimate macros dropped — they do not account for \(kcal, privacy: .private) kcal")
         return NutrientValues()
     }
 
@@ -160,7 +160,7 @@ enum FoodIntelligence {
         let reading = NutritionPlausibility.check(
             kcal: kcal, sodiumMg: sodiumMg, nutrients: nutrients)
         guard let first = reading.dropped.first else { return true }
-        log.notice("estimate rejected — \(first.reason, privacy: .public)")
+        log.notice("estimate rejected — \(first.reason, privacy: .private)")
         return false
     }
 
@@ -525,7 +525,7 @@ enum FoodIntelligence {
             let reading = NutritionPlausibility.check(
                 kcal: food.kcal, sodiumMg: food.sodiumMg, nutrients: food.nutrients)
             for finding in reading.dropped {
-                log.notice("screenshot read dropped \(finding.field.rawValue, privacy: .public): \(finding.reason, privacy: .public)")
+                log.notice("screenshot read dropped \(finding.field.rawValue, privacy: .public): \(finding.reason, privacy: .private)")
             }
             let food = ScreenshotFood(
                 name: food.name, serving: food.serving, kcal: reading.kcal,

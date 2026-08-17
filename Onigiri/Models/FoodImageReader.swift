@@ -89,7 +89,11 @@ enum FoodImageReader {
         case .label(let label):
             let checked = NutritionPlausibility.checked(label)
             for finding in checked.warnings {
-                imageLog.notice("image read \(finding.severity.rawValue, privacy: .public): \(finding.reason, privacy: .public)")
+                // `reason` carries the parsed FIGURE in prose ("2,500 kcal
+                // in one serving isn't a food"), so it stays private while
+                // the severity — which gate fired — stays public. A
+                // debugger still shows both.
+                imageLog.notice("image read \(finding.severity.rawValue, privacy: .public): \(finding.reason, privacy: .private)")
             }
             return .label(checked)
         case .food(let product):

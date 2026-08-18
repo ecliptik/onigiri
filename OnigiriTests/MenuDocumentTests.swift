@@ -10,7 +10,9 @@ import OnigiriKit
 ///
 /// Deliberately NOT opt-in like the eval suite beside it — no model, no
 /// network, ~50 ms.
-@MainActor
+///
+/// No class-level @MainActor (the target's nonisolated-default rule,
+/// project.yml) — MenuDocumentReader's read functions are nonisolated.
 final class MenuDocumentTests: XCTestCase {
     private func menuURL() throws -> URL {
         try XCTUnwrap(

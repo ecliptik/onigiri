@@ -75,6 +75,12 @@ final class FoodIntelligenceEvals: XCTestCase {
         /// with an ingredient list" from "a menu listing two" is a
         /// judgment, and the ingredient run is the known trap.
         static let signItemCount = 0.75
+        /// Screenshot read (2026-08-17), set BEFORE the first run. The
+        /// values are PRINTED on the page and the prompt demands them
+        /// exactly, so the name is a guardrail like signName; value
+        /// exactness gets one-sample headroom on a four-sample set.
+        static let screenshotName = 1.0
+        static let screenshotExact = 0.75
     }
 
     @MainActor
@@ -750,6 +756,139 @@ final class FoodIntelligenceEvals: XCTestCase {
     // The sign read sees only the text — geometry belongs to SignText
     // (kit, deterministically tested against the real boxes) — so these
     // reuse the refine section's placeholder-geometry `transcript`.
+
+    // MARK: Screenshot nutrition read (a nutrition page's OCR text)
+
+    private struct ScreenshotSample {
+        let what: String
+        let lines: [String]
+        let nameContains: [String]
+        let kcal: Double
+        let sodiumMg: Double
+    }
+
+    /// Rendered-screen text, page furniture included. Unlike every
+    /// estimate gate in this file, the expected values are EXACT: the
+    /// prompt demands "report every value EXACTLY as printed", and
+    /// these pages print them. This affordance shipped real bugs
+    /// before it had an eval (the 810,400 mg sodium incident,
+    /// PLAN-nutrition-plausibility) — it was the one of seven with no
+    /// regression gate (audit, 2026-08-17).
+    private static let screenshotGolden: [ScreenshotSample] = [
+        .init(
+            what: "restaurant nutrition page",
+            lines: [
+                "Menu", "Order Now", "Nutrition Information",
+                "Chicken Burrito Bowl",
+                "Calories 625", "Total Fat 23g", "Sodium 1310mg",
+                "Protein 42g",
+                "© 2026 Example Restaurants",
+            ],
+            nameContains: ["burrito"], kcal: 625, sodiumMg: 1310),
+        .init(
+            what: "delivery app item screen",
+            lines: [
+                "9:41", "Back", "Add to cart · $12.49",
+                "Spicy Chicken Sandwich",
+                "710 Cal", "Sodium: 1590 mg",
+                "Customize", "Frequently bought together",
+            ],
+            nameContains: ["sandwich", "chicken"], kcal: 710, sodiumMg: 1590),
+        .init(
+            what: "grocer's product page",
+            lines: [
+                "Home / Soups / Chicken Noodle Soup Cup",
+                "$3.29", "Add to list",
+                "Nutrition Facts", "Per container",
+                "Calories 230", "Sodium 890mg", "Total Carbohydrate 33g",
+                "Reviews (214)",
+            ],
+            nameContains: ["soup", "noodle"], kcal: 230, sodiumMg: 890),
+        .init(
+            what: "chain's PDF-style item row",
+            lines: [
+                "Bakery Nutrition Guide",
+                "Blueberry Muffin",
+                "Calories 460", "Sodium 400 mg", "Sugars 39g",
+                "Values are approximate.",
+            ],
+            nameContains: ["muffin"], kcal: 460, sodiumMg: 400),
+    ]
+
+    /// Pages with numbers but NO nutrition figures — the Salt & Straw
+    /// shape: a copyright year and a gift-card price were once logged
+    /// as sodium off pages like these. The read must return nothing
+    /// and leave the refusal to the deterministic guards.
+    private static let screenshotNotNutrition: [[String]] = [
+        ["Salt & Straw", "Our Story", "Find a Scoop Shop",
+         "© 2026 All Rights Reserved"],
+        ["Gift Cards", "From $15", "Free shipping over $50",
+         "Terms apply"],
+    ]
+
+    @MainActor
+    func testReadNutritionScreenshotGoldenSet() async throws {
+        try requireEvalRun()
+        var produced = 0, nameOK = 0, exactOK = 0
+        var report: [String] = []
+
+        for sample in Self.screenshotGolden {
+            let foods = await FoodIntelligence.readNutritionScreenshot(
+                transcript: Self.transcript(sample.lines))
+            guard let first = foods.first else {
+                report.append("REFUSED  \(sample.what)")
+                continue
+            }
+            produced += 1
+            let lowered = foods.map { $0.name.lowercased() }.joined(separator: " ")
+            let nameHit = sample.nameContains.contains { lowered.contains($0) }
+            let exactHit = first.kcal == sample.kcal && first.sodiumMg == sample.sodiumMg
+            if nameHit { nameOK += 1 }
+            if exactHit { exactOK += 1 }
+            report.append(
+                "\(nameHit && exactHit ? "ok  " : "MISS") \(sample.what) → "
+                + foods.map {
+                    "\"\($0.name)\" \($0.kcal.map(String.init(describing:)) ?? "nil") kcal, "
+                    + "\($0.sodiumMg.map(String.init(describing:)) ?? "nil") mg"
+                }.joined(separator: " | ")
+                + "  [want \(sample.kcal) kcal, \(sample.sodiumMg) mg, name ~ \(sample.nameContains)]")
+        }
+
+        attachAndPrint(report, name: "readNutritionScreenshot-eval")
+        let n = Double(Self.screenshotGolden.count)
+        XCTAssertGreaterThanOrEqual(Double(produced) / n, Gate.produced, "produced (refusals are failures)")
+        guard produced > 0 else {
+            XCTFail("no sample produced values — nothing was measured")
+            return
+        }
+        let a = Double(produced)
+        XCTAssertGreaterThanOrEqual(Double(nameOK) / a, Gate.screenshotName, "name grounded in the page's own words")
+        XCTAssertGreaterThanOrEqual(Double(exactOK) / a, Gate.screenshotExact, "values exactly as printed")
+    }
+
+    @MainActor
+    func testReadNutritionScreenshotRejectsPagesWithoutFigures() async throws {
+        try requireEvalRun()
+        var report: [String] = []
+        var invented = 0
+
+        for lines in Self.screenshotNotNutrition {
+            let foods = await FoodIntelligence.readNutritionScreenshot(
+                transcript: Self.transcript(lines))
+            if foods.isEmpty {
+                report.append("ok   [\(lines.joined(separator: " / "))] → none")
+            } else {
+                invented += 1
+                report.append("INVENTED [\(lines.joined(separator: " / "))] → "
+                    + foods.map {
+                        "\"\($0.name)\" \($0.kcal.map(String.init(describing:)) ?? "nil") kcal"
+                    }.joined(separator: ", "))
+            }
+        }
+
+        attachAndPrint(report, name: "readNutritionScreenshot-notnutrition-eval")
+        XCTAssertEqual(invented, 0, "a page showing no nutrition figures must return no foods")
+    }
 
     // MARK: Plumbing
 

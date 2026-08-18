@@ -435,7 +435,7 @@ extension FoodIntelligence {
                 nutrients: macroNutrients(
                     fatG: item.fatG, carbsG: item.carbsG, proteinG: item.proteinG,
                     fiberG: item.fiberG, sugarG: item.sugarG))
-        }))
+        }, transcript: text))
     }
 
     private struct RemoteMenuDishReading: Decodable {

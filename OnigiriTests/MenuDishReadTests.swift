@@ -12,6 +12,15 @@ import OnigiriKit
 /// failed to settle (2026-08-16).
 ///
 /// Opt-in like the rest of the eval suite: it needs real inference.
+///
+/// Class-level @MainActor DELIBERATELY, against the target's
+/// nonisolated default: these tests assert synchronously on
+/// FoodIntelligence result types whose members are MainActor-isolated
+/// (the app target's default isolation), so without it the asserts
+/// don't compile — removing it was tried and reverted (audit,
+/// 2026-08-17). Safe here because nothing overrides an ObjC
+/// lifecycle method, which is the collision project.yml's setting
+/// guards against.
 @MainActor
 final class MenuDishReadTests: XCTestCase {
     private func transcript() throws -> [LabelObservation] {
@@ -87,6 +96,7 @@ final class MenuDishReadTests: XCTestCase {
 /// not. Shake Shack's guide carries an InDesign-style filename and says
 /// "Shake Shack" in exactly one place: the small-print disclaimer on its
 /// last page. That is the page this fixture holds.
+/// @MainActor for MenuDishReadTests' reason, above.
 @MainActor
 final class MenuSourceReadTests: XCTestCase {
     func testTheModelNamesTheRestaurantFromTheSmallPrint() async throws {

@@ -6,7 +6,11 @@ import OnigiriKit
 /// is exactly what broke: after the keychain access-group change an
 /// Anthropic key silently failed to store, so "Test connection" stayed
 /// greyed out with a key visibly in the field (2026-08-16).
-@MainActor
+///
+/// No class-level @MainActor — the target's `nonisolated` default
+/// exists precisely so XCTestCase subclasses don't re-isolate their
+/// inherited ObjC init/tearDown (project.yml's own comment); everything
+/// here calls nonisolated kit code (audit, 2026-08-17).
 final class SecretStorageTests: XCTestCase {
     private let account = "unitTestSecret"
 

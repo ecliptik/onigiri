@@ -293,38 +293,55 @@ struct GoalView: View {
     /// pace sane — rather than the one nine-row block it used to be
     /// (the user, 2026-08-10: "there's a lot here").
     ///
-    /// Exactly ONE row on the visible screen is called "Budget". The
-    /// average-day projection lives in the collapsed derivation group
-    /// instead, because two rows by that name — in any two sections —
-    /// read as one number failing to match itself (the user,
-    /// 2026-08-11). That is the 2026-08-02 ruling (both budgets must be
-    /// told apart) satisfied harder, not loosened: do not bring the
-    /// projection back up here, and do not collapse the two into one.
+    /// The two budgets must stay TOLD APART, and since 2026-08-18 the
+    /// ROW LABEL carries that — "Today's Budget" here against "Budget,
+    /// average day" in the collapsed derivation group. It used to be the
+    /// SECTION header ("Budget" under "Today"), which worked only while
+    /// the row label was a bare "Budget"; naming the row is the stronger
+    /// form, since a label survives being read out of context and a
+    /// section header does not. What must never come back is two rows
+    /// reading plainly "Budget" — that is one number failing to match
+    /// itself (the user, 2026-08-11), and it is still forbidden. Do not
+    /// bring the projection up here, and do not collapse the two.
+    ///
+    /// One fact per row. The old "Budget" row printed the pair as
+    /// "612 / 1595 kcal", which asks the reader to do the subtraction
+    /// and never says which side is which (the user, 2026-08-18).
+    /// Nothing new is computed here — this is three numbers the screen
+    /// already had, laid out so none of them needs interpreting.
     @ViewBuilder
     private func todaySection(_ plan: CalorieBudget.Plan) -> some View {
-        // The fraction is eaten-of-today's-budget, a real part-of-whole.
-        // It is NOT today's budget over the average day's: those are
-        // different quantities over different spans, and on an active
-        // day the first exceeds the second, so that fraction would
-        // render past 100% and break its own metaphor.
         if let todayBudget {
             Section {
-                LabeledContent("Budget") {
-                    Text("\(model.todayIntakeKcal, format: .number.precision(.fractionLength(0))) / \(todayBudget, format: .number.precision(.fractionLength(0))) kcal")
+                LabeledContent("Today's Budget") {
+                    Text("\(todayBudget, format: .number.precision(.fractionLength(0))) kcal")
                         .monospacedDigit()
                 }
-                // NOT "so far": `dayBurn` is active earned to now PLUS
-                // the whole day's resting, credited from midnight. The
-                // bare-label version of this collided with Details'
-                // measured-so-far figure and read as the app
-                // contradicting itself (2026-08-02); the footer carries
-                // the distinction instead.
-                LabeledContent("Burn") {
+                // The user's own word for intake — this row follows the
+                // Settings choice like every other intake readout.
+                LabeledContent("\(intakeWord.label) Today") {
+                    Text("\(model.todayIntakeKcal, format: .number.precision(.fractionLength(0))) kcal")
+                        .monospacedDigit()
+                }
+                // NOT "so far", and the longer label makes that MORE
+                // tempting to misread than the old bare "Burn" did:
+                // `dayBurn` is active earned to now PLUS the whole day's
+                // resting, credited from midnight. That misreading
+                // already collided with Details' measured-so-far figure
+                // once and read as the app contradicting itself
+                // (2026-08-02). What answers it is the disclosure below
+                // ("Resting energy is credited at midnight, active
+                // energy as you earn it"), NOT this section's footer —
+                // 2026-08-13 deliberately emptied the footer of
+                // how-it-is-built copy for length. Keep that split; if
+                // this row ever needs the caveat inline, shorten the
+                // LABEL rather than refilling the footer.
+                LabeledContent("Burned Today") {
                     Text("\(model.todayDayBurnKcal, format: .number.precision(.fractionLength(0))) kcal")
                         .monospacedDigit()
                 }
             } header: {
-                Text("Today")
+                Text("Budget")
             } footer: {
                 // Says what the number IS and nothing more — HOW it is
                 // built is the disclosure's job, and both captions
@@ -479,6 +496,40 @@ struct GoalView: View {
                         "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
                     } ?? "Not estimated")
                         .monospacedDigit()
+                }
+                // LAST, because it is a check on every row above rather
+                // than an input to any of them. "Last 30 days" has
+                // always shown a predicted change beside the actual one
+                // and left the gap unexplained — this is the gap said
+                // as one number ("shouldn't we get better at this?",
+                // the user, 2026-08-18).
+                //
+                // It REPORTS. Nothing plans from it, and `ObservedBurn`
+                // records why: the figure cannot tell under-logging from
+                // a wrong resting estimate from water weight, and
+                // feeding it back into `dayBurn` would rebuild the
+                // trailing-average substitution PLAN-earned-budget
+                // deleted — silently, which is worse than the version
+                // that was removed.
+                if let observed = model.trend.observedBurnKcal {
+                    LabeledContent("Burn, from your results") {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("≈ \(observed, format: .number.precision(.fractionLength(0))) kcal/day")
+                                .monospacedDigit()
+                            if let measured = model.trend.measuredBurnKcal {
+                                let delta = observed - measured
+                                // A near-match is the reassuring answer
+                                // and deserves to be readable as one.
+                                // "8 below measured" reads as a finding;
+                                // it is agreement.
+                                Text(abs(delta) < 50
+                                     ? "in line with measured"
+                                     : "\(abs(delta), format: .number.precision(.fractionLength(0))) kcal/day \(delta < 0 ? "below" : "above") measured")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                 }
                 // Three sentences became two: this is the one place the
                 // mechanism belongs, so it keeps it and the Today

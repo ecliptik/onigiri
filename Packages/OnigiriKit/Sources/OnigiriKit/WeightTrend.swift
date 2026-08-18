@@ -71,13 +71,35 @@ public enum WeightTrend {
             from start: Date,
             to end: Date
         ) -> Double? {
+            windowFit(history: history, from: start, to: end)
+                .map { $0.slopeLbPerDay * $0.spanDays }
+        }
+
+        /// The same fit as `actualLb`, read as a RATE instead of a
+        /// total. Energy reconciliation needs lb/day — multiplying out
+        /// to a window total and dividing by a day count that may not
+        /// match the fit's own span is how a partially-weighed month
+        /// turns into a confident wrong number (`ObservedBurn`).
+        public static func actualRateLbPerDay(
+            history: [Point],
+            from start: Date,
+            to end: Date
+        ) -> Double? {
+            windowFit(history: history, from: start, to: end)?.slopeLbPerDay
+        }
+
+        /// Shared so the total and the rate can never disagree about
+        /// which readings, which span, or which fit.
+        private static func windowFit(
+            history: [Point], from start: Date, to end: Date
+        ) -> (slopeLbPerDay: Double, spanDays: Double)? {
             let windowed = history.filter { $0.date >= start && $0.date <= end }
             guard let first = windowed.first, let last = windowed.last else { return nil }
             let spanDays = last.date.timeIntervalSince(first.date) / 86400
             guard spanDays >= 1,
                   let fit = WeightTrend.fit(windowed, reference: last.date, lambda: 0)
             else { return nil }
-            return fit.slopeLbPerDay * spanDays
+            return (fit.slopeLbPerDay, spanDays)
         }
     }
 

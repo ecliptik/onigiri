@@ -11,6 +11,15 @@ public struct GoalTrendStats: Equatable, Sendable {
     public let predicted30Lb: Double?
     /// Smoothed scale movement over the same window.
     public let actual30Lb: Double?
+    /// What the scale implies you actually burn, kcal/day — see
+    /// `ObservedBurn`. nil until the window carries enough tracked days
+    /// to mean anything. REPORTED ONLY: nothing plans from it.
+    public let observedBurnKcal: Double?
+    /// Mean MEASURED burn over the very same tracked days, so the two
+    /// can be subtracted honestly. Reading the observed figure against
+    /// `averageBurnKcal` instead would compare across two different
+    /// windows and attribute the difference to the model.
+    public let measuredBurnKcal: Double?
     /// When the target is reached at the recent trend — a recency-weighted
     /// least-squares fit over the last three weeks of weigh-ins
     /// (`WeightTrend.recencyWeightedFit`), so a diet started last week
@@ -78,6 +87,7 @@ public struct GoalTrendStats: Equatable, Sendable {
 
     public init(
         predicted30Lb: Double?, actual30Lb: Double?,
+        observedBurnKcal: Double? = nil, measuredBurnKcal: Double? = nil,
         projectedWindow: ClosedRange<Date>?,
         fasterWindow: ClosedRange<Date>? = nil,
         driftLbPerWeek: Double?,
@@ -86,6 +96,8 @@ public struct GoalTrendStats: Equatable, Sendable {
     ) {
         self.predicted30Lb = predicted30Lb
         self.actual30Lb = actual30Lb
+        self.observedBurnKcal = observedBurnKcal
+        self.measuredBurnKcal = measuredBurnKcal
         self.projectedWindow = projectedWindow
         self.fasterWindow = fasterWindow
         self.driftLbPerWeek = driftLbPerWeek
@@ -126,6 +138,33 @@ public struct GoalTrendStats: Equatable, Sendable {
             ? nil
             : WeightTrend.Change.predictedLb(totalDeficitKcal: deficits.reduce(0, +))
         let actual = WeightTrend.Change.actualLb(history: weightHistory, from: thirtyDaysAgo, to: now)
+
+        // What the scale says the burn really was, beside what was
+        // measured — the two read over the SAME tracked days, so their
+        // difference is the model's error and not a window mismatch.
+        // Reported, never planned from: see `ObservedBurn` for the five
+        // causes this single number cannot tell apart, and for why
+        // feeding it back into `dayBurn` would resurrect the deleted
+        // trailing-average substitution.
+        let windowDays = trackedDays.filter { $0.day >= thirtyDaysAgo }
+        let observedBurn: Double? = {
+            guard !windowDays.isEmpty,
+                  let rate = WeightTrend.Change.actualRateLbPerDay(
+                      history: weightHistory, from: thirtyDaysAgo, to: now)
+            else { return nil }
+            let meanIntake = windowDays.reduce(0) { $0 + $1.intakeKcal }
+                / Double(windowDays.count)
+            return ObservedBurn.kcalPerDay(
+                meanDailyIntakeKcal: meanIntake,
+                scaleRateLbPerDay: rate,
+                trackedDays: windowDays.count
+            )
+        }()
+        // Only alongside the observed figure — on its own it is a third
+        // burn average on a screen that already carries two.
+        let measuredBurn: Double? = observedBurn == nil || windowDays.isEmpty
+            ? nil
+            : windowDays.reduce(0) { $0 + $1.burnKcal } / Double(windowDays.count)
 
         // One fit powers both modes: lose projects a finish window from
         // it, maintenance reads it as drift.
@@ -196,6 +235,7 @@ public struct GoalTrendStats: Equatable, Sendable {
         }
         return GoalTrendStats(
             predicted30Lb: predicted, actual30Lb: actual,
+            observedBurnKcal: observedBurn, measuredBurnKcal: measuredBurn,
             projectedWindow: projected, fasterWindow: faster, driftLbPerWeek: drift,
             bankedKcal: banked, bankedLb: -WeightTrend.Change.predictedLb(totalDeficitKcal: banked),
             bankedDays: trackedDays.count,

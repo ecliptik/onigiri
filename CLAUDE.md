@@ -530,13 +530,36 @@ Each cost a debugging session.
 - `CalorieBudget.projectedDailyBurn` survives for the Goal/onboarding PREVIEW
   only ("an average day"), never to judge a day. Goal shows BOTH budgets and
   they must stay TOLD APART — one label on two different numbers reads as a
-  contradiction (726 kcal apart at lunchtime, 2026-08-02). Since 2026-08-11 the
-  SECTION carries that distinction, not the row labels: `Budget` under `Today`
-  (live `dayBurn − deficit`, as eaten/budget) and `Budget, average day` inside
-  the collapsed "How the budget is set". Don't put two rows called "Budget" side by
-  side again, and don't re-add a today-floor to the projection to close the gap
-  — that was tried, it made the average neither one thing nor the other, and it
-  didn't close it.
+  contradiction (726 kcal apart at lunchtime, 2026-08-02). Since 2026-08-18 the
+  ROW LABEL carries that distinction: `Today's Budget` under a `Budget` section
+  (live `dayBurn − deficit`) against `Budget, average day` inside the collapsed
+  "How the budget is set". From 2026-08-11 to 2026-08-18 the SECTION carried it
+  instead (`Budget` under `Today`), which worked only while the visible row was
+  a bare "Budget" — naming the row is the stronger form, since a label survives
+  being read out of context and a section header does not. Don't put two rows
+  called "Budget" side by side again, and don't re-add a today-floor to the
+  projection to close the gap — that was tried, it made the average neither one
+  thing nor the other, and it didn't close it.
+- That `Budget` section is ONE FACT PER ROW — `Today's Budget`, `<intake word>
+  Today`, `Burned Today`. It used to print the pair as "612 / 1595 kcal", which
+  asks the reader to subtract and never says which side is which (the user,
+  2026-08-18). `Burned Today` is `dayBurn`, NOT a measurement so far, and the
+  longer label makes that easier to misread than the old bare "Burn" did — what
+  answers it is the disclosure's "Resting energy is credited at midnight, active
+  energy as you earn it", never this section's footer, which 2026-08-13
+  deliberately emptied of how-it-is-built copy. Shorten the label before
+  refilling the footer.
+- **`ObservedBurn` REPORTS and nothing plans from it** (2026-08-18,
+  `plans/PLAN-goal-budget-reconciliation.md`). `meanDailyIntake − scaleRate ×
+  3500` is what the scale says you burn, shown last in the derivation group so
+  the "Last 30 days" gap stops being a puzzle. It cannot tell under-logging from
+  a wrong resting estimate from Health's active energy from water weight — the
+  first three would justify moving a budget and the fourth would not — so
+  feeding it back into `dayBurn` would rebuild the trailing-average
+  substitution PLAN-earned-budget DELETED, and do it silently. If a correction
+  is ever wanted it must be OFFERED and stored, never applied. It needs
+  `ObservedBurn.minimumTrackedDays` in the window or it says nothing: the
+  tracked days' mean intake stands in for every day the scale moved across.
 - A day's VERDICT has two gates, and both live in `StreakCalendar`:
   `isTracked` (intake ≥ `untrackedBelowKcal`, default 500 — too little
   logged to trust the numbers; Settings → Metrics tunes it, 0 disables)

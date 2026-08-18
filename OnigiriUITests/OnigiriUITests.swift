@@ -337,16 +337,49 @@ final class OnigiriUITests: XCTestCase {
         let monthCard = calendarMonthCard(in: app)
         XCTAssertTrue(monthCard.waitForExistence(timeout: 5),
                       "Calendar month summary card")
+        // Existence is not hittability — this file's own rule. The card
+        // happens to sit above the fold on this device, but a larger
+        // Dynamic Type size pushes it down, and an unhittable card taps
+        // into nothing while still "existing". Defensive, not the fix
+        // for anything observed.
+        for _ in 0..<5 where !monthCard.isHittable { app.swipeUp() }
+        XCTAssertTrue(monthCard.isHittable, "Month card should be reachable")
         monthCard.tap()
-        let predictedRow = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label CONTAINS 'Predicted' AND label CONTAINS 'lb'"))
-            .firstMatch
-        XCTAssertTrue(predictedRow.waitForExistence(timeout: 10),
-                      "Month detail should show a predicted change in lb")
-        let scaleRow = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label CONTAINS 'Scale change' AND label CONTAINS 'lb'"))
-            .firstMatch
-        XCTAssertTrue(scaleRow.exists, "Month detail should show the scale change in lb")
+        // Confirm the push landed before hunting rows on it, or a failed
+        // navigation reads as a missing row.
+        func row(titled title: String) -> XCUIElement {
+            app.descendants(matching: .any)
+                .matching(NSPredicate(format: "label CONTAINS %@", title))
+                .firstMatch
+        }
+        XCTAssertTrue(row(titled: "Days goal met").waitForExistence(timeout: 10),
+                      "Month detail should have pushed")
+
+        // The rows sit nine deep in "This month", below the fold, and a
+        // List keeps off-screen rows out of the accessibility tree — so
+        // scroll before reading. `waitForExistence` on an element that
+        // never enters the tree just burns its timeout.
+        //
+        // Match the COMBINED element: each `LabeledContent` yields two
+        // static texts, the bare title ("Predicted") and the whole row
+        // ("Predicted, -0.9 lb"). A plain `CONTAINS title` firstMatch
+        // returns the title, whose own `value` is empty — which reads as
+        // a blank figure and sent an earlier fix down the wrong path.
+        func figure(inRowTitled title: String) -> String {
+            let target = app.staticTexts
+                .matching(NSPredicate(format: "label BEGINSWITH %@", title + ","))
+                .firstMatch
+            for _ in 0..<6 where !target.exists { app.swipeUp() }
+            XCTAssertTrue(target.waitForExistence(timeout: 5),
+                          "Month detail should show a '\(title)' row")
+            return target.label
+        }
+        let predicted = figure(inRowTitled: "Predicted")
+        XCTAssertTrue(predicted.contains("lb"),
+                      "Predicted should carry an lb figure, row read: \(predicted)")
+        let scale = figure(inRowTitled: "Scale change")
+        XCTAssertTrue(scale.contains("lb"),
+                      "Scale change should carry an lb figure, row read: \(scale)")
     }
 
     /// Showcase tour (opt-in via TEST_RUNNER_SHOWCASE=1): walks every
@@ -761,23 +794,37 @@ final class OnigiriUITests: XCTestCase {
         }
     }
 
-    /// The decimal pad has no return key; the Goal tab shows a nav-bar Done
-    /// while a weight field is focused, and tapping it dismisses the keyboard.
+    /// The decimal pad has no return key, so the weight fields need a way
+    /// out that isn't the return key. Goal's toolbar is Cancel ↔ Save —
+    /// the styled principal "Done" was removed because it read as
+    /// belonging to nothing — and Cancel is what appears on FOCUS ALONE
+    /// (`hasEdits || focusedField != nil`), then discards and drops the
+    /// keyboard. This test asserted the deleted Done until 2026-08-18;
+    /// it had been failing on that button ever since, which is why the
+    /// suite's "Connect Hardware Keyboard" suspect was a red herring —
+    /// the keyboard assertion above it always passed.
     @MainActor
-    func testGoalKeyboardDoneDismisses() throws {
+    func testGoalCancelDismissesKeyboard() throws {
         let app = XCUIApplication()
         app.launch()
+        skipOnboardingIfPresent(in: app)
         grantHealthAccess(in: app, timeout: 10)
 
         switchTab(in: app, to: "Goal")
         let field = app.textFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 10), "Weight field should exist")
+
+        // Focus is what summons Cancel, so it must be absent first — an
+        // "is it there?" probe on a button that was always there would
+        // pass while guarding nothing.
+        let cancel = app.buttons["Cancel"]
+        XCTAssertTrue(cancel.waitForNonExistence(timeout: 3),
+                      "Cancel should be absent on an unedited, unfocused Goal")
+
         field.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "Keyboard should appear")
-
-        let done = app.buttons["Done"]
-        XCTAssertTrue(done.waitForExistence(timeout: 5), "Done should appear while editing")
-        done.tap()
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5), "Focus alone should summon Cancel")
+        cancel.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5), "Keyboard should dismiss")
     }
 
@@ -1054,19 +1101,35 @@ final class OnigiriUITests: XCTestCase {
     @MainActor
     func testBarcodeLookupPrefillsForm() throws {
         let app = XCUIApplication()
+        // SEEDED, and not for the library: `DebugSeeder` is what flips
+        // `onlineLookups` on ("the off-by-default privacy stance would
+        // skip all of it, so seeded runs opt in" — barcode routes are
+        // named in that comment). Unseeded, "Set Up Later" leaves
+        // lookups off and Look Up can never reach OpenFoodFacts, so the
+        // form never opens. The test passed for as long as it ran on a
+        // sim some earlier seeded run had already opted in; erasing the
+        // sim took that away (2026-08-18).
+        app.launchArguments = ["--seed-sample-data"]
         app.launch()
         // Fresh sims land on onboarding (no tab bar) — this test used
         // to depend on an already-onboarded device state.
         skipOnboardingIfPresent(in: app)
+        grantHealthAccess(in: app, timeout: 30)
         grantHealthAccess(in: app, timeout: 10)
 
-        switchTab(in: app, to: "Foods")
-        // The Foods scan row (1.8.1): an unknown barcode fetches the
-        // product and opens the prefilled food form directly — no trip
-        // through the Add chooser. (The form keeps its own scan row for
-        // attaching a barcode mid-edit; this exercises the screen's.)
+        // The LOG SHEET's scan row. This test used to tap a scan row on
+        // the Foods tab; the entry doors left that screen on 2026-08-02
+        // (FoodsView: "this is the LIBRARY screen, and the + already
+        // opens an Add Food form that carries the very same two doors"),
+        // so the row it looked for had not existed for a fortnight.
+        // `EntryDoorsSection` now renders in exactly two places — the
+        // Log sheet and a blank food form — and the Add tab IS the Log
+        // sheet (`Tab("Add" …, value: .log)`), which keeps the intent
+        // the original comment named: an unknown barcode goes straight
+        // to the prefilled form, no trip through a chooser.
+        switchTab(in: app, to: "Add")
         let scan = scanRow(in: app)
-        XCTAssertTrue(scan.waitForExistence(timeout: 5), "Scan Barcode row on Foods")
+        XCTAssertTrue(scan.waitForExistence(timeout: 5), "Scan row in the Log sheet")
         scan.tap()
 
         let field = app.textFields["Barcode"]

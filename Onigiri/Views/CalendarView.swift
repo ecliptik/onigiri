@@ -102,14 +102,25 @@ struct CalendarView: View {
                     .accessibilityLabel("Next month")
                 }
             }
-        }
-        .task { await refresh() }
-        .navigationDestination(for: Route.self) { route in
-            switch route {
-            case .monthDetail(let month):
-                MonthDetailView(model: model, month: month)
+            // INSIDE the NavigationStack's content, and it has to be.
+            // `navigationDestination` resolves against the stack it is
+            // declared WITHIN, so attached to the stack itself — one
+            // brace further out — it registers with nothing and every
+            // value-based NavigationLink here is inert. That is where it
+            // sat from the 2026-08-17 switch to a bound path until
+            // 2026-08-18: tapping the month card did nothing at all,
+            // silently, with no error, no log and no build warning. A
+            // bare `NavigationLink(destination:)` needs no registration,
+            // which is why the older form worked and the rewrite broke
+            // it — the two are not interchangeable.
+            .navigationDestination(for: Route.self) { route in
+                switch route {
+                case .monthDetail(let month):
+                    MonthDetailView(model: model, month: month)
+                }
             }
         }
+        .task { await refresh() }
         // onChange covers the live case (the app is foregrounded by the
         // widget tap itself, so the request arrives while this view is
         // mounted); onAppear covers the cold launch, where the request

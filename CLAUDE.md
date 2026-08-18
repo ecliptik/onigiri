@@ -330,6 +330,18 @@ Each cost a debugging session.
   tests, wait for the picker's navigation bar to be GONE before tapping the
   next chip: sheets-over-sheets transform the parent while they dismiss, so a
   tap at the chip's last-known frame lands on the backdrop and closes the edit.
+- **`.navigationDestination(for:)` must sit INSIDE the `NavigationStack`'s
+  content closure, not on the stack itself** — one brace further out and
+  it registers with nothing, so every value-based `NavigationLink` is inert:
+  taps do nothing, silently, with no error, no log, and no build warning.
+  The Calendar's month card shipped unreachable this way between
+  2026-08-17 (the switch to a bound `navPath`, so a widget deep link could
+  POP the detail) and 2026-08-18. A bare `NavigationLink(destination:)`
+  needs no registration, which is why the older form worked and the
+  rewrite broke it — the two forms are NOT interchangeable. A nav audit
+  called destination coverage "clean" while this was live, because the
+  destination does exist; only its placement is wrong. Verify a
+  value-based link by TAPPING it, not by grepping for the modifier.
 - SwiftUI writes a `TabView` selection binding when you tap the tab you are
   ALREADY on. That is what makes "tapping Today goes to today's date" possible
   (a proxy `Binding` on the selection), and it is an assumption no build can
@@ -611,8 +623,8 @@ Each cost a debugging session.
   `Survey (FNDDS)` dataType parens. Barcode scans are always OpenFoodFacts.
 - Label scanning is the third door beside barcode and text search, and it
   shares ONE camera with barcodes: `ScanSheet` ("Scan Barcode or Nutrition
-  Label" — the user's copy; one row on Foods, the Log sheet, and the blank food
-  form) runs the live barcode scanner with a shutter button whose still goes to
+  Label" — the user's copy) runs the live barcode scanner with a shutter
+  button whose still goes to
   `LabelScan` (kit) — Vision OCR, `.accurate`, language correction OFF
   (correction mangles "0g" → "Og") — into the pure, fixture-tested
   `LabelParser`. Keep the request configuration in `LabelScan.swift` and
@@ -620,6 +632,17 @@ Each cost a debugging session.
   that script, never by hand-transcribing. On iOS 26 the documents-request
   table branch runs first; real photos produce tables, rendered label graphics
   don't, so the geometry parser is a load-bearing fallback, not legacy.
+- **The entry doors render in exactly TWO places: the Log sheet and a BLANK
+  food form** (`EntryDoorsSection`, gated on `isBlankNewFood` in the form).
+  They led the Foods tab until 2026-08-02 and were removed (the user): Foods
+  is the LIBRARY screen, the + already opens an Add Food form carrying the
+  same doors, so the screen shipped two add paths competing for one job with
+  the library pushed below them. Scanning a new food is one tap longer on
+  purpose. A prefilled form hides the doors and shows only the provenance
+  caption. This is a product decision — don't re-add a Foods-tab scan row —
+  and it rots anything that looks for one: `testBarcodeLookupPrefillsForm`
+  hunted that row for a fortnight and this file still described it, both
+  found 2026-08-18.
 - Screenshot import (`plans/PLAN-screenshot-nutrition.md`): every image route —
   the camera, the scan sheet's photo pick, and a SHARED image (share sheet or
   Files) — runs ONE cascade, `FoodImageReader` (OCR → LabelParser → refine →

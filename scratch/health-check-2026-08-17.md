@@ -221,3 +221,108 @@ All three now run on the iPhone 17 Pro (26.5) pairing; the sims the
 suite historically ran on ("iPhone 16 Pro") are now 18.x-only. Next
 session: settle sim-environment vs. app regression per test, on
 device where needed.
+
+## Review pass — 2026-08-18
+
+The fix list above was re-verified against the tree, item by item, rather
+than taken at its word. It holds: all seven "Act on these" and the whole
+second tier are present, some under different names than proposed
+(`clear(files:)` not `clear(only:)`; `riceToastStatus` not
+`riceToastText`; DaySnapshot got a hand-written `init(from:)` with
+`decodeIfPresent`, which is better than the proposed `Bool?`). The
+contrast figures were recomputed independently and match: the old light
+tan is 3.33:1 on white, `riceToastStatus` is 5.44:1.
+
+Three corrections to the record.
+
+- **6(c) never landed, and it should not.** The share extension still
+  opens the store with no repair pre-flight, and that is now the
+  documented decision (`ShareFlow.saveToLibrary`). The audit's "cheap
+  insurance" was `repairDanglingFoodReferences` — the SwiftData-level
+  pass, which fetches every Meal and walks `meal.items` / `item.food`.
+  The extension touches nothing but `Food`, so it never performs the
+  access that trips the process kill; adding that call would MANUFACTURE
+  the traversal it was meant to guard. The pass is only safe after the
+  Core Data one, which `OnigiriApp` runs first and the extension runs
+  not at all.
+- **The `sharedImport`-vs-open-tab-sheet guard was never added**, and no
+  longer needs to be: the compounding risk was the deposit being
+  `take()`n and then lost, and `take()` now copies instead of moving.
+  Recorded as resolved by other means, not as done. Separately,
+  `onOpenURL`'s file branch assigned `sharedImport` with no guard at all
+  (clobbering a live import sheet, whose `cleanUp` then never ran) —
+  fixed 2026-08-18.
+- **Two of the three UI-test failures were app-side staleness, not the
+  simulator**, and both leading suspects in the section above are wrong.
+  See below.
+
+### The three UI-test failures, settled
+
+- `testGoalKeyboardDoneDismisses` — **stale test.** The app has no
+  "Done": there is no `placement: .keyboard` toolbar anywhere, and
+  GoalView's toolbar comment records the removal ("the styled principal
+  'Done' read as belonging to nothing") in favour of Cancel ↔ Save, with
+  Cancel appearing on focus alone. "Connect Hardware Keyboard" was never
+  the cause — a missing software keyboard would have failed the
+  assertion one line earlier, and the reported failure was on Done.
+  Rewritten as `testGoalCancelDismissesKeyboard` against the real
+  contract, asserting Cancel is ABSENT before focus so it cannot pass
+  vacuously. It was also missing the `skipOnboardingIfPresent` call six
+  sibling tests carry; added.
+- `testBarcodeLookupPrefillsForm` — **stale test.** The Foods tab has no
+  scan row. `EntryDoorsSection` renders in exactly two places, the Log
+  sheet and a blank food form, and `FoodsView` records the 2026-08-02
+  removal. The test had been hunting a row that left a fortnight before
+  the audit; CLAUDE.md described it too, and both are fixed. The
+  "Automation type mismatch … Button vs PopUpButton" note was a red
+  herring. Rerouted through Add → Add Food, the same leg
+  `testLabelScanPrefillsForm` already uses.
+- `testSeedGrantAndLogFlow` — **it was hiding a live app bug.** The
+  Calendar's month card did not navigate AT ALL: `.navigationDestination`
+  sat one brace too low, on the `NavigationStack` rather than inside its
+  content, so it registered with nothing and every value-based
+  `NavigationLink` was inert — no error, no log, no warning. Shipped that
+  way by the 2026-08-17 switch to a bound `navPath` (so the month-stats
+  widget could pop the detail); a bare `NavigationLink(destination:)`
+  needs no registration, which is why the older form worked. Four
+  different tap strategies were tried against it before the placement was
+  found. The month detail was unreachable in the app, not just the test.
+  Fixed, verified by tap, and written into CLAUDE.md's SwiftUI landmines.
+
+  Note what this says about the audit round: the nav auditor reported
+  destination coverage CLEAN, and by grep it was — the destination
+  exists and handles every route. Only its placement was wrong. A
+  value-based link is verified by tapping it, never by finding the
+  modifier.
+
+  Two test-side faults sat on top of it and had to be cleared before the
+  app bug was even visible: the stats rows are nine deep in "This month",
+  below the fold, and a List keeps off-screen rows out of the
+  accessibility tree; and `firstMatch` on `label CONTAINS 'Predicted'`
+  returns the BARE title element (whose `value` is empty), because each
+  `LabeledContent` yields two static texts — "Predicted" and
+  "Predicted, -0.9 lb". The original one-predicate form was actually
+  right about that second element; it never got the chance to match.
+  Seeded data was never the problem (-0.9 lb predicted, -1.1 lb actual).
+
+### Verification
+
+Kit 616/616. Full sim build, all five targets. All three previously
+failing UI tests pass on erased, paired sims (iPhone 17 Pro / Watch
+Series 11, 26.5). Default UI suite: 30 executed, 23 skipped (opt-ins),
+every test green except the one below.
+
+**`testSeedGrantAndLogFlow` cannot pass inside the default suite, and
+that is structural, not a regression.** Its own stale-seed guard fires:
+"the hydration row reads 48 / 64 oz water but a fresh seed yields 24 /
+64". `--seed-sample-data` ADDS Health samples on every launch, and
+`testFoodsSearchSurvivesScroll` seeds and sorts ahead of it — so the
+flow test sees doubled totals. Reproduced with just that pair on erased
+sims, with the barcode test out of the picture, so it predates this
+session's changes; it is what the "the full suite always dies earlier"
+note above was describing. The flow test must be run SOLO on erased
+sims, which is how it was verified.
+
+Worth deciding separately: making `DebugSeeder` idempotent (skip when
+the day already has samples) would let the flow test live in the suite.
+That is an app change with real blast radius and was not taken here.

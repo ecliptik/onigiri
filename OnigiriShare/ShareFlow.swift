@@ -338,6 +338,19 @@ struct ShareFlow: View {
     /// Adds the dish to the library so it is one tap next time. Silent on
     /// failure — the store may be open in the app, and a duplicate or a
     /// contended write is not worth failing a completed log over.
+    ///
+    /// NO repair pre-flight here, deliberately (audit 2026-08-17 proposed
+    /// one as "cheap insurance"; declined 2026-08-18). This extension
+    /// only ever fetches and inserts `Food`, so it never reads
+    /// `MealItem.food` — the one access that trips the dangling-reference
+    /// process kill. It is immune as written. The proposed call was
+    /// `repairDanglingFoodReferences`, which is the SwiftData-level pass:
+    /// it fetches every Meal and walks `meal.items` and `item.food`, so
+    /// adding it would MANUFACTURE the traversal it is meant to protect
+    /// against. That pass is only safe after the Core Data one, which is
+    /// why `OnigiriApp` runs `repairStore` first and this process runs
+    /// neither. Insurance that has to be bought in the right order isn't
+    /// cheap here — leave the extension out of the meal graph entirely.
     private func saveToLibrary(_ label: ParsedLabel, name: String) {
         guard let container = try? SharedStore.modelContainer() else { return }
         let context = ModelContext(container)

@@ -184,6 +184,16 @@ struct ContentView: View {
             // extension: no new target, no app-group hand-off, and the
             // parse runs in the foreground app with its full memory.
             if url.isFileURL {
+                // Not over a live import. Swapping a `.sheet(item:)`
+                // binding out from under a presented sheet is the
+                // dismissal race this file already documents, and the
+                // replaced request's `cleanUp` never runs because
+                // onDismiss doesn't fire on a swap. Dropping is the safe
+                // side HERE specifically: a Files URL is the user's own
+                // file and still sitting in Files, so re-opening it
+                // costs one tap — unlike an inbox deposit, which is why
+                // `drainMenuInbox` leaves its extras queued instead.
+                guard sharedImport == nil else { return }
                 // Opened in place from Files — the user's own file, so
                 // isOurs stays false and it survives being read.
                 sharedImport = SharedImport(

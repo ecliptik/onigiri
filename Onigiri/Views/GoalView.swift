@@ -494,19 +494,25 @@ struct GoalView: View {
                 // read as a derivation, and the budget below comes from
                 // the measured burn, never from this one.
                 //
-                // It names the ambiguity on purpose. An earlier draft
-                // printed a delta instead and got it wrong in a way
-                // worth remembering: computed against the mean burn over
-                // the same tracked days — the honest basis, but not the
-                // number on screen — it read "265 below measured" three
-                // rows under an "Average daily burn" the reader could
-                // see was 306 away.
+                // The label mirrors the row above so the two read as
+                // one quantity measured two ways; "Burn, from your
+                // results" and "Implied by logs and scale" both tried
+                // to carry that on their own and read oddly detached.
+                //
+                // An earlier draft printed a DELTA instead of a caption
+                // and got it wrong in a way worth remembering: computed
+                // against the mean burn over the same tracked days — the
+                // honest basis, but not the number on screen — it read
+                // "265 below measured" three rows under an "Average
+                // daily burn" the reader could see was 306 away. The
+                // caption states the causes in prose or not at all; it
+                // never puts a second measured burn on the screen.
                 if let observed = model.trend.observedBurnKcal {
-                    LabeledContent("Implied by logs and scale") {
+                    LabeledContent("Average burn, from data") {
                         Text("≈ \(observed, format: .number.precision(.fractionLength(0))) kcal/day")
                             .monospacedDigit()
                     }
-                    Text("The first is measured. The second is what your food logs and weight change work out to — a gap can mean under-logging, the resting estimate, or water weight, so it is a cross-check rather than a correction.")
+                    Text("The first is measured. The second is what your food logs and weight change work out to — a cross-check, not a correction.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

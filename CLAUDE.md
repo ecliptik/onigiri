@@ -561,7 +561,7 @@ Each cost a debugging session.
   is ever wanted it must be OFFERED and stored, never applied. It needs
   `ObservedBurn.minimumTrackedDays` in the window or it says nothing: the
   tracked days' mean intake stands in for every day the scale moved across.
-  It renders as ONE LINE (`Implied by logs and scale`) directly BENEATH
+  It renders as ONE LINE (`Average burn, from data`) directly BENEATH
   `Average daily burn`, because a cross-check is unreadable away from the
   thing it checks, with a caption under the pair. That caption is load-bearing
   twice: it says what the second number is, and it BREAKS THE COLUMN — three

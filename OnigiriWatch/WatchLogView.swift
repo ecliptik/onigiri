@@ -18,9 +18,21 @@ struct WatchLogView: View {
                         .foregroundStyle(.secondary)
                 }
                 if let flash = model.flash {
-                    Text(flash)
-                        .font(.footnote)
-                        .foregroundStyle(model.flashIsError ? .orange : .green)
+                    // A delete's flash carries tap-to-undo (WatchModel's
+                    // captured re-log) — the swipe that put it up has no
+                    // confirm, so this is the way back.
+                    if let undo = model.flashUndo {
+                        Button(action: undo) {
+                            Text("\(flash) · Undo")
+                                .font(.footnote)
+                                .foregroundStyle(.green)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        Text(flash)
+                            .font(.footnote)
+                            .foregroundStyle(model.flashIsError ? .orange : .green)
+                    }
                 }
                 ForEach(model.foodLog) { entry in
                     if entry.editable {

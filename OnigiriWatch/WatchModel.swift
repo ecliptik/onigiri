@@ -31,6 +31,11 @@ final class WatchModel {
     /// log indistinguishable from a successful one.
     private(set) var flash: String?
     private(set) var flashIsError = false
+    /// Tap-to-undo riding the flash — set only by `deleteEntry`, whose
+    /// no-confirm swipe otherwise had no way back (the phone's Undo
+    /// toast rule; audit, 2026-08-17). The render sites turn the flash
+    /// into a Button while this is non-nil.
+    private(set) var flashUndo: (() -> Void)?
     private var flashGeneration = 0
     /// Write access denied — zeros forever otherwise, with no hint.
     private(set) var healthDenied = false
@@ -183,7 +188,16 @@ final class WatchModel {
         do {
             try await health.deleteFoodEntry(id: entry.id)
             WKInterfaceDevice.current().play(.success)
-            showFlash("Removed \(entry.name)", isError: false)
+            // No confirmation, BECAUSE undo: the phone deletes the same
+            // way (LogActions.deleteFoodEntry — "an accidental swipe
+            // costs one tap"), and the watch had shipped the no-confirm
+            // half without the way back — a fat-fingered swipe on a
+            // 41 mm screen permanently deleted a HealthKit sample
+            // (audit, 2026-08-17). The captured entry re-logs whole,
+            // meal composition included.
+            showFlash("Removed \(entry.name)", isError: false) { [weak self] in
+                Task { await self?.undoDelete(entry) }
+            }
             sync.notifyPhoneOfLog()
             await refresh()
             return true
@@ -191,6 +205,29 @@ final class WatchModel {
             WKInterfaceDevice.current().play(.failure)
             showFlash(Self.writeFailureFlash(error, verb: "remove"), isError: true)
             return false
+        }
+    }
+
+    /// Re-log the captured entry — the flash's tap-to-undo.
+    private func undoDelete(_ entry: FoodLogEntry) async {
+        guard !isLogging else { return }
+        isLogging = true
+        defer { isLogging = false }
+        flashUndo = nil
+        do {
+            _ = try await health.logFood(
+                name: entry.name, kcal: entry.kcal, sodiumMg: entry.sodiumMg,
+                nutrients: entry.nutrients, category: entry.category,
+                date: entry.date, aiGenerated: entry.aiGenerated,
+                quantity: entry.quantity, mealItems: entry.mealItems
+            )
+            WKInterfaceDevice.current().play(.success)
+            showFlash("Restored \(entry.name) ✓", isError: false)
+            sync.notifyPhoneOfLog()
+            await refresh()
+        } catch {
+            WKInterfaceDevice.current().play(.failure)
+            showFlash(Self.writeFailureFlash(error, verb: "restore"), isError: true)
         }
     }
 
@@ -243,18 +280,27 @@ final class WatchModel {
         }
     }
 
-    private func showFlash(_ message: String, isError: Bool) {
+    private func showFlash(_ message: String, isError: Bool, undo: (() -> Void)? = nil) {
         flashGeneration += 1
         let generation = flashGeneration
         flash = message
         flashIsError = isError
+        flashUndo = undo
         // Spoken too: the transient text + haptic left VoiceOver users
         // unable to tell a failed log from a success (the model's own
         // comment about ambiguous haptics, one layer up).
-        AccessibilityNotification.Announcement(message).post()
+        AccessibilityNotification.Announcement(
+            undo == nil ? message : "\(message). Undo available."
+        ).post()
         Task {
-            try? await Task.sleep(for: .seconds(isError ? 4 : 2))
-            if generation == flashGeneration { flash = nil }
+            // An undo-carrying flash lingers longer: it IS the recovery
+            // affordance (the phone toast holds five seconds for the
+            // same reason).
+            try? await Task.sleep(for: .seconds(isError ? 4 : (undo == nil ? 2 : 6)))
+            if generation == flashGeneration {
+                flash = nil
+                flashUndo = nil
+            }
         }
     }
 }

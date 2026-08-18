@@ -67,12 +67,24 @@ struct WatchHomeView: View {
                     .tint(.blue)
 
                     // Success flash / failure hint: the haptic alone made
-                    // a failed log look exactly like a working one.
+                    // a failed log look exactly like a working one. A
+                    // flash carrying an undo (a delete) is a Button —
+                    // the tap re-logs the captured entry (WatchModel).
                     if let flash = model.flash {
-                        Text(flash)
-                            .font(.caption2)
-                            .foregroundStyle(model.flashIsError ? .orange : .green)
-                            .multilineTextAlignment(.center)
+                        if let undo = model.flashUndo {
+                            Button(action: undo) {
+                                Text("\(flash) · Undo")
+                                    .font(.caption2)
+                                    .foregroundStyle(.green)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            Text(flash)
+                                .font(.caption2)
+                                .foregroundStyle(model.flashIsError ? .orange : .green)
+                                .multilineTextAlignment(.center)
+                        }
                     } else if model.healthDenied {
                         Text("Health access is off — allow Onigiri in the Health app on your iPhone.")
                             .font(.caption2)

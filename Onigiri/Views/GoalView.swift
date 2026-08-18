@@ -313,13 +313,13 @@ struct GoalView: View {
     private func todaySection(_ plan: CalorieBudget.Plan) -> some View {
         if let todayBudget {
             Section {
-                LabeledContent("Budget for Today") {
+                LabeledContent("Budget for today") {
                     Text("\(todayBudget, format: .number.precision(.fractionLength(0))) kcal")
                         .monospacedDigit()
                 }
                 // The user's own word for intake — this row follows the
                 // Settings choice like every other intake readout.
-                LabeledContent("\(intakeWord.label) Today") {
+                LabeledContent("\(intakeWord.label) today") {
                     Text("\(model.todayIntakeKcal, format: .number.precision(.fractionLength(0))) kcal")
                         .monospacedDigit()
                 }
@@ -336,7 +336,7 @@ struct GoalView: View {
                 // how-it-is-built copy for length. Keep that split; if
                 // this row ever needs the caveat inline, shorten the
                 // LABEL rather than refilling the footer.
-                LabeledContent("Burned Today") {
+                LabeledContent("Burned today") {
                     Text("\(model.todayDayBurnKcal, format: .number.precision(.fractionLength(0))) kcal")
                         .monospacedDigit()
                 }
@@ -481,6 +481,35 @@ struct GoalView: View {
                     } ?? "≈ 2,000 kcal/day (assumed)")
                         .monospacedDigit()
                 }
+                // Beside the measured figure, because a cross-check is
+                // unreadable away from the thing it checks (the user,
+                // 2026-08-18). ONE LINE, like every row here — a
+                // trailing VStack overflows the width and makes
+                // LabeledContent stack label above value, which is what
+                // this row did alone at the bottom of the group.
+                //
+                // The caption is doing two jobs. It says what the second
+                // number IS, and it BREAKS THE COLUMN: three descending
+                // figures in a row (2,784 → 2,478 → 2,320) invite being
+                // read as a derivation, and the budget below comes from
+                // the measured burn, never from this one.
+                //
+                // It names the ambiguity on purpose. An earlier draft
+                // printed a delta instead and got it wrong in a way
+                // worth remembering: computed against the mean burn over
+                // the same tracked days — the honest basis, but not the
+                // number on screen — it read "265 below measured" three
+                // rows under an "Average daily burn" the reader could
+                // see was 306 away.
+                if let observed = model.trend.observedBurnKcal {
+                    LabeledContent("Implied by logs and scale") {
+                        Text("≈ \(observed, format: .number.precision(.fractionLength(0))) kcal/day")
+                            .monospacedDigit()
+                    }
+                    Text("The first is measured. The second is what your food logs and weight change work out to — a gap can mean under-logging, the resting estimate, or water weight, so it is a cross-check rather than a correction.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if let plan {
                     LabeledContent("Budget, average day") {
                         Text("≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
@@ -511,27 +540,6 @@ struct GoalView: View {
                 // trailing-average substitution PLAN-earned-budget
                 // deleted — silently, which is worse than the version
                 // that was removed.
-                // ONE LINE, like every other row here. A trailing VStack
-                // overflowed the row's width, so LabeledContent fell back
-                // to stacking label above value and this row alone broke
-                // the screen's rhythm (the user, 2026-08-18).
-                //
-                // The second line also carried a real fault. It read the
-                // delta against the mean burn over the same tracked days,
-                // which is the honest basis for the subtraction but is
-                // NOT the number on screen — so it announced "265 below
-                // measured" three rows under an "Average daily burn" of
-                // 2,784, where the visible difference is 306. Two
-                // measured burns on one screen is the contradiction the
-                // two-budgets rule exists to prevent. The comparison is
-                // left to the reader against the row they can actually
-                // see, and no second baseline is implied.
-                if let observed = model.trend.observedBurnKcal {
-                    LabeledContent("Burn, from your results") {
-                        Text("≈ \(observed, format: .number.precision(.fractionLength(0))) kcal/day")
-                            .monospacedDigit()
-                    }
-                }
                 // Three sentences became two: this is the one place the
                 // mechanism belongs, so it keeps it and the Today
                 // footer above no longer repeats it.

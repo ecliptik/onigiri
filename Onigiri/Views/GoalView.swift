@@ -294,7 +294,7 @@ struct GoalView: View {
     /// (the user, 2026-08-10: "there's a lot here").
     ///
     /// The two budgets must stay TOLD APART, and since 2026-08-18 the
-    /// ROW LABEL carries that — "Today's Budget" here against "Budget,
+    /// ROW LABEL carries that — "Budget for Today" here against "Budget,
     /// average day" in the collapsed derivation group. It used to be the
     /// SECTION header ("Budget" under "Today"), which worked only while
     /// the row label was a bare "Budget"; naming the row is the stronger
@@ -313,7 +313,7 @@ struct GoalView: View {
     private func todaySection(_ plan: CalorieBudget.Plan) -> some View {
         if let todayBudget {
             Section {
-                LabeledContent("Today's Budget") {
+                LabeledContent("Budget for Today") {
                     Text("\(todayBudget, format: .number.precision(.fractionLength(0))) kcal")
                         .monospacedDigit()
                 }
@@ -511,24 +511,25 @@ struct GoalView: View {
                 // trailing-average substitution PLAN-earned-budget
                 // deleted — silently, which is worse than the version
                 // that was removed.
+                // ONE LINE, like every other row here. A trailing VStack
+                // overflowed the row's width, so LabeledContent fell back
+                // to stacking label above value and this row alone broke
+                // the screen's rhythm (the user, 2026-08-18).
+                //
+                // The second line also carried a real fault. It read the
+                // delta against the mean burn over the same tracked days,
+                // which is the honest basis for the subtraction but is
+                // NOT the number on screen — so it announced "265 below
+                // measured" three rows under an "Average daily burn" of
+                // 2,784, where the visible difference is 306. Two
+                // measured burns on one screen is the contradiction the
+                // two-budgets rule exists to prevent. The comparison is
+                // left to the reader against the row they can actually
+                // see, and no second baseline is implied.
                 if let observed = model.trend.observedBurnKcal {
                     LabeledContent("Burn, from your results") {
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text("≈ \(observed, format: .number.precision(.fractionLength(0))) kcal/day")
-                                .monospacedDigit()
-                            if let measured = model.trend.measuredBurnKcal {
-                                let delta = observed - measured
-                                // A near-match is the reassuring answer
-                                // and deserves to be readable as one.
-                                // "8 below measured" reads as a finding;
-                                // it is agreement.
-                                Text(abs(delta) < 50
-                                     ? "in line with measured"
-                                     : "\(abs(delta), format: .number.precision(.fractionLength(0))) kcal/day \(delta < 0 ? "below" : "above") measured")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+                        Text("≈ \(observed, format: .number.precision(.fractionLength(0))) kcal/day")
+                            .monospacedDigit()
                     }
                 }
                 // Three sentences became two: this is the one place the

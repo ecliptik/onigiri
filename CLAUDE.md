@@ -531,7 +531,7 @@ Each cost a debugging session.
   only ("an average day"), never to judge a day. Goal shows BOTH budgets and
   they must stay TOLD APART — one label on two different numbers reads as a
   contradiction (726 kcal apart at lunchtime, 2026-08-02). Since 2026-08-18 the
-  ROW LABEL carries that distinction: `Today's Budget` under a `Budget` section
+  ROW LABEL carries that distinction: `Budget for Today` under a `Budget` section
   (live `dayBurn − deficit`) against `Budget, average day` inside the collapsed
   "How the budget is set". From 2026-08-11 to 2026-08-18 the SECTION carried it
   instead (`Budget` under `Today`), which worked only while the visible row was
@@ -540,8 +540,8 @@ Each cost a debugging session.
   called "Budget" side by side again, and don't re-add a today-floor to the
   projection to close the gap — that was tried, it made the average neither one
   thing nor the other, and it didn't close it.
-- That `Budget` section is ONE FACT PER ROW — `Today's Budget`, `<intake word>
-  Today`, `Burned Today`. It used to print the pair as "612 / 1595 kcal", which
+- That `Budget` section is ONE FACT PER ROW — `Budget for Today`, `<intake
+  word> Today`, `Burned Today`, all three sharing the same `… Today` shape. It used to print the pair as "612 / 1595 kcal", which
   asks the reader to subtract and never says which side is which (the user,
   2026-08-18). `Burned Today` is `dayBurn`, NOT a measurement so far, and the
   longer label makes that easier to misread than the old bare "Burn" did — what
@@ -560,6 +560,12 @@ Each cost a debugging session.
   is ever wanted it must be OFFERED and stored, never applied. It needs
   `ObservedBurn.minimumTrackedDays` in the window or it says nothing: the
   tracked days' mean intake stands in for every day the scale moved across.
+  It renders as ONE LINE like its neighbours, and carries NO delta caption —
+  a companion "N below measured" was built and removed the same day, because
+  the honest basis for that subtraction (the mean over the same tracked days)
+  is not the burn on screen, so it read "265 below" three rows under an
+  "Average daily burn" the reader could see was 306 away. Two measured burns
+  on one screen is the very contradiction the two-budgets rule forbids.
 - A day's VERDICT has two gates, and both live in `StreakCalendar`:
   `isTracked` (intake ≥ `untrackedBelowKcal`, default 500 — too little
   logged to trust the numbers; Settings → Metrics tunes it, 0 disables)

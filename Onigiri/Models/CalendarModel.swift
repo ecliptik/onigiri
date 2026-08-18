@@ -120,10 +120,15 @@ final class CalendarModel {
             .map { calendar.startOfDay(for: $0.day) })
     }
 
-    /// The deficit target a day is judged against: its snapshot when one
-    /// was recorded, else today's target.
+    /// The deficit target a day is judged against — the ONE rule shared
+    /// with Today (DeficitTargetHistory.judgingTarget): history by its
+    /// own snapshot, the day in progress by the LIVE target. This used
+    /// to read the snapshot for today too, so for the minute between a
+    /// goal edit and the next re-stamp this card and Today's goal card
+    /// could show two different targets for the same live day (audit,
+    /// 2026-08-17).
     func targetDeficit(for day: Date) -> Double? {
-        DeficitTargetHistory.target(on: day) ?? targetDeficitKcal
+        DeficitTargetHistory.judgingTarget(on: day, live: targetDeficitKcal)
     }
 
     /// Water total and eating-event count for the month detail.

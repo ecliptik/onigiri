@@ -71,4 +71,36 @@ struct DeficitTargetHistoryTests {
         DeficitTargetHistory.recordToday(targetKcal: nil, now: day, calendar: calendar)
         #expect(DeficitTargetHistory.hasSnapshot(on: day, calendar: calendar))
     }
+
+    /// The one shared judging rule (Today's goal card AND the
+    /// Calendar's day card call this): TODAY is judged by the live
+    /// target even when a snapshot exists — a stale stamp must not
+    /// outrank a goal the user just edited — while history keeps the
+    /// bar it was actually held to, falling back to live only when
+    /// unstamped (audit, 2026-08-17: the two surfaces carried separate
+    /// copies of this rule and disagreed about the day in progress).
+    @Test func todayIsJudgedLiveHistoryByItsSnapshot() {
+        defer { SharedStore.defaults.removeObject(forKey: DeficitTargetHistory.key) }
+        let calendar = Calendar.current
+        let now = Date.now
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: now)!
+        let unstamped = calendar.date(from: DateComponents(year: 2014, month: 4, day: 4))!
+
+        DeficitTargetHistory.recordToday(targetKcal: 500, now: now, calendar: calendar)
+        DeficitTargetHistory.recordToday(targetKcal: 640, now: yesterday, calendar: calendar)
+
+        // The goal edit moved the live target to 320; today's stale 500
+        // stamp loses to it.
+        #expect(DeficitTargetHistory.judgingTarget(
+            on: now, live: 320, now: now, calendar: calendar) == 320)
+        // Yesterday keeps its own stamp.
+        #expect(DeficitTargetHistory.judgingTarget(
+            on: yesterday, live: 320, now: now, calendar: calendar) == 640)
+        // Pre-snapshot history falls back to the live target.
+        #expect(DeficitTargetHistory.judgingTarget(
+            on: unstamped, live: 320, now: now, calendar: calendar) == 320)
+        // A goal-less live plan judges today as nil, stamp or no stamp.
+        #expect(DeficitTargetHistory.judgingTarget(
+            on: now, live: nil, now: now, calendar: calendar) == nil)
+    }
 }

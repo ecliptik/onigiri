@@ -62,6 +62,21 @@ public enum DeficitTargetHistory {
         return value
     }
 
+    /// The ONE rule for which target judges a day — shared by Today's
+    /// goal card and the Calendar's day detail, which each carried their
+    /// own copy until they could disagree about the day in progress
+    /// (audit, 2026-08-17). History is judged by its own snapshot; TODAY
+    /// is judged by the live plan, never the stamp — a stale stamp
+    /// outranking a goal the user just edited is the bug TodayView fixed
+    /// on 2026-08-02, hoisted here so no surface can un-fix it locally.
+    public static func judgingTarget(
+        on day: Date, live: Double?,
+        now: Date = .now, calendar: Calendar = .current
+    ) -> Double? {
+        if calendar.isDate(day, inSameDayAs: now) { return live }
+        return target(on: day, calendar: calendar) ?? live
+    }
+
     /// Whether any rule was stamped on `day` — the "did today's plan
     /// load run yet" check, which `target(on:)`'s nil can no longer
     /// answer (maintenance days read nil there by design).

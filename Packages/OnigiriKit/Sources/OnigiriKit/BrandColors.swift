@@ -24,6 +24,24 @@ public extension Color {
     static let riceToast = Color(red: 0.89, green: 0.70, blue: 0.42)
     #endif
 
+    /// riceToast's VERDICT shade — what `sodiumStatus`/`remainingStatus`
+    /// return. The tint above is chrome and reads at large sizes, where
+    /// 3:1 is the bar; status color lands on small warning TEXT (the
+    /// "near limit" sodium figure, the "near budget" headline), which
+    /// WCAG AA holds to 4.5:1. The shared tint measured ≈3.3:1 on the
+    /// light-mode card white (audit, 2026-08-17), so light mode deepens
+    /// here (≈5.4:1 on white, ≈4.9:1 on riceCanvas); dark mode and
+    /// watchOS keep the bright tan, already ≈7:1 on black.
+    #if canImport(UIKit) && !os(watchOS)
+    static let riceToastStatus = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.89, green: 0.70, blue: 0.42, alpha: 1)
+            : UIColor(red: 0.55, green: 0.38, blue: 0.17, alpha: 1)
+    })
+    #else
+    static let riceToastStatus = Color(red: 0.89, green: 0.70, blue: 0.42)
+    #endif
+
     /// The nori green off the app icon's seaweed wrap — the brand's
     /// SECOND accent, for structure (section headers, chrome glyphs):
     /// riceToast stays the interactive tint, greys stay body text.
@@ -58,7 +76,7 @@ public extension Color {
     /// green when comfortably under, toast yellow within 300 mg, red over.
     static func sodiumStatus(mg: Double, limitMg: Double) -> Color {
         if mg > limitMg { return .red }
-        if mg >= limitMg - 300 { return .riceToast }
+        if mg >= limitMg - 300 { return .riceToastStatus }
         return .green
     }
 
@@ -90,7 +108,7 @@ public extension Color {
     /// budget, orange once over.
     static func remainingStatus(kcal: Double) -> Color {
         if kcal < 0 { return .orange }
-        if kcal <= 150 { return .riceToast }
+        if kcal <= 150 { return .riceToastStatus }
         return .green
     }
 

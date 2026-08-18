@@ -321,6 +321,12 @@ struct CalendarView: View {
         .onTapGesture {
             QuickActions.shared.dayRequest = selectedDay
         }
+        // ONE VoiceOver stop, like MonthGrid's DayCell and this file's
+        // own slotMetric: without combining, the goal line, the metrics,
+        // and the target caption were separate swipe stops and the
+        // button trait landed on none the user could tell apart (audit,
+        // 2026-08-17 — the grouping lesson slotMetric already recorded).
+        .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityHint("Opens this day on Today, where you can view and edit it")
         .animation(reduceMotion ? nil : .snappy, value: selectedDay)

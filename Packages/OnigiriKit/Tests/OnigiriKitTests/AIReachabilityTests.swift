@@ -89,4 +89,37 @@ struct AIReachabilityTests {
         #expect(AIReachability.isTransient(AIChatError.badStatus(429, "slow down")))
         #expect(!AIReachability.isTransient(AIChatError.badStatus(401, "invalid x-api-key")))
     }
+
+    // MARK: - A refused credential
+
+    /// 401/403 only. The provider read the request and turned the key
+    /// away — which is not a network problem and not a model declining.
+    @Test func onlyAuthFailuresCountAsRefused() {
+        #expect(AIReachability.isRejectedCredential(AIChatError.badStatus(401, "invalid x-api-key")))
+        #expect(AIReachability.isRejectedCredential(AIChatError.badStatus(403, nil)))
+        #expect(!AIReachability.isRejectedCredential(AIChatError.badStatus(429, nil)))
+        #expect(!AIReachability.isRejectedCredential(AIChatError.badStatus(500, nil)))
+        #expect(!AIReachability.isRejectedCredential(AIChatError.emptyContent))
+        #expect(!AIReachability.isRejectedCredential(urlError(.notConnectedToInternet)))
+    }
+
+    /// The two predicates answer DIFFERENT questions, and 401 is where
+    /// they part: not transient (do not retry, do not call it a dead
+    /// network) and yet refused (nothing was asked, so a fallback engine
+    /// may answer). One boolean could not say both, which is how a stale
+    /// key came to suppress the on-device fallback (audit, 2026-08-17).
+    @Test func refusedAndTransientAreIndependent() {
+        let refused = AIChatError.badStatus(401, nil)
+        #expect(AIReachability.isRejectedCredential(refused))
+        #expect(!AIReachability.isTransient(refused))
+
+        let busy = AIChatError.badStatus(503, nil)
+        #expect(!AIReachability.isRejectedCredential(busy))
+        #expect(AIReachability.isTransient(busy))
+
+        // And a genuine reply the guards threw out is neither: that one
+        // really was answered, and nothing else should second-guess it.
+        #expect(!AIReachability.isRejectedCredential(AIChatError.badResponse))
+        #expect(!AIReachability.isTransient(AIChatError.badResponse))
+    }
 }

@@ -83,7 +83,14 @@ struct LibraryReferencesTests {
         let meal = Meal(name: "Porridge", items: [MealItem(food: oats), MealItem(food: doomed)])
         context.insert(meal)
         try context.save()
-        meal.items[1].food = nil
+        // Found by NAME, not by index. A SwiftData to-many comes back
+        // unordered, so `items[1]` nils whichever item happened to sort
+        // there — half the time that was the oats, leaving the doomed
+        // food still referenced and the meal correctly named, which read
+        // as a failure. Flaky the day it was written (2026-08-17); it
+        // passed the first several runs.
+        let doomedItem = try #require(meal.items.first { $0.food?.name == "Doomed" })
+        doomedItem.food = nil
         try context.save()
 
         let meals = try context.fetch(FetchDescriptor<Meal>())

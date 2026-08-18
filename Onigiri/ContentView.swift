@@ -92,6 +92,14 @@ struct ContentView: View {
             }
             BackupService.backupIfDue(context: context)
             ReminderScheduler.shared.activate()
+            // The app half of the refused-credential notice. Installed
+            // here rather than called from FoodIntelligenceRemote
+            // directly: that file also compiles into the share
+            // extension, which has no toast of its own and leaves this
+            // nil.
+            FoodIntelligence.onCredentialRejected = { provider in
+                ToastCenter.shared.show("\(provider) rejected your API key — check Settings")
+            }
             // (The HealthKit log observer lives in OnigiriApp.init now —
             // a background relaunch never runs this .task.)
             // Existing installs never see onboarding: a goal means the

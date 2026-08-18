@@ -90,11 +90,54 @@ extension FoodIntelligence {
             }
         } catch {
             let transient = AIReachability.isTransient(error)
-            log.notice("""
-                remote AI fell back: \(String(describing: error)) \
-                (\(transient ? "unreachable — on-device may answer" : "answered, no fallback"))
-                """)
-            return transient ? .unavailable : .answered(nil)
+            // A REFUSED credential is `.unavailable`, not
+            // `.answered(nil)`. Nothing was asked of any model, so there
+            // is no answer for a fallback to second-guess — and
+            // `.unavailable`'s own definition already covers this: "also
+            // covers an unconfigured provider — there is nothing to
+            // ask", which is exactly what a rejected key leaves you
+            // with. Classed as an answer, it suppressed the on-device
+            // fallback the user had switched ON precisely for this, so a
+            // stale key returned NOTHING while a working engine sat idle
+            // (audit, 2026-08-17).
+            let rejected = AIReachability.isRejectedCredential(error)
+            let verdict: String
+            if transient {
+                verdict = "unreachable — on-device may answer"
+            } else if rejected {
+                verdict = "credential refused — on-device may answer"
+            } else {
+                verdict = "answered, no fallback"
+            }
+            log.notice("remote AI fell back: \(String(describing: error)) (\(verdict))")
+            if rejected { noteCredentialRejected() }
+            return (transient || rejected) ? .unavailable : .answered(nil)
+        }
+    }
+
+    /// Say ONCE, per launch, that the provider refused the key.
+    ///
+    /// The rest of this file fails silently on purpose — a model that
+    /// declines is not news. A credential is a different class: it fails
+    /// every time, for everything, until someone edits it, and the only
+    /// other way to find out is opening Settings and tapping Test. The
+    /// file's own rule already wanted this ("a key that silently stops
+    /// working must not look identical to one that works").
+    ///
+    /// Routed through a hook rather than calling `ToastCenter` because
+    /// this file also compiles into the share extension, which has no
+    /// toast to show. There it stays nil and nothing happens.
+    @MainActor static var onCredentialRejected: ((String) -> Void)?
+    /// Re-armed when a key is edited (Settings) — a fresh key deserves a
+    /// fresh warning if it is wrong too.
+    @MainActor static var credentialNoticeShown = false
+
+    private static func noteCredentialRejected() {
+        let provider = AIProviderSettings.selected.displayName
+        Task { @MainActor in
+            guard !credentialNoticeShown else { return }
+            credentialNoticeShown = true
+            onCredentialRejected?(provider)
         }
     }
 

@@ -1515,6 +1515,11 @@ private struct AISettingsScreen: View {
                     AIProviderSettings.saveSecret(raw, account: account)
                 }
                 aiTest = .idle
+                // A new key earns a fresh warning if it is wrong too —
+                // the refused-credential notice is once per launch, and
+                // editing the key is the one thing that makes it worth
+                // saying again.
+                FoodIntelligence.credentialNoticeShown = false
             }
             Button {
                 showAIKey.toggle()

@@ -57,4 +57,22 @@ public enum AIReachability {
     static func transientStatusCodes(_ code: Int) -> Bool {
         code == 408 || code == 429 || (500...599).contains(code)
     }
+
+    /// The provider REFUSED the credential — 401 or 403.
+    ///
+    /// Deliberately its own predicate rather than a case inside
+    /// `isTransient`, because the two answer different questions and
+    /// 401 gets opposite answers. "Should we retry, is the network
+    /// down?" — no, and that is why `transientStatusCodes` excludes it.
+    /// "May another engine try instead?" — yes: a refused key means
+    /// nothing was ever ASKED of a model, so there is no answer for a
+    /// fallback to second-guess. Collapsing both into one boolean is
+    /// what left a rejected key looking like a model that had replied
+    /// and declined (audit, 2026-08-17).
+    public static func isRejectedCredential(_ error: Error) -> Bool {
+        if case AIChatError.badStatus(let code, _) = error {
+            return code == 401 || code == 403
+        }
+        return false
+    }
 }

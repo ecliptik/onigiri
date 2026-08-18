@@ -180,6 +180,11 @@ public protocol HealthPlanReading: Sendable {
     /// needs. The trailing burn average it replaced is no longer a plan
     /// input on any surface.
     func bodyProfile() async -> (heightCm: Double?, ageYears: Int?, sex: BasalEstimate.Sex)
+    /// Day stamp on the last weight this store successfully answered
+    /// with — the evidence a nil weight is judged against
+    /// (`HealthReadTrust`). Read AFTER the weight, since the basis read
+    /// writes through to it.
+    func lastGoodWeightDay() -> String?
 }
 
 public extension HealthPlanReading {
@@ -187,6 +192,13 @@ public extension HealthPlanReading {
     /// without implementing anything.
     func targetBasisWeightLb() async -> Double? {
         (try? await latestBodyMassLb()) ?? nil
+    }
+
+    /// The write-through `targetBasisWeightLb` maintains. It is a cache
+    /// lookup, not a query — the seal check must not put a second sample
+    /// query on the complication/widget refresh path.
+    func lastGoodWeightDay() -> String? {
+        HealthKitService.cachedPlanWeightLb()?.day
     }
 }
 
@@ -207,10 +219,21 @@ public extension DailyPlanLoader {
         goal: SyncedGoal?,
         health: any HealthPlanReading = HealthKitService()
     ) async -> State {
-        let state = await computeState(goal: goal, health: health)
+        let (state, planWeightLb) = await computeState(goal: goal, health: health)
         // Every plan load stamps today's rule, so history keeps being
         // judged by the goal in force that day even after the goal (or
-        // the weight behind it) changes.
+        // the weight behind it) changes — but ONLY when the read behind
+        // it can be trusted. A SEALED store answers a weight goal with a
+        // nil target, which `recordToday` writes as 0 = "any deficit
+        // earns the badge", permanently re-grading the day. See
+        // `HealthReadTrust.mayStampPlan`; a rendered sealed read is
+        // corrected by the next refresh, a stamped one never is.
+        guard HealthReadTrust.mayStampPlan(
+            deficitTargetKcal: state.deficitTargetKcal,
+            hasWeightGoal: goal.map { !$0.isMaintenance } ?? false,
+            weightLb: planWeightLb,
+            cachedDay: health.lastGoodWeightDay()
+        ) else { return state }
         DeficitTargetHistory.recordToday(
             targetKcal: state.deficitTargetKcal,
             isMaintenance: goal?.isMaintenance ?? false
@@ -272,16 +295,24 @@ public extension DailyPlanLoader {
     }
     #endif
 
+    /// The state, plus the weight the plan was built from — the caller
+    /// needs that weight to judge whether the read was trustworthy
+    /// enough to persist (`HealthReadTrust.mayStampPlan`), and re-reading
+    /// it would put a second sample query on the complication/widget
+    /// refresh path for a value already in hand. It is the RESOLVED
+    /// weight, because that is the one the deficit target rides: on the
+    /// watch a fresh synced weight makes the target trustworthy even
+    /// while the local store is sealed.
     private static func computeState(
         goal: SyncedGoal?,
         health: any HealthPlanReading
-    ) async -> State {
+    ) async -> (state: State, planWeightLb: Double?) {
         guard let goal else {
             let summary = (try? await health.todaySummary()) ?? .zero
-            return makeState(
+            return (makeState(
                 goal: nil, summary: summary,
                 estimatedRestingKcal: nil, healthWeightLb: nil
-            )
+            ), nil)
         }
         // The reads are independent — run them concurrently; this path
         // is complication/widget refresh latency. Weight is read even in
@@ -324,13 +355,13 @@ public extension DailyPlanLoader {
             restingKcal: summary.restingBurnKcal,
             estimatedRestingKcal: estimatedResting
         )
-        return makeState(
+        return (makeState(
             goal: goal,
             summary: summary,
             estimatedRestingKcal: estimatedResting,
             healthWeightLb: weightLb,
             todayBurnFloorKcal: TodayBurnFloor.ratcheted(dayBurn)
-        )
+        ), weightLb)
     }
 
     /// On the watch, prefer the phone's synced weight while fresh (see

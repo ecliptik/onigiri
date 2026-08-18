@@ -50,6 +50,48 @@ struct HealthReadTrustTests {
             weightLb: nil, cachedDay: day(-30), calendar: calendar, now: now))
     }
 
+    // MARK: - What may be PERSISTED from a read
+
+    /// The D1 case (2026-08-18): a weight goal, a nil target, and a
+    /// weight the store had minutes ago. `recordToday` would write 0,
+    /// which decodes to `.anyDeficit` and permanently re-grades the day.
+    @Test func aSealedReadMayNotStampAWeightGoalsMissingTarget() {
+        #expect(!HealthReadTrust.mayStampPlan(
+            deficitTargetKcal: nil, hasWeightGoal: true,
+            weightLb: nil, cachedDay: day(0), calendar: calendar, now: now))
+        #expect(!HealthReadTrust.mayStampPlan(
+            deficitTargetKcal: nil, hasWeightGoal: true,
+            weightLb: nil, cachedDay: day(-1), calendar: calendar, now: now))
+    }
+
+    /// A user with genuinely no weigh-ins is real information, not a bad
+    /// read — that day has no target and must go on saying so.
+    @Test func anHonestlyAbsentWeightStillStamps() {
+        #expect(HealthReadTrust.mayStampPlan(
+            deficitTargetKcal: nil, hasWeightGoal: true,
+            weightLb: nil, cachedDay: nil, calendar: calendar, now: now))
+        #expect(HealthReadTrust.mayStampPlan(
+            deficitTargetKcal: nil, hasWeightGoal: true,
+            weightLb: nil, cachedDay: day(-30), calendar: calendar, now: now))
+    }
+
+    /// Narrow on purpose. A target in hand, no goal at all, or a
+    /// maintenance day (whose sentinel is read off the GOAL, not off
+    /// Health) all stamp exactly as before — even mid-seal.
+    @Test func everyOtherStampIsUntouched() {
+        #expect(HealthReadTrust.mayStampPlan(
+            deficitTargetKcal: 700, hasWeightGoal: true,
+            weightLb: 210, cachedDay: day(0), calendar: calendar, now: now))
+        // No goal: 0 is the correct, intended stamp.
+        #expect(HealthReadTrust.mayStampPlan(
+            deficitTargetKcal: nil, hasWeightGoal: false,
+            weightLb: nil, cachedDay: day(0), calendar: calendar, now: now))
+        // Maintenance reads nil here too, and stamps its sentinel.
+        #expect(HealthReadTrust.mayStampPlan(
+            deficitTargetKcal: nil, hasWeightGoal: false,
+            weightLb: nil, cachedDay: day(-1), calendar: calendar, now: now))
+    }
+
     // MARK: - The cache that supplies the evidence
 
     /// A sealed read must not clear a recent cache. Clearing it would

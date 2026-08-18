@@ -103,4 +103,126 @@ struct DeficitTargetHistoryTests {
         #expect(DeficitTargetHistory.judgingTarget(
             on: now, live: nil, now: now, calendar: calendar) == nil)
     }
+
+    // MARK: - What the loader is allowed to write here
+    //
+    // These drive `DailyPlanLoader.load`, not `recordToday`, but they
+    // live in THIS suite deliberately: they assert on the one defaults
+    // key every test above shares, and only a serialized suite can do
+    // that without racing its own cleanup.
+
+    #if canImport(HealthKit)
+    /// A weight goal 100 days out and 20 lb to go: 20 × 3500 / 100.
+    private static func loseGoal(now: Date, calendar: Calendar) -> SyncedGoal {
+        SyncedGoal(
+            targetWeightLb: 190,
+            targetDate: calendar.date(byAdding: .day, value: 100, to: now)!,
+            // nil, as on the device where D1 was confirmed — with a
+            // fallback the sealed read borrows it and never reaches 0.
+            fallbackCurrentWeightLb: nil
+        )
+    }
+
+    /// Today's key only. The plan-weight cache is NOT touched here —
+    /// two other suites own that key and clearing it from this one
+    /// would break them (and them, this one) under parallel execution.
+    /// The stub carries its own day stamp instead.
+    private func clearStamps() {
+        SharedStore.defaults.removeObject(forKey: DeficitTargetHistory.key)
+    }
+
+    /// D1 (2026-08-18): a SEALED store answers a weight goal with a nil
+    /// target, which used to be stamped as 0 — `DayBadgeRule.anyDeficit`,
+    /// "any deficit earns the badge". "The last value recorded on a day
+    /// stands", so one sealed load at 23:50 permanently re-graded the
+    /// day to a laxer rule, silently. Five such reads were in the
+    /// device's own journal across two days.
+    @MainActor
+    @Test func aSealedReadCannotOverwriteAGoodStamp() async {
+        clearStamps()
+        defer { clearStamps() }
+        let calendar = Calendar.current
+        let now = Date.now
+        let today = DeficitTargetHistory.dayKey(for: now, calendar: calendar)
+        let goal = Self.loseGoal(now: now, calendar: calendar)
+
+        // A healthy read stamps the real target: 20 lb over 100 days.
+        _ = await DailyPlanLoader.load(
+            goal: goal,
+            health: StubPlanHealth(weightLb: 210, lastGoodDay: today))
+        #expect(DeficitTargetHistory.target(on: now, calendar: calendar) == 700)
+
+        // Then the store seals: every channel empty, weight nil, while
+        // the cache still vouches for a weight read moments ago.
+        _ = await DailyPlanLoader.load(
+            goal: goal,
+            health: StubPlanHealth(weightLb: nil, lastGoodDay: today))
+        #expect(DeficitTargetHistory.target(on: now, calendar: calendar) == 700)
+    }
+
+    /// The other half of the line: a user who genuinely has no weigh-ins
+    /// has no target, and that is real information the day must keep.
+    /// Nothing cached ⇒ the nil is believed ⇒ the stamp happens.
+    @MainActor
+    @Test func aUserWithNoWeighInsStillStamps() async {
+        clearStamps()
+        defer { clearStamps() }
+        let calendar = Calendar.current
+        let now = Date.now
+
+        // Nothing ever cached: the nil weight is honest, and must be
+        // believed exactly as it was before the guard existed.
+        _ = await DailyPlanLoader.load(
+            goal: Self.loseGoal(now: now, calendar: calendar),
+            health: StubPlanHealth(weightLb: nil, lastGoodDay: nil))
+        #expect(DeficitTargetHistory.hasSnapshot(on: now, calendar: calendar))
+        #expect(DeficitTargetHistory.target(on: now, calendar: calendar) == 0)
+    }
+
+    /// And a MAINTENANCE day stamps its sentinel through a sealed read:
+    /// that value is read off the goal, not off Health, so withholding
+    /// the store can't change what gets written.
+    @MainActor
+    @Test func maintenanceStampsEvenThroughASealedRead() async {
+        clearStamps()
+        defer { clearStamps() }
+        let calendar = Calendar.current
+        let now = Date.now
+        let today = DeficitTargetHistory.dayKey(for: now, calendar: calendar)
+
+        _ = await DailyPlanLoader.load(
+            goal: SyncedGoal(
+                targetWeightLb: 200, targetDate: now,
+                fallbackCurrentWeightLb: nil, mode: GoalMode.maintain),
+            health: StubPlanHealth(weightLb: nil, lastGoodDay: today))
+        #expect(DeficitTargetHistory.hasSnapshot(on: now, calendar: calendar))
+        #expect(
+            DeficitTargetHistory.rulesByDay(calendar: calendar)[calendar.startOfDay(for: now)]
+                == .maintenanceBand
+        )
+    }
+    #endif
 }
+
+#if canImport(HealthKit)
+/// The loader's whole read surface, stubbed. `weightLb: nil` IS the
+/// sealed signature — the store is allowed to answer empty rather than
+/// throw, which is why `HealthReadTrust` judges the result instead of
+/// probing the store (see its doc comment).
+@MainActor
+private struct StubPlanHealth: HealthPlanReading {
+    let weightLb: Double?
+    /// Day stamp on the last weight the store answered with — supplied
+    /// here rather than through the real App Group cache, which two
+    /// other suites clear concurrently.
+    let lastGoodDay: String?
+    var summary: DailyEnergySummary = .zero
+
+    func todaySummary() async throws -> DailyEnergySummary { summary }
+    func latestBodyMassLb() async throws -> Double? { weightLb }
+    func bodyProfile() async -> (heightCm: Double?, ageYears: Int?, sex: BasalEstimate.Sex) {
+        (nil, nil, .unspecified)
+    }
+    func lastGoodWeightDay() -> String? { lastGoodDay }
+}
+#endif

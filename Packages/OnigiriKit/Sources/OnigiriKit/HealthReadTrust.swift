@@ -52,4 +52,49 @@ public enum HealthReadTrust {
         // snapshot forever. It self-heals in two days.
         return WatchSync.isRecentDay(cachedDay, calendar: calendar, now: now)
     }
+
+    /// Whether a plan built from this read may be STAMPED into
+    /// `DeficitTargetHistory`.
+    ///
+    /// The seal check was live on all three RENDER paths and absent from
+    /// the one PERSISTENCE path, which is worse than the bug it was
+    /// written for: a bad render is replaced by the next good one, a bad
+    /// stamp is permanent. `DeficitTargetHistory` records "the last value
+    /// recorded on a day stands", and `recordToday` writes `targetKcal ??
+    /// 0` — which decodes to `DayBadgeRule.anyDeficit`, "no goal, any
+    /// deficit earns the badge". So one sealed plan load late in the day
+    /// silently re-graded that day to a laxer rule, forever. Confirmed on
+    /// device 2026-08-18 from the phone's own plan journal: five `wt=NIL`
+    /// reads across two days, interleaved with healthy ones.
+    ///
+    /// Deliberately NARROW. It refuses exactly one case — a weight goal
+    /// whose target came back nil beside a weight the store had a moment
+    /// ago — because every other nil is real information the history is
+    /// supposed to keep:
+    ///
+    /// - No goal at all: 0 is the correct stamp, and no weight is even
+    ///   read on that path.
+    /// - Maintenance: the sentinel is read off the GOAL, not off Health,
+    ///   so nothing the store withheld can change what gets written.
+    /// - A user with genuinely no weigh-ins (nil weight, nothing cached
+    ///   recently): `looksSealed` believes that absence, and so does this
+    ///   — it is the existing behavior and it must survive.
+    ///
+    /// A stamped 0 keeps its meaning; nothing already stored is rewritten.
+    public static func mayStampPlan(
+        deficitTargetKcal: Double?,
+        /// A live weight goal — not maintenance, not the goal-less path.
+        hasWeightGoal: Bool,
+        /// The weight the target was derived from (nil when the read
+        /// came back empty).
+        weightLb: Double?,
+        cachedDay: String?,
+        calendar: Calendar = .current,
+        now: Date = .now
+    ) -> Bool {
+        guard hasWeightGoal, deficitTargetKcal == nil else { return true }
+        return !looksSealed(
+            weightLb: weightLb, cachedDay: cachedDay, calendar: calendar, now: now
+        )
+    }
 }

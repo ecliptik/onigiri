@@ -142,15 +142,14 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
             category: $0.category, nutrients: $0.nutrients, isMeal: false
         ) }
         // Favorites mix meals and foods like the phone's Favorites scope,
-        // interleaved by recency before the cap.
+        // interleaved by recency before the cap. Meal rows REUSE the
+        // synced rows built above (zip is index-aligned with allMeals):
+        // totalKcal/totalNutrients reduce over `items`, and rebuilding
+        // them here walked every favorite meal's items a second time on
+        // every push (audit, 2026-08-17).
         let favorites = (
-            allMeals.filter(\.isFavorite).map { meal in
-                (meal.recencyDate, SyncedMeal(
-                    id: meal.uuid, name: meal.name, kcal: meal.totalKcal, sodiumMg: meal.totalSodiumMg,
-                    category: meal.category, nutrients: meal.totalNutrients,
-                    items: meal.loggedItems, isMeal: true
-                ))
-            }
+            zip(allMeals, meals).filter { $0.0.isFavorite }
+                .map { ($0.0.recencyDate, $0.1) }
             + allFoods.filter(\.isFavorite).map { food in
                 (food.recencyDate, SyncedMeal(
                     id: UUID(), name: food.name, kcal: food.kcal, sodiumMg: food.sodiumMg,

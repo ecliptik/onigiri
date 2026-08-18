@@ -129,18 +129,24 @@ struct TodayView: View {
                     // the day-paging swipes.
                     dayTitleButton
                         .id(ScrollTarget.dayTop)
-                    if hSizeClass == .regular {
-                        // iPad/regular width: the summary beside the log,
-                        // not a phone column stretched across the canvas.
-                        HStack(alignment: .top, spacing: Layout.screenSpacing) {
-                            VStack(spacing: Layout.screenSpacing) { summaryStack }
-                                .frame(maxWidth: .infinity)
-                            VStack(spacing: Layout.screenSpacing) { logStack(scrollProxy) }
-                                .frame(maxWidth: .infinity)
-                        }
-                    } else {
-                        summaryStack
-                        logStack(scrollProxy)
+                    // iPad/regular width: the summary beside the log,
+                    // not a phone column stretched across the canvas.
+                    // AnyLayout, NOT an if/else on the size class: the
+                    // branch flip destroyed the subtree's identity, so
+                    // every crossing (dragging an iPad Split View
+                    // divider, rotating a Max phone) tore down and
+                    // rebuilt the whole summary+log — resetting
+                    // animations and swipe state mid-gesture (audit,
+                    // 2026-08-17; TodayCardWidget.trackedMetricsRow is
+                    // the in-repo precedent).
+                    let paneLayout = hSizeClass == .regular
+                        ? AnyLayout(HStackLayout(alignment: .top, spacing: Layout.screenSpacing))
+                        : AnyLayout(VStackLayout(spacing: Layout.screenSpacing))
+                    paneLayout {
+                        VStack(spacing: Layout.screenSpacing) { summaryStack }
+                            .frame(maxWidth: .infinity)
+                        VStack(spacing: Layout.screenSpacing) { logStack(scrollProxy) }
+                            .frame(maxWidth: .infinity)
                     }
                 }
                 .padding(.bottom, 24)
@@ -867,9 +873,12 @@ struct TodayView: View {
     /// days that are over.
     private func requiredDeficit(for goal: GoalSettings) -> Double {
         if goal.isMaintenance { return 0 }
-        if model.isToday { return currentRequiredDeficit(for: goal) ?? 0 }
-        return DeficitTargetHistory.target(on: model.selectedDate)
-            ?? currentRequiredDeficit(for: goal) ?? 0
+        // The ONE shared rule (DeficitTargetHistory.judgingTarget) —
+        // the Calendar's day card runs the same call, so the two
+        // surfaces can no longer disagree about the day in progress.
+        return DeficitTargetHistory.judgingTarget(
+            on: model.selectedDate, live: currentRequiredDeficit(for: goal)
+        ) ?? 0
     }
 
     /// The deficit target today's plan implies — the fallback for a past
@@ -1838,14 +1847,9 @@ private struct WaterEditSheet: View {
                 }
             }
         }
-        .presentationCornerRadius(28)
-        .presentationBackground {
-            ZStack {
-                Rectangle().fill(.thickMaterial)
-                UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
-                    .strokeBorder(Color.primary.opacity(0.15), lineWidth: 1)
-            }
-        }
+        // Shared card chrome — Style.swift's sheetCardChrome, one
+        // implementation with FoodsView's Contains card.
+        .sheetCardChrome()
     }
 }
 

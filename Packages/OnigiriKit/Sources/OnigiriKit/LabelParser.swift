@@ -240,10 +240,14 @@ public enum LabelParser {
             // Tolerance from the smaller box: a tall value ("Calories 280"
             // display print) must not get absorbed into the small-print
             // caption line above it.
-            if var last = rows.last,
-               abs(obs.midY - last.midY) < 0.6 * min(obs.h, last.height) {
-                last.cells.append(obs)
-                rows[rows.count - 1] = last
+            // Mutated through the subscript, in place: pulling the row
+            // out (`var last = rows.last`) held a second reference to
+            // its cells buffer, so every append paid a full
+            // copy-on-write clone of the accumulated row (audit,
+            // 2026-08-17). Same fix in MenuTableParser's cluster pair.
+            if let lastIndex = rows.indices.last,
+               abs(obs.midY - rows[lastIndex].midY) < 0.6 * min(obs.h, rows[lastIndex].height) {
+                rows[lastIndex].cells.append(obs)
             } else {
                 rows.append(Row(cells: [obs], midY: obs.midY, height: obs.h))
             }

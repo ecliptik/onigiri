@@ -160,6 +160,27 @@ extension View {
         scrollContentBackground(.hidden)
             .background(Color.riceCanvas.ignoresSafeArea())
     }
+
+    /// The frosted card chrome for half-height sheets presented OVER
+    /// other sheets (Edit Water, the meal "Contains" card): material +
+    /// hairline rim so the card reads as physically separate in both
+    /// modes. ONE implementation — Today and Foods each carried a
+    /// byte-identical copy of this ZStack (audit, 2026-08-17).
+    ///
+    /// Deliberately material on iOS 26 too, not `glassEffect`: glass is
+    /// for chrome floating over content, and a sheet's background IS a
+    /// content surface — the system's own sheets stay material. The
+    /// 2026-08-17 audit proposed the port; declined on that ground.
+    func sheetCardChrome() -> some View {
+        presentationCornerRadius(28)
+            .presentationBackground {
+                ZStack {
+                    Rectangle().fill(.thickMaterial)
+                    UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
+                        .strokeBorder(Color.primary.opacity(0.15), lineWidth: 1)
+                }
+            }
+    }
 }
 
 extension View {

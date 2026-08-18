@@ -497,7 +497,47 @@ struct FoodsView: View {
     /// results, and in the Log sheet, which marks them unconditionally.
     /// A row should read the same wherever it appears (the user,
     /// 2026-08-14).
+    /// Equatable gate for a library row: any @Query write (one favorite
+    /// toggle, one form save) re-runs this whole screen's body, and
+    /// without the gate every visible row re-built its buttons and
+    /// swipe actions for it (audit, 2026-08-17 — FoodLogRow's rule in
+    /// TodayView, extended to the library). `content` runs only when
+    /// what the row RENDERS changed.
+    private struct EquatableLibraryRow<Content: View>: View, Equatable {
+        let name: String
+        let detail: String
+        let kcal: Double
+        let metric: TrackedNutrient
+        let metricAmount: Double
+        let isFavorite: Bool
+        let aiGenerated: Bool
+        @ViewBuilder let content: () -> Content
+
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.name == rhs.name && lhs.detail == rhs.detail
+                && lhs.kcal == rhs.kcal && lhs.metric == rhs.metric
+                && lhs.metricAmount == rhs.metricAmount
+                && lhs.isFavorite == rhs.isFavorite
+                && lhs.aiGenerated == rhs.aiGenerated
+        }
+
+        var body: some View { content() }
+    }
+
     private func mealRow(_ meal: Meal) -> some View {
+        EquatableLibraryRow(
+            name: meal.name, detail: "", kcal: meal.totalKcal,
+            metric: libraryMetric,
+            metricAmount: libraryMetric.itemAmount(
+                sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients) ?? 0,
+            isFavorite: meal.isFavorite, aiGenerated: meal.aiGenerated
+        ) {
+            mealRowBody(meal)
+        }
+        .equatable()
+    }
+
+    private func mealRowBody(_ meal: Meal) -> some View {
         HStack(spacing: 10) {
             // Just the meal's name — listing every member made rows
             // balloon (the user).
@@ -582,6 +622,19 @@ struct FoodsView: View {
     /// slot stay deliberate); long press skips it and logs the default
     /// portion — the fast path when the label serving is the serving.
     private func foodRow(_ food: Food) -> some View {
+        EquatableLibraryRow(
+            name: food.name, detail: food.servingDescription, kcal: food.kcal,
+            metric: libraryMetric,
+            metricAmount: libraryMetric.itemAmount(
+                sodiumMg: food.sodiumMg, nutrients: food.nutrients) ?? 0,
+            isFavorite: food.isFavorite, aiGenerated: food.aiGenerated
+        ) {
+            foodRowBody(food)
+        }
+        .equatable()
+    }
+
+    private func foodRowBody(_ food: Food) -> some View {
         HStack(spacing: 10) {
             LibraryRow(
                 name: food.name,
@@ -1184,15 +1237,10 @@ struct PortionSheet: View {
         // sheet) the default background blends into the sheet behind —
         // in dark mode only the grabber separated them. The material,
         // a larger corner radius, and a hairline rim make it read as a
-        // physically separate card in both modes.
-        .presentationCornerRadius(28)
-        .presentationBackground {
-            ZStack {
-                Rectangle().fill(.thickMaterial)
-                UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
-                    .strokeBorder(Color.primary.opacity(0.15), lineWidth: 1)
-            }
-        }
+        // physically separate card in both modes. Shared chrome —
+        // Style.swift's sheetCardChrome, one implementation with the
+        // Edit Water sheet.
+        .sheetCardChrome()
     }
 
     /// One Contains row. A row whose food is still in the library opens

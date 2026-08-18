@@ -76,12 +76,18 @@ public enum LibrarySearch {
     public static func groups<T: LibrarySearchable>(
         _ items: [T], query: String, sortByRecency: Bool = true
     ) -> [(group: LibrarySearchGroup, items: [T])] {
-        let matched = items.filter { matches($0, query: query) }
+        // One pass to bucket the matches, not a re-filter per group:
+        // this runs on every keystroke over the whole library, and the
+        // four-case rescan was a needless 5× constant on that hot path
+        // (audit, 2026-08-17). Ordering is unchanged — groups render in
+        // allCases order, rows sort per group, empties drop.
+        let buckets = Dictionary(
+            grouping: items.filter { matches($0, query: query) },
+            by: { Self.group($0) }
+        )
         return LibrarySearchGroup.allCases.compactMap { group in
-            let inGroup = matched
-                .filter { Self.group($0) == group }
-                .sorted { ranked($0, $1, byRecency: sortByRecency) }
-            return inGroup.isEmpty ? nil : (group, inGroup)
+            guard let inGroup = buckets[group] else { return nil }
+            return (group, inGroup.sorted { ranked($0, $1, byRecency: sortByRecency) })
         }
     }
 

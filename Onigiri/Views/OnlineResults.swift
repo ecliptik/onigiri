@@ -345,6 +345,22 @@ final class OnlineFoodSearch {
         }
     }
 
+    /// A row's own await on its detail: joins the (unstructured)
+    /// in-flight fetch or the cache, so the ROW holds the result in its
+    /// own @State instead of reading the shared dictionaries in its
+    /// body — Observation tracks stored properties whole, so every
+    /// write to `products` used to re-evaluate EVERY visible row, N×
+    /// per results burst (audit, 2026-08-17). nil = the fetch failed.
+    func detail(awaiting barcode: String) async -> ScannedProduct? {
+        if let cached = products[barcode] { return cached }
+        if detailFailures.contains(barcode) { return nil }
+        loadDetail(for: barcode)
+        if let task = detailTasks[barcode] {
+            return await task.value
+        }
+        return products[barcode]
+    }
+
     private func apply(_ product: ScannedProduct, for barcode: String) {
         products[barcode] = product
         // No calorie data at all — weed it, and backfill a page if
@@ -436,6 +452,17 @@ struct OnlineResultRow: View {
     let search: OnlineFoodSearch
     let onPick: () -> Void
 
+    /// Row-local copies (audit, 2026-08-17): the body read
+    /// `search.products[...]`/`.detailFailures` directly, and one row's
+    /// fetch landing re-evaluated every visible row (the RowSwipeState
+    /// isolation lesson, applied to search results). The `.task` below
+    /// awaits the SAME shared, unstructured fetch — still one request
+    /// per barcode, still running to completion off-screen — and only
+    /// this row re-renders when it lands. Scroll-off resets the @State;
+    /// scroll-back re-joins the cache instantly.
+    @State private var detail: ScannedProduct?
+    @State private var detailFailed = false
+
     var body: some View {
         Button(action: onPick) {
             HStack {
@@ -459,7 +486,7 @@ struct OnlineResultRow: View {
                 Spacer()
                 if search.fetchingCode == result.barcode {
                     ProgressView()
-                } else if let product = search.products[result.barcode] {
+                } else if let product = detail {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(product.kcal.map {
                             "\($0.formatted(.number.precision(.fractionLength(0)))) kcal"
@@ -472,14 +499,21 @@ struct OnlineResultRow: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                } else if !search.detailFailures.contains(result.barcode) {
+                } else if !detailFailed {
                     ProgressView()
                         .controlSize(.small)
                 }
             }
         }
         .disabled(search.fetchingCode != nil)
-        .task { search.loadDetail(for: result.barcode) }
+        .task {
+            guard detail == nil, !detailFailed else { return }
+            if let product = await search.detail(awaiting: result.barcode) {
+                detail = product
+            } else {
+                detailFailed = true
+            }
+        }
     }
 }
 

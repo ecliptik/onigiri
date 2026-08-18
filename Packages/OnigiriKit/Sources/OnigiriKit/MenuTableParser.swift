@@ -169,13 +169,18 @@ public enum MenuTableParser {
     static func cluster(_ observations: [LabelObservation]) -> [Band] {
         var bands: [Band] = []
         for run in observations.sorted(by: { $0.midY > $1.midY }) {
-            if var last = bands.last,
-               abs(run.midY - last.midY) < 0.5 * min(run.h, last.height) {
-                last.runs.append(run)
-                last.midY = (last.midY * Double(last.runs.count - 1) + run.midY)
-                    / Double(last.runs.count)
-                last.height = min(last.height, run.h)
-                bands[bands.count - 1] = last
+            // Mutated through the subscript, in place: the pulled-out
+            // copy (`var last`) held a second reference to the runs
+            // buffer, so every append paid a full copy-on-write clone of
+            // the accumulated band (audit, 2026-08-17 — same shape as
+            // LabelParser.clusterRows and joinSubPitch below).
+            if let lastIndex = bands.indices.last,
+               abs(run.midY - bands[lastIndex].midY) < 0.5 * min(run.h, bands[lastIndex].height) {
+                bands[lastIndex].runs.append(run)
+                bands[lastIndex].midY = (bands[lastIndex].midY
+                    * Double(bands[lastIndex].runs.count - 1) + run.midY)
+                    / Double(bands[lastIndex].runs.count)
+                bands[lastIndex].height = min(bands[lastIndex].height, run.h)
             } else {
                 bands.append(Band(runs: [run], midY: run.midY, height: run.h))
             }
@@ -235,22 +240,22 @@ public enum MenuTableParser {
 
         var joined: [Band] = []
         for band in bands {
-            guard var last = joined.last,
-                  abs(last.midY - band.midY) < threshold,
-                  !(anchor(last) && anchor(band)),
-                  !requireSimilarHeight || similarHeight(last, band)
+            // Subscript mutation — the same COW rationale as `cluster`.
+            guard let lastIndex = joined.indices.last,
+                  abs(joined[lastIndex].midY - band.midY) < threshold,
+                  !(anchor(joined[lastIndex]) && anchor(band)),
+                  !requireSimilarHeight || similarHeight(joined[lastIndex], band)
             else {
                 joined.append(band)
                 continue
             }
-            last.runs.append(contentsOf: band.runs)
-            last.runs.sort { $0.x < $1.x }
-            last.numberCount += band.numberCount
-            last.hasTextRun = last.hasTextRun || band.hasTextRun
+            joined[lastIndex].runs.append(contentsOf: band.runs)
+            joined[lastIndex].runs.sort { $0.x < $1.x }
+            joined[lastIndex].numberCount += band.numberCount
+            joined[lastIndex].hasTextRun = joined[lastIndex].hasTextRun || band.hasTextRun
             // Keep the ANCHOR's geometry: a name that trails its numbers
             // must not drag the band's midY away from the row.
-            last.height = min(last.height, band.height)
-            joined[joined.count - 1] = last
+            joined[lastIndex].height = min(joined[lastIndex].height, band.height)
         }
         return joined
     }

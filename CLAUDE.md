@@ -86,8 +86,13 @@ cd Packages/OnigiriKit && swift test     # pure-logic tests; ALSO needs the
 
 ```sh
 TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
-  -scheme Onigiri -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+  -scheme Onigiri -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   -derivedDataPath build test -only-testing:OnigiriTests
+  # An iOS 26+ sim, or every eval skips. "iPhone 16 Pro" stopped
+  # working 2026-08-17: the roster now holds TWO sims by that name
+  # (18.5 floor-repro + 18.6) and xcodebuild refuses the ambiguity —
+  # and neither runs the model anyway. Check `simctl list` if this
+  # name drifts again.
 ```
 
 - Commits are GPG-signed: run `git commit` with the sandbox disabled (gpg needs
@@ -615,21 +620,18 @@ Each cost a debugging session.
   that script, never by hand-transcribing. On iOS 26 the documents-request
   table branch runs first; real photos produce tables, rendered label graphics
   don't, so the geometry parser is a load-bearing fallback, not legacy.
-- Screenshot import (`plans/PLAN-screenshot-nutrition.md`): the entry doors take
-  a PASTED image as well as the camera, and every route — those two plus the
-  scan sheet's own photo pick — runs ONE cascade, `FoodImageReader` (OCR →
-  LabelParser → refine → identify). Never fork that path; a screenshot must
-  read the way a photographed label does. A separate "Choose Photo" door was
-  built and REMOVED the same day (the user, 2026-07-24): the scan sheet's
-  photos button already covers saved images.
-- The paste door is gated on `hasImages`, a detection property that raises no
-  prompt, re-checked on appear AND foreground (the clipboard changes while
-  backgrounded — copy in Safari, then switch — where `changedNotification` is
-  unreliable). It is a plain `DoorRowLabel` reading
-  `UIPasteboard.general.itemProviders`, NOT SwiftUI's `PasteButton`, so the
-  system paste alert is VISIBLE; RESOLVED on device 2026-07-24 that iOS asks
-  ONCE, not per paste. A declined paste and an empty clipboard are
-  indistinguishable (iOS returns nothing for both), hence one shared message.
+- Screenshot import (`plans/PLAN-screenshot-nutrition.md`): every image route —
+  the camera, the scan sheet's photo pick, and a SHARED image (share sheet or
+  Files) — runs ONE cascade, `FoodImageReader` (OCR → LabelParser → refine →
+  identify). Never fork that path; a screenshot must read the way a
+  photographed label does. Two extra doors were built and REMOVED: a "Choose
+  Photo" row (the user, 2026-07-24 — the scan sheet's photos button covers
+  saved images) and the clipboard PASTE door (the user, 2026-08-17 — the
+  share sheet covers copy-in-Safari end to end, and the paste row was a
+  second door to the same cascade plus a system paste prompt). Don't
+  re-propose either; the paste-era lessons (`hasImages` detection, visible
+  paste alert, decline-vs-empty ambiguity) are recorded in
+  PLAN-screenshot-nutrition if a clipboard route ever returns.
 - `FoodImageSource.imported` additionally runs the screenshot read, which
   supplies the food NAME a photographed panel never carries; deterministic
   values always win over it, and a name equal to the serving is DROPPED (the

@@ -286,3 +286,25 @@ screenshot path is written but unverified, since keys are device-local
 and the simulator has no Keychain access to them. Part A3 (paste into
 the food form's Name field via `pasteConfiguration`) and Part D (share
 extension) are unbuilt by choice.
+
+## 2026-08-17 — the paste door is removed; the eval gate is built
+
+The clipboard paste door (Part A) is REMOVED (the user): the share
+route covers the copy-in-Safari case end to end — share the screenshot
+or the page straight into Onigiri — so the paste row had become a
+second door to the same `FoodImageReader` cascade with a system paste
+prompt on top. What the door taught stays recorded above for any
+future clipboard route: `hasImages` is the prompt-free detection
+property; a custom row (not `PasteButton`) keeps the system paste
+alert VISIBLE, and iOS asks once, not per paste (resolved on device
+2026-07-24); a declined paste and an empty clipboard are
+indistinguishable, hence one shared message.
+
+The screenshot-read eval golden set flagged "NOT built" above now
+exists: `testReadNutritionScreenshotGoldenSet` and
+`testReadNutritionScreenshotRejectsPagesWithoutFigures` in
+`FoodIntelligenceEvals.swift`, gated by `Gate.screenshotName` /
+`Gate.screenshotExact` (both set before the first run; the rejects
+set carries the Salt & Straw copyright-year shape). The
+remote-provider screenshot path remains unverified on device, as
+noted.

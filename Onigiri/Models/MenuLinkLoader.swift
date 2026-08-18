@@ -35,6 +35,22 @@ enum MenuLinkLoader {
     /// on a spinner forever.
     static let timeout: Duration = .seconds(25)
 
+    /// Bounded like the search clients, and NOT `URLSession.shared`.
+    ///
+    /// The 25 s above only ever raced the WKWebView render; the three
+    /// raw fetches inherited `URLSession.shared`'s 60 s default, so one
+    /// slow-but-not-dead host could stack a 60 s download, the render,
+    /// and a further 60 s probe — over two minutes of spinner against a
+    /// file whose own comment promises "must not hang the import sheet
+    /// on a spinner forever" (audit, 2026-08-17). Ephemeral because
+    /// nothing about somebody's shared page is worth caching to disk.
+    private static let session: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 30
+        return URLSession(configuration: configuration)
+    }()
+
     /// Returns a local PDF file the caller owns and must delete.
     static func pdf(for url: URL) async throws -> URL {
         let data: Data
@@ -87,12 +103,19 @@ enum MenuLinkLoader {
     /// markup — tags out, words left, and the same reader that handles a
     /// screenshot takes it from there.
     static func pageText(for url: URL) async -> String? {
-        guard let (data, response) = try? await URLSession.shared.data(from: url) else { return nil }
+        guard let (data, response) = try? await session.data(from: url) else { return nil }
         let mime = (response as? HTTPURLResponse)?.mimeType ?? response.mimeType ?? ""
         guard mime.localizedCaseInsensitiveContains("html") else { return nil }
         guard let html = String(data: data, encoding: .utf8)
             ?? String(data: data, encoding: .isoLatin1) else { return nil }
-        return PageText.stripped(from: html)
+        // Off the main actor, for the reason ShareFlow already gives its
+        // PDF parse: "even fast the work has no business on the thread
+        // drawing the spinner". This enum is `@MainActor`, so three
+        // regex passes over a whole JS-laden page were running there
+        // (audit, 2026-08-17).
+        return await Task.detached(priority: .userInitiated) {
+            PageText.stripped(from: html)
+        }.value
     }
 
     /// Whether a rendered page actually produced a readable table. The
@@ -110,27 +133,40 @@ enum MenuLinkLoader {
     /// a handful of candidates so a page full of links cannot turn one
     /// share into a crawl.
     private static func embeddedPDF(pageAt url: URL) async -> Data? {
-        guard let (data, _) = try? await URLSession.shared.data(from: url),
+        guard let (data, _) = try? await session.data(from: url),
               let html = String(data: data, encoding: .utf8) else { return nil }
-        let pattern = /https?:\/\/[^\s"'<>()\\]{10,400}/
-        var seen = Set<String>()
-        var tried = 0
-        for match in html.matches(of: pattern) {
-            let text = String(match.output)
-            let lower = text.lowercased()
-            guard lower.contains(".pdf") || lower.contains("/pdf/") else { continue }
-            guard seen.insert(text).inserted, let candidate = URL(string: text) else { continue }
-            tried += 1
-            if tried > 4 { break }
+        // The scan is pure and runs off the main actor; the downloads
+        // that follow stay here, since they are just awaits.
+        let candidates = await Task.detached(priority: .userInitiated) {
+            pdfCandidates(in: html)
+        }.value
+        for candidate in candidates {
             if let pdf = try? await downloadPDF(from: candidate) { return pdf }
         }
         return nil
     }
 
+    /// PDF-looking links a page names, deduped, capped so a page full of
+    /// links cannot turn one share into a crawl.
+    nonisolated private static func pdfCandidates(in html: String) -> [URL] {
+        let pattern = /https?:\/\/[^\s"'<>()\\]{10,400}/
+        var seen = Set<String>()
+        var found: [URL] = []
+        for match in html.matches(of: pattern) {
+            let text = String(match.output)
+            let lower = text.lowercased()
+            guard lower.contains(".pdf") || lower.contains("/pdf/") else { continue }
+            guard seen.insert(text).inserted, let candidate = URL(string: text) else { continue }
+            found.append(candidate)
+            if found.count == 4 { break }
+        }
+        return found
+    }
+
     /// Only when the server actually says PDF — a 404 page is HTML and
     /// would otherwise be "downloaded" as a zero-item menu.
     private static func downloadPDF(from url: URL) async throws -> Data {
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         let mime = (response as? HTTPURLResponse)?.mimeType ?? response.mimeType ?? ""
         guard mime.localizedCaseInsensitiveContains("pdf") else { throw Failure.notAMenu }
         return data

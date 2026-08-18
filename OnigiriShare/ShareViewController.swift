@@ -75,6 +75,26 @@ final class ShareViewController: UIViewController {
         }
     }
 
+    /// Give up the claim AND stop renewing it. The two have to move
+    /// together — every release goes through here for that reason.
+    ///
+    /// Releasing alone was not enough: the renewal loop above woke 30 s
+    /// later and claimed the inbox straight back, re-instating exactly
+    /// what had just been handed over. On the success path that is the
+    /// 2026-08-16 bug returning — the app skips a deposit it is being
+    /// given, and "open Onigiri" leads to nothing (audit, 2026-08-17).
+    ///
+    /// Note which path is NOT here: a FAILED read leaves its card up on
+    /// purpose, and this extension is still alive and still owns what it
+    /// deposited, so it goes on renewing until the user dismisses it.
+    /// Stopping there would let the claim lapse under a live extension,
+    /// which is the race the claim exists to prevent.
+    private func stopClaiming() {
+        claimRenewal?.cancel()
+        claimRenewal = nil
+        ShareInbox.releaseClaim()
+    }
+
     private func handleShare() async {
         let providers = attachments()
         // Order matters: a Safari share of a PDF page can carry BOTH the
@@ -172,9 +192,8 @@ final class ShareViewController: UIViewController {
             // Logged OR cancelled, the deposit goes: the net exists for a
             // process that died, and this one didn't. Cancelling here has
             // to cancel it everywhere, which was the whole complaint.
-            self.claimRenewal?.cancel()
             ShareInbox.clear()
-            ShareInbox.releaseClaim()
+            self.stopClaiming()
             self.extensionContext?.completeRequest(returningItems: [])
         }
         let host = UIHostingController(rootView: flow)
@@ -277,7 +296,7 @@ final class ShareViewController: UIViewController {
             // "open Onigiri" led to nothing at all (2026-08-16). The
             // claim exists to stop the app racing a LIVE extension; this
             // one is finished.
-            ShareInbox.releaseClaim()
+            stopClaiming()
             Task {
                 try? await Task.sleep(for: .milliseconds(1100))
                 extensionContext?.completeRequest(returningItems: [])
@@ -311,7 +330,7 @@ final class ShareViewController: UIViewController {
             // A failure the user dismissed is not a crash to recover
             // from, so nothing is left waiting for the app.
             ShareInbox.clear()
-            ShareInbox.releaseClaim()
+            self?.stopClaiming()
             self?.extensionContext?.completeRequest(returningItems: [])
         }, for: .touchUpInside)
 

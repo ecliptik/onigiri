@@ -950,7 +950,17 @@ final class OnigiriUITests: XCTestCase {
 
         // Stock: the seeded library is gone.
         switchTab(in: app, to: "Foods")
-        let seededFood = app.staticTexts["Chicken breast"]
+        // Any-element label match, NOT `app.staticTexts`: a library row
+        // carries `.isButton`, so its text is never exposed as a
+        // StaticText and that query can't match whatever the app does.
+        // Which made the assertion below pass vacuously — "library empty
+        // after reset" was true of an app that had reset nothing — while
+        // its twin after the restore could only ever fail. Both went
+        // unnoticed because this test is opt-in (audit, 2026-08-17).
+        // `testFoodsSearchSurvivesScroll` had the right shape all along.
+        let seededFood = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS 'Chicken breast'")
+        ).firstMatch
         XCTAssertFalse(seededFood.waitForExistence(timeout: 3), "Library empty after reset")
 
         // Relaunch restoring the backup (no seeder — what returns is
@@ -1856,8 +1866,12 @@ final class OnigiriUITests: XCTestCase {
         fileCell.tap()
 
         // Proof over toast: the imported library renders in the list.
+        // Any-element match for the same reason as the reset round-trip
+        // above — a row is a Button, so `staticTexts` never matches it.
         XCTAssertTrue(
-            app.staticTexts["Protein shake"].waitForExistence(timeout: 10),
+            app.descendants(matching: .any).matching(
+                NSPredicate(format: "label CONTAINS 'Protein shake'")
+            ).firstMatch.waitForExistence(timeout: 10),
             "Imported food appears in Foods"
         )
         attachShot(named: "imported")

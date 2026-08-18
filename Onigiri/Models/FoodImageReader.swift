@@ -116,7 +116,15 @@ enum FoodImageReader {
         // whole cascade (stacked against the model's own footprint —
         // jetsam territory on older devices). The redraw also bakes
         // orientation upright, so Vision gets .up pixels.
-        let image = image.downsampled(maxEdge: 3000)
+        //
+        // Detached, because this enum is MainActor and a plain call ran
+        // the whole resample ON the main thread — the screenshot-import
+        // path hands this full-resolution images, and a large one froze
+        // the app behind the "Analyzing photo…" spinner it had just put
+        // up (jpegForUpload's @concurrent lesson; audit, 2026-08-17).
+        let image = await Task.detached(priority: .userInitiated) {
+            image.downsampled(maxEdge: 3000)
+        }.value
         guard let cgImage = image.cgImage else {
             return .nothing(message: "Couldn't read that photo — try another.")
         }
@@ -389,7 +397,12 @@ extension UIImage {
     /// the orientation upright. Prefer `downsampled(data:maxEdge:)`
     /// when the bytes are still to hand — this one needs the full image
     /// decoded already.
-    func downsampled(maxEdge: CGFloat) -> UIImage {
+    ///
+    /// nonisolated: real CPU work run from a detached task (`cascade`),
+    /// and the target's MainActor default would otherwise pin it — and
+    /// the caller — to the main thread. UIGraphicsImageRenderer is
+    /// documented thread-safe, unlike the old UIGraphicsBeginImageContext.
+    nonisolated func downsampled(maxEdge: CGFloat) -> UIImage {
         let longest = max(size.width, size.height)
         guard longest > maxEdge, longest > 0 else { return self }
         let scale = maxEdge / longest

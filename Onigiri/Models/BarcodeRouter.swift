@@ -1,4 +1,4 @@
-import SwiftUI
+import Foundation
 import OnigiriKit
 
 /// The one known-barcode → portion-sheet / unknown-barcode → prefilled-form
@@ -19,7 +19,11 @@ enum BarcodeRouter {
     static func lookUp(
         _ code: String,
         savedTarget: (String) -> PortionTarget?,
-        isLookingUp: Binding<Bool>,
+        /// A plain callback, not a `Binding` — the one SwiftUI type this
+        /// route carried, and the reason its branch logic couldn't be
+        /// unit-tested without constructing one (audit, 2026-08-17).
+        /// Callers pass `{ isLookingUp = $0 }`.
+        setLookingUp: @escaping (Bool) -> Void,
         presentPortion: @escaping (PortionTarget) -> Void,
         presentForm: @escaping (ProductPrefill) -> Void,
         /// Reopen the scanner on the label path. Only for `.notFound` —
@@ -39,9 +43,9 @@ enum BarcodeRouter {
             Task { presentPortion(target) }
             return
         }
-        isLookingUp.wrappedValue = true
+        setLookingUp(true)
         Task {
-            defer { isLookingUp.wrappedValue = false }
+            defer { setLookingUp(false) }
             do {
                 let product = try await OpenFoodFactsClient().product(barcode: code)
                 presentForm(ProductPrefill(product: product))

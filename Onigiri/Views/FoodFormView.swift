@@ -254,19 +254,14 @@ struct FoodFormView: View {
                 // pick — the toolbar icon crowded the Save cluster);
                 // lookup status lands right beneath it. The search field
                 // lives at the bottom, system placement.
-                // The shared entry doors (scan + describe) — identical
-                // on Foods, the Log sheet, and here (PLAN-entry-doors).
-                // The component captions the describe door itself; the
-                // scan door shows this form's lookup provenance.
+                // The shared scan door — identical on Foods, the Log
+                // sheet, and here (PLAN-entry-doors). The scan door
+                // shows this form's lookup provenance in its caption.
                 if isBlankNewFood {
                     EntryDoorsSection(
                         scanBusy: isLookingUp,
                         scanCaption: lookupMessage,
-                        onScan: { activeSheet = .scanner(notice: nil) },
-                        // Same routes the scanner's outcomes take: fill
-                        // THIS form rather than presenting another one.
-                        onLabel: { parsed in applyLabel(parsed) },
-                        onFood: { product in apply(product) }
+                        onScan: { activeSheet = .scanner(notice: nil) }
                     )
                 } else if let lookupMessage {
                     // Prefilled opens hide the doors (the form isn't
@@ -440,6 +435,11 @@ struct FoodFormView: View {
                             confirmDiscard = true
                         } else {
                             offerTask?.cancel()
+                            // The inline database search dies with the
+                            // form — clear() cancels its search/page
+                            // tasks (audit, 2026-08-17; offerTask's
+                            // here-not-onDisappear rule).
+                            onlineSearch.clear()
                             dismiss()
                         }
                     }
@@ -525,6 +525,7 @@ struct FoodFormView: View {
             .alert("Discard changes?", isPresented: $confirmDiscard) {
                 Button("Discard", role: .destructive) {
                     offerTask?.cancel()
+                    onlineSearch.clear()
                     dismiss()
                 }
                 Button("Keep Editing", role: .cancel) {}
@@ -862,8 +863,10 @@ struct FoodFormView: View {
         // `.searchable`, and that modifier's transient teardown is what
         // turned two sibling cancels into silent dropped work (audit,
         // 2026-08-17). The cost of the paths not covered is one bounded
-        // lookup writing into @State that SwiftUI discards.
+        // lookup writing into @State that SwiftUI discards. The online
+        // search's tasks ride the same rule.
         offerTask?.cancel()
+        onlineSearch.clear()
         persist()
         // Every log confirms loudly; a silent edit-save read as a dead
         // button.

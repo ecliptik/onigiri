@@ -250,18 +250,7 @@ struct QuickLogSheet: View {
                     // form (PLAN-entry-doors / PLAN-unified-search).
                     EntryDoorsSection(
                         scanBusy: isLookingUpBarcode,
-                        onScan: { activeSheet = .scanner(notice: nil) },
-                        // Same routes the scanner's outcomes take — the
-                        // prefilled form, whose Log action returns here
-                        // with logDate intact.
-                        onLabel: { parsed in
-                            let prefill = ProductPrefill(product: parsed.scannedProduct())
-                            Task { activeSheet = .form(prefill) }
-                        },
-                        onFood: { product in
-                            let prefill = ProductPrefill(product: product)
-                            Task { activeSheet = .form(prefill) }
-                        }
+                        onScan: { activeSheet = .scanner(notice: nil) }
                     )
                 }
                 // Search leads with the tap-to-estimate row (AI →
@@ -445,13 +434,25 @@ struct QuickLogSheet: View {
                 // multi-item lunches, in the confirm slot (top trailing,
                 // emphasized) like Settings' Done.
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .keyboardShortcut(.cancelAction)
+                    Button("Cancel") {
+                        // The in-flight online search dies with the
+                        // sheet — clear() cancels its search/page tasks
+                        // instead of letting them keep the model alive
+                        // for one wasted round trip (audit, 2026-08-17;
+                        // deliberately here, never .onDisappear —
+                        // CLAUDE.md's .searchable teardown trap).
+                        onlineSearch.clear()
+                        dismiss()
+                    }
+                    .keyboardShortcut(.cancelAction)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                        .fontWeight(.semibold)
-                        .keyboardShortcut(.return, modifiers: .command)
+                    Button("Done") {
+                        onlineSearch.clear()
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .keyboardShortcut(.return, modifiers: .command)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     // The Foods screen's sort circle, third surface — kept on
@@ -692,7 +693,7 @@ struct QuickLogSheet: View {
         BarcodeRouter.lookUp(
             code,
             savedTarget: { libraryTarget(forBarcode: $0) },
-            isLookingUp: $isLookingUpBarcode,
+            setLookingUp: { isLookingUpBarcode = $0 },
             presentPortion: { activeSheet = .portion($0) },
             presentForm: { activeSheet = .form($0) },
             // Straight back to the camera, saying why — the panel is in

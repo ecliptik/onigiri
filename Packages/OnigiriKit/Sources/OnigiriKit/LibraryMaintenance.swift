@@ -23,21 +23,44 @@ public enum LibraryMaintenance {
     /// to prevent — now a compile error rather than a convention.
     @MainActor
     public static func repairStore(at url: URL) {
-        guard FileManager.default.fileExists(atPath: url.path),
-              let model = NSManagedObjectModel.makeManagedObjectModel(
-                for: [Food.self, Meal.self, MealItem.self, GoalSettings.self]
-              )
-        else { return }
+        // No store yet is every fresh install — silence is right there.
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        // The entity list is the SCHEMA's own, never a hand copy: the
+        // copy this replaced had nothing keeping it in step with
+        // `OnigiriSchemaV1.models`, so a future schema version would
+        // have silently starved the repair (audit, 2026-08-17).
+        guard let model = NSManagedObjectModel.makeManagedObjectModel(for: OnigiriSchemaV1.models)
+        else {
+            // The bridge failing means the repair switched itself off —
+            // at exactly the moment a schema change makes it likeliest
+            // to be needed. Never silent.
+            maintenanceLog.error("repairStore: SwiftData model bridge failed — repair skipped")
+            return
+        }
         let container = NSPersistentContainer(name: "Onigiri", managedObjectModel: model)
         let description = NSPersistentStoreDescription(url: url)
         description.shouldAddStoreAsynchronously = false
+        // This tool inspects a store; it must never evolve one — schema
+        // changes are OnigiriMigrationPlan's job alone. Both flags
+        // default TRUE, so left unset, a future model/store mismatch
+        // could quietly attempt an automatic migration of the shared
+        // store against this repair-only model. Mismatches now fail the
+        // load — loudly, below (audit, 2026-08-17).
+        description.shouldMigrateStoreAutomatically = false
+        description.shouldInferMappingModelAutomatically = false
         // SwiftData stores track persistent history; without opting in the
         // store mounts read-only and the repair can't save.
         description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
         container.persistentStoreDescriptions = [description]
-        var loadFailed = false
-        container.loadPersistentStores { _, error in loadFailed = error != nil }
-        guard !loadFailed else { return }
+        var loadError: Error?
+        container.loadPersistentStores { _, error in loadError = error }
+        if let loadError {
+            // The second exit that used to be silent — and the one that
+            // fires first when something is actually wrong (incompatible
+            // store, disk fault, bad bridge).
+            maintenanceLog.error("repairStore: store load failed, repair skipped: \(loadError)")
+            return
+        }
         defer {
             // A store left mounted here would collide with SwiftData
             // reopening the same file, whose failure path is fatalError —
@@ -151,8 +174,18 @@ public enum LibraryMaintenance {
     /// rather than a convention every future caller has to know.
     @MainActor
     public static func repairDanglingFoodReferences(context: ModelContext) {
-        guard let meals = try? context.fetch(FetchDescriptor<Meal>()),
-              let foods = try? context.fetch(FetchDescriptor<Food>()) else { return }
+        let meals: [Meal]
+        let foods: [Food]
+        do {
+            meals = try context.fetch(FetchDescriptor<Meal>())
+            foods = try context.fetch(FetchDescriptor<Food>())
+        } catch {
+            // Same rule as the save below: a repair that silently could
+            // not look is indistinguishable from one that found nothing
+            // wrong.
+            maintenanceLog.error("repairDanglingFoodReferences: fetch failed, skipping: \(error)")
+            return
+        }
         let liveFoodIDs = Set(foods.map(\.persistentModelID))
         var repaired = false
         for meal in meals {

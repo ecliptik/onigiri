@@ -23,7 +23,9 @@ struct DaySnapshot: Codable {
     /// Day totals for the two tracked-metric slots (Today card only).
     /// Optional so a pre-2.1 cached last-good snapshot still decodes;
     /// nil falls back to the summary's sodium/water, which is also the
-    /// answer whenever the slots hold their defaults.
+    /// answer whenever the slots hold their defaults. (Every field
+    /// added after the cache shipped decodes leniently now — see the
+    /// hand-written `init(from:)` below.)
     var trackedTotals: [Double]?
 
     static let placeholder = DaySnapshot(
@@ -87,6 +89,31 @@ struct DaySnapshot: Codable {
             guard let totals = trackedTotals, totals.indices.contains(slot - 1) else { return 0 }
             return totals[slot - 1]
         }
+    }
+}
+
+/// Decoding is hand-written so every field added after the cache first
+/// shipped decodes leniently: synthesized Decodable ignores the
+/// `= false` defaults above and THROWS on a cached blob missing a newer
+/// key — and this type's one decode site is the sealed-store fallback,
+/// where `try?` swallows the throw and falls through to computing a
+/// LIVE snapshot against a store already known sealed. That is the
+/// "confident zero day" this cache exists to stop, re-armed by the next
+/// field anyone adds (audit, 2026-08-17; `trackedTotals` learned it
+/// first, the watch's DailyPlanLoader.State applied it wholesale — this
+/// makes the phone match). Encoding stays synthesized, and the
+/// memberwise init survives because this lives in an extension.
+extension DaySnapshot {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        summary = try c.decode(DailyEnergySummary.self, forKey: .summary)
+        deficitTargetKcal = try c.decodeIfPresent(Double.self, forKey: .deficitTargetKcal)
+        remainingKcal = try c.decodeIfPresent(Double.self, forKey: .remainingKcal)
+        gaugeProgress = try c.decode(Double.self, forKey: .gaugeProgress)
+        waterGoalOz = try c.decode(Double.self, forKey: .waterGoalOz)
+        needsSetup = try c.decodeIfPresent(Bool.self, forKey: .needsSetup) ?? false
+        isMaintenance = try c.decodeIfPresent(Bool.self, forKey: .isMaintenance) ?? false
+        trackedTotals = try c.decodeIfPresent([Double].self, forKey: .trackedTotals)
     }
 }
 

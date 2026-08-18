@@ -101,9 +101,13 @@ public enum FoodDataCentralError: Error, LocalizedError {
 /// key (1,000 requests/hour free tier).
 public struct FoodDataCentralClient: Sendable {
     private let apiKey: String
+    private let urlSession: URLSession
 
-    public init(apiKey: String) {
+    /// `session` is injectable for the network tests' URLProtocol stub
+    /// (OpenFoodFactsClient's pattern); nil uses the shared 15 s one.
+    public init(apiKey: String, session: URLSession? = nil) {
         self.apiKey = apiKey
+        self.urlSession = session ?? Self.session
     }
 
     /// The generic datasets. Branded is excluded on purpose: it's US-only
@@ -242,7 +246,7 @@ public struct FoodDataCentralClient: Sendable {
     private func fetch(_ request: URLRequest) async throws -> Data {
         var request = request
         request.setValue(ClientIdentity.userAgent, forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await Self.session.data(for: request)
+        let (data, response) = try await urlSession.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw FoodDataCentralError.badResponse }
         switch http.statusCode {
         case 200: return data

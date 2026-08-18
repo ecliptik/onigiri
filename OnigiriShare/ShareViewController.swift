@@ -42,6 +42,13 @@ final class ShareViewController: UIViewController {
     /// Keeps the claim alive while this sheet is up — see `renewClaim`.
     private var claimRenewal: Task<Void, Never>?
 
+    /// What THIS session wrote into the dropbox. Cleanup is scoped to
+    /// these names — the inbox can hold another session's deposit (share
+    /// A, swipe the sheet away, share B), and a directory sweep here
+    /// deleted A's queued import the moment B finished (audit,
+    /// 2026-08-17).
+    private var depositedFiles: [String] = []
+
     override func viewDidLoad() {
         super.viewDidLoad()
         buildCard()
@@ -155,9 +162,10 @@ final class ShareViewController: UIViewController {
         // Deposited BEFORE the work starts, so an extension killed for
         // memory leaves the document for the app to find. Cleared only
         // once something is actually logged.
-        guard ShareInbox.deposit(data, name: name, kind: kind) else {
+        guard let deposited = ShareInbox.deposit(data, name: name, kind: kind) else {
             return finish(message: "Couldn't hand that to Onigiri.", ok: false)
         }
+        depositedFiles.append(deposited)
         // Photos are read HERE again. They were handed to the app for a
         // while on a diagnosis that turned out to be wrong: after
         // jetsam killed this extension during a full-size image decode
@@ -189,10 +197,12 @@ final class ShareViewController: UIViewController {
     private func present(_ payload: SharePayload) {
         let flow = ShareFlow(payload: payload) { [weak self] logged in
             guard let self else { return }
-            // Logged OR cancelled, the deposit goes: the net exists for a
+            // Logged OR cancelled, OUR deposit goes: the net exists for a
             // process that died, and this one didn't. Cancelling here has
-            // to cancel it everywhere, which was the whole complaint.
-            ShareInbox.clear()
+            // to cancel it everywhere, which was the whole complaint —
+            // but only for this session's own files; another session's
+            // queued share is not ours to sweep.
+            ShareInbox.clear(files: depositedFiles)
             self.stopClaiming()
             self.extensionContext?.completeRequest(returningItems: [])
         }
@@ -222,17 +232,19 @@ final class ShareViewController: UIViewController {
                 return finish(message: "Couldn't read that file.", ok: false)
             }
             let kind: ShareInbox.Kind = url.pathExtension.lowercased() == "pdf" ? .document : .image
-            guard ShareInbox.deposit(data, name: url.lastPathComponent, kind: kind) else {
+            guard let deposited = ShareInbox.deposit(data, name: url.lastPathComponent, kind: kind) else {
                 return finish(message: "Couldn't hand that to Onigiri.", ok: false)
             }
+            depositedFiles.append(deposited)
             return present(.document(local(data, name: url.lastPathComponent, ext: "pdf")))
         }
         guard url.scheme == "http" || url.scheme == "https" else {
             return finish(message: "Onigiri can't open that kind of link.", ok: false)
         }
-        guard ShareInbox.deposit(link: url) else {
+        guard let deposited = ShareInbox.deposit(link: url) else {
             return finish(message: "Couldn't hand that to Onigiri.", ok: false)
         }
+        depositedFiles.append(deposited)
         present(.link(url))
     }
 
@@ -328,8 +340,9 @@ final class ShareViewController: UIViewController {
         close.isHidden = true
         close.addAction(UIAction { [weak self] _ in
             // A failure the user dismissed is not a crash to recover
-            // from, so nothing is left waiting for the app.
-            ShareInbox.clear()
+            // from, so nothing of OURS is left waiting for the app —
+            // another session's queued share stays.
+            ShareInbox.clear(files: self?.depositedFiles ?? [])
             self?.stopClaiming()
             self?.extensionContext?.completeRequest(returningItems: [])
         }, for: .touchUpInside)

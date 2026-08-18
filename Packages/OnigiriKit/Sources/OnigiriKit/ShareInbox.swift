@@ -11,9 +11,13 @@ import Foundation
 /// the app will come up; the app finds what is waiting whenever it next
 /// runs.
 ///
-/// One-shot survives this: `take()` MOVES the item out and the caller
-/// deletes it after reading, so a document cannot be imported twice and
-/// an abandoned share cannot pile up.
+/// One-shot survives this: `take()` hands out a COPY and the original
+/// stays in the dropbox until the import sheet closes
+/// (`SharedImport.cleanUp`), so an app killed mid-import still finds the
+/// document on its next foreground; the drain guard (`sharedImport ==
+/// nil`) keeps one take from being offered twice while the sheet is up.
+/// Moving-on-take was the old contract, and it silently lost the share
+/// to any mid-import death (audit, 2026-08-17).
 public enum ShareInbox {
     /// What was shared. Three kinds because the share sheet offers three
     /// useful things and they route to different readers: a menu
@@ -54,11 +58,13 @@ public enum ShareInbox {
             .appending(path: "ShareInbox", directoryHint: .isDirectory)
     }
 
-    /// Called by the extension. Returns false when the group container is
-    /// unreachable, which the extension REPORTS rather than swallowing —
+    /// Called by the extension. Returns the deposited file's NAME — the
+    /// session keeps it so its own cleanup can be scoped to what it
+    /// wrote (`clear(files:)`) — or nil when the group container is
+    /// unreachable, which the extension REPORTS rather than swallowing:
     /// a share that silently did nothing is worse than one that failed.
     @discardableResult
-    public static func deposit(_ data: Data, name: String, kind: Kind) -> Bool {
+    public static func deposit(_ data: Data, name: String, kind: Kind) -> String? {
         write(data, name: name, pathExtension: kind.pathExtension)
     }
 
@@ -67,13 +73,13 @@ public enum ShareInbox {
     /// render — because that needs the network and a web view, and an
     /// extension has neither the memory budget nor the lifetime.
     @discardableResult
-    public static func deposit(link: URL) -> Bool {
-        guard let data = link.absoluteString.data(using: .utf8) else { return false }
+    public static func deposit(link: URL) -> String? {
+        guard let data = link.absoluteString.data(using: .utf8) else { return nil }
         return write(data, name: link.host() ?? "link", pathExtension: linkExtension)
     }
 
-    private static func write(_ data: Data, name: String, pathExtension: String) -> Bool {
-        guard let directory else { return false }
+    private static func write(_ data: Data, name: String, pathExtension: String) -> String? {
+        guard let directory else { return nil }
         do {
             try FileManager.default.createDirectory(
                 at: directory, withIntermediateDirectories: true)
@@ -84,19 +90,32 @@ public enum ShareInbox {
                 .appending(path: "\(UUID().uuidString)-\(safe(name))")
                 .appendingPathExtension(pathExtension)
             try data.write(to: file, options: .atomic)
-            return true
+            return file.lastPathComponent
         } catch {
-            return false
+            return nil
         }
     }
 
-    /// Called by the app on foreground. Takes the OLDEST waiting item;
+    /// What `take()` hands the app: the item to import, plus the inbox
+    /// original backing it. The original stays in the dropbox until the
+    /// import sheet's `cleanUp` deletes it, so a kill mid-import leaves
+    /// the share recoverable on the next foreground.
+    public struct Taken {
+        public let item: Item
+        public let inboxFile: URL
+    }
+
+    /// Called by the app on foreground. Returns the OLDEST waiting item;
     /// nil when nothing is waiting.
     ///
-    /// A file is MOVED into the caller's temporary directory and the
-    /// caller owns it from then on. A link marker is read and deleted
-    /// here — there is nothing for the caller to clean up.
-    public static func take() -> Item? {
+    /// A file is COPIED into the caller's temporary directory — not
+    /// moved: the original is the crash net, and it lives until the
+    /// caller's `cleanUp` (a re-offer after a mid-import death costs one
+    /// duplicate prompt; the old move lost the document outright). A
+    /// link marker likewise stays until `cleanUp`; only a malformed one
+    /// is deleted here, or it would be retried on every foreground
+    /// forever.
+    public static func take() -> Taken? {
         guard let directory else { return nil }
         let files = (try? FileManager.default.contentsOfDirectory(
             at: directory,
@@ -114,29 +133,34 @@ public enum ShareInbox {
         guard let oldest else { return nil }
 
         if oldest.pathExtension == linkExtension {
-            defer { try? FileManager.default.removeItem(at: oldest) }
             guard let data = try? Data(contentsOf: oldest),
                   let text = String(data: data, encoding: .utf8),
                   let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
                   url.scheme == "http" || url.scheme == "https"
-            else { return nil }
-            return .link(url)
+            else {
+                try? FileManager.default.removeItem(at: oldest)
+                return nil
+            }
+            return Taken(item: .link(url), inboxFile: oldest)
         }
 
         let destination = FileManager.default.temporaryDirectory
             .appending(path: oldest.lastPathComponent)
         try? FileManager.default.removeItem(at: destination)
         do {
-            try FileManager.default.moveItem(at: oldest, to: destination)
+            try FileManager.default.copyItem(at: oldest, to: destination)
         } catch {
             // Drop it rather than leave it to be retried forever on every
             // foreground.
             try? FileManager.default.removeItem(at: oldest)
             return nil
         }
-        return oldest.pathExtension == Kind.document.pathExtension
-            ? .document(destination)
-            : .image(destination)
+        return Taken(
+            item: oldest.pathExtension == Kind.document.pathExtension
+                ? .document(destination)
+                : .image(destination),
+            inboxFile: oldest
+        )
     }
 
     // MARK: Who owns the work
@@ -171,17 +195,21 @@ public enum ShareInbox {
         return Date.now.timeIntervalSince1970 - at < claimSeconds
     }
 
-    /// Called by the extension once it has finished the job itself:
-    /// nothing is waiting for the app, so nothing should be waiting in
-    /// the inbox. Everything, not just the newest — the deposit is a
-    /// safety net for a process that might die, and a net that keeps
-    /// what it caught after the catch succeeded re-imports it later.
-    public static func clear() {
+    /// Called by the extension once its own share is finished — logged,
+    /// cancelled, or a failure the user dismissed: nothing from THIS
+    /// session should be left waiting for the app. Scoped to the files
+    /// the session deposited, never a directory sweep: the dropbox can
+    /// hold a DIFFERENT session's deposit (share menu A, swipe the sheet
+    /// away — A's net is queued for the app — then share and finish B),
+    /// and the sweep this replaced deleted A silently on B's finish
+    /// (audit, 2026-08-17). "Two menus shared before the app is opened
+    /// must both survive" is `write`'s own contract; this is the other
+    /// half of keeping it.
+    public static func clear(files: [String]) {
         guard let directory else { return }
-        let files = (try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles])) ?? []
-        for file in files { try? FileManager.default.removeItem(at: file) }
+        for name in files {
+            try? FileManager.default.removeItem(at: directory.appending(path: name))
+        }
     }
 
     /// A shared file name is untrusted input — it comes from whatever app

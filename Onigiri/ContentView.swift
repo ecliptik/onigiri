@@ -239,8 +239,9 @@ struct ContentView: View {
         // left the other (the user, 2026-08-16). The claim expires on
         // its own, so a killed extension still hands over.
         guard !ShareInbox.isClaimed else { return }
-        guard sharedImport == nil, let item = ShareInbox.take() else { return }
-        sharedImport = SharedImport(item: item, isOurs: true)
+        guard sharedImport == nil, let taken = ShareInbox.take() else { return }
+        sharedImport = SharedImport(
+            item: taken.item, isOurs: true, inboxOriginal: taken.inboxFile)
     }
 
     private static let deepLinkDay: DateFormatter = {

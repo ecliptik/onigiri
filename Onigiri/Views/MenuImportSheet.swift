@@ -10,11 +10,19 @@ struct SharedImport: Identifiable {
     /// delete when the sheet closes. False for a file opened in place
     /// from Files, which belongs to the user and must survive being read.
     var isOurs = false
+    /// The dropbox original backing a drained item. It outlives `take()`
+    /// on purpose — an app killed mid-import re-finds the share on the
+    /// next foreground instead of losing it (audit, 2026-08-17) — and it
+    /// leaves with the sheet, here.
+    var inboxOriginal: URL?
 
-    /// Discard the working copy. One-shot means nothing lingers after
-    /// the sheet that read it.
+    /// Discard the working copy AND the dropbox original. One-shot means
+    /// nothing lingers after the sheet that read it.
     func cleanUp() {
         guard isOurs else { return }
+        if let inboxOriginal {
+            try? FileManager.default.removeItem(at: inboxOriginal)
+        }
         switch item {
         case .document(let url), .image(let url):
             try? FileManager.default.removeItem(at: url)

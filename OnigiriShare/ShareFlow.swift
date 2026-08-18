@@ -138,7 +138,16 @@ struct ShareFlow: View {
     private func read() async {
         switch payload {
         case .document(let url):
-            await readMenu(at: url, temporary: nil)
+            // `temporary: url` — OURS to delete. Every `.document` and
+            // `.image` payload is built by `ShareViewController.local`,
+            // a scratch copy in this extension's own tmp/, distinct from
+            // the `ShareInbox` deposit (which is the app's). Passing nil
+            // here left one behind, up to 40 MB, on every document share
+            // — and the whole point of the flow is that a guide is
+            // shared repeatedly (audit, 2026-08-17). Safe to drop after
+            // the read: `rows` holds the parse, so picking a second item
+            // never returns to the file.
+            await readMenu(at: url, temporary: url)
         case .link(let remote):
             status = "Looking for nutrition…"
             do {
@@ -211,6 +220,8 @@ struct ShareFlow: View {
     private static let maxImageEdge: CGFloat = 1800
 
     private func readImage(at url: URL) async {
+        // Same scratch copy, same ownership as the document case above.
+        defer { try? FileManager.default.removeItem(at: url) }
         // Decoded once, at size, from the bytes — see
         // UIImage.downsampled(data:maxEdge:). Loading it full-size is
         // what jetsam killed this extension for.

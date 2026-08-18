@@ -1979,8 +1979,44 @@ struct DailyGoalCard: View, Equatable {
     /// instead of deficit banked, and the copy talks budget, not goal.
     private var isMaintenance: Bool { plan.requiredDailyDeficit <= 0 }
 
+    /// A LOSE goal with no deficit left to hit — at or inside the band
+    /// around its target. Not the same thing as `isMaintenanceMode`,
+    /// though the card rendered them identically: both take the
+    /// budget framing, so arriving at a target you spent months on was
+    /// narrated by silently swapping the vocabulary, with nothing on
+    /// screen saying you had arrived (the user, 2026-08-18 — "different
+    /// copy than on August 14th"). It also loosens the badge rule to
+    /// any-deficit, which is the other half of why "35%" and "earned"
+    /// looked like a contradiction.
+    private var isAtTarget: Bool { !isMaintenanceMode && isMaintenance }
+
+    /// The goal asks for more than the day burns, so there is nothing
+    /// left to eat — see `CalorieBudget.completedDayPlan`. Distinct
+    /// from a budget that happens to be spent: the zero is the PLAN's,
+    /// not the day's, and printing a bare 0 lets it read as the latter.
+    private var hasNoBudget: Bool {
+        plan.requiredDailyDeficit > 0 && plan.dailyBudget <= 0
+    }
+
     private var progress: Double {
         if isMaintenance {
+            // A FINISHED day answers the same question the badge does,
+            // and must answer it the same way. This gauge measures
+            // LEFTOVER HEADROOM — it starts full at midnight and drains
+            // as you eat (the direction the widget pre-render depends
+            // on) — which is the right reading for a day in progress
+            // and the wrong one for a day that is over. Under the
+            // any-deficit and maintenance-band rules there is no
+            // partial credit, so a day earned with a third of its
+            // budget unspent drew a third-full onigiri beside a green
+            // "earned" (the user, 2026-08-18, on Aug 15 and Aug 17).
+            //
+            // It failed in the other direction too, and more quietly: a
+            // maintenance day that logged almost nothing drew a FULL
+            // onigiri while missing the band outright, because unspent
+            // budget is exactly what that gauge rewards and maintenance
+            // does not reward it.
+            if !showsRemaining { return dayEarnedLook ? 1 : 0 }
             return plan.dailyBudget > 0 ? max(0, min(1, 1 - intakeKcal / plan.dailyBudget)) : 0
         }
         return plan.requiredDailyDeficit > 0 ? bankedKcal / plan.requiredDailyDeficit : 1
@@ -2008,7 +2044,10 @@ struct DailyGoalCard: View, Equatable {
         guard isTrackedDay else { return false }
         if isMaintenanceMode { return abs(deficitKcal) <= StreakCalendar.maintenanceBandKcal }
         if plan.requiredDailyDeficit <= 0 { return deficitKcal > 0 }
-        return progress >= 1
+        // Spelled out rather than `progress >= 1` — identical, but it
+        // frees the GAUGE to depend on this verdict without the two
+        // becoming mutually recursive.
+        return bankedKcal >= plan.requiredDailyDeficit
     }
 
     var body: some View {
@@ -2020,15 +2059,33 @@ struct DailyGoalCard: View, Equatable {
                 HStack(spacing: 6) {
                     Text(isMaintenance ? "Daily budget" : "Daily goal")
                         .font(.headline)
-                    Text("\(((max(0, min(1, progress))) * 100).formatted(.number.precision(.fractionLength(0))))%")
-                        .font(.headline)
-                        // Green is the "you did it" signal, so it must
-                        // agree with the verdict below: a finished day
-                        // that logged too little to count showed a green
-                        // 100% over "not tracked" (2026-08-02).
-                        .foregroundStyle(
-                            progress >= 1 && (showsRemaining || isTrackedDay)
-                                ? Color.green : Color.secondary)
+                    // The percentage is shown ONLY where it measures
+                    // goal achievement. In budget mode it is the
+                    // fraction of the budget REMAINING, while the line
+                    // directly beneath it states the amount EATEN —
+                    // exact complements, so the card printed "35%"
+                    // above "Eaten 1,555 of 2,384" (65% eaten) and the
+                    // reader has to invert one to reconcile them. Next
+                    // to the words "Daily budget" a bare 35% reads as
+                    // "you have used a third", which is the opposite of
+                    // the truth (the user, 2026-08-18).
+                    //
+                    // The RING still fills with what's left, because a
+                    // full onigiri has to mean a good day in both
+                    // modes. It is the printed number that could not
+                    // serve both, and the line below already says the
+                    // same thing without needing to be inverted.
+                    if !isMaintenance {
+                        Text("\(((max(0, min(1, progress))) * 100).formatted(.number.precision(.fractionLength(0))))%")
+                            .font(.headline)
+                            // Green is the "you did it" signal, so it must
+                            // agree with the verdict below: a finished day
+                            // that logged too little to count showed a green
+                            // 100% over "not tracked" (2026-08-02).
+                            .foregroundStyle(
+                                progress >= 1 && (showsRemaining || isTrackedDay)
+                                    ? Color.green : Color.secondary)
+                    }
                 }
                 if isMaintenance {
                     Text("\(intakeWord.label) \(intakeKcal, format: .number.precision(.fractionLength(0))) of \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal")
@@ -2039,10 +2096,31 @@ struct DailyGoalCard: View, Equatable {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+                // Arriving is news, and it used to be delivered only by
+                // the vocabulary quietly changing. It also says why the
+                // day grades more permissively from here — the same
+                // fact the Goal screen spells out under its budget row,
+                // said short enough to sit in a card.
+                // The object is stated, and it is "the day" — the very
+                // thing the green "earned" below names. An earlier
+                // draft ended "keeps it", which dangled AND was untrue:
+                // no single day keeps a target, the seven-day sustained
+                // basis does (the user, 2026-08-18: "keeps what?").
+                if isAtTarget {
+                    Text("Target reached — now any deficit earns the day.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 // Keep the card the same height across days: today shows the
                 // remaining budget; past days show the day's outcome.
                 if showsRemaining {
-                    if remainingKcal >= 0 {
+                    if hasNoBudget {
+                        // NOT "0 kcal left", which reads as a budget
+                        // spent rather than one that never existed.
+                        Text("Goal needs more than today's burn — no budget left")
+                            .font(.subheadline)
+                            .foregroundStyle(.orange)
+                    } else if remainingKcal >= 0 {
                         Text("≈ \(remainingKcal, format: .number.precision(.fractionLength(0))) kcal left to eat today")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)

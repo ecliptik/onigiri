@@ -62,8 +62,30 @@ public enum CalorieBudget {
         let deficit = max(0, requiredDailyDeficit)
         return Plan(
             requiredDailyDeficit: deficit,
-            dailyBudget: dayBurnKcal - deficit,
+            // A budget is what there is left to EAT, and that has a
+            // floor at nothing. Unfloored it went NEGATIVE the moment a
+            // goal asked for more than the day burns: a target moved
+            // 210 → 200 against a stale date wanted 2,453 kcal/day out
+            // of a 1,956 kcal burn, so the budget came to −497 and
+            // Today read "+498 kcal over" at 9am with nothing logged
+            // (the user, 2026-08-18). Nobody has overeaten before their
+            // first meal; the goal was unreachable, which is a
+            // different sentence and `isAggressive` is the one that
+            // says it.
+            //
+            // The guardrails that would have caught this — the flat
+            // `minReasonableBudget` and the body's own resting floor —
+            // live in `plan()`, which is the Goal-tab PREVIEW. This is
+            // the function every real day is judged by and it carried
+            // none of them.
+            dailyBudget: max(0, dayBurnKcal - deficit),
             // A past day can't be talked out of what it already was.
+            // This flag means specifically "move your target date",
+            // which a spent day cannot act on — so it stays false even
+            // when the floor above bit. A caller that needs to know the
+            // goal outran the burn reads the two numbers instead
+            // (`requiredDailyDeficit > 0 && dailyBudget == 0`), which
+            // says that and only that, on any day.
             isAggressive: false
         )
     }

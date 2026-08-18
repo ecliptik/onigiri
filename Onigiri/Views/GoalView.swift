@@ -221,9 +221,38 @@ struct GoalView: View {
     /// at two weeks. Without this the stored date rides along, and
     /// `requiredDailyDeficit` divides by `max(1, daysRemaining)` — 5 lb
     /// against a stale date is 17,500 kcal/day.
+    ///
+    /// That warning was written for `continueGoal`, which was its only
+    /// caller — and the gap it names is exactly what a HAND edit walked
+    /// into. Lowering the target from 210 to 200 in the field above,
+    /// with the stored date two weeks out, asked for 2,453 kcal/day
+    /// against a 1,956 kcal burn: a NEGATIVE budget, so Today read
+    /// "+498 kcal over" at 9am with nothing eaten (the user,
+    /// 2026-08-18). The quick "5 lb more" buttons were immune only
+    /// because they call this; the field was not.
     private func suggestedDate(forLosing poundsLb: Double) -> Date {
         let days = max(14, Int((poundsLb * 7).rounded(.up)))
         return Calendar.current.date(byAdding: .day, value: days, to: .now) ?? .now
+    }
+
+    /// The date this target stops being aggressive at, or nil when the
+    /// one already set is far enough out.
+    ///
+    /// OFFERED, never imposed. `continueGoal` may set a date outright
+    /// because its buttons carry no date input at all — a hand edit sits
+    /// directly under a picker the user chose from, and silently moving
+    /// it would be the screen overruling them. The button writes the
+    /// binding only, so the recomputed budget is visible BEFORE Save.
+    private var gentlerTargetDate: Date? {
+        guard !isMaintenance,
+              let current = planWeightLb, let target = targetWeightLb,
+              current > target
+        else { return nil }
+        let suggestion = suggestedDate(forLosing: current - target)
+        // Never offer a date that is not actually later: a button
+        // promising a gentler pace must not be a no-op.
+        guard suggestion > targetDate else { return nil }
+        return suggestion
     }
 
     /// Continue past a reached target: same journey, new destination.
@@ -334,6 +363,19 @@ struct GoalView: View {
                 )
                 .font(.footnote)
                 .foregroundStyle(.orange)
+                // The warning named the fix and then left you to work
+                // out the date yourself, with the picker two sections
+                // up and nothing saying which date would do. Naming a
+                // date is the difference between a warning and a way
+                // out — and this is the ONE place the app can say it,
+                // because it is the only screen holding both the weight
+                // and the date at once.
+                if let gentlerTargetDate {
+                    Button("Move the date to \(gentlerTargetDate.formatted(.dateTime.month(.abbreviated).day()))") {
+                        targetDate = gentlerTargetDate
+                    }
+                    .font(.footnote)
+                }
             }
         }
     }

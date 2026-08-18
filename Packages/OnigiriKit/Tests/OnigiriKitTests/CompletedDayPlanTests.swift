@@ -50,8 +50,48 @@ struct CompletedDayPlanTests {
         #expect(plan.requiredDailyDeficit == 0)
     }
 
+    /// A budget is what there is left to EAT, so it stops at nothing.
+    ///
+    /// The exact shape that shipped: a target moved 210 → 200 lb kept a
+    /// target date 13 days out, which asks 2,453 kcal/day of a 1,956
+    /// kcal burn. Unfloored the budget came to −497, and Today rendered
+    /// "+498 kcal over" at 9am against an empty log — the app telling
+    /// someone they had overeaten before their first meal (the user,
+    /// 2026-08-18). The guardrails that would have caught it live in
+    /// `plan()`, the Goal-tab preview; this is the function every real
+    /// day is judged by and it had none.
+    @Test func anImpossibleGoalCannotMakeTheBudgetNegative() {
+        let plan = CalorieBudget.completedDayPlan(
+            dayBurnKcal: 1_956, requiredDailyDeficit: 2_453)
+        #expect(plan.dailyBudget == 0)
+        // The ASK is not clamped with it — the goal really does want
+        // that much, and the pace warning and the Goal screen both
+        // need to be able to say so.
+        #expect(plan.requiredDailyDeficit == 2_453)
+    }
+
+    /// How a caller tells "no budget existed" from "the budget is spent"
+    /// — the pair `DailyGoalCard.hasNoBudget` reads, since `isAggressive`
+    /// deliberately stays false here (see below).
+    @Test func anOutrunBurnIsDistinguishableFromASpentBudget() {
+        let impossible = CalorieBudget.completedDayPlan(
+            dayBurnKcal: 1_956, requiredDailyDeficit: 2_453)
+        #expect(impossible.requiredDailyDeficit > 0 && impossible.dailyBudget == 0)
+        // Exactly break-even: the goal is met by eating nothing, which
+        // is punishing but not impossible, so it reads the same way.
+        let exact = CalorieBudget.completedDayPlan(
+            dayBurnKcal: 2_000, requiredDailyDeficit: 2_000)
+        #expect(exact.dailyBudget == 0)
+        // A real budget, merely tight, must NOT trip the same test.
+        let tight = CalorieBudget.completedDayPlan(
+            dayBurnKcal: 2_000, requiredDailyDeficit: 1_900)
+        #expect(tight.dailyBudget == 100)
+    }
+
     /// A past day is never "aggressive" — that flag asks the user to move
     /// their target date, which is meaningless for a day already spent.
+    /// It stays false even when the budget floor bit, which is why the
+    /// test above reads the two numbers rather than this flag.
     @Test func aPastDayIsNeverFlaggedAggressive() {
         let plan = CalorieBudget.completedDayPlan(
             dayBurnKcal: 1_200, requiredDailyDeficit: 1_500)

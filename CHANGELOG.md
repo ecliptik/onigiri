@@ -8,6 +8,38 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.27.5 — when a key stops working, you'll hear about it
+
+_2026-08-17_ · [changes since v2.27.4](https://github.com/ecliptik/onigiri/compare/v2.27.4...v2.27.5)
+
+If you bring your own AI provider — an Anthropic or OpenAI key, or a local
+server — this release is for you. If you don't, nothing here changes anything
+you'll see.
+
+**A rejected key used to fail in silence.** Revoke a key, mistype one, let it
+expire, and Onigiri went on quietly doing without: every estimate, every photo
+read, every menu name fell back to the plain path exactly as though the model
+had simply had nothing useful to say. Nothing ever mentioned the key. The only
+way to discover it was opening Settings and tapping Test.
+
+Now the first time a provider turns your key away, Onigiri says so and points
+you at Settings. Once per launch, and again if you edit the key — a new key
+deserves a fresh warning if it's wrong too. Everything else still fails
+quietly, deliberately: a model declining to answer isn't news, but a credential
+that will refuse everything until you change it is.
+
+**And Apple Intelligence now covers for a bad key.** This is the part you'd
+have felt without knowing why. If you had the on-device fallback switched on —
+for exactly the case where your provider can't be reached — a rejected key
+switched it off too, because the app had filed the rejection as "the model
+answered." It hadn't: nothing was ever asked. So a stale key gave you nothing
+at all, with a perfectly good engine sitting idle in your hand. It falls back
+properly now.
+
+Under the surface: a shared menu no longer leaves a copy of itself behind in
+storage, a slow website can't hold the import spinner past its promised limit,
+and the share sheet can't reclaim a document it just handed over.
+
 ## v2.27.4 — bigger text, and room to put it
 
 _2026-08-17_ · [changes since v2.27.3](https://github.com/ecliptik/onigiri/compare/v2.27.3...v2.27.4)

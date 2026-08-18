@@ -190,10 +190,19 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   weigh-ins), `--seed-milestone` (a 210 lb start against a 190 target, so
   a 5 lb rung is passed and the target isn't), `--seed-regained`
   (maintenance held near 193, which the weigh-ins sit above).
-- The iPhone and Watch sims are PAIRED and share Health data — erase BOTH before
-  running the flow test, or seeded totals will be off (`simctl erase <both udids>`).
-  Same for the iPad sim: every `--seed-sample-data` launch ADDS samples, so after
-  a few QA runs the flow test's total assertions fail on stale data — erase first.
+- **`--seed-sample-data` RESETS the Health store on a simulator, it no
+  longer adds to it** (2026-08-18). `seedSampleData` deletes every sample
+  the app itself wrote before seeding, so repeat runs are idempotent and
+  `testSeedGrantAndLogFlow` now passes inside the default UI suite —
+  where a sibling seeds ahead of it, and where its own stale-seed guard
+  used to fire ("48 / 64 oz water"). Clearing, not just de-duplicating,
+  is what makes that work: sibling tests write REAL logs too (the Add
+  pill's long press writes 12 oz), and the flow test asserts an exact 24.
+  The reset is `targetEnvironment(simulator)`, NOT merely `#if DEBUG` —
+  a DEBUG build lands on the real phone every week and that store is the
+  user's actual diary. On device the seed is still additive.
+  The iPhone and Watch sims are PAIRED and share Health data, so erasing
+  for other reasons still means erasing BOTH (`simctl erase <both udids>`).
 - **`simctl erase` FAILS on a BOOTED device** ("Unable to erase contents
   and settings in current state"). Shut down first, and never swallow its
   stderr: a silently-failed erase leaves the old container, and the next

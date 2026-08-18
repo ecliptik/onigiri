@@ -38,8 +38,10 @@ enum DebugSeeder {
 
         // A page-plus of filler so scroll-dependent behavior (search
         // drawer collapse, tab-bar minimize) is reproducible in tests —
-        // the four-item library above never scrolls. Opt-in, and only
-        // on a fresh install (every seeding launch ADDS, per CLAUDE.md).
+        // the four-item library above never scrolls. Opt-in, and only on
+        // a fresh install: the library seed is guarded by count (this
+        // file has always been idempotent), while the HEALTH seed resets
+        // instead — see HealthKitService.clearSeededSamples.
         if foodCount == 0,
            ProcessInfo.processInfo.arguments.contains("--seed-big-library") {
             for index in 1...30 {

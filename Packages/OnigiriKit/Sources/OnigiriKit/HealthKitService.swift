@@ -1271,10 +1271,70 @@ public final class HealthKitService {
     // MARK: - Debug seeding
 
     #if DEBUG
+    /// Everything `seedSampleData` writes — and so everything a seed has
+    /// to clear to leave the store MATCHING the seed.
+    private static var debugSeedClearTypes: Set<HKObjectType> {
+        var types: Set<HKObjectType> = [HKCorrelationType(.food)]
+        for type in shareTypes.union(debugSeedShareTypes) { types.insert(type) }
+        return types
+    }
+
+    /// Make the store match the seed instead of accumulating it.
+    ///
+    /// Seeding used to be purely additive, so every launch stacked another
+    /// day on the last: two seeded launches read "48 / 64 oz water", and
+    /// `testSeedGrantAndLogFlow` could only pass on a freshly erased PAIR
+    /// of simulators. That kept it out of the default UI suite, where
+    /// `testFoodsSearchSurvivesScroll` seeds and sorts ahead of it — the
+    /// flow test was failing there on its own stale-seed guard, which is
+    /// what "the suite always dies earlier" meant.
+    ///
+    /// Clearing rather than merely de-duplicating is the point: the flow
+    /// test asserts an EXACT 24 oz, and the 12 oz that
+    /// `testAddPillLongPressLogsWater` writes by long-pressing the Add
+    /// pill is just as fatal as a second seed. Only a reset absorbs
+    /// both. Seeding now means "this is the state", which is also what
+    /// every capture run wanted.
+    ///
+    /// SIMULATOR ONLY, and that gate is load-bearing. HealthKit lets an
+    /// app delete none but its OWN samples, so the blast radius is
+    /// Onigiri's data — but on a development phone that is the user's
+    /// real food diary, and `deploy-phone.sh` puts a DEBUG build on it
+    /// every week. `#if DEBUG` is therefore not a strong enough fence
+    /// for a destructive step; `targetEnvironment(simulator)` is. On a
+    /// device the seed stays additive, exactly as before.
+    private func clearSeededSamples() async {
+        #if targetEnvironment(simulator)
+        let everything = HKQuery.predicateForSamples(
+            withStart: .distantPast, end: .distantFuture)
+        var failures: [String] = []
+        for type in Self.debugSeedClearTypes {
+            do {
+                _ = try await store.deleteObjects(of: type, predicate: everything)
+            } catch {
+                failures.append("\(type.identifier): \(error.localizedDescription)")
+            }
+        }
+        // The cache maps ids to correlations that no longer exist.
+        correlationCache.removeAll()
+        // Never silent: a clear that half-failed leaves totals that read
+        // as a seeding bug, which is the confusion this replaces.
+        if failures.isEmpty {
+            print("[onigiri] seed: cleared prior samples")
+        } else {
+            print("[onigiri] seed: clear FAILED for \(failures.count) type(s) — "
+                  + failures.joined(separator: "; "))
+        }
+        #endif
+    }
+
     /// Simulator helper: writes plausible intake/burn/water samples so the
     /// meter has data. Call requestDebugSeedAuthorization() first — this
     /// assumes write access to the burn/weight types is already granted.
+    ///
+    /// Idempotent on the simulator: see `clearSeededSamples`.
     public func seedSampleData(now: Date = .now) async throws {
+        await clearSeededSamples()
         // All times are anchored inside calendar days so the seed behaves the
         // same at any hour — a span crossing midnight would be apportioned
         // across days by HealthKit statistics and skew per-day totals.

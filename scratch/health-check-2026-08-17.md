@@ -323,6 +323,13 @@ session's changes; it is what the "the full suite always dies earlier"
 note above was describing. The flow test must be run SOLO on erased
 sims, which is how it was verified.
 
-Worth deciding separately: making `DebugSeeder` idempotent (skip when
-the day already has samples) would let the flow test live in the suite.
-That is an app change with real blast radius and was not taken here.
+**Resolved the same day.** `seedSampleData` now CLEARS every sample the
+app wrote before seeding, so the seed is idempotent and the flow test
+runs in the suite: 30 executed, 23 opt-in skips, 0 failures, on a
+deliberately un-erased simulator. Clearing rather than de-duplicating is
+what makes it work — sibling tests write real logs too (the Add pill's
+long press writes 12 oz) and the flow test asserts an exact 24. The
+reset is gated `targetEnvironment(simulator)`, not merely `#if DEBUG`:
+a DEBUG build reaches the real phone weekly and that store is the user's
+diary. On device seeding stays additive. The library half of
+`DebugSeeder` was already count-guarded and needed nothing.

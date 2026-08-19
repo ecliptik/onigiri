@@ -518,7 +518,7 @@ struct GoalView: View {
                 if !isMaintenance, let plan, let daysToTarget,
                    let current = planWeightLb, let target = targetWeightLb,
                    current > target {
-                    Text("\(unit.fromLb(current - target), format: .number.precision(.fractionLength(1))) \(unit.symbol) over \(daysToTarget) days needs \(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal/day. The budget is that taken off your burn.")
+                    Text("\(unit.fromLb(current - target), format: .number.precision(.fractionLength(1))) \(unit.symbol) over \(daysToTarget) days needs \(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal/day. Your budget is your burn minus that.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

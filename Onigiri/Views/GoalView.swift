@@ -77,6 +77,19 @@ struct GoalView: View {
     /// question. The 2026-08-02 ruling was right; its scope was wrong.
     private var planWeightLb: Double? { model.basisWeightLb ?? currentWeightLb }
 
+    /// Days from today to the target date — the ONE input behind
+    /// "Deficit needed" that the screen never showed, so 464 kcal/day
+    /// arrived with no way to check it (the user, 2026-08-18). Same
+    /// arithmetic `CalorieBudget.requiredDailyDeficit` divides by, so
+    /// the row and the figure cannot drift.
+    private var daysToTarget: Int? {
+        let calendar = Calendar.current
+        let days = calendar.dateComponents(
+            [.day], from: calendar.startOfDay(for: .now), to: targetDate
+        ).day
+        return (days ?? 0) > 0 ? days : nil
+    }
+
     /// The basis actually in force, for the picker row's caption.
     private var weightBasis: WeightBasis { SharedStore.weightBasis }
 
@@ -465,6 +478,12 @@ struct GoalView: View {
                     LabeledContent("To lose") {
                         Text("\(unit.fromLb(current - target), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
                     }
+                    if let daysToTarget {
+                        LabeledContent("Days left") {
+                            Text("\(daysToTarget)")
+                                .monospacedDigit()
+                        }
+                    }
                     if let plan {
                         LabeledContent("Deficit needed") {
                             Text("\(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal/day")
@@ -484,6 +503,24 @@ struct GoalView: View {
                         Text("≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
                             .monospacedDigit()
                     }
+                }
+                // The disclosure listed the ingredients and never the
+                // recipe — "we know 464 is the deficit, but how is it
+                // actually calculated?" (the user, 2026-08-18). Spelled
+                // in the LIVE numbers rather than as a formula, so it
+                // can be checked against the rows right above it.
+                //
+                // Deliberately no "× 3,500 kcal per lb": that constant
+                // is per POUND, and this screen renders in the user's
+                // unit. Stating it would be wrong in kg, and branching
+                // the sentence on the unit to keep it right buys less
+                // than it costs.
+                if !isMaintenance, let plan, let daysToTarget,
+                   let current = planWeightLb, let target = targetWeightLb,
+                   current > target {
+                    Text("\(unit.fromLb(current - target), format: .number.precision(.fractionLength(1))) \(unit.symbol) over \(daysToTarget) days needs \(plan.requiredDailyDeficit, format: .number.precision(.fractionLength(0))) kcal/day. The budget is that taken off your burn.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 // The burn the projection above is built from — a
                 // FORECAST, so it lives with the derivation rather than
@@ -539,6 +576,22 @@ struct GoalView: View {
                         "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
                     } ?? "Not estimated")
                         .monospacedDigit()
+                }
+                // Kept, and now says why it is here. It is the only
+                // ESTIMATE among measured figures and it is NOT a
+                // component of the two burns above — those carry
+                // Health's own basal, this is `BasalEstimate` over body
+                // metrics, so subtracting it from them yields nothing.
+                // What it does is FLOOR the day's resting credit, which
+                // is the whole reason "Burned today" can read 2,197
+                // while Health has recorded 841 so far. Without this
+                // line that gap has no explanation anywhere in the app
+                // (the user, 2026-08-18: "do we need to put resting
+                // burn in here then?").
+                if model.estimatedRestingKcal != nil {
+                    Text("Estimated from your body metrics. Today's burn never counts less resting than this, even before Health has recorded it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 // LAST, because it is a check on every row above rather
                 // than an input to any of them. "Last 30 days" has

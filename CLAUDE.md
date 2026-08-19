@@ -540,6 +540,13 @@ Each cost a debugging session.
   called "Budget" side by side again, and don't re-add a today-floor to the
   projection to close the gap — that was tried, it made the average neither one
   thing nor the other, and it didn't close it.
+- "How the budget is set" must show the RECIPE, not just the ingredients.
+  It listed `To lose`, `Deficit needed` and both budgets while omitting the one
+  input that makes the deficit checkable — days remaining — so the figure
+  arrived unverifiable (the user, 2026-08-18). `Days left` is a row, and a
+  caption states the arithmetic in the LIVE numbers. That caption never names
+  the 3,500 kcal-per-POUND constant: this screen renders in the user's unit and
+  the constant is wrong in kg.
 - That `Budget` section is ONE FACT PER ROW — `Budget for today`, `<intake
   word> today`, `Burned today`, all three sharing the same `… today` shape,
   lower-case t (the user, 2026-08-18). It used to print the pair as "612 / 1595 kcal", which
@@ -572,6 +579,12 @@ Each cost a debugging session.
   same tracked days) is not the burn on screen, so it read "265 below" three
   rows under an "Average daily burn" the reader could see was 306 away. Two
   measured burns on one screen is the very contradiction the rule forbids.
+- `Resting burn, full day` is NOT a component of either burn average above it
+  — those carry Health's measured basal, that row is `BasalEstimate` over body
+  metrics, so subtracting them yields nothing. It is kept because it FLOORS the
+  day's resting credit (`max(measured, estimate)`), which is the only
+  explanation anywhere in the app for "Burned today" reading 2,197 while Health
+  shows 841 so far. Its caption says so; don't drop the row as redundant.
 - A day's VERDICT has two gates, and both live in `StreakCalendar`:
   `isTracked` (intake ≥ `untrackedBelowKcal`, default 500 — too little
   logged to trust the numbers; Settings → Metrics tunes it, 0 disables)

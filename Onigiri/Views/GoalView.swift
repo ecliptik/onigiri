@@ -471,7 +471,21 @@ struct GoalView: View {
                         }
                     }
                 }
-                // The projection, and the burn it comes from — a
+                // Straight after "Deficit needed", the other half of the
+                // answer (the user, 2026-08-18): the two figures a plan
+                // actually hands you, before the burn rows that explain
+                // where they came from. Conclusions, then inputs.
+                //
+                // OUTSIDE the !isMaintenance block above on purpose —
+                // maintenance has no deficit row but still has a budget,
+                // and moving this inside would silently drop it there.
+                if let plan {
+                    LabeledContent("Budget, average day") {
+                        Text("≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
+                            .monospacedDigit()
+                    }
+                }
+                // The burn the projection above is built from — a
                 // FORECAST, so it lives with the derivation rather than
                 // beside today's live figure, where a second row called
                 // "Budget" read as a number that ought to match it.
@@ -515,12 +529,6 @@ struct GoalView: View {
                     Text("The first is measured. The second is what your food logs and weight change work out to — a cross-check, not a correction.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                }
-                if let plan {
-                    LabeledContent("Budget, average day") {
-                        Text("≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
-                            .monospacedDigit()
-                    }
                 }
                 // "Resting burn, FULL DAY" — the bare label collided with
                 // Details', which shows what Health has recorded SO FAR,

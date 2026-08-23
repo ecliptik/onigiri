@@ -531,15 +531,16 @@ Each cost a debugging session.
   only ("an average day"), never to judge a day. Goal shows BOTH budgets and
   they must stay TOLD APART — one label on two different numbers reads as a
   contradiction (726 kcal apart at lunchtime, 2026-08-02). Since 2026-08-18 the
-  ROW LABEL carries that distinction: `Budget for today` under a `Budget` section
-  (live `dayBurn − deficit`) against `Budget, average day` inside the collapsed
-  "How the budget is set". From 2026-08-11 to 2026-08-18 the SECTION carried it
-  instead (`Budget` under `Today`), which worked only while the visible row was
-  a bare "Budget" — naming the row is the stronger form, since a label survives
-  being read out of context and a section header does not. Don't put two rows
-  called "Budget" side by side again, and don't re-add a today-floor to the
-  projection to close the gap — that was tried, it made the average neither one
-  thing nor the other, and it didn't close it.
+  ROW LABEL carries that distinction: `Budget, right now` under a `Budget`
+  section (live `dayBurn − deficit`) against `Budget, average day` inside the
+  collapsed "How the budget is set" — matching COMMA forms, so the two read as
+  one quantity qualified two ways. From 2026-08-11 to 2026-08-18 the SECTION
+  carried it instead (`Budget` under `Today`), which worked only while the
+  visible row was a bare "Budget" — naming the row is the stronger form, since a
+  label survives being read out of context and a section header does not. Don't
+  put two rows called "Budget" side by side again, and don't re-add a
+  today-floor to the projection to close the gap — that was tried, it made the
+  average neither one thing nor the other, and it didn't close it.
 - "How the budget is set" must show the RECIPE, not just the ingredients.
   It listed `To lose`, `Deficit needed` and both budgets while omitting the one
   input that makes the deficit checkable — days remaining — so the figure
@@ -547,12 +548,22 @@ Each cost a debugging session.
   caption states the arithmetic in the LIVE numbers. That caption never names
   the 3,500 kcal-per-POUND constant: this screen renders in the user's unit and
   the constant is wrong in kg.
-- That `Budget` section is ONE FACT PER ROW — `Budget for today`, `<intake
-  word> today`, `Burned today`, all three sharing the same `… today` shape,
-  lower-case t (the user, 2026-08-18). It used to print the pair as "612 / 1595 kcal", which
-  asks the reader to subtract and never says which side is which (the user,
-  2026-08-18). `Burned Today` is `dayBurn`, NOT a measurement so far, and the
-  longer label makes that easier to misread than the old bare "Burn" did — what
+- That `Budget` section is ONE FACT PER ROW — `Budget, right now`, `<intake
+  word> today`, `Burned today`, lower-case t (the user, 2026-08-18). The first
+  row alone breaks the `… today` shape the other two share, on purpose
+  (2026-08-23): `Budget for today` read as a FIXED daily allowance and got
+  compared against a 2,000 kcal RDA — 1,361 at 9:33 am looks like starvation
+  until you see it is the whole day's resting plus 21 kcal of active earned so
+  far, and it climbs one-for-one with `Burned today` all day. Two labels are
+  ruled OUT for it: not "so far" (that claims a partial MEASUREMENT, which the
+  midnight resting credit makes false, and `Burned today` is forbidden the same
+  qualifier for the same reason — the two must not disagree about what kind of
+  number they are), and not "earned" (the VERDICT word, `isTracked` +
+  `DayBadgeRule`; it may not name an allowance). It used to print the pair as
+  "612 / 1595 kcal", which asks the reader to subtract and never says which side
+  is which (the user, 2026-08-18). `Burned Today` is `dayBurn`, NOT a
+  measurement so far, and the longer label makes that easier to misread than
+  the old bare "Burn" did — what
   answers it is the disclosure's "Resting energy is credited at midnight, active
   energy as you earn it", never this section's footer, which 2026-08-13
   deliberately emptied of how-it-is-built copy. Shorten the label before

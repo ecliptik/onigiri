@@ -307,15 +307,32 @@ struct GoalView: View {
     /// (the user, 2026-08-10: "there's a lot here").
     ///
     /// The two budgets must stay TOLD APART, and since 2026-08-18 the
-    /// ROW LABEL carries that — "Budget for Today" here against "Budget,
-    /// average day" in the collapsed derivation group. It used to be the
-    /// SECTION header ("Budget" under "Today"), which worked only while
-    /// the row label was a bare "Budget"; naming the row is the stronger
-    /// form, since a label survives being read out of context and a
-    /// section header does not. What must never come back is two rows
-    /// reading plainly "Budget" — that is one number failing to match
-    /// itself (the user, 2026-08-11), and it is still forbidden. Do not
-    /// bring the projection up here, and do not collapse the two.
+    /// ROW LABEL carries that — "Budget, right now" here against
+    /// "Budget, average day" in the collapsed derivation group. It used
+    /// to be the SECTION header ("Budget" under "Today"), which worked
+    /// only while the row label was a bare "Budget"; naming the row is
+    /// the stronger form, since a label survives being read out of
+    /// context and a section header does not. What must never come back
+    /// is two rows reading plainly "Budget" — that is one number failing
+    /// to match itself (the user, 2026-08-11), and it is still
+    /// forbidden. Do not bring the projection up here, and do not
+    /// collapse the two.
+    ///
+    /// The COMMA form is load-bearing, and it is why this row alone
+    /// breaks the "… today" shape of the three (2026-08-23). It pairs
+    /// with "Budget, average day" so the two read as one quantity
+    /// qualified two ways — the pairing that already carries "Average
+    /// daily burn" / "Average burn, from data". "Budget for today"
+    /// read as a fixed daily allowance and got compared against an RDA:
+    /// 1,361 at 9:33 am looked like a starvation diet when it was
+    /// simply the whole day's resting plus 21 kcal of active earned so
+    /// far (the user, 2026-08-23). What it must NOT say is "so far":
+    /// that claims a partial MEASUREMENT, which this is not — resting
+    /// is credited whole at midnight — and it would contradict "Burned
+    /// today" one row down, which moves with it one-for-one and is
+    /// forbidden the same qualifier for the same reason. "Budget
+    /// earned today" is likewise out: "earned" is the VERDICT word
+    /// (`isTracked` + `DayBadgeRule`) and must not name an allowance.
     ///
     /// One fact per row. The old "Budget" row printed the pair as
     /// "612 / 1595 kcal", which asks the reader to do the subtraction
@@ -326,7 +343,7 @@ struct GoalView: View {
     private func todaySection(_ plan: CalorieBudget.Plan) -> some View {
         if let todayBudget {
             Section {
-                LabeledContent("Budget for today") {
+                LabeledContent("Budget, right now") {
                     Text("\(todayBudget, format: .number.precision(.fractionLength(0))) kcal")
                         .monospacedDigit()
                 }

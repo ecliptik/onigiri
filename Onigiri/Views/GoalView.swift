@@ -363,9 +363,10 @@ struct GoalView: View {
                 // ("Resting energy is credited at midnight, active
                 // energy as you earn it"), NOT this section's footer —
                 // 2026-08-13 deliberately emptied the footer of
-                // how-it-is-built copy for length. Keep that split; if
-                // this row ever needs the caveat inline, shorten the
-                // LABEL rather than refilling the footer.
+                // how-it-is-built copy for length. The footer now
+                // carries ONE line again (2026-08-23) and it is about
+                // the BUDGET, not this row — the midnight/earned split
+                // is still the disclosure's to explain.
                 LabeledContent("Burned today") {
                     Text("\(model.todayDayBurnKcal, format: .number.precision(.fractionLength(0))) kcal")
                         .monospacedDigit()
@@ -373,30 +374,47 @@ struct GoalView: View {
             } header: {
                 Text("Budget")
             } footer: {
-                // Says what the number IS and nothing more — HOW it is
-                // built is the disclosure's job, and both captions
-                // explaining midnight-and-earned made each one long
-                // (the user, 2026-08-13).
+                // Every line here must say something the rows CANNOT.
+                // That is the whole test, and it is why 2026-08-13
+                // emptied this footer: the caption then restated the
+                // two rows above it, and the midnight-and-earned
+                // explanation belongs to the disclosure, which has room
+                // for it.
                 //
-                // The at-target sentence is the exception, because
-                // something else changes there and nothing said so: a
-                // zero deficit target makes `DayBadgeRule.current`
-                // return `.anyDeficit`, which grades more permissively
-                // than either real mode. That silent loosening is the
-                // whole reason `GoalReachedCard` re-arms after two
-                // weeks; it should not take a card to find out.
+                // ONE line is unconditional again since 2026-08-23, and
+                // it passes that test. Every figure in this section is a
+                // snapshot that CLIMBS — the budget one-for-one with the
+                // burn, all day — and no row can say so, because a row
+                // shows a number rather than its direction. "Budget,
+                // right now" stops the number reading as a fixed daily
+                // ration; only this says which way it moves. Without
+                // it, someone who checks at breakfast and not again
+                // never learns the figure was going to grow (the user,
+                // 2026-08-23, on 1,361 kcal at 9:33 am).
                 //
-                // Worded for BOTH cases it fires in — at or under the
-                // target, and inside the band a pound above it. "You're
-                // at your target" would be a small lie in the second.
-                // ONLY the at-target exception speaks now (the user,
-                // 2026-08-17). The ordinary caption restated the two
-                // rows above it; this one says something they can't —
-                // that a zero deficit target makes `DayBadgeRule.current`
-                // return `.anyDeficit`, grading more permissively than
-                // either real mode.
-                if !isMaintenance, plan.requiredDailyDeficit == 0 {
-                    Text("No deficit left to hit at this weight, so the budget is your whole burn — any deficit earns the day.")
+                // Kept to one clause on purpose. It names ACTIVE energy
+                // only — the half that moves — and leaves the midnight
+                // resting credit to the disclosure, which is what stops
+                // this becoming the long caption that got the footer
+                // emptied. "Energy" is the formal register's word and
+                // captions are formal register; the ROWS still say burn.
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Your budget grows through the day as you earn active energy.")
+                    // The at-target exception, because something else
+                    // changes there and nothing else says so: a zero
+                    // deficit target makes `DayBadgeRule.current` return
+                    // `.anyDeficit`, which grades more permissively than
+                    // either real mode. That silent loosening is the
+                    // whole reason `GoalReachedCard` re-arms after two
+                    // weeks; it should not take a card to find out.
+                    //
+                    // Worded for BOTH cases it fires in — at or under
+                    // the target, and inside the band a pound above it.
+                    // "You're at your target" would be a small lie in
+                    // the second.
+                    if !isMaintenance, plan.requiredDailyDeficit == 0 {
+                        Text("No deficit left to hit at this weight, so the budget is your whole burn — any deficit earns the day.")
+                    }
                 }
             }
         }

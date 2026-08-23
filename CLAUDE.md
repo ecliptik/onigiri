@@ -563,11 +563,20 @@ Each cost a debugging session.
   "612 / 1595 kcal", which asks the reader to subtract and never says which side
   is which (the user, 2026-08-18). `Burned Today` is `dayBurn`, NOT a
   measurement so far, and the longer label makes that easier to misread than
-  the old bare "Burn" did — what
-  answers it is the disclosure's "Resting energy is credited at midnight, active
-  energy as you earn it", never this section's footer, which 2026-08-13
-  deliberately emptied of how-it-is-built copy. Shorten the label before
-  refilling the footer.
+  the old bare "Burn" did — what answers it is the disclosure's "Resting energy
+  is credited at midnight, active energy as you earn it", never this section's
+  footer.
+- **That footer holds ONE unconditional line, and the test it must pass is
+  saying something no ROW can** (2026-08-23). It is "Your budget grows through
+  the day as you earn active energy" — direction, which a row cannot carry
+  because a row shows a number, not which way it moves. `Budget, right now`
+  stops the figure reading as a fixed ration; only the footer says it climbs,
+  and without it someone who checks at breakfast and not again never finds out.
+  2026-08-13 emptied this footer because the caption then RESTATED the two rows
+  above it; that is the rule, not "keep the footer empty". Keep it to one clause
+  naming ACTIVE energy only — the midnight resting credit stays the
+  disclosure's, and putting both here is what made the caption long enough to
+  delete. The at-target sentence is the one conditional line beside it.
 - **`ObservedBurn` REPORTS and nothing plans from it** (2026-08-18,
   `plans/PLAN-goal-budget-reconciliation.md`). `meanDailyIntake − scaleRate ×
   3500` is what the scale says you burn, shown last in the derivation group so

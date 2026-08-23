@@ -20,6 +20,30 @@ public nonisolated struct MenuDocument: Sendable {
     /// field with, or nil when the document doesn't say — which is the
     /// COMMON case, not the exceptional one. See `source(in:fileName:)`.
     public let suggestedSource: String?
+    /// What each stage of the OCR escalation actually produced, in
+    /// DEBUG. Nil in release and nil when no OCR ran.
+    ///
+    /// Kept, in the spirit of `HealthKitService.diagnoseIntake`: this
+    /// path escalates through three readings behind a memory cap and a
+    /// pass budget, and when it comes back empty NOTHING on screen says
+    /// which stage gave up. The simulator read somisomi's page and the
+    /// phone did not, and the only way to tell those apart was to put
+    /// the counts in the failure message (2026-08-23).
+    public let scanNote: String?
+    /// What OCR produced, in DEBUG, EVEN WHERE IT WAS REJECTED — the
+    /// transcript `pages` did not keep. A rejected reading is the one
+    /// worth looking at.
+    public let debugScanned: [[LabelObservation]]?
+
+    public init(
+        pages: [[LabelObservation]], suggestedSource: String?,
+        scanNote: String? = nil, debugScanned: [[LabelObservation]]? = nil
+    ) {
+        self.pages = pages
+        self.suggestedSource = suggestedSource
+        self.scanNote = scanNote
+        self.debugScanned = debugScanned
+    }
 }
 
 /// The PDF half of the menu-import pipeline: one document in, the
@@ -56,6 +80,12 @@ public nonisolated enum MenuDocumentReader {
 
     static let ocrPageLimit = 12
 
+    /// Every Vision pass this document may spend, across strips and both
+    /// orientations. The page cap above still says which PAGES are
+    /// eligible; this one keeps a tall page cut into eight strips and
+    /// read twice from turning a share sheet into a half-minute hang.
+    static let ocrImageLimit = 24
+
     /// `read`, plus OCR for any page that turns out to be a picture.
     ///
     /// The parser takes OBSERVATIONS, not a PDF, and Vision produces the
@@ -63,9 +93,23 @@ public nonisolated enum MenuDocumentReader {
     /// down exactly the same path as a text one, with no second parser
     /// and no per-document special case. It costs a render and an OCR
     /// pass per page, which is why it only runs on pages that need it.
+    ///
+    /// TWO triggers, and the second is what a WEB PAGE needs. "Too few
+    /// runs to be text" identifies a scanned guide, and it can never
+    /// fire on a rendered page: nav, footer and cookie banner put
+    /// somisomi's nutrition page at 41 runs — above the limit — while
+    /// its two tables are `<img>` PNGs with no text layer at all, so the
+    /// share came back "no nutrition table" for a page that is nothing
+    /// but nutrition tables (the user, 2026-08-23). The honest test
+    /// there is the parse that just came back EMPTY, which is also what
+    /// `MenuLinkLoader` uses to decide a render failed. Asked of the
+    /// whole document, so a guide whose table pages already parse never
+    /// pays for its allergen pages.
     public static func readOCR(_ url: URL) async throws -> MenuDocument {
         let document = try read(url)
-        guard document.pages.contains(where: { $0.count < scannedPageRunLimit }) else {
+        let looksScanned = { (page: [LabelObservation]) in page.count < scannedPageRunLimit }
+        let readsAsNothing = MenuTableParser.parse(pages: document.pages).isEmpty
+        guard readsAsNothing || document.pages.contains(where: looksScanned) else {
             return document
         }
         let scoped = url.startAccessingSecurityScopedResource()
@@ -73,21 +117,357 @@ public nonisolated enum MenuDocumentReader {
         guard let data = try? Data(contentsOf: url, options: .mappedIfSafe),
               let pdf = PDFDocument(data: data) else { return document }
 
-        // Bounded: OCR is ~1 s a page, and a share sheet that thinks for
+        // Bounded: OCR is ~1 s a pass, and a share sheet that thinks for
         // half a minute reads as a hang. A scanned guide is usually a
         // few pages; a long one gives up its first dozen rather than
         // nothing.
-        var budget = ocrPageLimit
         var pages = document.pages
-        for index in pages.indices where pages[index].count < scannedPageRunLimit {
-            guard budget > 0 else { break }
-            budget -= 1
-            guard let page = pdf.page(at: index), let image = render(page) else { continue }
-            guard let scanned = try? await LabelScan.observations(from: image),
-                  scanned.count > pages[index].count else { continue }
+        var budget = ocrImageLimit
+        var pagesLeft = ocrPageLimit
+        var note: [String] = []
+        var scannedPages: [[LabelObservation]] = []
+        for index in pages.indices where readsAsNothing || looksScanned(pages[index]) {
+            guard pagesLeft > 0, budget > 0 else { break }
+            pagesLeft -= 1
+            guard let page = pdf.page(at: index) else { continue }
+            var stages: [String] = []
+            let scanned = await observations(
+                on: page, existing: pages[index], budget: &budget, stages: &stages)
+            #if DEBUG
+            scannedPages.append(scanned)
+            #endif
+            #if DEBUG
+            note.append("p\(index):" + stages.joined(separator: ","))
+            #endif
+            let reads = !MenuTableParser.parse(scanned).isEmpty
+            if looksScanned(pages[index]) {
+                // A picture of a page: anything Vision finds beats the
+                // handful of runs PDFKit had.
+                guard reads || scanned.count > pages[index].count else { continue }
+            } else {
+                // A page that HAS a text layer keeps it unless the OCR
+                // produced the table that layer could not. A shared
+                // article is read as PROSE further down the pipeline
+                // (`SharedPageReader`), off these same runs, and swapping
+                // them for a transcript that also holds no table changes
+                // that reading for nothing.
+                guard reads else { continue }
+            }
             pages[index] = scanned
         }
-        return MenuDocument(pages: pages, suggestedSource: document.suggestedSource)
+        #if DEBUG
+        note.append("left=\(budget)")
+        #endif
+        return MenuDocument(
+            pages: pages, suggestedSource: document.suggestedSource,
+            scanNote: note.isEmpty ? nil : note.joined(separator: " "),
+            debugScanned: scannedPages.isEmpty ? nil : scannedPages)
+    }
+
+    /// One page read by Vision, in page-normalized coordinates.
+    ///
+    /// Two things a single `LabelScan.observations` call cannot do:
+    ///
+    /// - **Vision downsamples what it is given**, so raising
+    ///   `renderEdge` on a tall page buys nothing — the extra pixels are
+    ///   thrown away before recognition. A rendered web page is often
+    ///   2–3 screens tall, and somisomi's eleven column names came back
+    ///   as one run of `!!!!!!!!!!` whether the page was rendered at
+    ///   2,400 or at 10,000. It is cut into strips instead, each
+    ///   `readableWidth` across, which is what puts real pixels on
+    ///   six-point table type.
+    /// - **A turned column name reads correctly in exactly ONE of two
+    ///   orientations.** somisomi sets its eleven headers on a diagonal
+    ///   and Vision reads most of them upside down — `SATURATED FAT`
+    ///   comes back as `AVS G3AYUNEVS`. Every one of them is clean in
+    ///   the 180° pass, which costs a second read of the same pixels and
+    ///   nothing else.
+    ///
+    /// The flipped pass mostly REPLACES a run it overlaps: on an
+    /// ordinary upright page it reads noise, and noise that loses every
+    /// comparison changes nothing. It may ADD a run only where it names
+    /// a column and the upright pass found nothing at all — see
+    /// `readingBetterOf`, and the device that returns silence where the
+    /// simulator returns wreckage.
+    ///
+    /// It ESCALATES rather than always paying for this: a page whose
+    /// whole-page reading already yields a table returns there in one
+    /// pass, exactly as a scanned guide did before, and the strips are
+    /// turned over only where `hidesText` says there is pictured text to
+    /// turn.
+    ///
+    /// What is NOT a gate is "did this parse". A table parses from the
+    /// upright strips alone — with four of its eleven headings garbled
+    /// into nothing, so sodium held the carbohydrate figures and the
+    /// reading was plausible and wrong. Stopping at the first transcript
+    /// that yields rows is stopping at the first that yields WRONG rows,
+    /// which is the failure this whole path exists to avoid. Reading the
+    /// second orientation can only help, because the merge replaces a
+    /// run solely with a MORE legible reading of the same box.
+    static func observations(
+        on page: PDFPage, existing: [LabelObservation], budget: inout Int,
+        stages: inout [String]
+    ) async -> [LabelObservation] {
+        let bounds = page.bounds(for: .mediaBox)
+        guard bounds.width > 0, bounds.height > 0, budget > 0 else {
+            stages.append("skip")
+            return []
+        }
+        budget -= 1
+        var whole: [LabelObservation] = []
+        if let image = render(page),
+           let runs = try? await LabelScan.observations(from: image) {
+            whole = runs
+            if !MenuTableParser.parse(runs).isEmpty {
+                stages.append("whole=\(runs.count)!")
+                return runs
+            }
+        }
+        stages.append("whole=\(whole.count)")
+        // Strip-normalized, kept so the flipped pass below has something
+        // to be compared against. The IMAGES are not kept: eight strips
+        // of five megapixels is most of a phone's memory for a share
+        // sheet, and re-rendering one costs a fraction of reading it.
+        let strips = strips(of: bounds)
+        var perStrip: [[LabelObservation]] = []
+        var renderFailures = 0
+        for strip in strips {
+            guard budget > 0 else { break }
+            guard let image = render(page, strip: strip) else { renderFailures += 1; break }
+            budget -= 1
+            perStrip.append((try? await LabelScan.observations(from: image)) ?? [])
+        }
+        stages.append("strips=\(strips.count)/\(perStrip.count)"
+                      + (renderFailures > 0 ? "/rf\(renderFailures)" : ""))
+        // The SECOND orientation is spent only on a page that is HIDING
+        // text — one the strips found substantially more on than PDFKit
+        // could see, which means ink the text layer does not account
+        // for. somisomi's render carries 41 runs of navigation over 458
+        // read off its two table PNGs; a shared ARTICLE reads about the
+        // same either way, and turning it over would buy nothing.
+        //
+        // The question cannot be asked any earlier. At the whole-page
+        // size Vision hands back 46 runs for the very page whose strips
+        // hold 458 — a pictured table is invisible until there are
+        // enough pixels on it, so a cheap probe cannot tell these two
+        // pages apart.
+        let upright = merge(perStrip, of: strips, in: bounds)
+        stages.append("up=\(upright.count)")
+        guard hidesText(upright, beyond: existing) else {
+            stages.append("nothidden")
+            return upright.count > whole.count ? upright : whole
+        }
+        var added = 0
+        for (index, strip) in strips.enumerated() where index < perStrip.count {
+            guard budget > 0, let image = render(page, strip: strip),
+                  let flipped = turned(image) else { break }
+            budget -= 1
+            guard let second = try? await LabelScan.observations(from: flipped) else { continue }
+            let before = perStrip[index].count
+            perStrip[index] = readingBetterOf(perStrip[index], flipped: second)
+            added += perStrip[index].count - before
+        }
+        let stripped = merge(perStrip, of: strips, in: bounds)
+        let rows = MenuTableParser.parse(stripped).count
+        stages.append("turned=\(stripped.count)/add\(added)/rows\(rows)")
+        if rows > 0 { return stripped }
+
+        let withHeader = await readingHeader(
+            of: page, in: bounds, over: stripped, budget: &budget)
+        let headerRows = MenuTableParser.parse(withHeader).count
+        stages.append("hdr=\(withHeader.count)/rows\(headerRows)")
+        if headerRows > 0 { return withHeader }
+        return withHeader.count > whole.count ? withHeader : whole
+    }
+
+    /// Whether Vision found materially more on the page than its own
+    /// text layer holds.
+    static func hidesText(
+        _ scanned: [LabelObservation], beyond existing: [LabelObservation]
+    ) -> Bool {
+        scanned.count > max(existing.count * 2, existing.count + 20)
+    }
+
+    /// Every strip's runs in the page's own coordinates, with the seam
+    /// duplicates dropped: the strips overlap, so a row that straddles
+    /// one is read twice, and left in, its numbers are counted twice and
+    /// the row stops matching its columns.
+    static func merge(
+        _ perStrip: [[LabelObservation]], of strips: [CGRect], in bounds: CGRect
+    ) -> [LabelObservation] {
+        var merged: [LabelObservation] = []
+        for (runs, strip) in zip(perStrip, strips) {
+            for run in runs.map({ placed($0, of: strip, in: bounds) })
+            where !merged.contains(where: { $0.text == run.text && covers($0, run) }) {
+                merged.append(run)
+            }
+        }
+        return merged
+    }
+
+    /// How wide a page has to be rendered before Vision can read
+    /// six-point table type off it, and how many pixels it may hand
+    /// Vision at once.
+    ///
+    /// The second number is the surprising one. **Vision downsamples
+    /// what it is given**, so rendering a tall page bigger does not make
+    /// its small type readable — measured on the somisomi sheet, a
+    /// 4,000 × 3,201 render lost the column headers entirely while
+    /// 3,000 × 818 of the same header read every one of them. The way
+    /// through is fewer pixels per pass, not more: cut the page into
+    /// strips wide enough to resolve the type and short enough to stay
+    /// under the budget.
+    static let readableWidth: CGFloat = 3_900
+    static let pixelBudget: CGFloat = 6_000_000
+
+    static let stripOverlap: CGFloat = 0.06
+
+    static func strips(of bounds: CGRect) -> [CGRect] {
+        let tallest = pixelBudget / (readableWidth * readableWidth)
+        let aspect = bounds.height / bounds.width
+        // The overlap below makes each strip taller than its share, and
+        // the budget is about what Vision is HANDED, not what the page
+        // was divided into.
+        let count = max(1, Int(((aspect * (1 + 2 * stripOverlap)) / tallest).rounded(.up)))
+        // Overlapped, because a strip edge otherwise falls through a row
+        // of the table and cuts its numbers in half. A run split across
+        // two strips is read whole by the other one, and the duplicate
+        // reading loses to it or matches it.
+        let height = bounds.height / CGFloat(count)
+        let overlap = count > 1 ? height * stripOverlap : 0
+        return (0..<count).map { index in
+            let minY = max(bounds.minY, bounds.minY + height * CGFloat(index) - overlap)
+            let maxY = min(bounds.maxY, bounds.minY + height * CGFloat(index + 1) + overlap)
+            return CGRect(x: bounds.minX, y: minY, width: bounds.width, height: maxY - minY)
+        }
+    }
+
+    /// A strip's run put back into the page's own coordinates.
+    static func placed(
+        _ run: LabelObservation, of strip: CGRect, in bounds: CGRect
+    ) -> LabelObservation {
+        LabelObservation(
+            text: run.text,
+            x: (Double(strip.minX - bounds.minX) + run.x * Double(strip.width))
+                / Double(bounds.width),
+            y: (Double(strip.minY - bounds.minY) + run.y * Double(strip.height))
+                / Double(bounds.height),
+            w: run.w * Double(strip.width) / Double(bounds.width),
+            h: run.h * Double(strip.height) / Double(bounds.height))
+    }
+
+    /// The upright reading of each run, unless the 180° pass read the
+    /// same box more legibly.
+    static func readingBetterOf(
+        _ upright: [LabelObservation], flipped: [LabelObservation]
+    ) -> [LabelObservation] {
+        merging(flipped.map {
+            LabelObservation(text: $0.text, x: 1 - $0.x - $0.w, y: 1 - $0.y - $0.h, w: $0.w, h: $0.h)
+        }, into: upright)
+    }
+
+    /// A second reading of the same page laid over the first: it wins a
+    /// box it covers only by being more legible, and stands on its own
+    /// only where it NAMES A COLUMN.
+    static func merging(
+        _ extra: [LabelObservation], into base: [LabelObservation]
+    ) -> [LabelObservation] {
+        var runs = base
+        for candidate in extra {
+            guard let index = runs.firstIndex(where: { covers($0, candidate) }) else {
+                // NOTHING TO REPLACE. Vision on the phone hands back no
+                // run at all where the Mac's hands back wreckage, so
+                // somisomi's turned headings arrived as `AVS G3AYUNEVS`
+                // in the simulator and as SILENCE on the device — and a
+                // replace-only merge threw away the one correct reading
+                // of them for having nothing to overwrite. Every row
+                // then had a calorie column and no other, and the sheet
+                // said "no nutrition found" (the user, 2026-08-23).
+                //
+                // So a flipped-only run may be ADDED, but only when it
+                // NAMES A COLUMN — which is the entire reason this pass
+                // exists, and is a bar that OCR noise does not clear.
+                if MenuTableParser.namesAColumn(candidate.text) { runs.append(candidate) }
+                continue
+            }
+            guard legibility(candidate.text) > legibility(runs[index].text) else { continue }
+            runs[index] = candidate
+        }
+        return runs
+    }
+
+    /// How the COLUMN HEADINGS are read when the strips have delivered a
+    /// table without any.
+    ///
+    /// Vision downsamples what it is handed, and the phone's threshold
+    /// sits far below the Mac's. Measured on the device, on the very
+    /// same band of the very same page:
+    ///
+    ///     3,900 x 1,365  (5.3 MP)   1 of 10 column names
+    ///     3,900 x   914  (3.3 MP)   2 of 10
+    ///     2,600 x   609  (1.6 MP)  10 of 10
+    ///
+    /// The strips are sized for the DATA rows, which read perfectly well
+    /// at 5.3 MP; the headings are smaller type set on a diagonal and do
+    /// not. So the headings get one close look of their own, at about
+    /// two megapixels, over the band directly above the first data row —
+    /// two passes, not a resizing of all sixteen.
+    ///
+    /// This is why the phone said "no nutrition found" while the
+    /// simulator read the page: the transcript reaching the parser had
+    /// every figure in it and one column name, and a table with no
+    /// columns is correctly refused (the user, 2026-08-23).
+    static let headerBandWidth: CGFloat = 3_250
+    static let headerBandHeight = 0.075
+
+    static func readingHeader(
+        of page: PDFPage, in bounds: CGRect, over transcript: [LabelObservation],
+        budget: inout Int
+    ) async -> [LabelObservation] {
+        let bands = MenuTableParser.bands(transcript)
+        guard let data = bands.first(where: { MenuTableParser.isDataBand($0) }),
+              let floor = data.runs.map({ $0.y + $0.h }).max() else { return transcript }
+        let ceiling = min(1, floor + headerBandHeight)
+        guard ceiling > floor, budget > 0 else { return transcript }
+        let rect = CGRect(
+            x: bounds.minX, y: bounds.minY + bounds.height * floor,
+            width: bounds.width, height: bounds.height * (ceiling - floor))
+        guard rect.width > 0, rect.height > 0,
+              let image = raster(page, in: rect, scale: headerBandWidth / rect.width)
+        else { return transcript }
+        budget -= 1
+        var runs = (try? await LabelScan.observations(from: image)) ?? []
+        if budget > 0, let flipped = turned(image),
+           let second = try? await LabelScan.observations(from: flipped) {
+            budget -= 1
+            runs = readingBetterOf(runs, flipped: second)
+        }
+        return merging(runs.map { placed($0, of: rect, in: bounds) }, into: transcript)
+    }
+
+    /// The same piece of the page, read twice — most of the smaller box
+    /// lies inside the larger.
+    static func covers(_ a: LabelObservation, _ b: LabelObservation) -> Bool {
+        let width = min(a.x + a.w, b.x + b.w) - max(a.x, b.x)
+        let height = min(a.y + a.h, b.y + b.h) - max(a.y, b.y)
+        guard width > 0, height > 0 else { return false }
+        return width * height > 0.5 * min(a.w * a.h, b.w * b.h)
+    }
+
+    /// How much of a run reads as text rather than as OCR wreckage.
+    /// `SATURATED FAT` scores 1; the upside-down reading of it,
+    /// `AVS G3AYUNEVS`, scores the same — so the tie is broken by what
+    /// the header table can NAME, which is the only judge that matters
+    /// here and the reason a garbled twin never wins.
+    static func legibility(_ text: String) -> Double {
+        guard !text.isEmpty else { return 0 }
+        let named = MenuTableParser.field(forHeader: text) != nil ? 1.0 : 0
+        let readable = text.unicodeScalars.filter { scalar in
+            scalar.isASCII && (CharacterSet.alphanumerics.contains(scalar)
+                || CharacterSet.whitespaces.contains(scalar)
+                || ".,()%/-'".unicodeScalars.contains(scalar))
+        }.count
+        return named + Double(readable) / Double(text.unicodeScalars.count)
     }
 
     /// A page as pixels, big enough for Vision to read six-point table
@@ -98,7 +478,19 @@ public nonisolated enum MenuDocumentReader {
     static func render(_ page: PDFPage) -> CGImage? {
         let bounds = page.bounds(for: .mediaBox)
         guard bounds.width > 0, bounds.height > 0 else { return nil }
-        let scale = renderEdge / max(bounds.width, bounds.height)
+        return raster(page, in: bounds, scale: renderEdge / max(bounds.width, bounds.height))
+    }
+
+    /// A strip at `readableWidth` across, whatever its height — the
+    /// whole point of cutting the page up is the pixels ACROSS it, and
+    /// scaling by the long edge would give a short strip fewer of them
+    /// than the page it came from.
+    static func render(_ page: PDFPage, strip: CGRect) -> CGImage? {
+        guard strip.width > 0, strip.height > 0 else { return nil }
+        return raster(page, in: strip, scale: readableWidth / strip.width)
+    }
+
+    private static func raster(_ page: PDFPage, in bounds: CGRect, scale: CGFloat) -> CGImage? {
         let width = Int((bounds.width * scale).rounded())
         let height = Int((bounds.height * scale).rounded())
         guard width > 0, height > 0,
@@ -115,6 +507,27 @@ public nonisolated enum MenuDocumentReader {
         context.scaleBy(x: scale, y: scale)
         context.translateBy(x: -bounds.minX, y: -bounds.minY)
         page.draw(with: .mediaBox, to: context)
+        return context.makeImage()
+    }
+
+    /// The same pixels upside down. Not `CGImagePropertyOrientation`:
+    /// that rides on the request and rotates the RESULT's coordinates
+    /// back, which is exactly what must not happen — the second reading
+    /// has to be compared against the first in the same frame.
+    static func turned(_ image: CGImage) -> CGImage? {
+        guard let context = CGContext(
+            data: nil, width: image.width, height: image.height,
+            bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+        else { return nil }
+        context.setFillColor(gray: 1, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        context.translateBy(x: CGFloat(image.width) / 2, y: CGFloat(image.height) / 2)
+        context.rotate(by: .pi)
+        context.draw(image, in: CGRect(
+            x: -CGFloat(image.width) / 2, y: -CGFloat(image.height) / 2,
+            width: CGFloat(image.width), height: CGFloat(image.height)))
         return context.makeImage()
     }
 

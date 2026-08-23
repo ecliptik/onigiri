@@ -586,3 +586,203 @@ disprove is worth less than the file it was written into.
 Fixtures and references are renamed to `menu-cava-*`. `CHANGELOG.md` is
 left alone: it is regenerated from tag messages and records what the
 release notes actually said at the time.
+
+
+## Round 7 — a page whose table is a PICTURE, and a header that is TURNED (2026-08-23)
+
+`somisomi.com/nutrition-facts` came back "no nutrition table" for a page
+that is nothing but nutrition tables (the user). Tracing it end to end
+found three failures stacked, and only the third was the interesting one.
+
+**One: the page has no text.** It is a React shell — 1,452 bytes of
+served HTML, no table, no numbers — so `MenuLinkLoader.pageText` and
+`SharedPageReader`'s prose route have nothing to read. Its two tables are
+`<img>` PNGs (2551 × 3301) linked from the bundle.
+
+**Two: the "this page is a picture" test could never fire on a rendered
+page.** `scannedPageRunLimit` asks whether the page has too FEW text runs
+to be text, which identifies a scanned guide exactly (Starbucks: 3 pages,
+22 runs). A rendered web page always carries nav, footer and a cookie
+banner — somisomi's render holds 41 runs — so it sails past the limit
+while its tables have no text layer at all. `readOCR` now has a second
+trigger: the whole document parsed to NOTHING. That is the same test
+`MenuLinkLoader` already uses to decide a render failed, and it is asked
+of the document rather than the page, so a guide whose table pages parse
+never pays for its allergen pages.
+
+**Three: Vision downsamples what it is given.** This is the one that cost
+the afternoon. Rendering the page LARGER does not make its small type
+readable — the pixels are thrown away before recognition. Measured on
+this page:
+
+| render | result |
+| --- | --- |
+| 960 × 2,400 (whole page, `renderEdge`) | 46 runs, no table |
+| 3,999 × 10,000 (whole page) | 42 runs, no table |
+| 4,000 × 3,201 (top third) | 172 runs, rows read, header `!!!!!!!!!!` |
+| 3,000 × 818 (header band only) | every column name |
+
+So the page is cut into STRIPS, each rendered at `readableWidth` across
+and short enough to stay under `pixelBudget`. Neither number is a taste:
+below the width the six-point table type is unreadable, above the budget
+Vision resamples it away again. Raising `readableWidth` to 5,000 made it
+WORSE — the turned names came back clipped (`TOTAL CAL` for `TOTAL
+CARBS`, which the header table then reads as a second calorie column).
+
+### The turned header
+
+The sheet sets eleven column names at about 60°, which breaks two things
+at once.
+
+**Vision reads most of them upside down.** `SATURATED FAT` comes back as
+`AVS G3AYUNEVS`, `TOTAL CARBS` as `SH5V3 1V101`. Every one of them is
+clean in a 180° pass of the same pixels, so each strip is read twice and
+the more legible reading of each box wins. Two rules make that safe: the
+flipped pass may only REPLACE a run it overlaps, never add one (its noise
+then loses every comparison and changes nothing), and the tie is broken
+by what `field(forHeader:)` can NAME — the two readings of a turned
+heading have the same length and the same character classes, so a
+legibility count alone calls them equal.
+
+**An axis-aligned box around a turned name overlaps its neighbours.** The
+upright rule merges any run starting before the previous column ends, so
+the whole header fused into three columns reading "SATURATED FAT TRANS
+FAT" and every value landed under the wrong name. `diagonalColumns`
+recognises the case by the thing an upright header never does —
+neighbouring cells OVERLAP while each still names a different column —
+and keeps the runs one column apiece. The box's LEFT EDGE is where the
+column is: `CALORIES` starts at 0.270 against data at 0.264, `SODIUM` at
+0.592 against 0.590.
+
+### Where it goes wrong, and why the answer is to drop a figure
+
+Three readings of this sheet produce rows. Only one is right.
+
+- **Count match** (a row prints one number per column): OCR loses cells
+  here — a printed `0` most often — so nine numbers went under nine
+  surviving names and every figure shifted.
+- **Nearest column centre**: with `DIETARY FIBER` and `SUGAR` unread
+  there is a real gap in the middle of the table, and the fibre and sugar
+  figures were handed to total-carbs and added-sugar three columns away.
+- **Inside a column or nowhere** (`Column.anchored`): what it cannot
+  place, it drops. A dropped figure costs that one field; a filled gap
+  costs every field to its right.
+
+The last one is the rule wherever the span is authoritative, which is
+only ever a diagonal header — an upright header's cells are merged by
+overlap and their spans are approximate, so nearest-centre stays the rule
+there.
+
+`TOTAL ADDED SUGAR` joined `ignoredHeaderWords` for the "CALCIUM contains
+cal" reason: it holds the keyword for a column Onigiri does keep, and
+with the plain `SUGAR` heading lost to OCR it inherited the field and
+every soft serve reported 20 g against a printed 31. That fix then broke
+the diagonal DETECTION, because an ignored heading stopped counting
+toward the header's layout and the sheet fell back to being read as
+upright — `namesAColumn` is the split: detection is about layout, the
+field table about what is stored.
+
+### What it reads now
+
+27 items off the first table — soft serve, ahboong cones, taiyaki — with
+calories, fat, saturated fat, cholesterol, sodium and carbohydrates
+correct against the printed sheet. One field is wrong in 27 rows
+(`STRAWBERRY` cholesterol, where OCR read `35` as `5`, on a row whose
+name is also garbled); everything else is either right or absent.
+
+### Known gaps, this round
+
+- **The second table is dropped, correctly.** The page prints two sheets
+  stacked, and `parsePage` detects ONE header per page — so the somi sips
+  and toppings tables have no columns of their own. They are not read
+  against the first table's columns either, because those sit at
+  different x and the anchored rule refuses what it cannot place. Fixing
+  it means per-BLOCK header detection within a page, which is a real
+  change and not this one. Its own header is unreadable at these
+  resolutions in both orientations anyway.
+- **`MenuLinkLoader.yieldsMenu` still probes with `read`, not
+  `readOCR`**, so an image-table page takes the "follow the PDF this page
+  names" detour before falling back to the render. It costs one request
+  and finds nothing here. Giving it the OCR path would double the OCR
+  bill for the same answer.
+- **Cost.** A page that reaches the strips spends 17 Vision passes and
+  about 8 s on a Mac. `ocrImageLimit` bounds it, and `hidesText` keeps a
+  shared ARTICLE from paying it: the second orientation is read only
+  where the strips found materially more than the page's own text layer
+  holds. That question cannot be asked any earlier — at whole-page size
+  Vision returns 46 runs for the very page whose strips hold 458, so a
+  cheap probe cannot tell a prose page from a pictured one.
+
+
+### Round 7b — the number that mattered was MEGAPIXELS, and macOS hid it
+
+Everything above was measured on a Mac, and the phone disagreed. Four
+builds went to the device before the cause surfaced, and three of the
+"fixes" in between were real bugs that were not THE bug:
+
+- The **overlap count** for detecting a turned header: macOS Vision put
+  three of somisomi's headings in contact, iOS Vision one. A threshold of
+  two read the sheet as turned on the Mac and as upright on the phone,
+  where `SATURATED FAT` and `TRANS FAT` fused and every row shifted —
+  31 g of sugar reported as 31 mg of sodium. Fixed by requiring one
+  overlap AND rotation, measured as width-per-character against the
+  table's own rows; see `turnedColumns`.
+- The **replace-only merge**: the flipped pass could only overwrite a run
+  it covered. Mac Vision returns wreckage at a turned heading
+  (`AVS G3AYUNEVS`) and the correct reading replaced it; the phone
+  returns SILENCE, so there was nothing to replace and the correct
+  reading was discarded. A flipped-only run may now be added where it
+  names a column.
+- Neither was the reason the phone failed.
+
+**The reason was image size.** Vision downsamples what it is handed, and
+the phone's threshold sits far below the Mac's. Measured on the device,
+on one band of one page:
+
+| render | megapixels | column names read |
+| --- | --- | --- |
+| 3,900 x 1,365 (a pipeline strip) | 5.3 | 1 of 10 |
+| 3,900 x 914 | 3.3 | 2 of 10 |
+| 2,600 x 609 | 1.6 | **10 of 10** |
+
+Same page, same pixels per inch, same rotation. The strips are sized for
+the DATA rows, which read perfectly at 5.3 MP; the headings are smaller
+type on a diagonal and do not survive it. So the headings get one close
+look of their own — `MenuDocumentReader.readingHeader`, about two
+megapixels over the band directly above the first data row, upright and
+at 180°. Two passes, not a resizing of all sixteen.
+
+The transcript the parser had been handed held every figure on the sheet
+and exactly one column name, and refusing it was correct.
+`menu-somisomi-device-headerless.json` is that transcript, captured off
+the phone, and pins the refusal.
+
+### How the phone was finally read
+
+`log stream --device` no longer exists, and the XCUITest runner cannot be
+signed from an agent shell ("No Accounts"). What worked, and is worth
+reaching for first next time:
+
+1. `MenuDocument.scanNote` (DEBUG) — each stage's run counts, shown in
+   the failure card by `ShareFlow` and `MenuImportSheet`. This is what
+   ruled out the memory cap (`strips=8/8`) and Vision itself
+   (`up=469`) and pointed at the parser.
+2. `MenuDocument.debugScanned` (DEBUG) — the transcript EVEN WHERE IT WAS
+   REJECTED, written to Documents and pulled with
+   `xcrun devicectl device copy from --domain-type appDataContainer`.
+   The first attempt dumped `pages`, which by then held the 41 runs of
+   the text layer that survived instead; a rejected reading is the one
+   worth looking at.
+3. A DEBUG probe in the app behind a launch argument, run with
+   `devicectl device process launch --console` and read directly. This
+   is what measured the table above, and it needs no help from anyone
+   holding the phone — only that the phone is unlocked.
+
+### Known gaps, this round
+
+- **The device reads fewer rows than the Mac** — 18 against 27 — and
+  garbles a name or two (`CTDAWREDDV STRAWBERRY`, where the item's icon
+  OCRs into letters that merge with its name). Calories and the mapped
+  columns are right; the misses are misses, not misplacements.
+- **The second table is still dropped**, for the reason in Round 7: one
+  header per page, and this page stacks two printed sheets.

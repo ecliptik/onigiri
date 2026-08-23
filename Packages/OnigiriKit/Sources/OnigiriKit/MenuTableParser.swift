@@ -138,6 +138,13 @@ public enum MenuTableParser {
         var text: String
         var field: Field?
         var unit: Unit?
+        /// The span is where this column IS, and a value outside every
+        /// span belongs to no column. True only for a diagonal header,
+        /// where the names are read one per column and can go MISSING
+        /// one at a time — see `diagonalColumns`. An upright header's
+        /// cells are merged by overlap and their spans are approximate,
+        /// so the nearest-centre reading stays the rule there.
+        var anchored = false
         var center: Double { (minX + maxX) / 2 }
     }
 
@@ -310,8 +317,17 @@ public enum MenuTableParser {
     /// McDonald's row read 25 kcal instead of 740 (2026-08-16). Naming
     /// them here is safer than tightening every keyword, because the
     /// next table will invent another one.
+    ///
+    /// `added sugar` is here for the same reason and not for the same
+    /// cause: it is a column Onigiri does not store, and it CONTAINS the
+    /// keyword for one it does. Where a table prints both, the leftmost
+    /// rule already gave `Total Sugars` the field — but somisomi's
+    /// `TOTAL ADDED SUGAR` outlived its neighbour when OCR lost the
+    /// plain `SUGAR` heading beside it, and every soft serve then
+    /// reported its added sugars as its sugars (2026-08-23).
     static let ignoredHeaderWords = [
         "calcium", "vitamin", "iron", "potassium", "daily value", "dv",
+        "added sugar",
     ]
 
     /// A nutrition table states each value once. When two columns
@@ -329,6 +345,21 @@ public enum MenuTableParser {
             }
             return column
         }
+    }
+
+    /// Whether a run reads as a column HEADING at all, including one
+    /// recognised only in order to be skipped.
+    ///
+    /// Detection of a diagonal header is about the header's LAYOUT, not
+    /// about which columns Onigiri keeps — and the difference is not
+    /// academic: the moment `TOTAL ADDED SUGAR` joined the ignored list
+    /// it stopped counting toward that layout, the somisomi header fell
+    /// back to being read as upright, and every soft serve reported its
+    /// carbohydrates as sodium (2026-08-23).
+    static func namesAColumn(_ text: String) -> Bool {
+        if field(forHeader: text) != nil { return true }
+        let folded = fold(text)
+        return ignoredHeaderWords.contains { folded.contains($0) }
     }
 
     static func field(forHeader text: String) -> Field? {
@@ -387,7 +418,14 @@ public enum MenuTableParser {
     ) -> [MenuRow] {
         let bands = bands(observations)
         guard let dataStart = bands.firstIndex(where: { isDataBand($0) }) else { return [] }
-        let header = header(above: dataStart, in: bands)
+        // How wide upright text of this table runs, per character, per
+        // unit of height. Measured on the ROWS, which are upright by
+        // construction, and used below to tell a turned column name from
+        // a straight one — see `turnedColumns`.
+        let rowAspects = bands.filter(\.isData).flatMap(\.runs)
+            .compactMap(charAspect).sorted()
+        let rowAspect = rowAspects.isEmpty ? 0 : rowAspects[rowAspects.count / 2]
+        let header = header(above: dataStart, in: bands, rowAspect: rowAspect)
         // A page that reprints no header continues the previous page's
         // table. Without this the tail of a long menu is silently
         // dropped — the Chick-fil-A render puts its drinks on a second,
@@ -665,7 +703,107 @@ public enum MenuTableParser {
         return pieces.isEmpty ? [run] : pieces
     }
 
-    static func header(above dataStart: Int, in bands: [Band]) -> Header? {
+    /// How narrow a run is for the text it holds: its width per
+    /// character, per unit of height. Upright text of any size lands on
+    /// one value; a turned word's box is as tall as the word is long and
+    /// lands far below it. Free of the page's own proportions, which the
+    /// normalized coordinates do not carry.
+    static func charAspect(_ run: LabelObservation) -> Double? {
+        let count = run.text.trimmingCharacters(in: .whitespaces).count
+        guard count >= 1, run.h > 0 else { return nil }
+        return run.w / (run.h * Double(count))
+    }
+
+    /// A column name this much narrower than the table's own rows can
+    /// only be turned. The gap it sits in is wide — CAVA's upright cells
+    /// measure 0.46 and up, somisomi's turned ones 0.22 and down.
+    static let turnedCharAspect = 0.35
+
+    /// Column names printed on a DIAGONAL, one column each — nil when
+    /// the header is the ordinary upright kind.
+    ///
+    /// A one-page guide that has to fit eleven column names above narrow
+    /// number columns turns them 60°, and the somisomi sheet does
+    /// exactly that. OCR reads such a name into an AXIS-ALIGNED box, so
+    /// "SATURATED FAT" comes back spanning its own column AND its
+    /// neighbour's — and the upright rule below, which merges any run
+    /// starting before the previous column ends, then fuses the whole
+    /// header into two or three columns whose text reads "SATURATED FAT
+    /// TRANS FAT". Every value after that lands under the wrong name:
+    /// the cholesterol column held sodium's figures (2026-08-23).
+    ///
+    /// The box's LEFT EDGE is where the column is: a name rising to the
+    /// right starts at the column it belongs to (measured on the
+    /// somisomi sheet — `CALORIES` starts at 0.270 against data at
+    /// 0.264, `SODIUM` at 0.592 against 0.590). So the runs are kept as
+    /// they were read, one column apiece, and nothing is merged.
+    ///
+    /// Only the turned runs become columns. A name the same size as the
+    /// rows is upright text that happens to sit in the header block —
+    /// a section label, a unit line — and has no column of its own.
+    static func turnedColumns(_ runs: [LabelObservation], rowAspect: Double) -> [Column]? {
+        guard rowAspect > 0 else { return nil }
+        let sorted = runs.sorted { $0.x < $1.x }
+        // TWO conditions, and both are needed — measured on every menu
+        // in the fixtures.
+        //
+        // OVERLAP is the harm. A name at 60° is wide enough to lean over
+        // the column beside it, and the merge below then fuses the two.
+        // A name at a full 90° is NARROWER than its column and leans on
+        // nothing, which is why McDonald's, Shake Shack and Chipotle set
+        // their headings vertically and have read correctly through the
+        // merge since the day they were fixtured.
+        //
+        // ROTATION is what keeps CAVA out. It has one overlapping pair
+        // of its own — `Cal.` sitting under `from Fat` — so overlap
+        // alone routed a perfectly upright header down here and took all
+        // 113 of its rows with it. Its cells measure 0.46–0.92 of the
+        // rows' own width-per-character; somisomi's measure 0.07–0.22,
+        // because a turned word's box is as tall as the word is long.
+        // NEIGHBOURS AMONG THE NAMES, not among all the runs: a unit
+        // line sorts between two headings and would otherwise stand
+        // between them, hiding the very overlap this is looking for.
+        let named = sorted.filter { namesAColumn($0.text) }
+        var leaning = false
+        for (left, right) in zip(named, named.dropFirst()) {
+            guard right.x < left.maxX,
+                  let leftAspect = charAspect(left), let rightAspect = charAspect(right),
+                  leftAspect <= turnedCharAspect * rowAspect,
+                  rightAspect <= turnedCharAspect * rowAspect
+            else { continue }
+            // The same name read twice is one column, not two — and a
+            // stacked unit line names no column at all.
+            if let a = field(forHeader: left.text), a == field(forHeader: right.text) { continue }
+            leaning = true
+            break
+        }
+        guard leaning else { return nil }
+
+        var columns: [Column] = []
+        for run in sorted {
+            guard let matched = field(forHeader: run.text) else { continue }
+            // The unit line ("mg") is set UPRIGHT beneath its turned
+            // name, so it is claimed by overlap the way the upright path
+            // claims it — but ONLY a run that is nothing but a unit. A
+            // turned name leans across its neighbour, so anything looser
+            // pulls the next column's heading into this one's text.
+            let unitText = sorted
+                .filter {
+                    $0.text.count <= 4 && unit(forHeader: $0.text) != nil
+                        && $0.x < run.maxX && $0.maxX > run.x
+                }
+                .sorted { $0.x < $1.x }
+                .map(\.text)
+                .joined(separator: " ")
+            let text = "\(run.text) \(unitText)".trimmingCharacters(in: .whitespacesAndNewlines)
+            columns.append(Column(
+                minX: run.x, maxX: run.maxX, text: text,
+                field: matched, unit: unit(forHeader: text), anchored: true))
+        }
+        return columns.count >= 3 ? columns : nil
+    }
+
+    static func header(above dataStart: Int, in bands: [Band], rowAspect: Double) -> Header? {
         var block: [Band] = []
         var bottom = dataStart
         var index = dataStart - 1
@@ -682,6 +820,10 @@ public enum MenuTableParser {
         let runs = block.flatMap(\.runs).flatMap(splitMergedHeaderRun)
         let matches = runs.reduce(0) { $0 + (field(forHeader: $1.text) != nil ? 1 : 0) }
         guard matches >= 3 else { return nil }
+
+        if let turned = turnedColumns(runs, rowAspect: rowAspect) {
+            return Header(columns: deduplicated(turned), bodyStart: bottom + 1)
+        }
 
         var columns: [Column] = []
         for run in runs.sorted(by: { $0.x < $1.x }) {
@@ -733,6 +875,40 @@ public enum MenuTableParser {
             return !(run.x < servingColumn.maxX && run.maxX > servingColumn.minX)
         }
         let valueColumns = columns.filter { $0.field != nil && $0.field != .serving }
+
+        // A DIAGONAL header knows exactly where its columns are, and
+        // that changes what an unplaceable number means. Its names are
+        // read one per column, so OCR can lose ONE and leave a real gap
+        // in the middle of the table — and both readings below fill a
+        // gap rather than admit it. Counting put nine numbers under nine
+        // surviving names; nearest-centre handed the fibre and sugar
+        // figures to total-carbs and added-sugar, three columns away.
+        // Every soft-serve row came out plausible and wrong
+        // (2026-08-23).
+        //
+        // So where the span is authoritative, a value is placed INSIDE a
+        // column or not at all. A dropped figure costs that one field;
+        // a filled gap costs every field to its right.
+        if columns.contains(where: \.anchored) {
+            for run in numberRuns {
+                let found = numbers(in: run.text)
+                guard found.count == 1, let value = found.first else { continue }
+                let at = run.x + run.w / 2
+                // Overlapping spans are ordinary here — a turned name
+                // leans over its neighbour — so the innermost match
+                // wins: the column that starts latest still containing
+                // the figure.
+                guard let column = columns
+                    .filter({ $0.minX <= at && at <= $0.maxX })
+                    .max(by: { $0.minX < $1.minX }),
+                    let field = column.field, field != .serving
+                else { continue }
+                values[field] = converted(value, for: field, unit: column.unit)
+            }
+            return assemble(
+                id: id, name: strippingAllergens(from: name), section: section,
+                serving: serving, values: values)
+        }
 
         // PRIMARY: count match. A table row prints one number per value
         // column, in column order, so when the counts agree the mapping

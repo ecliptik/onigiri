@@ -863,6 +863,81 @@ Each cost a debugging session.
     Vision, whose observations the parser cannot tell from PDFKit's. A
     rasterised guide goes 0 rows → 47. Capped at `ocrPageLimit` pages
     because OCR costs ~1 s each.
+  - **That run-count test can never fire on a RENDERED WEB PAGE, and a
+    web page is where it is needed most** (2026-08-23). Nav, footer and
+    cookie banner put somisomi's nutrition page at 41 runs — past the
+    limit — while its two tables are `<img>` PNGs with no text layer at
+    all, so "no nutrition table" came back for a page that is nothing
+    but nutrition tables. `readOCR`'s second trigger is the whole
+    DOCUMENT having parsed to nothing, which is the same test
+    `MenuLinkLoader` uses to decide a render failed. A page that HAS a
+    text layer keeps it unless the OCR produces the table that layer
+    could not — a shared article is read as prose off those same runs
+    (`SharedPageReader`), and swapping them for a transcript that also
+    holds no table changes that reading for nothing.
+  - **Vision DOWNSAMPLES what it is handed, so rendering a page bigger
+    makes its small type LESS readable, not more — and THE PHONE'S
+    THRESHOLD IS FAR BELOW THE MAC'S.** Measured on the device, one band
+    of one page: 3,900 × 1,365 (5.3 MP) read 1 of 10 column names,
+    3,900 × 914 read 2, and 2,600 × 609 (1.6 MP) read all 10. Same
+    pixels per inch, same rotation — only the megapixels differ. Hence
+    strips (`readableWidth` across, `pixelBudget` deep), and hence
+    `readingHeader`: the strips are sized for the DATA rows, which read
+    fine at 5.3 MP, so the HEADINGS get one close look of their own at
+    about 2 MP over the band above the first data row. **Calibrating any
+    of this on a Mac is worthless** — four builds went to the phone
+    before this surfaced, each green on macOS.
+  - **A TURNED column name reads correctly in exactly one of two
+    orientations**, so each strip is read again at 180° and the more
+    legible reading of each box wins; the tie is broken by what
+    `field(forHeader:)` can NAME, because `SATURATED FAT` and its
+    upside-down twin `AVS G3AYUNEVS` are the same length in the same
+    character classes. The flipped pass mostly REPLACES, but it may ADD
+    a run that names a column: **Mac Vision returns wreckage where the
+    phone returns SILENCE**, so a replace-only rule discarded the only
+    correct reading of somisomi's headings on the only platform that
+    ships. It is paid only where `hidesText` says the strips found
+    materially more than the page's own text layer — and that question
+    cannot be asked earlier, since at whole-page size Vision returns 46
+    runs for the page whose strips hold 458.
+  - **An axis-aligned box around a turned name OVERLAPS its
+    neighbours**, so the upright merge rule fused eleven headings into
+    three reading "SATURATED FAT TRANS FAT" and every value landed under
+    the wrong name. `turnedColumns` keeps one column per run, anchored at
+    the box's LEFT EDGE, which is where the data is. It needs BOTH of
+    its conditions and each is measured across every fixture: ONE
+    overlapping pair (the harm — a 90° name is narrower than its column
+    and leans on nothing, which is why McDonald's, Shake Shack and
+    Chipotle read correctly through the ordinary merge) AND rotation, as
+    width-per-character against the table's own rows (CAVA has an
+    incidental overlap of its own at 0.46–0.92 of that measure;
+    somisomi's turned cells sit at 0.07–0.22). Counting overlaps ALONE
+    was the first attempt and it is platform-dependent: macOS Vision put
+    three of somisomi's headings in contact and iOS Vision one.
+    Detection counts headings by `namesAColumn`, INCLUDING ones
+    recognised only to be ignored: adding `added sugar` to
+    `ignoredHeaderWords` silently stopped that heading counting toward
+    the layout and every row shifted a column.
+  - **When a menu will not read on the PHONE, do not debug it on the
+    Mac.** `log stream --device` is gone and the XCUITest runner cannot
+    be signed from an agent shell. What works: `MenuDocument.scanNote`
+    (DEBUG) puts each stage's run counts in the failure card;
+    `MenuDocument.debugScanned` (DEBUG) keeps the transcript EVEN WHERE
+    IT WAS REJECTED and writes it to Documents, where
+    `xcrun devicectl device copy from --domain-type appDataContainer`
+    reaches it; and a DEBUG probe behind a launch argument, run with
+    `devicectl device process launch --console`, measures on-device
+    Vision directly. Reach for these FIRST — they cost one deploy and
+    replace a guess-and-screenshot loop.
+  - **Where the header is diagonal a figure is placed INSIDE a column or
+    not at all** (`Column.anchored`). OCR loses cells on such a sheet —
+    a printed `0` most often — and both other readings fill the gap
+    rather than admit it: counting put nine numbers under nine surviving
+    names, and nearest-centre handed the fibre figure to total-carbs
+    three columns away. A dropped figure costs one field; a filled gap
+    costs every field to its right. Nearest-centre stays the rule for an
+    upright header, whose cells are merged by overlap and whose spans
+    are therefore approximate.
   - A shared "nutrition PDF" link may be a **CAPTCHA interstitial** or a
     JS viewer shell; both render as documents with no table. Follow the
     PDF the page names (`MenuLinkLoader`), don't trust the URL's `.pdf`.

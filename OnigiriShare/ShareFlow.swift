@@ -201,7 +201,19 @@ struct ShareFlow: View {
                 phase = .confirming
                 return
             }
-            phase = .failed("Try a photo or screenshot of the nutrition instead.")
+            var message = "Try a photo or screenshot of the nutrition instead."
+            #if DEBUG
+            // WHICH STAGE GAVE UP, in the one place it can be seen. The
+            // read escalates through a whole-page pass, sixteen strip
+            // passes and a close look at the header, behind a memory cap
+            // and a pass budget — and when it comes back empty nothing
+            // on screen says which of those stopped. These counts are
+            // what ruled out the extension's memory cap (`strips=8/8`)
+            // and Vision itself (`up=469`) on the phone, and pointed at
+            // the transcript instead (2026-08-23).
+            message += "\n[dbg runs=\(document.pages.map(\.count)) \(document.scanNote ?? "no ocr")]"
+            #endif
+            phase = .failed(message)
             return
         }
         rows = parsed

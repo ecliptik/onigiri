@@ -183,7 +183,29 @@ struct MenuImportSheet: View {
                     phase = .ready
                     return
                 }
-                phase = .failed("Try a photo or screenshot of one item instead.")
+                var message = "Try a photo or screenshot of one item instead."
+                #if DEBUG
+                // Which stage gave up — see ShareFlow, which shows the
+                // same line.
+                message += "\n[dbg runs=\(document.pages.map(\.count)) \(document.scanNote ?? "no ocr")]"
+                // AND the transcript, for reading off the device with
+                // `xcrun devicectl device copy from --domain-type
+                // appDataContainer`. On-device Vision and the
+                // simulator's do not produce the same runs, and no
+                // amount of reasoning on a Mac substitutes for the
+                // phone's own — four builds went to the device before
+                // that sank in (2026-08-23). `debugScanned` and not
+                // `pages`, because a REJECTED reading is the one worth
+                // looking at and `pages` no longer holds it.
+                struct Dump: Encodable { let observations: [LabelObservation] }
+                let scanned = document.debugScanned?.first ?? document.pages.first ?? []
+                if let out = try? JSONEncoder().encode(Dump(observations: scanned)),
+                   let dir = FileManager.default.urls(
+                    for: .documentDirectory, in: .userDomainMask).first {
+                    try? out.write(to: dir.appending(path: "menu-scan-debug.json"))
+                }
+                #endif
+                phase = .failed(message)
                 return
             }
             rows = parsed

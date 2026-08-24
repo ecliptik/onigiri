@@ -354,6 +354,44 @@ struct GoalView: View {
     private func todaySection(_ plan: CalorieBudget.Plan) -> some View {
         if let todayBudget {
             Section {
+                // The budget's two halves, ABOVE the sum, so the card
+                // opens with the part that cannot move (2026-08-23, the
+                // user, after asking how Lifesum does this). Lifesum and
+                // MyFitnessPal set a fixed goal from a DECLARED activity
+                // level and add tracker exercise on top; Onigiri has been
+                // the same shape all along — resting credited at
+                // midnight, active earned — with a measured baseline
+                // instead of a declared one, and showing only the SUM.
+                // That was the whole of the difference, and it is what
+                // made a number that climbs read as no plan at all.
+                //
+                // `Resting budget` is the fixed daily budget the user
+                // asked for, and it is GUARANTEED rather than forecast:
+                // the deficit comes out of the half that happens whether
+                // or not you move, so whatever is left is yours at
+                // breakfast. It is NOT `Resting burn, full day` in the
+                // disclosure minus something — that row is the estimate
+                // alone; this is the credit actually in force
+                // (`max(measured, estimate)`), less the deficit.
+                if let budgetSplit {
+                    LabeledContent("Resting budget") {
+                        Text("\(budgetSplit.resting, format: .number.precision(.fractionLength(0))) kcal")
+                            .monospacedDigit()
+                    }
+                    // "Earned" is the app's own word for active energy —
+                    // the footer two lines down says "as you earn active
+                    // energy" and PLAN-earned-budget is named for it. The
+                    // standing ban is on "earned" naming the ALLOWANCE
+                    // ("Budget earned today"), where it collides with the
+                    // verdict rule (`isTracked` + `DayBadgeRule`). Naming
+                    // the INCREMENT is the usage the ban was carved
+                    // around, and without it the footer's sentence has no
+                    // row it corresponds to.
+                    LabeledContent("Earned by moving") {
+                        Text("\(budgetSplit.earned, format: .number.precision(.fractionLength(0))) kcal")
+                            .monospacedDigit()
+                    }
+                }
                 LabeledContent("Budget, today's burn") {
                     Text("\(todayBudget, format: .number.precision(.fractionLength(0))) kcal")
                         .monospacedDigit()
@@ -758,6 +796,35 @@ struct GoalView: View {
         return plan.requiredDailyDeficit >= model.todayDayBurnKcal
             ? 0
             : model.todayDayBurnKcal - plan.requiredDailyDeficit
+    }
+
+    /// The budget as its two parts: the one that is already yours and the
+    /// one you are still earning. `resting + earned == todayBudget`,
+    /// exactly, and that is the property to protect — a column that does
+    /// not add up is a worse version of the problem this whole round
+    /// exists to fix.
+    ///
+    /// `earned` is DERIVED (`dayBurn − restingCredit`) rather than read
+    /// from Health's active total, because `todayDayBurnKcal` is
+    /// `TodayBurnFloor`-ratcheted and the credit is not; taking both
+    /// halves from source would leave the ratchet unaccounted and break
+    /// the sum. The residual belongs in active either way — the ratchet
+    /// exists to stop Health revising the volatile term down mid-day.
+    ///
+    /// nil when the deficit eats the entire resting credit. There is no
+    /// honest "already yours" figure then (it would be negative, and the
+    /// budget row above is floored at zero, so the column would stop
+    /// adding up), and `isAggressive` in its own section is the sentence
+    /// that case actually needs. Also nil before the credit exists at
+    /// all — a body Health cannot describe, first thing in the morning.
+    private var budgetSplit: (resting: Double, earned: Double)? {
+        guard let plan, let todayBudget,
+              model.todayRestingCreditKcal > 0,
+              plan.requiredDailyDeficit < model.todayRestingCreditKcal
+        else { return nil }
+        let resting = model.todayRestingCreditKcal - plan.requiredDailyDeficit
+        let earned = max(0, todayBudget - resting)
+        return (resting, earned)
     }
 
     /// What is left of today's budget, rendered the one way the app

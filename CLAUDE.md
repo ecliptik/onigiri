@@ -552,9 +552,28 @@ Each cost a debugging session.
   caption states the arithmetic in the LIVE numbers. That caption never names
   the 3,500 kcal-per-POUND constant: this screen renders in the user's unit and
   the constant is wrong in kg.
-- That `Budget` section is ONE FACT PER ROW — `Budget, today's burn`, `<intake
-  word> today`, `Left today`, `Burned today`, lower-case t (the user,
-  2026-08-18). `Left today` is `budget − intake` through
+- That `Budget` section is ONE FACT PER ROW — `Resting budget`,
+  `Earned by moving`, `Budget, today's burn`, `<intake word> today`,
+  `Left today`, `Burned today`, lower-case t (the user, 2026-08-18). The
+  first two are the budget's HALVES and they must sum to the third
+  EXACTLY: `resting = restingCredit − deficit`, `earned = dayBurn −
+  restingCredit`. Derive `earned`, never read Health's active total for it
+  — `todayDayBurnKcal` is `TodayBurnFloor`-ratcheted and the credit is not,
+  so two source-read halves stop adding up. Suppress the pair entirely when
+  the deficit exceeds the resting credit (no honest "already yours" figure,
+  and the budget row is floored at 0, so the column would break);
+  `isAggressive` says that case. The split is what Lifesum and MyFitnessPal
+  show and Onigiri did not (the user asked, 2026-08-23): both set a fixed
+  goal from a DECLARED activity level and add tracker exercise on top —
+  same shape, worse baseline. `Resting budget` is the fixed daily budget,
+  GUARANTEED rather than forecast, because the whole deficit comes out of
+  the half that happens whether or not you move. It is NOT
+  `Resting burn, full day` minus anything: that row is the estimate alone,
+  this is the credit in force. `Earned by moving` is the one place "earned"
+  may appear on this screen — the ban is on it naming the ALLOWANCE
+  ("Budget earned today"), where it collides with the verdict rule; naming
+  the INCREMENT is the app's own word for active energy and the footer one
+  line down already uses it. `Left today` is `budget − intake` through
   `remainingHeadline`, so a day past its budget reads `+246 kcal over` and
   never as a negative allowance; it sits directly under the intake row so the
   top three read DOWN as the subtraction (2026-08-23, the user's ask — Goal

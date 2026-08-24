@@ -158,7 +158,8 @@ favour and one not:
 - **Lifesum shows the two parts separately; Onigiri shows only the sum.**
   That is the whole of the difference, and it is exactly the complaint.
 
-Which suggests a Fork A follow-on, not yet built — decompose the row:
+Which suggested a Fork A follow-on, and the user took it (see Status) —
+decompose the row:
 
     Resting budget      1,430 kcal   ← yours at midnight, does not move
     + Earned by moving    166 kcal   ← active so far today
@@ -166,13 +167,16 @@ Which suggests a Fork A follow-on, not yet built — decompose the row:
 
 The fixed daily budget then EXISTS and is guaranteed rather than forecast,
 and both budgets finally share a visible common term (`Budget, average day`
-is the same first row plus an average day's active). Caveats to settle
-first: the resting credit is `max(measured, estimate)`, so it can rise a
-little during the day rather than being strictly fixed; `TodayBurnFloor`
-ratchets the TOTAL, so the parts must be derived as
-`resting = credit, active = todayDayBurnKcal − credit` or the column will
-not add up; and it takes the section to six rows, which is the direction
-2026-08-10 pulled back from ("there's a lot here").
+is the same first row plus an average day's active). Settled in the build:
+the resting credit is `max(measured, estimate)`, so it can rise a little
+during the day rather than being strictly fixed — accepted, it can only
+rise; `TodayBurnFloor` ratchets the TOTAL, so `earned` is DERIVED
+(`dayBurn − credit`) and the residual lands in active, which is the term
+the ratchet exists to protect; and the pair is suppressed when the deficit
+exceeds the credit, where no honest "already yours" figure exists. It does
+take the section to six rows, which is the direction 2026-08-10 pulled back
+from ("there's a lot here") — the mitigation is that all six now form one
+checkable column rather than six unrelated facts.
 
 ## Status — Fork A shipped (2026-08-23)
 
@@ -186,5 +190,18 @@ The user chose Fork A. Built, 654 kit tests green, app + watch build clean:
   `GoalView.averageDayReconciliation(_:)` — suppressed when
   `averageBurnKcal` is nil or the projected budget is non-positive.
 - CLAUDE.md's three budget bullets updated to match.
+- `OnigiriUITests.testGoalBudgetShot` (opt-in, `TEST_RUNNER_BUDGET_SHOT=1`)
+  captures the section and asserts the rows it photographs. It exists
+  because the QA walkthrough's `qa-goal` shots are NOT evidence for this
+  screen — both of 2026-08-23's were a stuck food-form sheet and the run
+  passed anyway. It scrolls before waiting: a Form renders lazily, so a
+  below-fold row does not exist to wait for, and the first version of this
+  test spent 20 seconds waiting for something that could never appear.
 
-The Lifesum decomposition above is the open question.
+Then the Lifesum decomposition, on the user's go (2026-08-23):
+
+- `Resting budget` + `Earned by moving` above `Budget, today's burn`, the
+  two halves summing to it exactly. `GoalModel.todayRestingCreditKcal`
+  added; `earned` derived, never read from Health, so the ratchet cannot
+  break the column. Verified on the seeded sim: 1,093 + 385 = 1,478, and
+  1,478 − 1,100 = 378.

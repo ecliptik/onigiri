@@ -17,6 +17,20 @@ final class GoalModel {
     /// day. Ratcheted HERE, once per load, not in the view body: the
     /// floor writes as it reads, and a view body re-runs per keystroke.
     private(set) var todayDayBurnKcal: Double = 0
+    /// The RESTING half of `todayDayBurnKcal` — `max(measured, estimate)`,
+    /// the credit that lands whole at midnight. Held separately so Goal
+    /// can show the budget as its two parts (the fixed one and the earned
+    /// one) rather than only their sum, which is the single difference
+    /// between this model and how Lifesum/MyFitnessPal present the same
+    /// arithmetic (2026-08-23, `plans/PLAN-budget-one-number.md`).
+    ///
+    /// The ACTIVE half is deliberately NOT stored beside it. It is derived
+    /// as `todayDayBurnKcal − todayRestingCreditKcal`, because the total
+    /// above is `TodayBurnFloor`-ratcheted and the credit is not — store
+    /// both halves and the ratchet lands nowhere, so the two rows stop
+    /// summing to the row under them. Deriving it puts the residual in
+    /// active, which is the term the ratchet exists to protect anyway.
+    private(set) var todayRestingCreditKcal: Double = 0
     /// Eaten so far today — the numerator of Goal's `Budget` row. Free:
     /// it rides the `todaySummary()` read that already produces the burn
     /// above it, so showing progress costs no extra HealthKit query.
@@ -111,6 +125,7 @@ final class GoalModel {
             return BasalEstimate.restingKcal(
                 weightLb: weightLb, heightCm: heightCm, ageYears: age, sex: body.sex)
         }()
+        todayRestingCreditKcal = max(today.restingBurnKcal, estimatedRestingKcal ?? 0)
         todayDayBurnKcal = TodayBurnFloor.ratcheted(
             DayBudget.dayBurn(
                 activeKcal: today.activeBurnKcal,

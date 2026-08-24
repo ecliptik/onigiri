@@ -99,6 +99,8 @@ final class OnigiriUITests: XCTestCase {
             "Goal's Budget section never appeared — the shot would be of the wrong screen"
         )
         XCTAssertTrue(app.staticTexts["Budget, today's burn"].exists)
+        XCTAssertTrue(app.staticTexts["Resting budget"].exists)
+        XCTAssertTrue(app.staticTexts["Earned by moving"].exists)
         Thread.sleep(forTimeInterval: 1.0)
         let top = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         top.name = "goal-budget"

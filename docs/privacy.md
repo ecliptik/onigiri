@@ -5,7 +5,7 @@ permalink: /privacy/
 
 # Onigiri Privacy Policy
 
-_Last updated: July 20, 2026_
+_Last updated: August 24, 2026_
 
 Onigiri is a calorie, nutrition, and water tracker for iPhone, iPad,
 and Apple Watch. It is built so that your data stays yours.
@@ -54,10 +54,27 @@ beyond your device's network address, which every internet request
 carries. Each service's own privacy policy governs what it does with
 queries it receives.
 
+## Content you share with Onigiri
+
+Onigiri can read a nutrition page, a PDF, an image, or a link you hand
+it through the iOS share sheet. It reads only what you share, when you
+share it — it does not watch your browsing, your clipboard, or your
+photo library.
+
+One case reaches the network: if what you share is a **link**, Onigiri
+fetches that address so it has something to read. The request goes to
+the site you chose and nowhere else, carries no Health data and no
+identity, and happens only for a link you shared yourself. A page, PDF,
+or image shared directly is read on your device without any request.
+
+Shared documents are read into a scratch copy that is deleted when the
+read finishes. Nothing is kept but a food you actually save or log.
+
 ## AI features (optional)
 
 Onigiri's AI features — food estimates, meal-name suggestions,
-nutrition-label reading, and Identify Food — are **off by default**.
+nutrition-label reading, reading a sign or a menu, Identify Food, and
+refining an estimate with a note you write — are **off by default**.
 Nothing AI-related runs until you turn the switch on in Settings → AI.
 When you do, they run **on-device** through Apple Intelligence on
 devices that support it — on that setting, no data is sent to third
@@ -72,9 +89,10 @@ scans never use AI at all. With the default Apple Intelligence engine,
 every stage stays on the phone.
 
 In Settings you can instead bring your own AI provider. When you do,
-those features send only the text you typed, the label transcript
-being read, or the photo being identified to the provider **you**
-configured, under your own API key:
+those features send only the text you typed, the note you wrote to
+refine an estimate, the label or menu transcript being read, or the
+photo being identified to the provider **you** configured, under your
+own API key:
 
 - **[Anthropic](https://www.anthropic.com/legal/privacy)** — your
   Anthropic API key, sent only to Anthropic.

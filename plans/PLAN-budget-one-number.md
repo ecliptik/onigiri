@@ -205,3 +205,108 @@ Then the Lifesum decomposition, on the user's go (2026-08-23):
   added; `earned` derived, never read from Health, so the ratchet cannot
   break the column. Verified on the seeded sim: 1,093 + 385 = 1,478, and
   1,478 − 1,100 = 378.
+
+
+## Round 3 — one budget, and Goal stops reporting a day (2026-08-23)
+
+> "I think we're overcomplicating by mixing in daily information into goal.
+> Goal should include just the daily budget and how it is calculated. We
+> don't need to include today's active energy, food eaten or left, just have
+> Daily Budget. Put the resting budget into the How the budget is set, also
+> rename this to 'How your budget is calculated'." — the user
+
+This REVERSES Round 2's direction, and the reversal is the lesson. Rounds 1
+and 2 both tried to make two budgets legible side by side — better names,
+then a reconciling footer, then a resting/earned split. Each addition was
+correct on its own and none of them fixed the complaint, because the
+complaint was never about naming. Two numbers that answer "what can I eat
+per day" cannot be made to read as one, however well labelled.
+
+What fixed it was deleting one. Goal keeps the AVERAGE-DAY budget — the
+stable one, the one a plan is made of, constant midnight to midnight — and
+the live figure stays on Today, where the logging it is tracked against
+already lives. Nothing on Goal moves during a day, so there is no second
+number left to contradict the first.
+
+Shipped:
+
+- The `Budget` section is ONE row, `Daily budget` = `plan.dailyBudget`,
+  rendered `≈ N kcal/day` because it is a rate, not a day.
+- Gone from Goal: `Budget, today's burn`, `Earned by moving`, `<intake>
+  today`, `Left today`, `Burned today` — and with them `GoalModel`'s
+  `todayDayBurnKcal` / `todayIntakeKcal` / `todayRestingCreditKcal`, its
+  `todaySummary()` read, and its `TodayBurnFloor` ratchet (TodayView and
+  `DailyPlanLoader` still drive that; Goal was only ever a reader).
+- `Resting budget` moved INTO the explainer, rebuilt from `BasalEstimate`
+  rather than today's credit so nothing in the group moves either. It sits
+  directly under `Resting burn, full day`, the row it is cut from.
+- `How the budget is set` → `How your budget is calculated`. "Set" reads as
+  a setting; every figure inside is derived.
+- `Budget, average day` deleted from the explainer — the visible row IS that
+  number now, and repeating it under a second name is the same fault as two
+  numbers under one name.
+- The footer is the one thing holding the two screens together: "This is
+  what an average day allows. Today's own budget follows the energy you
+  actually burn, so Today can read higher or lower."
+
+Open, flagged not fixed: Today's card title is ALSO "Daily budget" in
+maintenance mode (`TodayView`; "Daily goal" in lose mode). In maintenance
+the same words name Goal's average and Today's live figure — the collision
+this plan exists to remove, in the one mode nobody was looking at.
+
+## The QA walkthrough was filing false evidence (2026-08-23)
+
+Found while verifying Round 2: `qa-goal` was a photograph of a stuck Add
+Food form, and the run passed. Three faults, each invisible on its own.
+
+1. **The form never closed.** The bottom `.searchable` bar dismisses with an
+   X GLYPH, not a button labelled "Cancel", so the two `tapIfExists(Cancel)`
+   calls after `food-form-db-search` matched nothing. Fixed by relaunching,
+   which the tour already does for the Log sheet's focused search.
+2. **The recovery loop guarded nothing.** It asked whether the Foods scope
+   bar EXISTED — and a sheet does not remove the screen beneath it from the
+   hierarchy, so the answer was yes the whole time it was covered. It exited
+   on the first check having dismissed nothing. Replaced by `dismissModals`,
+   which tests HITTABILITY of the tab chrome.
+3. **`switchTab` tapped through the sheet.** A covered tab button still
+   exists, and tapping it lands on whatever is over it — silently. It now
+   waits for hittability and `XCTFail`s with a named reason.
+
+Plus `shot(expect:)`: every stop that can land on the wrong screen names
+something only the right screen has, files the image as `…-WRONG`, and
+records a failure without aborting the tour. Two traps met while adding it,
+both worth remembering:
+
+- **An expectation must be something the capture can CONTAIN.** `qa-goal`
+  is the top of Goal and the budget is below the fold, so expecting
+  "Daily budget" failed on the right screen. It expects "Current weight",
+  and a new `qa-goal-budget` stop scrolls down for the rows themselves.
+- **An expectation must not also be true of the screen behind.** The first
+  version expected "Protein shake" on the food-form stop — which the Foods
+  LIST row carries too, so it would have passed on the exact failure it was
+  written for. It expects "Edit Food".
+
+## The seeded simulator (2026-08-23)
+
+- **Default target +60 days → +120.** At 60, the seeded 12.2 lb asks 650
+  kcal/day, leaving a ~1,650 average-day budget against a ~1,743 resting
+  estimate — under the body's own baseline, so `isAggressive` fired and every
+  Goal capture carried an orange pace warning. A correct warning about a bad
+  seed, and no way to review the ordinary screen. 120 days asks ~298 for a
+  ~2,002 budget. `--seed-aggressive` keeps 60 so the warning stays reachable.
+- **A state flag now REPLACES the saved goal.** `goalCount == 0` made every
+  one of them a no-op on the second run — the SwiftData store outlives the
+  install — so `--seed-goal-reached` inserted nothing and
+  `testGoalReachedCelebrationAndContinue` failed on a real assertion about a
+  state the argument had declined to set up.
+- **A state flag clears `goalReachedAck*`.** Defaults outlive the store too,
+  so the celebration stayed permanently dismissed and the test worked exactly
+  once per simulator.
+
+Two more latent test bugs surfaced once the seed was honest, both the same
+lazy-Form trap in different clothes: `testMaintenanceMode` decided a
+`DisclosureGroup` was shut because a row below the fold was not in the tree,
+and CLOSED the group it needed open (`revealInBudgetExplainer` scrolls
+first, then toggles); and `testGoalReachedCelebrationAndContinue` asserted
+`.exists` on choices that render below the celebration card's own bottom
+edge.

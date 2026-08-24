@@ -300,219 +300,79 @@ struct GoalView: View {
         )
     }
 
-    /// What today allows, and the pace warning if the plan has earned
-    /// one. The screen reads as four questions — what can I eat today,
-    /// how far have I come, where do these numbers come from, is the
-    /// pace sane — rather than the one nine-row block it used to be
-    /// (the user, 2026-08-10: "there's a lot here").
+    /// The plan the goal implies, and the pace warning if it has earned
+    /// one. Goal answers two questions and only two — what does my goal
+    /// allow me per day, and how was that worked out. The DAY's own
+    /// figures are Today's job (the user, 2026-08-23: "we're
+    /// overcomplicating by mixing in daily information into goal").
     ///
-    /// The two budgets must stay TOLD APART, and since 2026-08-18 the
-    /// ROW LABEL carries that — "Budget, today's burn" here against
-    /// "Budget, average day" in the collapsed derivation group. It used
-    /// to be the SECTION header ("Budget" under "Today"), which worked
-    /// only while the row label was a bare "Budget"; naming the row is
-    /// the stronger form, since a label survives being read out of
-    /// context and a section header does not. What must never come back
-    /// is two rows reading plainly "Budget" — that is one number failing
-    /// to match itself (the user, 2026-08-11), and it is still
-    /// forbidden. Do not bring the projection up here.
+    /// This section held six rows for a few hours — the budget, its
+    /// resting and earned halves, eaten, left, and burned — each one
+    /// correct, all six answering a question this screen was not being
+    /// asked. Adding rows was the wrong cure for "the two budgets
+    /// disagree": what actually fixed it was DELETING one of them, so
+    /// nothing on Goal moves during a day and there is no second number
+    /// left to contradict the first.
     ///
-    /// The COMMA form is load-bearing, and it is why this row alone
-    /// breaks the "… today" shape of the others (2026-08-23). It pairs
-    /// with "Budget, average day" so the two read as one quantity
-    /// qualified two ways — the pairing that already carries "Average
-    /// daily burn" / "Average burn, from data". "Budget for today"
-    /// read as a fixed daily allowance and got compared against an RDA:
-    /// 1,361 at 9:33 am looked like a starvation diet when it was
-    /// simply the whole day's resting plus 21 kcal of active earned so
-    /// far (the user, 2026-08-23). What it must NOT say is "so far":
-    /// that claims a partial MEASUREMENT, which this is not — resting
-    /// is credited whole at midnight — and it would contradict "Burned
-    /// today" one row down, which moves with it one-for-one and is
-    /// forbidden the same qualifier for the same reason. "Budget
-    /// earned today" is likewise out: "earned" is the VERDICT word
-    /// (`isTracked` + `DayBadgeRule`) and must not name an allowance.
+    /// So this row is the AVERAGE-DAY budget, not today's. It is stable
+    /// from midnight to midnight (`averageDailyBurnKcal` excludes today
+    /// and caches on a day-key), which is what makes it the number you
+    /// can plan against at breakfast — the "set daily budget based on
+    /// our goal" that was asked for. The live one lives on Today, where
+    /// the logging it is tracked against also lives.
     ///
-    /// What the qualifier names, since 2026-08-23, is the INPUT rather
-    /// than the moment: "right now" said only WHEN, which is the half
-    /// the reader already had. Naming the burn makes the row checkable
-    /// against the two figures already on screen — "Burned today" minus
-    /// "Deficit needed" — and makes the pair with "Budget, average day"
-    /// state its own difference: one sum, two burns. Three rounds of
-    /// renaming (section header, row label, footer) had left the two
-    /// figures still reading as rival allowances (the user, 2026-08-23:
-    /// "1,596 here as a budget is different than the budget, average
-    /// day of 2,369"), which is what the footer's second clause now
-    /// answers outright.
-    ///
-    /// One fact per row. The old "Budget" row printed the pair as
-    /// "612 / 1595 kcal", which asks the reader to do the subtraction
-    /// and never says which side is which (the user, 2026-08-18).
-    /// Nothing new is computed here — this is three numbers the screen
-    /// already had, laid out so none of them needs interpreting.
+    /// The two screens can therefore still quote different figures, and
+    /// the footer is what stops that reading as a contradiction: it says
+    /// plainly that this is an average day and Today's own follows what
+    /// is actually burned. That sentence is load-bearing — it is the
+    /// only remaining thing standing between this design and the
+    /// 2026-08-02 failure of one label on two numbers.
     @ViewBuilder
-    private func todaySection(_ plan: CalorieBudget.Plan) -> some View {
-        if let todayBudget {
-            Section {
-                // The budget's two halves, ABOVE the sum, so the card
-                // opens with the part that cannot move (2026-08-23, the
-                // user, after asking how Lifesum does this). Lifesum and
-                // MyFitnessPal set a fixed goal from a DECLARED activity
-                // level and add tracker exercise on top; Onigiri has been
-                // the same shape all along — resting credited at
-                // midnight, active earned — with a measured baseline
-                // instead of a declared one, and showing only the SUM.
-                // That was the whole of the difference, and it is what
-                // made a number that climbs read as no plan at all.
+    private func budgetSection(_ plan: CalorieBudget.Plan) -> some View {
+        Section {
+            // ONE row. The `≈` and the `/day` are both doing work: this
+            // is derived from a trailing average, and it is a rate
+            // rather than a figure for a particular day.
+            LabeledContent("Daily budget") {
+                Text("≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
+                    .monospacedDigit()
+            }
+        } header: {
+            Text("Budget")
+        } footer: {
+            // Every line here must say something the row CANNOT, which
+            // is why 2026-08-13 emptied this footer when its caption
+            // restated the rows above it.
+            //
+            // This one passes: the row cannot say what KIND of day its
+            // number describes. Without it, someone who reads 2,369
+            // here and 1,596 on Today has two answers to one question
+            // and nothing telling them apart — the exact failure of
+            // 2026-08-02, which two rows on one screen were previously
+            // used to avoid. One row plus this sentence is the cheaper
+            // version of the same guarantee.
+            //
+            // "Follows the energy you actually burn" rather than "grows
+            // through the day": with no live figure on this screen,
+            // direction is Today's story to tell, and the useful fact
+            // here is that the other number has a different basis, not
+            // which way it moves.
+            VStack(alignment: .leading, spacing: 4) {
+                Text("This is what an average day allows. Today's own budget follows the energy you actually burn, so Today can read higher or lower.")
+                // The at-target exception, because something else
+                // changes there and nothing else says so: a zero
+                // deficit target makes `DayBadgeRule.current` return
+                // `.anyDeficit`, which grades more permissively than
+                // either real mode. That silent loosening is the
+                // whole reason `GoalReachedCard` re-arms after two
+                // weeks; it should not take a card to find out.
                 //
-                // `Resting budget` is the fixed daily budget the user
-                // asked for, and it is GUARANTEED rather than forecast:
-                // the deficit comes out of the half that happens whether
-                // or not you move, so whatever is left is yours at
-                // breakfast. It is NOT `Resting burn, full day` in the
-                // disclosure minus something — that row is the estimate
-                // alone; this is the credit actually in force
-                // (`max(measured, estimate)`), less the deficit.
-                if let budgetSplit {
-                    LabeledContent("Resting budget") {
-                        Text("\(budgetSplit.resting, format: .number.precision(.fractionLength(0))) kcal")
-                            .monospacedDigit()
-                    }
-                    // "Earned" is the app's own word for active energy —
-                    // the footer two lines down says "as you earn active
-                    // energy" and PLAN-earned-budget is named for it. The
-                    // standing ban is on "earned" naming the ALLOWANCE
-                    // ("Budget earned today"), where it collides with the
-                    // verdict rule (`isTracked` + `DayBadgeRule`). Naming
-                    // the INCREMENT is the usage the ban was carved
-                    // around, and without it the footer's sentence has no
-                    // row it corresponds to.
-                    LabeledContent("Earned by moving") {
-                        Text("\(budgetSplit.earned, format: .number.precision(.fractionLength(0))) kcal")
-                            .monospacedDigit()
-                    }
-                }
-                LabeledContent("Budget, today's burn") {
-                    Text("\(todayBudget, format: .number.precision(.fractionLength(0))) kcal")
-                        .monospacedDigit()
-                }
-                // The user's own word for intake — this row follows the
-                // Settings choice like every other intake readout.
-                LabeledContent("\(intakeWord.label) today") {
-                    Text("\(model.todayIntakeKcal, format: .number.precision(.fractionLength(0))) kcal")
-                        .monospacedDigit()
-                }
-                // Directly under the two rows it comes from, so the top of
-                // the section reads DOWN as the subtraction it is
-                // (1,596 − 1,018 = 578) rather than asking the reader to do
-                // it (the user, 2026-08-23: "add the kcal left number").
-                // Goal held both terms already and quoted neither against
-                // the other — the one figure Today's ring has always led
-                // with was the one this screen made you compute.
-                //
-                // Through `remainingHeadline`, so a day past its budget
-                // reads "+246 kcal over" and never as a negative
-                // allowance — the same grammar the ring, the complication
-                // and the widget flank use.
-                if let todayLeftText {
-                    LabeledContent("Left today") {
-                        Text(todayLeftText)
-                            .monospacedDigit()
-                    }
-                }
-                // NOT "so far", and the longer label makes that MORE
-                // tempting to misread than the old bare "Burn" did:
-                // `dayBurn` is active earned to now PLUS the whole day's
-                // resting, credited from midnight. That misreading
-                // already collided with Details' measured-so-far figure
-                // once and read as the app contradicting itself
-                // (2026-08-02). What answers it is the disclosure below
-                // ("Resting energy is credited at midnight, active
-                // energy as you earn it"), NOT this section's footer —
-                // 2026-08-13 deliberately emptied the footer of
-                // how-it-is-built copy for length. The footer now
-                // carries ONE line again (2026-08-23) and it is about
-                // the BUDGET, not this row — the midnight/earned split
-                // is still the disclosure's to explain.
-                LabeledContent("Burned today") {
-                    Text("\(model.todayDayBurnKcal, format: .number.precision(.fractionLength(0))) kcal")
-                        .monospacedDigit()
-                }
-            } header: {
-                Text("Budget")
-            } footer: {
-                // Every line here must say something the rows CANNOT.
-                // That is the whole test, and it is why 2026-08-13
-                // emptied this footer: the caption then restated the
-                // two rows above it, and the midnight-and-earned
-                // explanation belongs to the disclosure, which has room
-                // for it.
-                //
-                // ONE line is unconditional again since 2026-08-23, and
-                // it passes that test. Every figure in this section is a
-                // snapshot that CLIMBS — the budget one-for-one with the
-                // burn, all day — and no row can say so, because a row
-                // shows a number rather than its direction. "Budget,
-                // right now" stops the number reading as a fixed daily
-                // ration; only this says which way it moves. Without
-                // it, someone who checks at breakfast and not again
-                // never learns the figure was going to grow (the user,
-                // 2026-08-23, on 1,361 kcal at 9:33 am).
-                //
-                // Kept to one clause on purpose. It names ACTIVE energy
-                // only — the half that moves — and leaves the midnight
-                // resting credit to the disclosure, which is what stops
-                // this becoming the long caption that got the footer
-                // emptied. "Energy" is the formal register's word and
-                // captions are formal register; the ROWS still say burn.
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Your budget grows through the day as you earn active energy.")
-                    // The reconciliation, and the reason this footer is two
-                    // clauses again after 2026-08-23 kept it to one. The
-                    // rule that emptied it in 2026-08-13 is "say something
-                    // no ROW can", and no row on this screen can say that
-                    // the two budgets are ONE SUM on two different burns:
-                    // they are `burn − deficit` either way, and the reader
-                    // met them in two different containers, one of them
-                    // collapsed. "1,596 here as a budget is different than
-                    // the budget, average day of 2,369" (the user,
-                    // 2026-08-23) is that gap read as a contradiction.
-                    //
-                    // Said in the LIVE numbers, like the derivation caption
-                    // the user asked for on 2026-08-18 — a relationship
-                    // stated as a formula is checkable by nobody.
-                    //
-                    // It quotes the DIFFERENCE IN BURN, not "the active
-                    // energy today hasn't earned". Those are the same
-                    // figure only while the day's resting credit matches
-                    // an average day's measured basal, and the credit is
-                    // floored by `BasalEstimate` — so the tidier sentence
-                    // is one this screen cannot prove.
-                    //
-                    // Never a prediction. "On an average day's burn" is a
-                    // conditional; "lands near" would promise the calories
-                    // PLAN-earned-budget deleted the trailing average for
-                    // promising. Suppressed entirely when the average is
-                    // absent, since the plan is then riding the assumed
-                    // 2,000 and an assumption is not a second opinion.
-                    if let averageDayReconciliation = averageDayReconciliation(plan) {
-                        Text(averageDayReconciliation)
-                    }
-                    // The at-target exception, because something else
-                    // changes there and nothing else says so: a zero
-                    // deficit target makes `DayBadgeRule.current` return
-                    // `.anyDeficit`, which grades more permissively than
-                    // either real mode. That silent loosening is the
-                    // whole reason `GoalReachedCard` re-arms after two
-                    // weeks; it should not take a card to find out.
-                    //
-                    // Worded for BOTH cases it fires in — at or under
-                    // the target, and inside the band a pound above it.
-                    // "You're at your target" would be a small lie in
-                    // the second.
-                    if !isMaintenance, plan.requiredDailyDeficit == 0 {
-                        Text("No deficit left to hit at this weight, so the budget is your whole burn — any deficit earns the day.")
-                    }
+                // Worded for BOTH cases it fires in — at or under
+                // the target, and inside the band a pound above it.
+                // "You're at your target" would be a small lie in
+                // the second.
+                if !isMaintenance, plan.requiredDailyDeficit == 0 {
+                    Text("No deficit left to hit at this weight, so the budget is your whole burn — any deficit earns the day.")
                 }
             }
         }
@@ -605,7 +465,11 @@ struct GoalView: View {
     @ViewBuilder
     private func budgetCompositionSection(_ plan: CalorieBudget.Plan?) -> some View {
         Section {
-            DisclosureGroup("How the budget is set") {
+            // "How your budget is calculated" (the user, 2026-08-23).
+            // "Set" reads as a setting — something chosen and stored —
+            // when every figure inside is derived. Calculated says what
+            // the group actually contains, which is the arithmetic.
+            DisclosureGroup("How your budget is calculated") {
                 if !isMaintenance, let current = planWeightLb, let target = targetWeightLb {
                     weightBasisRow(basisLb: current)
                     LabeledContent("To lose") {
@@ -623,20 +487,13 @@ struct GoalView: View {
                         }
                     }
                 }
-                // Straight after "Deficit needed", the other half of the
-                // answer (the user, 2026-08-18): the two figures a plan
-                // actually hands you, before the burn rows that explain
-                // where they came from. Conclusions, then inputs.
-                //
-                // OUTSIDE the !isMaintenance block above on purpose —
-                // maintenance has no deficit row but still has a budget,
-                // and moving this inside would silently drop it there.
-                if let plan {
-                    LabeledContent("Budget, average day") {
-                        Text("≈ \(plan.dailyBudget, format: .number.precision(.fractionLength(0))) kcal/day")
-                            .monospacedDigit()
-                    }
-                }
+                // "Budget, average day" USED to repeat here, under a
+                // qualified name, because the visible row above it was
+                // a different (live) budget and the two had to be told
+                // apart. The section header row IS that number now, so
+                // repeating it would put one figure on the screen twice
+                // under two names — which is the same fault as two
+                // figures under one name, and just as unreadable.
                 // The disclosure listed the ingredients and never the
                 // recipe — "we know 464 is the deficit, but how is it
                 // actually calculated?" (the user, 2026-08-18). Spelled
@@ -721,8 +578,36 @@ struct GoalView: View {
                 // line that gap has no explanation anywhere in the app
                 // (the user, 2026-08-18: "do we need to put resting
                 // burn in here then?").
+                // The guaranteed floor under the budget, directly under
+                // the burn it comes from — a derived figure is unreadable
+                // away from its input, the same rule that put "Average
+                // burn, from data" beside "Average daily burn".
+                //
+                // This is the fixed part of the budget: resting happens
+                // whether or not you move, so taking the WHOLE deficit
+                // out of it leaves a number you have in hand at
+                // breakfast on any day, including one you never get off
+                // the sofa. It briefly sat in the Budget section above
+                // as "Resting budget" beside an "Earned by moving" row
+                // (2026-08-23, the Lifesum split); it belongs here,
+                // because it explains the budget rather than reporting
+                // a day (the user, same day).
+                //
+                // Built from `BasalEstimate`, not from today's resting
+                // credit, so nothing in this group moves during a day.
+                if let resting = restingBudget {
+                    LabeledContent("Resting budget") {
+                        Text("≈ \(resting, format: .number.precision(.fractionLength(0))) kcal/day")
+                            .monospacedDigit()
+                    }
+                }
                 if model.estimatedRestingKcal != nil {
                     Text("Estimated from your body metrics. Today's burn never counts less resting than this, even before Health has recorded it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if restingBudget != nil {
+                    Text("The resting burn less the deficit — what the goal allows on a day you don't move at all. Anything you burn above resting is on top of it.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -787,86 +672,22 @@ struct GoalView: View {
         }
     }
 
-    /// What TODAY allows, on the day's own burn — the same arithmetic
-    /// Today and Details run, so the two screens quote one number. nil
-    /// before Health has any burn for the day (and on the preview of a
-    /// goal that can't be derived at all).
-    private var todayBudget: Double? {
-        guard let plan, model.todayDayBurnKcal > 0 else { return nil }
-        return plan.requiredDailyDeficit >= model.todayDayBurnKcal
-            ? 0
-            : model.todayDayBurnKcal - plan.requiredDailyDeficit
-    }
-
-    /// The budget as its two parts: the one that is already yours and the
-    /// one you are still earning. `resting + earned == todayBudget`,
-    /// exactly, and that is the property to protect — a column that does
-    /// not add up is a worse version of the problem this whole round
-    /// exists to fix.
+    /// The part of the budget that is already yours: the body's own
+    /// resting burn, less the WHOLE deficit the goal asks for.
     ///
-    /// `earned` is DERIVED (`dayBurn − restingCredit`) rather than read
-    /// from Health's active total, because `todayDayBurnKcal` is
-    /// `TodayBurnFloor`-ratcheted and the credit is not; taking both
-    /// halves from source would leave the ratchet unaccounted and break
-    /// the sum. The residual belongs in active either way — the ratchet
-    /// exists to stop Health revising the volatile term down mid-day.
+    /// Resting happens whether or not you move, so putting the entire
+    /// deficit against it leaves a figure that holds on any day —
+    /// including one with no activity at all. It is a floor, not a
+    /// target: active energy is earned on top of it.
     ///
-    /// nil when the deficit eats the entire resting credit. There is no
-    /// honest "already yours" figure then (it would be negative, and the
-    /// budget row above is floored at zero, so the column would stop
-    /// adding up), and `isAggressive` in its own section is the sentence
-    /// that case actually needs. Also nil before the credit exists at
-    /// all — a body Health cannot describe, first thing in the morning.
-    private var budgetSplit: (resting: Double, earned: Double)? {
-        guard let plan, let todayBudget,
-              model.todayRestingCreditKcal > 0,
-              plan.requiredDailyDeficit < model.todayRestingCreditKcal
-        else { return nil }
-        let resting = model.todayRestingCreditKcal - plan.requiredDailyDeficit
-        let earned = max(0, todayBudget - resting)
-        return (resting, earned)
-    }
-
-    /// What is left of today's budget, rendered the one way the app
-    /// renders it. `remainingHeadline` owns the sign and the word, so a
-    /// day past its budget reads "+246 kcal over" here exactly as it does
-    /// in the ring — a negative allowance is never shown, and the "+" is
-    /// what stops a bare 246 reading as 246 still available.
-    ///
-    /// The plain "578 kcal" case drops the caption because the ROW LABEL
-    /// already carries it; "578 kcal left" beside "Left today" says it
-    /// twice.
-    private var todayLeftText: String? {
-        guard let todayBudget else { return nil }
-        let headline = CalorieBudget.remainingHeadline(todayBudget - model.todayIntakeKcal)
-        let value = headline.value.formatted(.number.precision(.fractionLength(0)))
-        return headline.over ? "+\(value) kcal over" : "\(value) kcal"
-    }
-
-    /// The sentence that makes "Budget, today's burn" and "Budget, average
-    /// day" one quantity instead of two rivals: same subtraction, two
-    /// burns, and here is how far apart the burns are right now.
-    ///
-    /// nil when there is no measured average — the plan is then built on
-    /// `projectedDailyBurn`'s assumed 2,000, and quoting an assumption as
-    /// the figure today is "short of" invents the very second opinion this
-    /// line exists to remove. The disclosure already labels that case
-    /// "(assumed)".
-    ///
-    /// Also nil on a non-positive projected budget: the goal has outrun
-    /// the average burn, which `isAggressive` says in its own section and
-    /// which this sentence would only muddle.
-    private func averageDayReconciliation(_ plan: CalorieBudget.Plan) -> String? {
-        guard let average = model.averageBurnKcal,
-              model.todayDayBurnKcal > 0,
-              plan.dailyBudget > 0
-        else { return nil }
-        let budget = plan.dailyBudget.formatted(.number.precision(.fractionLength(0)))
-        let gap = average - model.todayDayBurnKcal
-        guard gap >= 1 else {
-            return "On an average day's burn the same budget is \(budget) kcal — today's burn is already past one."
-        }
-        return "On an average day's burn the same budget is \(budget) kcal — today's burn is \(gap.formatted(.number.precision(.fractionLength(0)))) kcal short of one so far."
+    /// nil without a resting estimate (Health cannot describe the body),
+    /// and nil when the deficit swallows it whole — a negative "already
+    /// yours" is not a smaller allowance, it is an unreachable goal, and
+    /// `isAggressive` in its own section is the sentence that case needs.
+    private var restingBudget: Double? {
+        guard let resting = model.estimatedRestingKcal, let plan else { return nil }
+        let budget = resting - plan.requiredDailyDeficit
+        return budget > 0 ? budget : nil
     }
 
     var body: some View {
@@ -926,7 +747,7 @@ struct GoalView: View {
                 // comparison to the live number rather than the other way
                 // round.
                 if let plan {
-                    todaySection(plan)
+                    budgetSection(plan)
                 }
                 // Outside `if let plan`, as its rows have always been:
                 // where the numbers come from has to stay readable when

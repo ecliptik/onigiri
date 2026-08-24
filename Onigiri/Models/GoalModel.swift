@@ -12,29 +12,6 @@ final class GoalModel {
     /// healthWeightLb.
     var basisWeightLb: Double?
     private(set) var averageBurnKcal: Double?
-    /// Today's own burn (`DayBudget.dayBurn`, day-ratcheted), floor for
-    /// the projection — without it the preview lags Today on an active
-    /// day. Ratcheted HERE, once per load, not in the view body: the
-    /// floor writes as it reads, and a view body re-runs per keystroke.
-    private(set) var todayDayBurnKcal: Double = 0
-    /// The RESTING half of `todayDayBurnKcal` — `max(measured, estimate)`,
-    /// the credit that lands whole at midnight. Held separately so Goal
-    /// can show the budget as its two parts (the fixed one and the earned
-    /// one) rather than only their sum, which is the single difference
-    /// between this model and how Lifesum/MyFitnessPal present the same
-    /// arithmetic (2026-08-23, `plans/PLAN-budget-one-number.md`).
-    ///
-    /// The ACTIVE half is deliberately NOT stored beside it. It is derived
-    /// as `todayDayBurnKcal − todayRestingCreditKcal`, because the total
-    /// above is `TodayBurnFloor`-ratcheted and the credit is not — store
-    /// both halves and the ratchet lands nowhere, so the two rows stop
-    /// summing to the row under them. Deriving it puts the residual in
-    /// active, which is the term the ratchet exists to protect anyway.
-    private(set) var todayRestingCreditKcal: Double = 0
-    /// Eaten so far today — the numerator of Goal's `Budget` row. Free:
-    /// it rides the `todaySummary()` read that already produces the burn
-    /// above it, so showing progress costs no extra HealthKit query.
-    private(set) var todayIntakeKcal: Double = 0
     private(set) var weightHistory: [WeightTrend.Point] = []
     /// Full-day resting from Health's body metrics — the floor under
     /// every day's resting credit, shown on the Goal screen because it
@@ -92,13 +69,10 @@ final class GoalModel {
         async let burnRead = health.averageDailyBurnKcal()
         async let historyRead = health.bodyMassHistory()
         async let totalsRead = health.dailyEnergyTotals()
-        async let todayRead = health.todaySummary()
         healthWeightLb = (try? await weightRead) ?? nil
         averageBurnKcal = (try? await burnRead) ?? nil
         weightHistory = (try? await historyRead) ?? []
         dailyTotals = (try? await totalsRead) ?? []
-        let today = (try? await todayRead) ?? .zero
-        todayIntakeKcal = today.intakeKcal
         let lows = WeightTrend.dailyLows(weightHistory)
         dailyLowDates = Set(lows.map(\.date))
         smoothedHistory = WeightTrend.movingAverage(lows, windowDays: 7)
@@ -109,10 +83,10 @@ final class GoalModel {
         basisWeightLb = WeightTrend.basisLb(
             SharedStore.weightBasis, history: weightHistory, latestLb: healthWeightLb)
         let body = await health.bodyProfile()
-        // `basisWeightLb`, not `healthWeightLb`. This estimate floors the
-        // resting half of `todayDayBurnKcal` below, which IS this
-        // screen's `Budget` row — a verdict-shaped number, so it runs on
-        // the sustained basis like every other one. Reading the raw
+        // `basisWeightLb`, not `healthWeightLb`. This estimate is what
+        // `Resting budget` is cut from and what floors every day's
+        // resting credit — a verdict-shaped number, so it runs on the
+        // sustained basis like every other one. Reading the raw
         // weigh-in here let an evening reading raise Goal's budget while
         // Today's (floored from `targetBasisWeightLb`) held still: ~14
         // kcal at 3 lb, since the equation's weight term is 10 kcal/kg,
@@ -125,14 +99,14 @@ final class GoalModel {
             return BasalEstimate.restingKcal(
                 weightLb: weightLb, heightCm: heightCm, ageYears: age, sex: body.sex)
         }()
-        todayRestingCreditKcal = max(today.restingBurnKcal, estimatedRestingKcal ?? 0)
-        todayDayBurnKcal = TodayBurnFloor.ratcheted(
-            DayBudget.dayBurn(
-                activeKcal: today.activeBurnKcal,
-                restingKcal: today.restingBurnKcal,
-                estimatedRestingKcal: estimatedRestingKcal
-            )
-        )
+        // No `todaySummary()` read any more. Goal carried today's burn,
+        // intake and resting credit for the rows that reported a DAY,
+        // and those moved to Today where the logging they track lives
+        // (the user, 2026-08-23). Nothing on this screen changes during
+        // a day now, so a per-visit day query bought nothing. The
+        // `TodayBurnFloor` ratchet went with it — TodayView and
+        // `DailyPlanLoader` still drive it, and this was only ever a
+        // reader.
         lastLoaded = .now
     }
 

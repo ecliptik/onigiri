@@ -53,9 +53,63 @@ enum DebugSeeder {
             }
         }
 
-        let goalCount = (try? context.fetchCount(FetchDescriptor<GoalSettings>())) ?? 0
-        if goalCount == 0 {
-            let target = Calendar.current.date(byAdding: .day, value: 60, to: .now) ?? .now
+        // A STATE flag replaces whatever goal is already there; a plain
+        // seed only fills an empty store.
+        //
+        // `goalCount == 0` alone made every state flag a silent no-op on
+        // the second run: the container keeps its SwiftData store across
+        // installs, so `--seed-goal-reached` after any earlier seeded run
+        // inserted nothing and left the ordinary 190 lb target in place.
+        // `testGoalReachedCelebrationAndContinue` then failed on "Today
+        // announces a reached target" — a real assertion about a state
+        // the launch argument had quietly declined to set up
+        // (2026-08-23). The flags are the only way to reach these states
+        // at all, so they must win.
+        let args = ProcessInfo.processInfo.arguments
+        let reached = args.contains("--seed-goal-reached")
+        let milestone = args.contains("--seed-milestone")
+        let regained = args.contains("--seed-regained")
+        // `--seed-aggressive` counts as a state flag for the same reason
+        // the other three do: it exists to put the store somewhere
+        // specific, and a flag that silently loses to whatever is
+        // already saved is worse than no flag.
+        let wantsState = reached || milestone || regained
+            || args.contains("--seed-aggressive")
+        let existing = (try? context.fetch(FetchDescriptor<GoalSettings>())) ?? []
+        if wantsState {
+            existing.forEach(context.delete)
+            // The goal-reached CARD is acknowledged in defaults, keyed by
+            // target — and defaults outlive the store, so re-seeding the
+            // state left the announcement permanently dismissed and
+            // `testGoalReachedCelebrationAndContinue` failed on its very
+            // first assertion the second time it was ever run
+            // (2026-08-23). A flag that sets up a state has to clear what
+            // would suppress it, or it works exactly once per simulator.
+            for key in [
+                SharedStore.goalReachedAckTargetKey,
+                SharedStore.goalReachedAckCountKey,
+                SharedStore.goalReachedAckAtKey,
+            ] {
+                SharedStore.defaults.removeObject(forKey: key)
+            }
+        }
+        if existing.isEmpty || wantsState {
+            // 120 days, not 60. At 60 the seeded goal — 12.2 lb against
+            // weigh-ins that drift 202 → 200 — asks for 650 kcal/day,
+            // which leaves an average-day budget of ~1,650 against a
+            // ~1,743 resting estimate for the seeded body. That is UNDER
+            // the body's own baseline, so `isAggressive` fires and every
+            // capture of the Goal screen carries an orange pace warning
+            // — a correct warning about a bad seed, and a screen nobody
+            // can review the ordinary state from (2026-08-23).
+            //
+            // 120 days asks ~298 kcal/day for a ~2,002 budget, clear of
+            // both floors with room to spare, and ~0.7 lb/week is what a
+            // representative goal looks like anyway. `--seed-aggressive`
+            // keeps the old 60 so the warning and its "Move the date to
+            // …" button stay reachable on purpose.
+            let days = args.contains("--seed-aggressive") ? 60 : 120
+            let target = Calendar.current.date(byAdding: .day, value: days, to: .now) ?? .now
             // `--seed-goal-reached` puts the target ABOVE the seeded
             // weigh-ins (which drift 202 → 200 lb), so the goal-reached
             // criterion is met and the celebration can be exercised.
@@ -72,10 +126,9 @@ enum DebugSeeder {
             //                       target is not
             //  --seed-regained      maintenance held near 193, which the
             //                       weigh-ins now sit well above
-            let args = ProcessInfo.processInfo.arguments
-            let reached = args.contains("--seed-goal-reached")
-            let milestone = args.contains("--seed-milestone")
-            let regained = args.contains("--seed-regained")
+            //  --seed-aggressive    the old 60-day target, whose deficit
+            //                       drives the budget under the resting
+            //                       estimate, so `isAggressive` fires
             // A stamped start too, so the celebration has an ARC to
             // report ("10 lb down") and continuing can be seen to
             // preserve it rather than re-zero at today's weight.

@@ -166,6 +166,31 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
 - Pass env vars to UI tests via `TEST_RUNNER_<NAME>=… xcodebuild test …`.
   `testAddWidgetToHomeScreen` (opt-in via `TEST_RUNNER_ADD_WIDGET=1`) installs
   the widget on the simulator home screen.
+- **A sheet does NOT remove the screen beneath it from the accessibility
+  tree, so `exists` is worthless for "is anything modal up?"** (2026-08-23).
+  `switchTab` now waits for the tab button to be HITTABLE and fails loudly
+  instead of tapping through a modal — it had been landing on whatever was
+  on top, silently, leaving every later step on the wrong screen while the
+  run passed. `dismissModals` tests hittability of the tab chrome; the loop
+  it replaced asked whether a covered scope bar existed and so exited
+  having dismissed nothing. Same trap in a Form: a row below the fold is
+  not rendered and therefore does not exist, which is indistinguishable
+  from a shut `DisclosureGroup` — `revealInBudgetExplainer` scrolls FIRST,
+  then toggles. And `closeSettings` exists because "Done" belongs to the
+  Settings ROOT and is absent from the tree inside any pushed subscreen
+  (the sheet also can't be swiped away — interactive dismissal is off).
+- **Screenshot tours must assert what they photographed.** `shot(expect:)`
+  in the QA walkthrough names something only the intended screen carries,
+  files a miss as `…-WRONG` and reddens the run without aborting the tour.
+  Two rules learned the hard way: the expectation must be something the
+  capture can CONTAIN (naming a below-the-fold row fails on the right
+  screen), and it must not also be true of the screen BEHIND (a library row
+  carries the same food name as its edit form).
+- In the Log sheet each type's long press is the other's tap: a FOOD's `+`
+  opens the portion sheet and its long press logs the default; a MEAL's is
+  the reverse. A HISTORY row has no library twin and no portion sheet at
+  all — the showcase tour spent an unknown stretch tapping one and
+  expecting a sheet (2026-08-23).
 - **The iOS 26 tab bar is absent from the accessibility tree** that
   `axe describe-ui` dumps, so external drivers can't tap it. XCUITest's
   `app.tabBars.buttons[name]` resolves it fine — use a UI test for anything
@@ -184,12 +209,27 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   list row still "exists"), and an "is it gone?" probe on an element that never
   appears passes forever while guarding nothing. Assert on something that can
   only be true when the behavior actually happened (2026-08-08).
-- Three goal states a fresh sim can't otherwise reach without weeks of
+- Goal states a fresh sim can't otherwise reach without weeks of
   simulated weight change, each an extra launch argument beside
   `--seed-sample-data`: `--seed-goal-reached` (target above the seeded
   weigh-ins), `--seed-milestone` (a 210 lb start against a 190 target, so
   a 5 lb rung is passed and the target isn't), `--seed-regained`
-  (maintenance held near 193, which the weigh-ins sit above).
+  (maintenance held near 193, which the weigh-ins sit above),
+  `--seed-aggressive` (a 60-day target, so `isAggressive` fires).
+  **A state flag REPLACES the saved goal; a plain seed only fills an empty
+  store** (2026-08-23). `goalCount == 0` alone made every one of them a
+  silent no-op on the second run, because the SwiftData store outlives the
+  install — `--seed-goal-reached` inserted nothing and
+  `testGoalReachedCelebrationAndContinue` failed on a real assertion about
+  a state the argument had quietly declined to set up. A state flag also
+  clears `goalReachedAck*` in defaults, which outlive the store too and
+  otherwise leave the celebration permanently dismissed after one run.
+- **The DEFAULT seeded target is +120 days, and the 60 it replaced was not
+  neutral** (2026-08-23). 12.2 lb over 60 days asks 650 kcal/day, leaving an
+  average-day budget of ~1,650 against the ~1,743 resting estimate — under
+  the body's own baseline, so `isAggressive` fired and every Goal capture
+  carried an orange pace warning. Correct warning, unusable screenshots.
+  120 days asks ~298 for a ~2,002 budget, clear of both floors.
 - **`--seed-sample-data` RESETS the Health store on a simulator, it no
   longer adds to it** (2026-08-18). `seedSampleData` deletes every sample
   the app itself wrote before seeding, so repeat runs are idempotent and
@@ -528,93 +568,55 @@ Each cost a debugging session.
   themselves from Health; that's accepted, and it's less code than freezing
   them.
 - `CalorieBudget.projectedDailyBurn` survives for the Goal/onboarding PREVIEW
-  only ("an average day"), never to judge a day. Goal shows BOTH budgets and
-  they must stay TOLD APART — one label on two different numbers reads as a
-  contradiction (726 kcal apart at lunchtime, 2026-08-02). Since 2026-08-18 the
-  ROW LABEL carries that distinction: `Budget, today's burn` under a `Budget`
-  section (live `dayBurn − deficit`) against `Budget, average day` inside the
-  collapsed "How the budget is set" — matching COMMA forms, so the two read as
-  one quantity qualified two ways. Since 2026-08-23 the qualifier names the
-  INPUT, not the moment (`right now` → `today's burn`,
-  `plans/PLAN-budget-one-number.md`): naming the burn makes the row checkable
-  against `Burned today` minus `Deficit needed`, both already on screen, and
-  makes the PAIR state its own difference — one sum, two burns. From 2026-08-11 to 2026-08-18 the SECTION
-  carried it instead (`Budget` under `Today`), which worked only while the
-  visible row was a bare "Budget" — naming the row is the stronger form, since a
-  label survives being read out of context and a section header does not. Don't
-  put two rows called "Budget" side by side again, and don't re-add a
-  today-floor to the projection to close the gap — that was tried, it made the
-  average neither one thing nor the other, and it didn't close it.
-- "How the budget is set" must show the RECIPE, not just the ingredients.
-  It listed `To lose`, `Deficit needed` and both budgets while omitting the one
-  input that makes the deficit checkable — days remaining — so the figure
-  arrived unverifiable (the user, 2026-08-18). `Days left` is a row, and a
-  caption states the arithmetic in the LIVE numbers. That caption never names
-  the 3,500 kcal-per-POUND constant: this screen renders in the user's unit and
-  the constant is wrong in kg.
-- That `Budget` section is ONE FACT PER ROW — `Resting budget`,
-  `Earned by moving`, `Budget, today's burn`, `<intake word> today`,
-  `Left today`, `Burned today`, lower-case t (the user, 2026-08-18). The
-  first two are the budget's HALVES and they must sum to the third
-  EXACTLY: `resting = restingCredit − deficit`, `earned = dayBurn −
-  restingCredit`. Derive `earned`, never read Health's active total for it
-  — `todayDayBurnKcal` is `TodayBurnFloor`-ratcheted and the credit is not,
-  so two source-read halves stop adding up. Suppress the pair entirely when
-  the deficit exceeds the resting credit (no honest "already yours" figure,
-  and the budget row is floored at 0, so the column would break);
-  `isAggressive` says that case. The split is what Lifesum and MyFitnessPal
-  show and Onigiri did not (the user asked, 2026-08-23): both set a fixed
-  goal from a DECLARED activity level and add tracker exercise on top —
-  same shape, worse baseline. `Resting budget` is the fixed daily budget,
-  GUARANTEED rather than forecast, because the whole deficit comes out of
-  the half that happens whether or not you move. It is NOT
-  `Resting burn, full day` minus anything: that row is the estimate alone,
-  this is the credit in force. `Earned by moving` is the one place "earned"
-  may appear on this screen — the ban is on it naming the ALLOWANCE
-  ("Budget earned today"), where it collides with the verdict rule; naming
-  the INCREMENT is the app's own word for active energy and the footer one
-  line down already uses it. `Left today` is `budget − intake` through
-  `remainingHeadline`, so a day past its budget reads `+246 kcal over` and
-  never as a negative allowance; it sits directly under the intake row so the
-  top three read DOWN as the subtraction (2026-08-23, the user's ask — Goal
-  held both terms and quoted neither against the other). The budget
-  row alone breaks the `… today` shape the others share, on purpose
-  (2026-08-23): `Budget for today` read as a FIXED daily allowance and got
-  compared against a 2,000 kcal RDA — 1,361 at 9:33 am looks like starvation
-  until you see it is the whole day's resting plus 21 kcal of active earned so
-  far, and it climbs one-for-one with `Burned today` all day. Two labels are
-  ruled OUT for it: not "so far" (that claims a partial MEASUREMENT, which the
-  midnight resting credit makes false, and `Burned today` is forbidden the same
-  qualifier for the same reason — the two must not disagree about what kind of
-  number they are), and not "earned" (the VERDICT word, `isTracked` +
-  `DayBadgeRule`; it may not name an allowance). It used to print the pair as
-  "612 / 1595 kcal", which asks the reader to subtract and never says which side
-  is which (the user, 2026-08-18). `Burned Today` is `dayBurn`, NOT a
-  measurement so far, and the longer label makes that easier to misread than
-  the old bare "Burn" did — what answers it is the disclosure's "Resting energy
-  is credited at midnight, active energy as you earn it", never this section's
-  footer.
-- **That footer's test is saying something no ROW can** (2026-08-23), and it
-  now holds TWO unconditional-ish clauses that each pass it. First,
-  DIRECTION: "Your budget grows through the day as you earn active energy" —
-  a row shows a number, not which way it moves, so without this someone who
-  checks at breakfast and not again never finds out. Keep it to one clause
-  naming ACTIVE energy only; the midnight resting credit stays the
-  disclosure's, and putting both here is what made the caption long enough
-  for 2026-08-13 to delete (it had RESTATED the rows above it — that is the
-  rule, not "keep the footer empty"). Second, the RECONCILIATION: "On an
-  average day's burn the same budget is 2,369 kcal — today's burn is 773 kcal
-  short of one so far." No row can hold it, because the two budgets live in
-  different containers and one of them is collapsed; three rounds of renaming
-  left them still reading as rival allowances (the user, 2026-08-23). Rules
-  for it: state the DIFFERENCE IN BURN, never "the active energy today hasn't
-  earned" (equal only while the resting credit matches an average day's
-  measured basal, and the credit is floored by `BasalEstimate`); never
-  predict — "on an average day's burn" is a conditional and "lands near"
-  would promise the calories PLAN-earned-budget deleted the trailing average
-  for promising; and suppress it entirely when `averageBurnKcal` is nil,
-  since the plan is then riding the assumed 2,000. The at-target sentence is
-  the one conditional line beside them.
+  only ("an average day"), never to judge a day. **Goal now shows exactly ONE
+  budget and it is that projection** — `Daily budget`, a single row
+  (`plans/PLAN-budget-one-number.md`, 2026-08-23). Goal answers two questions
+  and only two: what does my goal allow per day, and how was that worked out.
+  Anything reporting the DAY belongs to Today (the user: "we're
+  overcomplicating by mixing in daily information into goal"). So no
+  intake, no left, no burned, no earned row here — `testGoalBudgetShot`
+  asserts those ABSENCES, because nothing else pins the property.
+  From 2026-08-02 to 2026-08-23 Goal carried BOTH budgets and the rule was
+  that they must stay TOLD APART, since one label on two numbers reads as a
+  contradiction (726 kcal apart at lunchtime). Adding qualifiers to tell them
+  apart was tried three times (section header 2026-08-11, row label
+  2026-08-18, `Budget, today's burn` + a reconciling footer 2026-08-23) and
+  the confusion survived all three. DELETING one of them is what worked:
+  nothing on Goal moves during a day, so there is no second number left to
+  contradict the first. Don't put a live figure back on this screen.
+- **The two screens still quote different numbers, and ONE SENTENCE is all
+  that keeps that honest** — Goal's footer: "This is what an average day
+  allows. Today's own budget follows the energy you actually burn, so Today
+  can read higher or lower." It is load-bearing; without it 2,002 on Goal
+  against 1,478 on Today is the 2026-08-02 failure with extra steps. The row
+  cannot carry it (a row shows a number, not what kind of day it describes),
+  which is the test every line in that footer has to pass. `≈` and `/day`
+  on the value are part of the same job — a rate, not a figure for a
+  particular day. Today's maintenance card says **"Today's budget"**
+  (2026-08-23) — it used to say "Daily budget" too, so in that one mode the
+  same words named Goal's average and Today's live figure. "Daily budget" is
+  Goal's phrase; the card is about the day in progress. Lose mode still
+  reads "Daily goal".
+- "How your budget is calculated" (renamed from "How the budget is set",
+  2026-08-23 — "set" reads as a setting when every figure inside is derived)
+  must show the RECIPE, not just the ingredients. It listed `To lose`,
+  `Deficit needed` and both budgets while omitting the one input that makes
+  the deficit checkable — days remaining — so the figure arrived unverifiable
+  (the user, 2026-08-18). `Days left` is a row, and a caption states the
+  arithmetic in the LIVE numbers. That caption never names the 3,500
+  kcal-per-POUND constant: this screen renders in the user's unit and the
+  constant is wrong in kg. The group holds `Resting budget` too —
+  `BasalEstimate` less the whole deficit, directly under the
+  `Resting burn, full day` it comes from, nil when the deficit swallows it.
+  That is the GUARANTEED floor: resting happens whether or not you move, so
+  what is left of it after the deficit is in hand at breakfast on any day.
+  It is built from the estimate, never from today's resting credit, so
+  nothing in this group moves during a day. It spent a few hours in the
+  Budget section instead, beside an `Earned by moving` row (the Lifesum
+  split — both Lifesum and MyFitnessPal set a fixed goal from a DECLARED
+  activity level and add tracker exercise on top, which is Onigiri's shape
+  with a worse baseline); it explains the budget rather than reporting a
+  day, which is the line this screen is drawn on.
 - **`ObservedBurn` REPORTS and nothing plans from it** (2026-08-18,
   `plans/PLAN-goal-budget-reconciliation.md`). `meanDailyIntake − scaleRate ×
   3500` is what the scale says you burn, shown last in the derivation group so
@@ -677,7 +679,7 @@ Each cost a debugging session.
   — the sensitivity is `3500 / daysRemaining` kcal per pound (194 kcal/day at
   18 days out), so the last pound otherwise swings on water weight.
 - The chart's trend line has a checkable invariant: **its right-hand end EQUALS
-  the "Weight" row under "How the budget is set", to the digit**
+  the "Weight" row under "How your budget is calculated", to the digit**
   (`GoalFinishLineTests.theSmoothedLineEndsOnTheBudgetBasis`). It averages
   daily lows for that reason; on raw samples it ended ~2 lb high, and a day
   weighed twice outvoted a day weighed once — which measures weighing habits

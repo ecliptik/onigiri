@@ -14,7 +14,61 @@ func switchTab(in app: XCUIApplication, to name: String) {
     }
     let anyTab = app.buttons[name].firstMatch
     _ = anyTab.waitForExistence(timeout: 5)
+    // EXISTENCE is not reachability, and this is the sharp version of
+    // that rule: a sheet does NOT remove the screen beneath it from the
+    // hierarchy, so a covered tab button still exists — and tapping it
+    // lands on the sheet. Silently. No error, no failure, and every step
+    // after it runs against the wrong screen.
+    //
+    // That is what cost the QA walkthrough its Goal, Foods-edit and
+    // Meals-edit stops (found 2026-08-23): an Add Food form stayed up,
+    // and `qa-goal` was a photograph of it while the run reported
+    // success. Failing here is the only thing that makes such a capture
+    // impossible; a tour that finishes with mislabelled screenshots is
+    // worse than one that stops.
+    let deadline = Date().addingTimeInterval(5)
+    while !anyTab.isHittable, Date() < deadline {
+        Thread.sleep(forTimeInterval: 0.2)
+    }
+    guard anyTab.isHittable else {
+        XCTFail(
+            "The \(name) tab exists but is not tappable — something modal is "
+            + "over it. Dismiss it before switching tabs (dismissModals)."
+        )
+        return
+    }
     anyTab.tap()
+}
+
+/// Get back to a screen whose tab chrome can actually be tapped, and say
+/// whether that worked.
+///
+/// The loop this replaces asked whether the Foods scope bar EXISTED, and
+/// a sheet leaves the screen under it in the hierarchy — so the answer
+/// was yes for the whole time it was covered. It exited on the first
+/// check having dismissed nothing (2026-08-23). Hittability of the tab
+/// bar is the honest test: only an unobstructed screen has one.
+///
+/// Nav-bar buttons only. A bare `app.buttons["Cancel"]` also matches the
+/// `.searchable` bar's cancel and whatever a sheet's content puts on
+/// screen, so it can "succeed" without closing anything and spin out the
+/// retries.
+@MainActor
+@discardableResult
+func dismissModals(in app: XCUIApplication, tries: Int = 5) -> Bool {
+    func chromeReachable() -> Bool {
+        app.tabBars.buttons.count > 0
+            ? app.tabBars.buttons.firstMatch.isHittable
+            : app.buttons["Today"].firstMatch.isHittable
+    }
+    for _ in 0..<tries where !chromeReachable() {
+        let cancel = app.navigationBars.buttons["Cancel"].firstMatch
+        if cancel.exists, cancel.isHittable { cancel.tap(); continue }
+        let done = app.navigationBars.buttons["Done"].firstMatch
+        if done.exists, done.isHittable { done.tap(); continue }
+        app.swipeDown()
+    }
+    return chromeReachable()
 }
 
 
@@ -52,6 +106,64 @@ func scopeTap(in app: XCUIApplication, _ label: String) {
     if segment.isHittable { segment.tap() }
 }
 
+/// Reveal `row` inside Goal's budget explainer, opening the group if it
+/// is shut, and say whether it worked.
+///
+/// SCROLL FIRST, then toggle. A `DisclosureGroup` toggles, and a Form
+/// does not render a row until it is scrolled near — so "the row is not
+/// in the tree" is true both for a shut group AND for an open one whose
+/// rows are below the fold. A tap decided on that reading CLOSES a group
+/// that was already open, and the assertion after it then fails for the
+/// opposite of its stated reason. That is what broke the lose-mode half
+/// of `testMaintenanceMode` when the Budget section above shrank from
+/// six rows to one and moved the header up (2026-08-23).
+///
+/// Deciding on a sentinel row instead does NOT work, and the attempt is
+/// worth recording: the group has no row near its top common to both
+/// modes — `To lose`, `Days left` and `Deficit needed` are all inside
+/// `if !isMaintenance`, and `Based on` is a navigation-link `Picker`
+/// that never appears as a plain static text at all, so probing for it
+/// is false in every state and the toggle fires unconditionally.
+@MainActor
+@discardableResult
+func revealInBudgetExplainer(
+    in app: XCUIApplication, header: XCUIElement, row: XCUIElement
+) -> Bool {
+    // Two passes: the first rules out "merely below the fold", the
+    // second runs after the group has actually been opened.
+    for _ in 0..<2 {
+        for _ in 0..<8 where !row.exists { app.swipeUp() }
+        if row.exists { return true }
+        for _ in 0..<8 where !header.isHittable { app.swipeDown() }
+        guard header.isHittable else { return false }
+        header.tap()
+    }
+    return row.exists
+}
+
+/// Leave Settings from wherever you are inside it.
+///
+/// The pushed subscreens (Metrics, Appearance, …) have only a Back button;
+/// "Done" belongs to the Settings ROOT and is not in the tree at all from
+/// inside one — so `app.buttons["Done"].tap()` from a subscreen fails
+/// against a control that cannot be there. `testTrackedMetricSwap` did
+/// exactly that, twice, and had been failing on it (2026-08-23, confirmed
+/// against an untouched tree). The sheet cannot be swiped away either:
+/// interactive dismissal is off by design, so every exit is an explicit
+/// Done.
+///
+/// Both lookups are scoped to the NAVIGATION BAR, because the back button
+/// is labelled with its parent's title — "Settings" — and so is Today's
+/// gearshape, which makes the unscoped query ambiguous.
+@MainActor
+func closeSettings(in app: XCUIApplication) {
+    let back = app.navigationBars.buttons["Settings"].firstMatch
+    if back.waitForExistence(timeout: 3), back.isHittable { back.tap() }
+    let done = app.navigationBars.buttons["Done"].firstMatch
+    XCTAssertTrue(done.waitForExistence(timeout: 10), "The Settings root's Done")
+    done.tap()
+}
+
 /// The Calendar tab's MONTH summary card, which pushes the month detail.
 /// Since 2.1 the day card ALSO shows "Details ›" (grammar unified), so a
 /// bare detailsLink is ambiguous on this tab — target the month card by
@@ -72,9 +184,10 @@ final class OnigiriUITests: XCTestCase {
     /// (an optional Cancel that did not fire), and the test still passed —
     /// a green run that proved nothing until the images were opened.
     ///
-    /// It asserts the rows it means to photograph, so a capture that
-    /// lands on the wrong screen FAILS rather than filing a misleading
-    /// picture: `Left today` can only exist once the budget rows are up.
+    /// It asserts what it means to photograph, so a capture that lands on
+    /// the wrong screen FAILS rather than filing a misleading picture —
+    /// and it asserts the ABSENCES too, because "no day figures on Goal"
+    /// is the property this section now has and nothing else pins it.
     @MainActor
     func testGoalBudgetShot() throws {
         guard ProcessInfo.processInfo.environment["BUDGET_SHOT"] == "1" else {
@@ -82,8 +195,23 @@ final class OnigiriUITests: XCTestCase {
         }
         let app = XCUIApplication()
         app.launchArguments = ["--seed-sample-data"]
+        // TEST_RUNNER_SEED_AGGRESSIVE=1 captures the pace-warning state
+        // instead of the ordinary one — the reason `--seed-aggressive`
+        // exists, and the only thing that proves the flag still works
+        // now that the default seed no longer trips the warning.
+        let aggressive = ProcessInfo.processInfo.environment["SEED_AGGRESSIVE"] == "1"
+        if aggressive { app.launchArguments.append("--seed-aggressive") }
         XCUIDevice.shared.orientation = .portrait
         app.launch()
+        // A fresh install puts onboarding and the Health sheets in the
+        // way, and this test used to skip both — it passed only because
+        // it ran against an already-granted container. The uninstall
+        // that a seeder change requires is exactly when that stops being
+        // true, and `switchTab`'s new guard is what said so instead of
+        // tapping through the permission sheet.
+        skipOnboardingIfPresent(in: app)
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
         switchTab(in: app, to: "Goal")
         // The chart, progress and weight rows come first, so the Budget
         // section starts below the fold — and a Form renders lazily, so
@@ -92,27 +220,52 @@ final class OnigiriUITests: XCTestCase {
         // nothing" failure in its other direction: a 20-second wait that
         // could never have succeeded.
         _ = app.staticTexts["Current weight"].waitForExistence(timeout: 20)
-        let leftRow = app.staticTexts["Left today"]
-        for _ in 0..<8 where !leftRow.exists { app.swipeUp() }
+        let budgetRow = app.staticTexts["Daily budget"]
+        for _ in 0..<8 where !budgetRow.exists { app.swipeUp() }
         XCTAssertTrue(
-            leftRow.waitForExistence(timeout: 5),
+            budgetRow.waitForExistence(timeout: 5),
             "Goal's Budget section never appeared — the shot would be of the wrong screen"
         )
-        XCTAssertTrue(app.staticTexts["Budget, today's burn"].exists)
-        XCTAssertTrue(app.staticTexts["Resting budget"].exists)
-        XCTAssertTrue(app.staticTexts["Earned by moving"].exists)
+        // The whole point of the section: nothing on it reports a DAY.
+        for dayRow in ["Eaten today", "Left today", "Burned today", "Earned by moving"] {
+            XCTAssertFalse(
+                app.staticTexts[dayRow].exists,
+                "\(dayRow) is a Today figure and does not belong on Goal"
+            )
+        }
+        // The pace warning is its own section directly under the budget,
+        // never inside the collapsed group — so its presence is exactly
+        // what the seed flag is asserted by. Checked in BOTH directions:
+        // the default seed tripping it is what made every Goal capture
+        // unreviewable in the first place (2026-08-23).
+        let pace = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH 'That pace is aggressive'")).firstMatch
+        XCTAssertEqual(
+            pace.exists, aggressive,
+            aggressive
+                ? "--seed-aggressive should trip the pace warning"
+                : "the default seed should NOT trip the pace warning — if a "
+                    + "state flag (e.g. --seed-aggressive) was used on this "
+                    + "simulator, erase it: a plain seed only fills an EMPTY "
+                    + "store, so the previous goal is still in there"
+        )
         Thread.sleep(forTimeInterval: 1.0)
         let top = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        top.name = "goal-budget"
+        top.name = aggressive ? "goal-budget-aggressive" : "goal-budget"
         top.lifetime = .keepAlways
         add(top)
         // The disclosure open, so the two budgets and the reconciliation
         // sentence are in ONE frame — the whole point of the change.
-        let disclosure = app.buttons["How the budget is set"]
+        let disclosure = app.buttons["How your budget is calculated"]
         for _ in 0..<4 where !disclosure.exists { app.swipeUp() }
         if disclosure.waitForExistence(timeout: 5) {
             disclosure.tap()
             Thread.sleep(forTimeInterval: 1.0)
+            // `Resting budget` lives in here now, not in the Budget
+            // section — it explains the budget rather than reporting a
+            // day, which is the line this screen is drawn on.
+            for _ in 0..<6 where !app.staticTexts["Resting budget"].exists { app.swipeUp() }
+            XCTAssertTrue(app.staticTexts["Resting budget"].exists)
             let opened = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
             opened.name = "goal-budget-derivation"
             opened.lifetime = .keepAlways
@@ -491,10 +644,34 @@ final class OnigiriUITests: XCTestCase {
         scene("logsheet")
         // The row's Log button is unique to the sheet — the row text also
         // matches Today's log behind the sheet and isn't hittable there.
-        app.buttons["Log Two eggs & toast"].tap()
-        _ = app.buttons["Log"].waitForExistence(timeout: 5)
+        // EXISTENCE is not hittability: the row sits well down a scrolling
+        // list, and a tap on an off-screen element lands wherever its
+        // frame happens to be — so the portion sheet never opened and the
+        // "Log" the next line wants could not exist. The tour had been
+        // failing here on an untouched tree (found 2026-08-23); the QA
+        // walkthrough already scrolls its equivalent row into reach.
+        // "Two eggs", the seeded library FOOD — not "Two eggs & toast",
+        // which is not in the library at all: it is the name of a logged
+        // HealthKit sample, so that row is HISTORY and has no portion
+        // sheet behind it. Tapping it did nothing a screenshot could
+        // show, and the tour had been failing here on an untouched tree
+        // (found 2026-08-23). A food's + is the tap that opens the
+        // portion sheet; a meal's is its long press, and history's is
+        // neither.
+        let eggsRow = app.buttons["Log Two eggs"].firstMatch
+        for _ in 0..<6 where !eggsRow.isHittable { app.swipeUp() }
+        XCTAssertTrue(eggsRow.isHittable, "The row to log has to be reachable")
+        eggsRow.tap()
+        let confirm = app.buttons["Log"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "The portion sheet opens")
         scene("portion", hold: 3)
-        app.buttons["Log"].tap()
+        confirm.tap()
+        // Logging closes the PORTION sheet; the Log sheet behind it stays
+        // up, and its own dismiss is "Done". The tour carried on into
+        // Today's stops regardless, running them against whatever was on
+        // top — invisible until `switchTab` stopped tapping through
+        // modals (2026-08-23).
+        XCTAssertTrue(dismissModals(in: app), "The Log sheet closes after logging")
 
         Thread.sleep(forTimeInterval: 1.5)
         expandMealSections(in: app)
@@ -569,15 +746,33 @@ final class OnigiriUITests: XCTestCase {
             ProcessInfo.processInfo.environment["QA_ORIENTATION"] == "landscape"
                 ? .landscapeLeft : .portrait
 
-        func shot(_ name: String, settle: TimeInterval = 0.8) {
+        /// `expect` names something only the intended screen has. A
+        /// screenshot filed under the wrong name is worse than a missing
+        /// one — it is reviewed as evidence — and that is exactly what
+        /// this tour produced on 2026-08-23: a stuck Add Food form was
+        /// captured as `qa-goal`, `qa-food-form-edit` and
+        /// `qa-meal-form-edit`, and the run passed. The failure is
+        /// RECORDED rather than fatal (`continueAfterFailure` is true
+        /// here), so the tour still finishes and files every other stop
+        /// — but the run goes red and names the stop that lied.
+        func shot(_ name: String, settle: TimeInterval = 0.8, expect: String? = nil) {
             Thread.sleep(forTimeInterval: settle)
+            var name = name
+            if let expect, !app.descendants(matching: .any)[expect].exists {
+                XCTFail("qa-\(name) captured the wrong screen — no \"\(expect)\" on it.")
+                name += "-WRONG"
+            }
             let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
             attachment.name = "qa-\(name)"
             attachment.lifetime = .keepAlways
             add(attachment)
         }
         func tab(_ name: String) {
-            app.swipeDown()
+            // Dismiss FIRST, and verify it worked. The bare swipeDown
+            // this replaces did not close a sheet with a focused search
+            // field, and `switchTab` then tapped a tab button that
+            // exists but is covered — landing on the sheet.
+            dismissModals(in: app)
             switchTab(in: app, to: name)
         }
         // The walkthrough must always finish — a missed optional control
@@ -659,7 +854,7 @@ final class OnigiriUITests: XCTestCase {
 
         // Foods: scopes, filter menu, add menu, forms.
         tab("Foods")
-        shot("foods")
+        shot("foods", expect: "Filter by category")
         // Scope shots mirror the Log sheet's; segments only exist in
         // the normal-size pass (a menu at accessibility sizes).
         if app.segmentedControls.count > 0 {
@@ -689,9 +884,17 @@ final class OnigiriUITests: XCTestCase {
                 if tapIfExists(dbField) {
                     dbField.typeText("granola")
                     shot("food-form-db-search", settle: 1.2)
-                    tapIfExists(app.buttons["Cancel"].firstMatch)
                 }
-                tapIfExists(app.buttons["Cancel"].firstMatch)
+                // The bottom `.searchable` bar dismisses with an X
+                // GLYPH, not a button labelled "Cancel" — so the two
+                // Cancel taps that used to close this form matched
+                // nothing and it stayed up for the rest of the tour
+                // (2026-08-23). Relaunching is the one dismissal that
+                // cannot miss, and the tour already uses it a few stops
+                // up for the Log sheet's focused search. The seed flag
+                // is already gone from launchArguments by here, so this
+                // does not re-seed.
+                app.launch()
             }
         }
         // The edit shots need the Foods LIST back (the add-food flow
@@ -701,13 +904,13 @@ final class OnigiriUITests: XCTestCase {
         // the scope. The meal shot silently skipped once Favorites (not
         // "All") became the default and the tour ran its scope walk from
         // Foods — hence the explicit Meals switch.
-        var dismissTries = 0
-        while !app.segmentedControls.firstMatch.waitForExistence(timeout: 2), dismissTries < 4 {
-            if !tapIfExists(app.buttons["Cancel"].firstMatch, timeout: 1) {
-                app.swipeDown()
-            }
-            dismissTries += 1
-        }
+        // The relaunch above lands wherever the app restores to, so come
+        // back to Foods explicitly. This used to be a loop asking whether
+        // the scope bar EXISTED — which a sheet leaves true the whole
+        // time it covers it, so the loop exited having dismissed
+        // nothing and both edit shots below silently skipped for an
+        // unknown stretch (found 2026-08-23). `tab` verifies now.
+        tab("Foods")
         // A library row is a Button labeled by its name
         // (accessibilityAddTraits(.isButton)) — NOT a staticText, which
         // is why the old app.staticTexts[name] never matched and both
@@ -719,26 +922,44 @@ final class OnigiriUITests: XCTestCase {
         // hierarchy, untappable. Scroll it back into reach first.
         scopeTap(in: app, "Foods")
         if tapIfExists(app.buttons["Protein shake"].firstMatch, timeout: 5) {
-            shot("food-form-edit", settle: 1.2)
+            shot("food-form-edit", settle: 1.2, expect: "Edit Food")
             tapIfExists(app.buttons["Cancel"].firstMatch)
         }
         scopeTap(in: app, "Meals")
         if tapIfExists(app.buttons["Chicken & rice"].firstMatch, timeout: 5) {
-            shot("meal-form-edit", settle: 1.2)
+            shot("meal-form-edit", settle: 1.2, expect: "Edit Meal")
             tapIfExists(app.buttons["Cancel"].firstMatch)
         }
 
-        // Goal, including the focused-keyboard state.
+        // Goal: the top, the budget rows, and the focused-keyboard state.
         tab("Goal")
-        shot("goal")
+        // NOT "Daily budget" — the budget is below the fold and a Form
+        // does not render a row until it is scrolled near, so naming one
+        // here fails on the RIGHT screen. An expectation has to be
+        // something the capture can actually contain.
+        shot("goal", expect: "Current weight")
+        for _ in 0..<8 where !app.staticTexts["Daily budget"].exists { app.swipeUp() }
+        shot("goal-budget", expect: "Daily budget")
+        if tapIfExists(app.buttons["How your budget is calculated"]) {
+            // The group unrolls BELOW the fold, so its rows are not
+            // rendered — and therefore do not exist — until scrolled to.
+            // Same lazy-Form trap as the stop above, one level in.
+            for _ in 0..<6 where !app.staticTexts["Deficit needed"].exists { app.swipeUp() }
+            shot("goal-budget-calculated", settle: 1.0, expect: "Deficit needed")
+        }
+        // Back to the top for the weight field, and out via Cancel —
+        // Goal's toolbar is Cancel ↔ Save, so the "Done" this used to
+        // tap has not existed since 2026-08-18 and the keyboard stayed
+        // up into the next stop.
+        for _ in 0..<8 { app.swipeDown() }
         if tapIfExists(app.textFields.firstMatch) {
             shot("goal-keyboard")
-            tapIfExists(app.buttons["Done"].firstMatch, timeout: 2)
+            tapIfExists(app.buttons["Cancel"].firstMatch, timeout: 2)
         }
 
         // Calendar: previous month (little data), day picking, month detail.
         tab("Calendar")
-        shot("calendar")
+        shot("calendar", expect: "Previous month")
         if tapIfExists(app.buttons["Previous month"]) {
             shot("calendar-previous-month")
         }
@@ -918,23 +1139,42 @@ final class OnigiriUITests: XCTestCase {
         // has to be checked with the group OPEN or it passes merely
         // because the group is shut.
         let howSet = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == 'How the budget is set'")).firstMatch
+            .matching(NSPredicate(format: "label == 'How your budget is calculated'")).firstMatch
         // Below the fold, and a Form's rows don't exist in the tree until
         // scrolled near — waiting on one that isn't there just times out.
         XCTAssertTrue(scroll(app, until: howSet), "The budget explainer is reachable")
         // Open it and PROVE it opened before asserting a row is absent:
         // a shut group makes every absence trivially true.
+        //
+        // Decide open-vs-shut on `Based on`, the group's FIRST row, and
+        // only then scroll for the rest. A row further down is not
+        // rendered until it is scrolled near, so "it isn't there" looks
+        // identical whether the group is closed or merely below the
+        // fold — and tapping on that reading CLOSES a group that was
+        // already open. The Budget section going from six rows to one
+        // (2026-08-23) moved everything up far enough to make that
+        // coin-flip land the wrong way.
+        // `Resting burn, full day` is the target because it is inside the
+        // group in BOTH modes, and it sits BELOW where `Deficit needed`
+        // would be — so reaching it means the absence checked next was
+        // scrolled past, not merely unrendered.
         let restingRow = app.staticTexts["Resting burn, full day"]
-        if !restingRow.exists { howSet.tap() }
-        XCTAssertTrue(restingRow.waitForExistence(timeout: 5), "The group opens")
+        XCTAssertTrue(
+            revealInBudgetExplainer(in: app, header: howSet, row: restingRow),
+            "The group opens")
         XCTAssertFalse(app.staticTexts["Deficit needed"].exists, "No deficit row in maintenance")
         let save = app.buttons["Save"]
         XCTAssertTrue(save.isEnabled, "Mode change should enable Save")
         save.tap()
 
         switchTab(in: app, to: "Today")
-        let budgetTitle = app.staticTexts["Daily budget"]
-        XCTAssertTrue(budgetTitle.waitForExistence(timeout: 10), "Today card should read Daily budget")
+        // "Today's budget" — Goal's row owns "Daily budget" and holds the
+        // average-day figure, so this card cannot share the phrase.
+        let budgetTitle = app.staticTexts["Today's budget"]
+        XCTAssertTrue(budgetTitle.waitForExistence(timeout: 10),
+                      "Today card should read Today's budget in maintenance")
+        XCTAssertFalse(app.staticTexts["Daily budget"].exists,
+                       "\"Daily budget\" belongs to Goal, not Today")
         shot("today-maintain")
 
         // Back to lose so the sim isn't left in maintenance.
@@ -946,11 +1186,9 @@ final class OnigiriUITests: XCTestCase {
         // "Deficit needed" moved INSIDE the disclosure on 2026-08-10, so
         // scrolling alone can never reveal it — the group has to be open.
         let deficitRow = app.staticTexts["Deficit needed"]
-        if !deficitRow.exists {
-            XCTAssertTrue(scroll(app, until: howSet), "The explainer is reachable in lose mode")
-            if !deficitRow.exists { howSet.tap() }
-        }
-        XCTAssertTrue(deficitRow.waitForExistence(timeout: 5), "Deficit row returns in lose mode")
+        XCTAssertTrue(
+            revealInBudgetExplainer(in: app, header: howSet, row: deficitRow),
+            "Deficit row returns in lose mode")
         app.buttons["Save"].tap()
     }
 
@@ -1555,10 +1793,15 @@ final class OnigiriUITests: XCTestCase {
             NSPredicate(format: "label BEGINSWITH \"You've reached your target\"")).firstMatch
         XCTAssertTrue(celebration.waitForExistence(timeout: 15),
                       "Goal keeps the celebration after the card is dismissed")
-        XCTAssertTrue(app.buttons["Switch to Maintain"].firstMatch.exists,
-                      "Maintain is offered")
+        // The celebration renders at the very bottom edge of the screen,
+        // so its CHOICES are below the fold and a Form has not built
+        // them yet — `.exists` on them is false while the card they
+        // belong to is plainly there. Scroll to each rather than assert
+        // where they happen to land (2026-08-23).
+        let maintain = app.buttons["Switch to Maintain"].firstMatch
+        XCTAssertTrue(scroll(app, until: maintain), "Maintain is offered")
         let keepGoing = app.buttons["5 lb more"].firstMatch
-        XCTAssertTrue(keepGoing.waitForExistence(timeout: 5), "Quick amounts are offered")
+        XCTAssertTrue(scroll(app, until: keepGoing), "Quick amounts are offered")
         attachShot(named: "goal-reached-choices")
 
         // The journey's start weight, before and after. The seeded start is
@@ -2200,8 +2443,36 @@ final class OnigiriUITests: XCTestCase {
         let fiber = app.staticTexts["Fiber"]
         XCTAssertTrue(fiber.waitForExistence(timeout: 5), "Fiber in the picker")
         fiber.tap()
+        // Prove the pick took. Tapping the option pops the picker, and a
+        // tap that lands on a neighbour leaves the slot reading something
+        // else entirely ("Metric, None" was observed) — which the Today
+        // assertion far below would then blame on the wrong thing.
+        XCTAssertTrue(app.buttons["Metric, Fiber"].firstMatch.waitForExistence(timeout: 5),
+                      "Slot 1 now reads Fiber")
         attachShot(named: "metric-slot-settings")
-        app.buttons["Done"].tap()
+        // The Metric picker pops back to the PUSHED Metrics screen, whose
+        // exit is a Back button — "Done" belongs to the Settings ROOT and
+        // does not exist here at all. The test was updated for the move
+        // behind the Metrics row but not for the way out, so it had been
+        // failing on a control that cannot be on screen (found 2026-08-23,
+        // and confirmed against an untouched tree).
+        // Walk out of the pushed screens until the Settings root's Done is
+        // TAPPABLE, and judge it by that alone. Existence proves nothing
+        // in either direction here: the root stays in the hierarchy under
+        // every pushed screen, so waiting for "Reminders" passed from
+        // inside Metrics, while "Done" is not in the tree at all until
+        // the pop finishes. Both readings sent this somewhere wrong.
+        // Out of Settings in two steps, both scoped to the NAVIGATION BAR.
+        // The pushed Metrics screen has only a Back button; "Done" belongs
+        // to the Settings ROOT and is not in the tree at all from in here,
+        // which is the control the original single tap reached for. And
+        // the sheet cannot be swiped away — interactive dismissal is off
+        // by design, so every exit is an explicit Done.
+        //
+        // Scoped, because a bare `app.buttons["Settings"]` is AMBIGUOUS
+        // here: the back button carries the label "Settings" and so does
+        // Today's gearshape.
+        closeSettings(in: app)
 
         // Seeded foods carry fiber; the row reads "🌾 x / 28 g Fiber".
         let fiberMetric = app.descendants(matching: .any).matching(
@@ -2220,7 +2491,9 @@ final class OnigiriUITests: XCTestCase {
 
         // None empties the slot everywhere.
         switchTab(in: app, to: "Today")
-        app.buttons["Settings"].tap()
+        // By IDENTIFIER: a bare `app.buttons["Settings"]` is ambiguous
+        // whenever a pushed screen's back button carries the same label.
+        app.buttons["gearshape"].firstMatch.tap()
         XCTAssertTrue(metricsRow.waitForExistence(timeout: 10))
         metricsRow.tap()
         XCTAssertTrue(metricRow.waitForExistence(timeout: 10))
@@ -2229,7 +2502,9 @@ final class OnigiriUITests: XCTestCase {
         let none = app.buttons["None"].firstMatch
         XCTAssertTrue(none.waitForExistence(timeout: 5), "None in the picker")
         none.tap()
-        app.buttons["Done"].tap()
+        // The SAME exit, and the same bug: this second pass carried its
+        // own `app.buttons["Done"].tap()` against the pushed screen.
+        closeSettings(in: app)
         let fiberGone = app.descendants(matching: .any).matching(
             NSPredicate(format: "label CONTAINS 'g Fiber'")
         ).firstMatch

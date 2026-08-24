@@ -2057,7 +2057,14 @@ struct DailyGoalCard: View, Equatable {
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text(isMaintenance ? "Daily budget" : "Daily goal")
+                    // "Today's budget", not "Daily budget": Goal's own row
+                    // is called `Daily budget` and holds the AVERAGE-day
+                    // figure, so the same two words named two different
+                    // numbers on two screens — in maintenance only, which
+                    // is why it survived the 2026-08-23 rework that existed
+                    // to remove exactly that collision. This card is about
+                    // the day in progress, and now says so.
+                    Text(isMaintenance ? "Today's budget" : "Daily goal")
                         .font(.headline)
                     // The percentage is shown ONLY where it measures
                     // goal achievement. In budget mode it is the
@@ -2066,7 +2073,7 @@ struct DailyGoalCard: View, Equatable {
                     // exact complements, so the card printed "35%"
                     // above "Eaten 1,555 of 2,384" (65% eaten) and the
                     // reader has to invert one to reconcile them. Next
-                    // to the words "Daily budget" a bare 35% reads as
+                    // to the words "Today's budget" a bare 35% reads as
                     // "you have used a third", which is the opposite of
                     // the truth (the user, 2026-08-18).
                     //

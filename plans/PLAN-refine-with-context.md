@@ -328,9 +328,10 @@ reviews.
 6. [x] `RefineGroundingTests` (13, no model), the refine + injection
    evals, and `--refine-sample` behind `REFINE_STEP=1`.
 7. [x] CLAUDE.md rules.
-8. [ ] Device QA on real food — the relay's whole premise is that the
-   model cannot see the plate, so only a real photograph tests whether
-   the note does any work. Then the wiki page.
+8. [x] Device QA on real food (2026-08-24, the user: "works well") and
+   the wiki page. The relay's whole premise is that the model cannot see
+   the plate, so a real photograph was the only test of whether the note
+   does any work. It does.
 
 ## What shipping it measured
 

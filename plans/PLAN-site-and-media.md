@@ -16,7 +16,7 @@ Since 2026-07-16: **GitHub is origin** (https://github.com/ecliptik/onigiri, gh-
 
 **Why:** the user wanted everything (code + docs + policy) living in the repo with no external site to maintain.
 
-Also (2026-07-16): **GitHub wiki** at github.com/ecliptik/onigiri/wiki (Home, User-Guide, Privacy-Policy) — its git repo is github.com/ecliptik/onigiri.wiki.git; the FIRST page had to be created in the web UI before any push would work. **Docs home (since 2026-07-16 PM): the WIKI is the only user guide** (github.com/ecliptik/onigiri/wiki/User-Guide — docs/guide.md was deleted; site nav/CTA/footer + README point at the wiki). Privacy policy lives in BOTH by user request: docs/privacy.md is canonical (the App Store URL), wiki Privacy-Policy is a full mirror — update both together. Wiki edits: clone/push github.com/ecliptik/onigiri.wiki.git (a local checkout may exist in the session scratchpad). The landing page is docs/index.html — a self-contained THEMED marketing site (subtle scroll reveals, centered hero, user-facing content + one source section). Theme rules (user-chosen): follows the system via prefers-color-scheme, LIGHT is the fallback, nav toggle overrides + persists in localStorage, boot script in <head> resolves pre-paint. Palettes: dark bg #131510/text #f3ead9/toast #e3b36b/nori #8ca88c; light bg #fcf5eb/text #2b2416/toast #b8823f/nori #334d36; ricePaper #f5d49e both. APP MEDIA INVERTS the site theme (dark site→light app, light site→dark app) via data-app-light/dark attrs + JS swap; dark app assets live in docs/showcase/dark/ + docs/media/*-dark.mp4 — re-capture BOTH appearances when screens change. Site does NOT mirror the README; sync feature copy by hand. Video encode recipe for loops: setpts=PTS-STARTPTS, fps=30, -bf 0, -g 30 (a nonzero start_time = blank flash each loop). Social card: docs/media/social-card.png (1200×630, PIL-composed from the app icon; og/twitter meta in index.html). Wiki Privacy-Policy is deliberately just a pointer to the canonical Pages URL (no forked legal text).
+Also (2026-07-16): **GitHub wiki** at github.com/ecliptik/onigiri/wiki (Home, User-Guide, Privacy-Policy) — its git repo is github.com/ecliptik/onigiri.wiki.git; the FIRST page had to be created in the web UI before any push would work. **Docs home (since 2026-07-16 PM): the WIKI is the only user guide** (github.com/ecliptik/onigiri/wiki/User-Guide — docs/guide.md was deleted; site nav/CTA/footer + README point at the wiki). Privacy policy lives in BOTH by user request: docs/privacy.md is canonical (the App Store URL), wiki Privacy-Policy is a full mirror — update both together. Wiki edits: clone/push github.com/ecliptik/onigiri.wiki.git (a local checkout may exist in the session scratchpad). The landing page is docs/index.html — a self-contained THEMED marketing site (subtle scroll reveals, centered hero, user-facing content + one source section). Theme rules (user-chosen): follows the system via prefers-color-scheme, LIGHT is the fallback, nav toggle overrides + persists in localStorage, boot script in <head> resolves pre-paint. Palettes: dark bg #131510/text #f3ead9/toast #e3b36b/nori #8ca88c; light bg #fcf5eb/text #2b2416/toast #b8823f/nori #334d36; ricePaper #f5d49e both. APP MEDIA INVERTS the site theme (dark site→light app, light site→dark app) via data-app-light/dark attrs + JS swap; dark app assets live in docs/showcase/dark/ + docs/media/*-dark.mp4 — re-capture BOTH appearances when screens change. Site does NOT mirror the README; sync feature copy by hand. Video encode recipe for loops: setpts=PTS-STARTPTS, fps=30, -bf 0, -g 30 (a nonzero start_time = blank flash each loop). Social card: docs/media/social-card.png (1200×630, PIL-composed from the app icon; og/twitter meta in index.html) — its measured specs and the way to EDIT it without re-rendering are in the 2026-08-24 block at the end of this file. Wiki Privacy-Policy is deliberately just a pointer to the canonical Pages URL (no forked legal text).
 
 **How to apply:** anything committed under docs/ is PUBLISHED to the web on push — internal design docs live in `plans/` (moved 2026-07-16, refs updated in README/CLAUDE.md/project.yml); docs/ holds exactly the site (index, guide, privacy, _config.yml, showcase images — the README embeds those same images, keep them there). Keep docs/privacy.md's front-matter permalink (/privacy/) stable — it will be the App Store Connect privacy URL (the App Store plan (agent memory)). Site config in docs/_config.yml (Primer theme).
 
@@ -41,3 +41,45 @@ README screenshots come from `testHeaderShots` (OnigiriUITests, opt-in `TEST_RUN
 **WATCH `showcase/watch/home.png` (416×496, hard-won 2026-07-18).** The watch app has NO release seed path, but a DEBUG seed lives in `WatchModel.start()` (gated on `--seed-sample-data`) that writes a day via plain `logFood`/`logWater` on the REGULAR write auth. CAPTURE recipe: (1) erase BOTH paired sims — the pair is iPhone 17 Pro `65FE85CE…` + Apple Watch Series 11 46mm `B5010BD4…` (`simctl list pairs`); (2) seed+GRANT on the PHONE via `testHeaderShots` — this is the CRITICAL step: it determines the shared HealthKit auth so the watch's `requestAuthorization()` is a no-op. WITHOUT it the watch pops a "Health Access / Review" sheet that CANNOT be tapped on the watch sim (no `simctl` tap, no watch UI-test target); (3) build `OnigiriWatch` for the watch sim, `simctl install`, then `simctl launch <watch> com.ecliptik.Onigiri.watchkitapp --seed-sample-data` → the DEBUG seed's `logFood` writes into the now-authorized store (no sheet); burn (~1505) comes from the phone's shared seed, so balance ≈ food−burn (logging ~1235 kcal → −270 green). (4) `simctl io <watch> screenshot`. Do NOT use `seedSampleData()` on the watch — its `requestDebugSeedAuthorization` pops the same un-tappable sheet (it requests burn/weight WRITE the regular auth lacks). `simctl status_bar override` is UNSUPPORTED on watchOS (shot shows real sim time, not 9:41 — the original was 4:28, so that's fine). Paired sims share the phone's BURN to the watch but NOT the phone-written food, which is why the watch alone reads intake=0.
 
 **2026-08-03 add-food re-shoot — ONE TAKE PER SEED, and the sleeps aren't the beats.** (1) The take LOGS a meal, so a second take on the same sim starts from the first take's damage: Today opened at "+170 kcal over" (orange) instead of "430 kcal left" (green). Every retry needs the whole cycle again — erase → testHeaderShots → AI defaults → record — so measure the timing on a throwaway take, then spend a fresh seed on the keeper. (2) `axe tap` returns 1–2.3 s AFTER the tap lands (`--element-type Button` is the slowest — it enumerates), and `simctl io recordVideo` starts 0.2–2.3 s after it's backgrounded; both vary run to run. So a fixed sleep is only the REMAINDER of a beat, and the trim must be measured from FRAMES, not from the script's own clock — print timestamps around each tap, then filmstrip the raw (`ffmpeg -ss N -frames:v 1`, hstack) to find the real cut. (3) The clip is now **9.5 s** (was 14.5): ~1.2 s of Today, ~3 s of the Log sheet, ~3 s of the portion sheet, then the logged toast. The old cut held the Contains rows six seconds. Sleeps that produced it: 1.4 lead / 1.4 / 1.6 / 3.4 tail. Encode + concat-remux + poster + all four probes are one script (`encode.sh raw.mov out.mp4 <ss> <dur>`), kept in this session's scratchpad.
+
+## The social card
+
+**2026-08-24 — the card has no generator, so here are its measurements.**
+It was PIL-composed once (2026-07-16) and the script was never committed;
+every later edit therefore starts by re-deriving the layout, which is an
+hour each time. Measured off the committed PNG: canvas **1200×630**; face
+**Helvetica Bold 80** (`/System/Library/Fonts/Helvetica.ttc`, index 1 —
+confirmed by rendering line 1 and diffing it against the original raster,
+which is indistinguishable); tagline left ink edge **x=91**; baselines
+**352 / 454 / 556** (pitch 102, and the tops are NOT evenly spaced
+because they follow each line's tallest ascender — measure baselines, not
+tops); cream **#f3ead9**, accent/toast **#e3b36b**; icon + wordmark band
+ends y=223; the URL line sits y 573–597, x 834–1107. Clean full-width
+rows either side of the tagline: **379** and **565**.
+
+**Editing it: MOVE the glyphs, don't re-render the ones you are keeping.**
+Repaint only the band 380–564 by interpolating each column between rows
+379 and 565 — the vertical gradient is near-linear over that span and the
+interpolation matches the untouched rows exactly, so there is no seam and
+no need to model the gradient. Then lift an existing line by solving for
+its coverage against that same reconstructed background
+(`a = (pixel − bg) / (textcolour − bg)`, red channel, clamped) and
+re-composite that coverage at the new baseline and colour — this is what
+lets a line change COLOUR or POSITION while staying the original raster.
+Only render fresh when the glyphs don't exist yet (lower-case `health`
+had no capital `H` to reuse). Two probes before committing: the vertical
+step across rows 379/380 and 564/565 must be **0 levels**, and every
+pixel outside the band must be **byte-identical** to what you started
+from. Then the usual media check — `getexif()` empty (the `sips -r`
+orientation trap) and the size still 1200×630, which `og:image:width`
+and `og:image:height` both assert.
+
+**The unfurl reads `og:description`, and ours was wrong for weeks.**
+Slack and Signal render the `og:` tags; only Twitter/X prefers `twitter:`
+and falls back. `twitter:description` carried the tagline while
+`og:description` carried a different marketing sentence entirely, so the
+preview never showed the tagline anywhere it was actually shared. Keep
+BOTH on the same string, and keep them equal to what the card's own type
+says. Verify against the LIVE page with `curl` — WebFetch converts to
+markdown and drops meta tags. Slack and Signal also cache unfurls per
+URL (~30 min); append `?v=N` to force a fresh fetch when checking.

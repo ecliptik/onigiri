@@ -786,3 +786,12 @@ reaching for first next time:
   columns are right; the misses are misses, not misplacements.
 - **The second table is still dropped**, for the reason in Round 7: one
   header per page, and this page stacks two printed sheets.
+
+## Follow-up: ordering more than one thing (2026-08-23)
+
+The pick→confirm→log→pick loop this plan's share extension invented is
+now `MenuPickerFlow`, shared with the app — every in-app door threw the
+list away after the first item until then. See
+`plans/PLAN-multi-item-import.md`; `MenuPicker` gained a running note and
+a logged-row mark, and the in-app menu picker no longer opens a full
+`FoodFormView` per dish.

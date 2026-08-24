@@ -57,6 +57,27 @@ public struct MenuRow: Sendable, Equatable, Identifiable {
         self.aiGenerated = aiGenerated
     }
 
+    /// The other direction: labels read off ONE image — a screenshot
+    /// listing several foods — as rows, so the multi-item chooser is the
+    /// same list for both (`plans/PLAN-multi-item-import.md`). It used
+    /// to be a `confirmationDialog`, which can neither report what has
+    /// already been logged nor be returned to.
+    ///
+    /// Position is the identity, as it is for a parsed table: a
+    /// comparison screenshot can name two sizes of the same drink.
+    public static func list(from labels: [ParsedLabel]) -> [MenuRow] {
+        labels.enumerated().map { index, label in
+            MenuRow(
+                id: index,
+                name: label.name ?? "Item",
+                serving: label.servingDescription,
+                kcal: label.kcal,
+                sodiumMg: label.sodiumMg,
+                nutrients: label.nutrients,
+                aiGenerated: label.aiGenerated)
+        }
+    }
+
     /// Folded into a `ParsedLabel` so a picked row enters exactly the
     /// plumbing a screenshot read already uses — the prefilled food
     /// form, unchanged.

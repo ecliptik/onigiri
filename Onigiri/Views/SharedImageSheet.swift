@@ -9,15 +9,24 @@ import OnigiriKit
 /// paste door runs. That is the whole design: a shared screenshot must
 /// read the way a pasted one does, because they are the same picture
 /// arriving by a different route. Nothing is forked — label parse, AI
-/// blank-fill, the screenshot name read, the sign read, the photo
-/// identify, and the "Which item?" dialog all come along unchanged.
+/// blank-fill, the screenshot name read, the sign read and the photo
+/// identify all come along unchanged.
+///
+/// A read that lists SEVERAL foods hands its rows to `MenuPickerFlow`
+/// and stays there until Done: the sheet used to tear itself down with
+/// the first form it opened, so a screenshot of a menu section had to be
+/// re-shared and re-read for the second item
+/// (`plans/PLAN-multi-item-import.md`).
 struct SharedImageSheet: View {
     let url: URL
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
     @State private var phase = Phase.reading
     @State private var status = "Reading the photo…"
-    @State private var candidates: [ParsedLabel] = []
+    /// The rows a multi-item read produced, whether they came from a
+    /// photographed menu or from a screenshot listing several foods —
+    /// one list, one chooser.
     @State private var menuItems: [MenuRow] = []
     @State private var menuSource: String?
     @State private var pick: Pick?
@@ -27,6 +36,8 @@ struct SharedImageSheet: View {
         case failed(String)
         /// The form is up; this sheet is just its host now.
         case handedOff
+        /// A list to order from; `MenuPickerFlow` owns the screen.
+        case choosing
     }
 
     private struct Pick: Identifiable {
@@ -37,37 +48,16 @@ struct SharedImageSheet: View {
     var body: some View {
         NavigationStack {
             content
-                .navigationTitle("Add from Photo")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel", role: .cancel) { dismiss() }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { dismiss() }
-                    }
-                }
         }
         .task { await read() }
-        // The same chooser the paste door and the scan sheet raise, so a
-        // multi-item photo behaves identically wherever it arrived from.
-        // Both handoffs are deferred a turn. `menuPhotoPicker` IS a
-        // `.sheet`, and its onPick empties `rows` — starting that sheet's
-        // dismissal — before handing the row over, so assigning `pick`
-        // synchronously asked this view to tear one sheet down and raise
-        // another in the same turn. That is the 2026-07-22 race, and it
-        // left the picker on a blank hand-off screen with no way on but
-        // backing out and re-sharing. The other doors already do this
-        // (FoodFormView, QuickLogSheet); this one was missed (audit,
-        // 2026-08-17). The candidates dialog is lower risk — a
-        // confirmationDialog is not a sheet — but it hands off to the
-        // same `.sheet`, so it takes the same turn.
-        .screenshotCandidates($candidates) { picked in
-            Task { pick = Pick(product: picked.scannedProduct()) }
-        }
-        .menuPhotoPicker($menuItems, suggestedSource: menuSource) { picked in
-            Task { pick = Pick(product: picked.scannedProduct()) }
-        }
+        // A SINGLE food still goes to the full form, which can edit the
+        // numbers — one item costs one trip, and these reads are the
+        // ones worth editing. The deferred assignment stays: this used to
+        // swap one sheet's binding while another was dismissing, which
+        // is the 2026-07-22 race, and it left the picker on a blank
+        // hand-off screen (audit, 2026-08-17). Nothing swaps now — the
+        // list lives in this view's own body — but the form is still
+        // raised from a closure the reader finishes in.
         .sheet(item: $pick, onDismiss: { dismiss() }) { pick in
             FoodFormView(food: nil, prefill: pick.product)
         }
@@ -82,17 +72,57 @@ struct SharedImageSheet: View {
             } description: {
                 ProgressView()
             }
+            .modifier(HostChrome(dismiss: dismiss))
         case .failed(let message):
             ContentUnavailableView {
                 Label("No nutrition found", systemImage: "photo.badge.exclamationmark")
             } description: {
                 Text(message)
             }
+            .modifier(HostChrome(dismiss: dismiss))
         case .handedOff:
             // Briefly visible behind the form; never a dead end, because
             // dismissing the form dismisses this too.
             Color.clear
+        case .choosing:
+            MenuPickerFlow(
+                rows: menuItems,
+                suggestedSource: menuSource,
+                completion: .logging(saving: .optional, write: log),
+                onFinish: { _ in dismiss() })
         }
+    }
+
+    /// Title and way out for the phases this view still owns. Once
+    /// `MenuPickerFlow` is up it contributes its own — and adds Done
+    /// beside Cancel as soon as something has been logged.
+    private struct HostChrome: ViewModifier {
+        let dismiss: DismissAction
+
+        func body(content: Content) -> some View {
+            content
+                .navigationTitle("Add from Photo")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel", role: .cancel) { dismiss() }
+                    }
+                }
+        }
+    }
+
+    private func log(_ request: MenuLogRequest) async -> String? {
+        let ok = await LogActions.logFood(
+            name: request.name,
+            kcal: (request.label.kcal ?? 0) * request.quantity,
+            sodiumMg: (request.label.sodiumMg ?? 0) * request.quantity,
+            nutrients: request.label.nutrients.scaled(by: request.quantity),
+            category: request.category,
+            aiGenerated: request.label.aiGenerated,
+            quantity: request.quantity)
+        guard ok else { return "Couldn't log that item. Try again." }
+        if request.saveToLibrary { MenuLibrarySave.insert(request, into: context) }
+        return nil
     }
 
     private func read() async {
@@ -108,14 +138,17 @@ struct SharedImageSheet: View {
             phase = .handedOff
             pick = Pick(product: product)
         case .candidates(let list):
-            phase = .handedOff
-            candidates = list
+            // A screenshot listing several foods — the same list a menu
+            // gets, because it is the same question and a dialog could
+            // neither report what had been logged nor be returned to.
+            menuItems = MenuRow.list(from: list)
+            phase = .choosing
         case .menu(let items, let source):
-            // A photographed MENU shared in — the same picker the scan
-            // door raises, for the same reason: a board lists dozens.
-            phase = .handedOff
+            // A photographed MENU shared in — the same list, for the
+            // same reason: a board lists dozens.
             menuSource = source
             menuItems = items
+            phase = .choosing
         case .nothing(let message):
             phase = .failed(message)
         case .cancelled:

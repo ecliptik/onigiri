@@ -548,6 +548,11 @@ struct QuickLogSheet: View {
                     // intact. Deferred one turn — the sheet dismisses
                     // itself right after this closure, and a synchronous
                     // swap gets torn down by that dismissal.
+                    // `.logging` + `logDate`: a menu or multi-food read
+                    // here is ordered from — pick, confirm, log, back to
+                    // the list — and it writes into the day this sheet is
+                    // browsing, not today
+                    // (`plans/PLAN-multi-item-import.md`).
                     ScanSheet(onCode: { code in
                         lookUpBarcode(code)
                     }, onLabel: { parsed in
@@ -559,7 +564,7 @@ struct QuickLogSheet: View {
                         // here with logDate intact.
                         let prefill = ProductPrefill(product: product)
                         Task { activeSheet = .form(prefill) }
-                    }, notice: notice)
+                    }, purpose: .logging, logDate: logDate, notice: notice)
                 case .form(let prefill):
                     // New foods go through the full form — reviewable and
                     // complete. Its Log action returns here (the sheet stays

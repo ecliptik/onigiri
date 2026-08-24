@@ -739,8 +739,46 @@ Each cost a debugging session.
   When that read returns MORE THAN ONE food the deterministic parse is
   DISCARDED, not merged: it can only describe one row, so blank-filling stamped
   its numbers onto every candidate (four salads all reading 490 kcal, live
-  2026-07-24). The host asks with a confirmationDialog — never a sheet swapped
-  from inside a sheet.
+  2026-07-24). The host asks with the SAME searchable list a menu gets — see
+  the multi-item rule below; it was a confirmationDialog until 2026-08-23.
+- **A LIST is read once and ordered from several times, and every door
+  loops** (`plans/PLAN-multi-item-import.md`, 2026-08-23). One
+  `MenuPickerFlow` — compiled into the app AND the share extension beside
+  `MenuPicker`/`LogConfirmSheet` — owns pick → confirm → log → back to
+  the same list, with `MenuPickProgress`'s note saying what went in and a
+  check on the rows that did. The share extension worked this way from
+  2026-08-16; the in-app doors dismissed on the first pick, so the second
+  dish cost a second photograph, a second OCR pass and a second run at
+  the model (the user, 2026-08-23). Four rules hold it together:
+  - **The confirm REPLACES the list in the same stack** — it is not a
+    sheet, so the 2026-07-22 swap race cannot apply — and while a list
+    stands behind it the leading button is **Back**, not Cancel. Picking
+    the wrong row must not cost the read.
+  - **What a pick is FOR is the host's to say.** `.logging` loops (Log
+    sheet, shared image, menu import, share extension); `.filling` hands
+    the first pick over and closes, because the Add Food form's doors
+    fill a form and a door inside a form that started writing to Health
+    is a different feature. `ScanSheet` takes `purpose` AND `logDate` —
+    it writes on the host's behalf now, and the Log sheet backfills into
+    the day it is browsing.
+  - **A SINGLE food still goes to the full form in the app.** The quick
+    confirm exists because four dishes should not cost four trips
+    through a form; one dish costs one, and a prose-read page is where
+    editing matters most. The extension is the exception (no form to go
+    to).
+  - **Library saving is a toggle in the app, default OFF, and
+    unconditional in the extension** — "saving to the library is the
+    option, not the price of admission" (the user), and an extension has
+    no second visit. Both go through `MenuLibrarySave`, which stays
+    `Food`-only: give it a `Meal` fetch and it manufactures the
+    dangling-reference process kill it is immune to.
+  - Present that list from ONE value (`ScanSheet.MenuListing` via
+    `.sheet(item:)`), never rows-plus-a-Bool: a sheet's content closure
+    is read when it presents, so a source set in the same breath as the
+    flag can land after `MenuPicker` has already asked "Where is this
+    menu from?" about a menu that named itself — and its `.task` never
+    runs again to take it back. Cost a debugging round 2026-08-23, with
+    the Log sheet passing on identical code.
 - A photo with no nutrition panel is NOT a dead end (2026-08-02). The cascade
   after a failed parse is: `FoodIntelligence.readFoodSign` (the OCR TEXT — a
   bakery card, shelf sign, menu board, package front NAMES the food, which no
@@ -748,7 +786,7 @@ Each cost a debugging session.
   `SignText.namedFood` (kit, pure: name + serving, transcription only, the
   AI-off floor so the form opens half-filled instead of blank). Sign reads are
   ESTIMATES and carry `aiGenerated` through `ParsedLabel`; >1 named item raises
-  the existing "Which item?" dialog. Two guards are load-bearing:
+  the same list every multi-item read raises. Two guards are load-bearing:
   `plausibleSignFoods` rejects a name that appears nowhere in the OCR (it
   caught a confabulated food during the eval run), and the sign prompt DELIMITS
   the text as photographed data — without that framing an "Allergen Warning!
@@ -756,8 +794,8 @@ Each cost a debugging session.
 - A WHOLE MENU is a fourth door (`plans/PLAN-menu-import.md`, 2026-08-16) and it
   is PARSED, never prompted. `MenuDocumentReader` (app) → `MenuTableParser`
   (kit) reads 113 rows off the reference guide with AI off; the picker is a
-  `.searchable` list, because the "Which item?" confirmationDialog is sized for
-  a handful. Nothing persists but a food actually saved, and no URL is ever
+  `.searchable` list (`MenuPicker`), which is now what EVERY multi-item read
+  opens. Nothing persists but a food actually saved, and no URL is ever
   fetched — Safari's Share → Options → PDF makes a nutrition PAGE into a PDF,
   which is the vetoed URL-fetch avoided rather than reinstated. Landmines:
   - **`CFBundleDocumentTypes` does NOT put an app in Safari's share sheet.**

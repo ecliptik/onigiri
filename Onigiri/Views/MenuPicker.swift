@@ -5,19 +5,32 @@ import OnigiriKit
 /// document, a shared page, or a photograph of the board over the counter
 /// (`plans/PLAN-menu-import.md`).
 ///
-/// A restaurant publishes every item at once, so this deliberately does
-/// NOT reuse the "Which item?" confirmationDialog a screenshot read
-/// raises: that control is sized for a handful, and a menu runs to
-/// dozens. What makes a long menu usable is the same thing that makes the
-/// rest of the app usable — the standard system search field, bottom
-/// placement, no custom bar and no auto-focus.
+/// A restaurant publishes every item at once, so this is a searchable
+/// LIST and not a dialog: a "Which item?" confirmationDialog is sized for
+/// a handful, a menu runs to dozens, and — since
+/// `plans/PLAN-multi-item-import.md` — a dialog has nowhere to say what
+/// has already been logged and no way to be returned to. It is now the
+/// only chooser in the product: the multi-food screenshot read raises it
+/// too, mapped through `MenuRow`. What makes a long menu usable is the
+/// same thing that makes the rest of the app usable — the standard
+/// system search field, bottom placement, no custom bar and no
+/// auto-focus.
 struct MenuPicker: View {
     let rows: [MenuRow]
     /// Prefilled when the document named its restaurant, which is rare.
     let suggestedSource: String?
-    /// What has already been logged from this list, when anything has.
+    /// What has already been logged from this list, when anything has
+    /// (`MenuPickProgress`).
     var note: String?
-    let onPick: (ParsedLabel) -> Void
+    /// Rows already logged in this sitting. The note names the last one
+    /// and counts the rest, which after four picks cannot answer "did I
+    /// already add the fries" — the row can. Keyed by ID, not name: a
+    /// menu section can print "Small" twice.
+    var loggedRowIDs: Set<Int> = []
+    /// The row rides along with the label because the caller cannot
+    /// recover it — by then the source prefix has been applied to the
+    /// name, and two rows can carry the same one.
+    let onPick: (ParsedLabel, MenuRow) -> Void
 
     @State private var source = ""
     @State private var askingSource = false
@@ -46,8 +59,10 @@ struct MenuPicker: View {
             ForEach(sections, id: \.title) { section in
                 Section(section.title ?? "Menu") {
                     ForEach(section.rows) { row in
-                        Button { choose(row) } label: { MenuItemRow(row: row) }
-                            .buttonStyle(.plain)
+                        Button { choose(row) } label: {
+                            MenuItemRow(row: row, isLogged: loggedRowIDs.contains(row.id))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -110,14 +125,15 @@ struct MenuPicker: View {
     private func choose(_ row: MenuRow) {
         var label = row.parsedLabel
         if !source.isEmpty { label.name = "\(row.name) (\(source))" }
-        onPick(label)
+        onPick(label, row)
     }
 }
 
-/// One menu row: the dish, and what logging it would cost — the grammar
-/// the "Which item?" dialog already uses.
+/// One menu row: the dish, what logging it would cost, and whether it
+/// already went in.
 private struct MenuItemRow: View {
     let row: MenuRow
+    let isLogged: Bool
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
@@ -135,100 +151,16 @@ private struct MenuItemRow: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
+            // A mark, not a disabled row: ordering two of something is a
+            // real order, so a logged row stays tappable.
+            if isLogged {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Already logged")
+            }
         }
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
-    }
-}
-
-/// A menu READ FROM A PHOTO, presented over whichever door took the
-/// picture. A sheet rather than the candidates dialog for the reason
-/// above — a board can list dozens.
-extension View {
-    func menuPhotoPicker(
-        _ rows: Binding<[MenuRow]>,
-        suggestedSource: String? = nil,
-        onPick: @escaping (ParsedLabel) -> Void
-    ) -> some View {
-        sheet(isPresented: Binding(
-            get: { !rows.wrappedValue.isEmpty },
-            set: { if !$0 { rows.wrappedValue = [] } })
-        ) {
-            MenuPhotoSheet(rows: rows.wrappedValue, suggestedSource: suggestedSource) { picked in
-                rows.wrappedValue = []
-                onPick(picked)
-            } onCancel: {
-                rows.wrappedValue = []
-            }
-        }
-    }
-}
-
-/// Hosts the picker for a PHOTOGRAPHED menu, where a row may carry no
-/// calories at all — most restaurants print none, since US labeling
-/// binds only chains of 20+ locations.
-///
-/// So picking is where the estimate happens, and only then: the menu
-/// listed thirty dishes and exactly one of them is being eaten.
-/// Estimating all thirty on the way in would spend inference on
-/// twenty-nine answers nobody asked for.
-private struct MenuPhotoSheet: View {
-    let rows: [MenuRow]
-    let suggestedSource: String?
-    /// What has already been logged from this list, when anything has.
-    var note: String?
-    let onPick: (ParsedLabel) -> Void
-    let onCancel: () -> Void
-
-    @State private var estimating: String?
-
-    var body: some View {
-        NavigationStack {
-            Group {
-                if let estimating {
-                    ContentUnavailableView {
-                        Label("Estimating \(estimating)…", systemImage: "sparkles")
-                    } description: {
-                        ProgressView()
-                    }
-                } else {
-                    MenuPicker(rows: rows, suggestedSource: suggestedSource, onPick: choose)
-                }
-            }
-            .navigationTitle("Choose an Item")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", role: .cancel, action: onCancel)
-                }
-            }
-        }
-    }
-
-    private func choose(_ picked: ParsedLabel) {
-        // A menu that PRINTED calories needs no model at all — that is
-        // MenuBoardParser's answer and it is exact.
-        guard picked.kcal == nil else { return onPick(picked) }
-        guard let name = picked.name, FoodIntelligence.isAvailable else {
-            // AI off: hand over the name and nothing else. A half-filled
-            // form beats a dead end, and it beats an invented number.
-            return onPick(picked)
-        }
-        estimating = name
-        Task {
-            let described = await FoodIntelligence.describeFood(name)
-            estimating = nil
-            guard let described else { return onPick(picked) }
-            var label = picked
-            label.kcal = described.kcal
-            label.sodiumMg = described.sodiumMg
-            label.nutrients = described.nutrients
-            label.servingDescription = described.serving.nilWhenEmpty
-            // These are a model's numbers, not the menu's — the mark and
-            // the review contract travel with them.
-            label.aiGenerated = true
-            onPick(label)
-        }
     }
 }
 

@@ -24,18 +24,56 @@ struct ScanSheet: View {
     let onLabel: (ParsedLabel) -> Void
     /// An identified food photo, prefill-shaped like the label path.
     let onFood: (ScannedProduct) -> Void
+    /// What a pick off a LIST is for, which is not the same question in
+    /// every host (`plans/PLAN-multi-item-import.md`). The Log sheet is
+    /// logging, so a menu read there is ordered from until Done; the Add
+    /// Food form is FILLING A FORM, and a door inside a form that
+    /// started writing to Health would be a different feature. Single
+    /// reads — a barcode, a label, an identified photo — hand off and
+    /// dismiss in both, as they always have.
+    var purpose: Purpose = .filling
+    /// The day the host is logging into. The Log sheet browses days and
+    /// backfills into the one on screen; without this a menu row logged
+    /// straight from the picker would land on today (new plumbing —
+    /// until now this sheet never logged anything).
+    var logDate: Date = .now
     /// Why the camera is back. Set when a scan found a barcode the
     /// database doesn't have — the sheet reopens on the label path and
     /// has to say so, or it just looks like the scan didn't take.
     var notice: String?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.modelContext) private var context
+
+    enum Purpose {
+        case logging
+        case filling
+    }
 
     @State private var manualCode = ""
     @State private var photoItem: PhotosPickerItem?
-    /// Non-empty while the photographed-menu picker is up.
-    @State private var menuItems: [MenuRow] = []
+    /// The list to order from, when a read produced one. Rows and source
+    /// travel together in ONE value, and the sheet is presented from it
+    /// with `.sheet(item:)` — never from a Bool beside them.
+    ///
+    /// This is load-bearing, not tidiness. A sheet's content closure is
+    /// evaluated when it presents, so a separate `menuSource` set in the
+    /// same breath as a `showing = true` flag can arrive AFTER the
+    /// picker has already read it: `MenuPicker` then asks "Where is this
+    /// menu from?" about a menu that named itself — the exact fault
+    /// fixed on 2026-08-16 — and its `.task` never runs again to take
+    /// the answer back. Seen on 2026-08-23 in the food form while the
+    /// Log sheet, running identical code, got the ordering it wanted.
+    @State private var listing: MenuListing?
     @State private var showingMenuFile = false
+
+    /// One read's list, identified per arrival so a second read
+    /// re-presents.
+    private struct MenuListing: Identifiable {
+        let id = UUID()
+        let rows: [MenuRow]
+        let source: String?
+    }
 
     /// A menu DOCUMENT chosen from Files, read exactly the way a shared
     /// one is — same reader, same OCR fallback, same picker.
@@ -56,15 +94,11 @@ struct ScanSheet: View {
             if source == nil {
                 source = await FoodIntelligence.readMenuSource(pages: document.pages)
             }
-            menuSource = source
-            menuItems = rows
+            listing = MenuListing(rows: rows, source: source)
         } catch {
             failureMessage = "Onigiri couldn't open that document."
         }
     }
-    @State private var menuSource: String?
-    /// Non-empty while the "which item?" dialog is up.
-    @State private var candidates: [ParsedLabel] = []
     @State private var isReading = false
     /// The one in-flight OCR/identify pipeline. Stored so Cancel (and
     /// backgrounding) actually STOPS it — an orphaned cascade used to
@@ -99,14 +133,36 @@ struct ScanSheet: View {
     /// sits on top of it, and a delivered result dismisses behind it.
     /// Every one of these resolves, so the preview can't wedge — a
     /// failed read drops straight back to live for the retry.
+    ///
+    /// The condition is "some list is up", not a roll-call of every
+    /// state variable that can mean that: the menu picker was missing
+    /// from the old list, so a photographed board already ran the live
+    /// camera behind its own picker.
     private var showsFrozenFrame: Bool {
-        capturedStill != nil && (isReading || delivered || !candidates.isEmpty)
+        capturedStill != nil && (isReading || delivered || listing != nil)
     }
 
     /// UI-test hook (LABEL_SCAN=1): a bundled label photo stands in for
     /// the pickers, exercising the real Vision request end to end.
     private static let sampleAvailable =
         ProcessInfo.processInfo.arguments.contains("--label-scan-sample")
+
+    /// UI-test hook (MENU_LOOP=1): a three-row menu, standing in for a
+    /// read no headless runner can perform — a camera pointed at a board
+    /// or a document picked from Files. It skips the PARSER on purpose;
+    /// what it exercises is the loop after it
+    /// (`plans/PLAN-multi-item-import.md`), which is where the list used
+    /// to be thrown away. `MenuTableParserTests` covers the reading.
+    private static let menuSampleAvailable =
+        ProcessInfo.processInfo.arguments.contains("--menu-scan-sample")
+
+    /// Printed calories, so nothing here waits on a model the simulator
+    /// may not have.
+    private static let sampleMenu = [
+        MenuRow(id: 0, name: "Sample Bowl", section: "Mains", kcal: 540, sodiumMg: 900),
+        MenuRow(id: 1, name: "Sample Fries", section: "Sides", kcal: 320, sodiumMg: 400),
+        MenuRow(id: 2, name: "Sample Shake", section: "Drinks", kcal: 610, sodiumMg: 260),
+    ]
 
     var body: some View {
         NavigationStack {
@@ -160,14 +216,28 @@ struct ScanSheet: View {
                 readTask?.cancel()
                 readTask = Task { await readMenuDocument(url) }
             }
-            .menuPhotoPicker($menuItems, suggestedSource: menuSource) { picked in
-            delivered = true
-            onLabel(picked)
-            dismiss()
-        }
-        .screenshotCandidates($candidates) { picked in
-                onLabel(picked)
-                dismiss()
+            // ONE list for every multi-item read — a photographed board,
+            // a menu document, a screenshot naming several foods. It is a
+            // sheet OVER this one, never a swap of this one's binding:
+            // nesting is fine, swapping mid-dismissal is the 2026-07-22
+            // race.
+            .sheet(item: $listing) { listing in
+                NavigationStack {
+                    MenuPickerFlow(
+                        rows: listing.rows,
+                        suggestedSource: listing.source,
+                        completion: flowCompletion,
+                        onFinish: { logged in
+                            self.listing = nil
+                            // Done goes back to the host with the day's
+                            // logs written; Cancel leaves the camera up
+                            // for another try.
+                            if logged {
+                                delivered = true
+                                dismiss()
+                            }
+                        })
+                }
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
@@ -195,7 +265,15 @@ struct ScanSheet: View {
         // undeferred barcode hit would race the OCR/identify cascade
         // for the same single-slot sheet state in every host
         // (2026-07-20 audit HIGH).
-        ScannerRepresentable(proxy: scannerProxy, isCapturing: { isReading }) { code in
+        ScannerRepresentable(
+            proxy: scannerProxy,
+            isCapturing: { isReading },
+            // The list is a sheet OVER this one, so the camera would
+            // otherwise keep running — and be looked at for as long as
+            // choosing a dish takes. It never showed before because the
+            // sheet dismissed on the first pick.
+            isPaused: listing != nil
+        ) { code in
             readTask?.cancel()
             onCode(code)
             dismiss()
@@ -292,6 +370,41 @@ struct ScanSheet: View {
         }
     }
 
+    /// Logging hosts order from the list until Done; the Add Food form
+    /// takes the first pick and closes. The estimate for a row that
+    /// printed no calories runs inside the flow either way, so a menu
+    /// board fills the form exactly as it used to.
+    private var flowCompletion: MenuPickerFlow.Completion {
+        switch purpose {
+        case .logging:
+            .logging(saving: .optional, write: log)
+        case .filling:
+            .filling { picked in
+                listing = nil
+                delivered = true
+                onLabel(picked)
+                dismiss()
+            }
+        }
+    }
+
+    private func log(_ request: MenuLogRequest) async -> String? {
+        let ok = await LogActions.logFood(
+            name: request.name,
+            kcal: (request.label.kcal ?? 0) * request.quantity,
+            sodiumMg: (request.label.sodiumMg ?? 0) * request.quantity,
+            nutrients: request.label.nutrients.scaled(by: request.quantity),
+            category: request.category,
+            // The day the HOST is browsing, not today — the Log sheet
+            // backfills, and this sheet now writes on its behalf.
+            date: logDate,
+            aiGenerated: request.label.aiGenerated,
+            quantity: request.quantity)
+        guard ok else { return "Couldn't log that item. Try again." }
+        if request.saveToLibrary { MenuLibrarySave.insert(request, into: context) }
+        return nil
+    }
+
     private func captureLabel() async {
         // The shutter set isReading before this task started; every
         // early exit must clear it (read() re-sets and clears its own).
@@ -367,6 +480,14 @@ struct ScanSheet: View {
                     }
                     .accessibilityIdentifier("labelScanSample")
                 }
+                if Self.menuSampleAvailable {
+                    Button {
+                        listing = MenuListing(rows: Self.sampleMenu, source: "Sample Cafe")
+                    } label: {
+                        Label("Use Sample Menu", systemImage: "testtube.2")
+                    }
+                    .accessibilityIdentifier("menuScanSample")
+                }
                 if isReading {
                     HStack(spacing: 8) {
                         ProgressView()
@@ -417,10 +538,13 @@ struct ScanSheet: View {
             onFood(product)
             dismiss()
         case .candidates(let list):
-            candidates = list
+            // A screenshot listing several foods gets the same list a
+            // menu does: the "Which item?" dialog could not say what had
+            // already been logged, and could not be returned to
+            // (PLAN-multi-item-import).
+            listing = MenuListing(rows: MenuRow.list(from: list), source: nil)
         case .menu(let items, let source):
-            menuSource = source
-            menuItems = items
+            listing = MenuListing(rows: items, source: source)
         case .nothing(let message):
             failureMessage = message
         case .cancelled:
@@ -440,6 +564,10 @@ private struct ScannerRepresentable: UIViewControllerRepresentable {
     /// True while the shutter cascade runs — live barcode hits are
     /// ignored so the two paths can't race each other's sheet slot.
     let isCapturing: () -> Bool
+    /// True while a picker covers this sheet. Scanning STOPS rather
+    /// than merely being ignored: the choosing can take minutes, and a
+    /// camera nobody can see is only heat.
+    let isPaused: Bool
     let onCode: (String) -> Void
 
     func makeUIViewController(context: Context) -> DataScannerViewController {
@@ -466,7 +594,11 @@ private struct ScannerRepresentable: UIViewControllerRepresentable {
         // Dismissal after a successful scan re-runs updates — don't
         // restart the camera for the teardown animation.
         guard !context.coordinator.delivered else { return }
-        try? scanner.startScanning()
+        if isPaused {
+            scanner.stopScanning()
+        } else {
+            try? scanner.startScanning()
+        }
     }
 
     static func dismantleUIViewController(_ scanner: DataScannerViewController, coordinator: Coordinator) {

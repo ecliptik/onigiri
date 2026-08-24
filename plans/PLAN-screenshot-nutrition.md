@@ -184,6 +184,14 @@ honesty marks.
   typing.
 - More than one candidate → a picker before the form ("Which item?"),
   name + kcal per row. One candidate → straight to the form.
+  **AMENDED 2026-08-23 (`PLAN-multi-item-import.md`): the
+  `confirmationDialog` is gone.** Several candidates now raise the same
+  searchable list a menu does, and it STAYS — a dialog has nowhere to
+  say what has already been logged, and cannot be returned to, so the
+  second item off one screenshot cost a whole second read of the same
+  picture. The 2026-07-22 dismissal race the dialog was chosen to dodge
+  is still dodged: nothing swaps a sheet binding, the list holds its own
+  screen and the confirm replaces its content.
 - The deterministic path stays name-blank: guessing a name from OCR
   geometry (largest text near the top) is a wrong-answer generator on any
   page with a site header.

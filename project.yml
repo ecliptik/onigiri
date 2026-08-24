@@ -190,6 +190,11 @@ targets:
       - Onigiri/Models/MenuLinkLoader.swift
       - Onigiri/Models/SharedPageReader.swift
       - Onigiri/Views/MenuPicker.swift
+      # The pick→confirm→log→pick loop and its receipt, shared with the
+      # app so a menu reads the same way in both processes
+      # (plans/PLAN-multi-item-import.md).
+      - Onigiri/Views/MenuPickerFlow.swift
+      - Onigiri/Views/LogConfirmSheet.swift
     dependencies:
       - package: OnigiriKit
     settings:

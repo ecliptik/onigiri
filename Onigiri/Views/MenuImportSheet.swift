@@ -32,19 +32,19 @@ struct SharedImport: Identifiable {
     }
 }
 
-/// The picker for a whole imported menu (`plans/PLAN-menu-import.md`).
+/// A whole imported menu, read and then ordered from
+/// (`plans/PLAN-menu-import.md`).
 ///
-/// A restaurant publishes every item at once — the CAVA guide runs
-/// to 113 rows — so this deliberately does NOT reuse the "Which item?"
-/// confirmationDialog a screenshot read raises. That control is sized for
-/// a handful. What makes a long menu usable is the same thing that makes
-/// the rest of the app usable: the standard system search field, bottom
-/// placement, no custom bar and no auto-focus.
+/// The reading is here; the pick→confirm→log→pick loop is
+/// `MenuPickerFlow`, shared with the share extension. This sheet used to
+/// stack a full `FoodFormView` over the list per item — reviewable, but
+/// four dishes off one guide meant four trips through a form built for
+/// creating a food, when what was happening was ordering lunch
+/// (`plans/PLAN-multi-item-import.md`).
 ///
 /// One-shot by construction. The document is parsed from memory, never
-/// copied in, and nothing survives this sheet except a food the user
-/// actually saved — which lands in the library and reaches Recent and
-/// Favorites by the ordinary route.
+/// copied in, and nothing survives this sheet except what was logged and
+/// any food explicitly saved to the library.
 struct MenuImportSheet: View {
     /// `.document` for a PDF, `.link` for a page or PDF URL that has to
     /// be resolved first — the resolve happens inside the reading phase,
@@ -52,50 +52,48 @@ struct MenuImportSheet: View {
     let shared: ShareInbox.Item
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
     @State private var phase = Phase.reading
     @State private var rows: [MenuRow] = []
+    /// One food and no table — a product page stating its nutrition in a
+    /// sentence. It goes to the full form, not to the flow's quick
+    /// confirm: the quick confirm exists because picking the fourth
+    /// dish off a menu should not cost four trips through a form, and a
+    /// single food costs one. These numbers are also the riskiest in the
+    /// app — read out of prose, where `SharedPageReader` fabricates a
+    /// coordinate per line — so the screen that can EDIT them is the
+    /// right one (`plans/PLAN-nutrition-plausibility.md`).
+    @State private var single: Pick?
+
+    /// A UUID rather than the product: every read here folds to a
+    /// barcode-less `ScannedProduct`, so product identity would collapse
+    /// two arrivals into one and `.sheet(item:)` would refuse to
+    /// re-present the second.
+    private struct Pick: Identifiable {
+        let id = UUID()
+        let product: ScannedProduct
+    }
     @State private var detectedSource: String?
     /// The host of a SHARED LINK, when the import came from one — a web
     /// address names the business more reliably than a PDF's metadata.
     @State private var linkHost: String?
     @State private var linkURL: URL?
-    @State private var pick: Pick?
-    @State private var picks = 0
     @State private var readingStatus = "Looking for nutrition…"
 
     private enum Phase: Equatable {
         case reading
         case ready
+        /// The form is up; this sheet is only its host now.
+        case handedOff
         case failed(String)
-    }
-
-    /// Identified by the ROW, not by the product: every menu row folds to
-    /// a barcode-less ScannedProduct, so product identity would collapse
-    /// all 113 into one and the form would refuse to re-present.
-    private struct Pick: Identifiable {
-        let id: Int
-        let product: ScannedProduct
     }
 
     var body: some View {
         NavigationStack {
             content
-                .navigationTitle("Choose an Item")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    // Cancel on the left beside Done, matching the forms:
-                    // a menu you opened and decided against needs a way
-                    // out that doesn't read as "finished" (the user).
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel", role: .cancel) { dismiss() }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { dismiss() }
-                    }
-                }
         }
         .task { await load() }
-        .sheet(item: $pick) { pick in
+        .sheet(item: $single, onDismiss: { dismiss() }) { pick in
             FoodFormView(food: nil, prefill: pick.product)
         }
     }
@@ -109,25 +107,59 @@ struct MenuImportSheet: View {
             } description: {
                 ProgressView()
             }
+            .navigationTitle("Choose an Item")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { cancelButton }
         case .failed(let message):
             ContentUnavailableView {
                 Label("No nutrition found", systemImage: "doc.questionmark")
             } description: {
                 Text(message)
             }
+            .navigationTitle("Choose an Item")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { cancelButton }
         case .ready:
-            list
+            // `.optional`: in the app, saving to the library is the
+            // option and not the price of admission (the user) — the
+            // extension is the one that always saves, because it has no
+            // second visit.
+            MenuPickerFlow(
+                rows: rows,
+                suggestedSource: detectedSource,
+                completion: .logging(saving: .optional, write: log),
+                onFinish: { _ in dismiss() })
+        case .handedOff:
+            // Briefly visible behind the form; never a dead end, because
+            // dismissing the form dismisses this too.
+            Color.clear
         }
     }
 
-    private var list: some View {
-        MenuPicker(rows: rows, suggestedSource: detectedSource) { picked in
-            // A fresh id per pick, not one derived from the row: two
-            // rows can share a name, and .sheet(item:) would then refuse
-            // to re-present for the second.
-            picks += 1
-            pick = Pick(id: picks, product: picked.scannedProduct())
+    /// Cancel on the left, matching the forms: a menu you opened and
+    /// decided against needs a way out that doesn't read as "finished"
+    /// (the user). Once the flow is up it owns this slot — and adds Done
+    /// beside it as soon as something has been logged.
+    private var cancelButton: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button("Cancel", role: .cancel) { dismiss() }
         }
+    }
+
+    private func log(_ request: MenuLogRequest) async -> String? {
+        // The app's own log path: toast, undo, haptic, widget reload.
+        let ok = await LogActions.logFood(
+            name: request.name,
+            kcal: (request.label.kcal ?? 0) * request.quantity,
+            sodiumMg: (request.label.sodiumMg ?? 0) * request.quantity,
+            nutrients: request.label.nutrients.scaled(by: request.quantity),
+            category: request.category,
+            aiGenerated: request.label.aiGenerated,
+            quantity: request.quantity)
+        guard ok else { return "Couldn't log that item. Try again." }
+        // After the log, and never at the cost of it.
+        if request.saveToLibrary { MenuLibrarySave.insert(request, into: context) }
+        return nil
     }
 
     private func load() async {
@@ -168,19 +200,16 @@ struct MenuImportSheet: View {
             phase = .failed(Self.message(for: error))
         case .success(let (document, parsed)):
             guard !parsed.isEmpty else {
-                var single = await SharedPageReader.singleFood(from: document.pages)
-                if single == nil, let linkURL,
+                var stated = await SharedPageReader.singleFood(from: document.pages)
+                if stated == nil, let linkURL,
                    let text = await MenuLinkLoader.pageText(for: linkURL) {
-                    single = await SharedPageReader.singleFood(fromPageText: text)
+                    stated = await SharedPageReader.singleFood(fromPageText: text)
                 }
-                if let single {
-                    rows = [MenuRow(
-                        id: 0, name: single.name ?? "Food", section: nil,
-                        serving: single.servingDescription, kcal: single.kcal,
-                        sodiumMg: single.sodiumMg, nutrients: single.nutrients,
-                        aiGenerated: single.aiGenerated)]
-                    detectedSource = detectedSource ?? linkHost.flatMap(MenuDocumentReader.source(fromHost:))
-                    phase = .ready
+                if let stated {
+                    // A one-row list is a question with one answer — the
+                    // form takes it directly, as it always has.
+                    phase = .handedOff
+                    single = Pick(product: stated.scannedProduct())
                     return
                 }
                 var message = "Try a photo or screenshot of one item instead."

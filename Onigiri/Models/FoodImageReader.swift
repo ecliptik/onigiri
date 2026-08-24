@@ -20,9 +20,10 @@ enum FoodImageOutcome {
     /// for a camera still (PLAN-screenshot-nutrition Part C).
     case candidates([ParsedLabel])
     /// A photographed MENU whose items carry printed calories — a board
-    /// over the counter, a card on the table. Dozens of rows, so the
-    /// host opens the searchable picker rather than the "Which item?"
-    /// dialog, which is sized for a handful.
+    /// over the counter, a card on the table. Dozens of rows, and the
+    /// host opens the searchable picker — which since
+    /// `plans/PLAN-multi-item-import.md` is what `.candidates` opens
+    /// too, so both list-shaped outcomes land in one control.
     /// `source` is the restaurant the menu named itself after, when it
     /// did — so the picker can prefill rather than ask.
     case menu([MenuRow], source: String?)

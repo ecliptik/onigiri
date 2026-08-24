@@ -2761,4 +2761,141 @@ final class OnigiriUITests: XCTestCase {
                       "cancelling leaves the edit sheet up")
         XCTAssertEqual(dateChip.label, afterDone, "…and the entry keeps the date it had")
     }
+
+    /// The loop this feature exists for (`plans/PLAN-multi-item-import.md`):
+    /// one read, several items. Opt-in via MENU_LOOP=1; the list itself
+    /// comes from --menu-scan-sample, because no headless runner can
+    /// point a camera at a menu board.
+    ///
+    /// The assertion that matters is the SECOND log. A picker that
+    /// appears, and a first item that logs, is exactly what shipped
+    /// before — the fault was that the list then disappeared, so
+    /// anything provable with one pick proves nothing here. "Logged 2
+    /// items" can only be rendered by a list that survived the first
+    /// one, and both entries in the day's log can only be written by a
+    /// flow that was never torn down.
+    @MainActor
+    func testMenuPickerLogsSeveralItems() throws {
+        guard ProcessInfo.processInfo.environment["MENU_LOOP"] == "1" else {
+            throw XCTSkip("Set MENU_LOOP=1 to run the multi-item menu test")
+        }
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        // The seed RESETS the store on a simulator, so the day's log
+        // holds this run's entries and no earlier run's.
+        app.launchArguments = ["--seed-sample-data", "--menu-scan-sample"]
+        app.launch()
+        skipOnboardingIfPresent(in: app)
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        switchTab(in: app, to: "Add")   // the corner + pill opens the Log sheet
+        let logTitle = app.navigationBars["Log"]
+        if !logTitle.waitForExistence(timeout: 10) { switchTab(in: app, to: "Add") }
+        XCTAssertTrue(logTitle.waitForExistence(timeout: 10), "Log sheet should be up")
+
+        let scan = scanRow(in: app)
+        XCTAssertTrue(scan.waitForExistence(timeout: 5), "Scan row in the Log sheet")
+        scan.tap()
+        let sampleMenu = app.buttons["menuScanSample"]
+        XCTAssertTrue(sampleMenu.waitForExistence(timeout: 10),
+                      "Sample menu row (needs --menu-scan-sample)")
+        sampleMenu.tap()
+
+        // The source dialog does not appear — the sample names its cafe,
+        // which is the same path a document that named itself takes.
+        let picker = app.navigationBars["Choose an Item"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 10), "The menu picker should be up")
+        attachShot(named: "menu-picker-first")
+
+        /// Pick a row, confirm it, and come back. Waits for the picker's
+        /// own title to return, which is the loop closing.
+        func logItem(_ name: String, expectFinalNote note: String) {
+            let row = app.buttons.matching(
+                NSPredicate(format: "label CONTAINS %@", name)
+            ).firstMatch
+            XCTAssertTrue(row.waitForExistence(timeout: 10), "\(name) row in the picker")
+            row.tap()
+            let confirm = app.navigationBars["Log Food"]
+            XCTAssertTrue(confirm.waitForExistence(timeout: 15), "Confirm step for \(name)")
+            attachShot(named: "menu-confirm-\(name.lowercased().replacingOccurrences(of: " ", with: "-"))")
+            app.buttons["Log"].firstMatch.tap()
+            // Back on the list, with the receipt of what just happened.
+            let noteText = app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS %@", note)
+            ).firstMatch
+            XCTAssertTrue(noteText.waitForExistence(timeout: 15),
+                          "The list should return, reading “\(note)”")
+        }
+
+        logItem("Sample Bowl", expectFinalNote: "Logged Sample Bowl")
+        // THE assertion: a second pick off a list that was supposed to be
+        // gone.
+        logItem("Sample Fries", expectFinalNote: "Logged 2 items")
+        attachShot(named: "menu-picker-after-two")
+
+        app.buttons["Done"].firstMatch.tap()
+        // Done closes the picker AND the scan sheet, landing back in the
+        // Log sheet the pill opened.
+        XCTAssertTrue(logTitle.waitForExistence(timeout: 10),
+                      "Done should return to the Log sheet")
+        app.buttons["Done"].firstMatch.tap()
+
+        // Both logs actually landed in the day — the picker's own note
+        // is the flow's word for it, this is Health's. Meal sections
+        // start collapsed, so the rows have to be opened before they can
+        // be asserted on.
+        switchTab(in: app, to: "Today")
+        XCTAssertTrue(
+            app.buttons.matching(collapsedSectionPredicate).firstMatch.waitForExistence(timeout: 20),
+            "Today's log should render meal-slot sections")
+        expandMealSections(in: app)
+        // The source is appended at pick time, so the entries read
+        // "Sample Bowl (Sample Cafe)" — matched by prefix.
+        for name in ["Sample Bowl", "Sample Fries"] {
+            let entry = app.staticTexts.matching(
+                NSPredicate(format: "label BEGINSWITH %@", name)
+            ).firstMatch
+            XCTAssertTrue(entry.waitForExistence(timeout: 15),
+                          "\(name) should be in today's log")
+        }
+        attachShot(named: "menu-loop-today")
+
+        // Leg 2 — the other half of the purpose split. The SAME list
+        // reached from a blank Add Food form fills the form and stops:
+        // a door inside a form that started writing to Health would be
+        // a different feature. So here a pick must produce a form, and
+        // must NOT produce a confirm step.
+        switchTab(in: app, to: "Foods")
+        switchTab(in: app, to: "Add")
+        let addFood = app.buttons["Add Food"]
+        XCTAssertTrue(addFood.waitForExistence(timeout: 5), "Add Food chooser option")
+        addFood.tap()
+        let formScan = scanRow(in: app)
+        XCTAssertTrue(formScan.waitForExistence(timeout: 5), "Scan row in the food form")
+        formScan.tap()
+        let formSample = app.buttons["menuScanSample"]
+        XCTAssertTrue(formSample.waitForExistence(timeout: 10), "Sample menu row")
+        formSample.tap()
+        let formPicker = app.navigationBars["Choose an Item"]
+        XCTAssertTrue(formPicker.waitForExistence(timeout: 10), "The picker should be up")
+        let shake = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS 'Sample Shake'")
+        ).firstMatch
+        XCTAssertTrue(shake.waitForExistence(timeout: 10), "Sample Shake row")
+        shake.tap()
+
+        // The form, filled — and no Log Food step on the way, which is
+        // what tells the two purposes apart.
+        let nameField = app.textFields["Name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 15),
+                      "A pick in the form's door should fill the form")
+        XCTAssertFalse(app.navigationBars["Log Food"].exists,
+                       "Filling a form must not raise the confirm step")
+        let named = expectation(
+            for: NSPredicate(format: "value CONTAINS[c] 'sample shake'"),
+            evaluatedWith: nameField)
+        wait(for: [named], timeout: 15)
+        attachShot(named: "menu-fills-form")
+    }
 }

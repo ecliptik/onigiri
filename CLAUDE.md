@@ -888,18 +888,57 @@ Each cost a debugging session.
     match WHOLE.** `Cal.` appears twice (the calorie column, and the top half
     of `Cal. from Fat`) and three columns contain "fat", so substring matching
     reads every row's calories off the wrong column.
-  - **Values map by COUNT first, geometry only as a fallback.** A row prints
-    one number per value column in column order, so when the counts agree the
-    mapping is positional. Geometry alone gets it wrong: on the Chick-fil-A
-    page the header words and their numbers have different extents ("FIBER
-    (G)" spans 0.841–0.859, its data starts at 0.860), so a run holding two
-    values put both on one column — fibre nil, sugar holding fibre's figure.
-    The fallback still handles runs that merge two cells ("0 105", "7 7").
+  - **A header may arrive as ONE run naming every column, and the split
+    back apart matches a PHRASE — anchored, longest first.** Dave's Hot
+    Chicken extracts all twelve names as a single run, so
+    `splitMergedHeaderRun` is what stands between that guide and nothing
+    ("No nutrition found" through the share sheet, 2026-08-23). Two
+    faults hid each other: the split matched one WORD at a time, cutting
+    "TRANS FAT (G)" in two on EVERY table in the fixtures — invisible
+    because `header`'s column merge, asking only whether a run started
+    before the last one ended, glued the halves back together, which is
+    also what re-fused Dave's twelve into two. So `headerMatch` lines a
+    keyword's words up with the run's, one for one from that position
+    (unanchored, two-word `total fat` matches "Calories Fat" and eats the
+    calorie column), longest match wins (`trans fat` over the bare `fat`
+    at its second word), the multi-word forms live in `headerTable`, and
+    the merge now needs a real overlap (`sameColumnOverlap`) so an exact
+    boundary cannot re-fuse two cells while a stacked "(mg)" still joins
+    its name.
+  - **Values map by COUNT first, then from a run's EDGES, and only then
+    by nearest centre.** A row prints one number per value column in
+    column order, so when the counts agree the mapping is positional.
+    Geometry alone gets it wrong: on the Chick-fil-A page the header
+    words and their numbers have different extents ("FIBER (G)" spans
+    0.841–0.859, its data starts at 0.860), so a run holding two values
+    put both on one column — fibre nil, sugar holding fibre's figure.
+    When the counts DISAGREE — a blank cell — `anchoredTargets` pins the
+    first figure to the run's left edge and the last to its right, because
+    those two are measured and the inside of a run is not: the one space
+    in "9 15" stands for however wide a gap the table sets, and both the
+    spanned reading and the apportioned one filed Dave's 15 mg of
+    cholesterol as 15 g of TRANS FAT across its blank trans column. It
+    returns nil unless the figures land on distinct columns in order, and
+    the older readings then run — they still handle "0 105" and "7 7".
   - **A visual row is not always one baseline.** Chick-fil-A puts an item's
     name a hair BELOW its numbers and wraps long names below that — three
     bands, one row. `joinSubPitch` merges bands closer than 0.35 × the table's
     own data pitch (never two data bands). Left split, a name band reads as a
     numberless row and gets glued to the row above it.
+  - **Which way a stray name leans is measured, and small print is not a
+    name at all.** A numberless band is a section heading, a wrapped
+    name, or the page's footnote, and all three look alike. Type size
+    settles the last one (`continuesAName`, the ratio `isHeading` uses in
+    the other direction): Dave's FDA footnote begins left of the value
+    columns, so the wide reading took it for a name and appended it to
+    the last item on four of five pages. Direction settles the second
+    (`carriesDown`, asked ONLY of a band carrying no figures): that guide
+    wraps a long name onto the line ABOVE its numbers, a full row pitch
+    away because the wrapped row is set double height, and read upward it
+    joined the row above and left its own row named "Mild Spice" —
+    while Chipotle's menu merges whole blocks of table into one run,
+    numbers and all, and those must still lean up. And a name ending in a
+    COLON is a heading whatever its size or case ("Combos:", "Sides:").
   - **The name column is found by MODAL x, not "everything to the left."**
     That page carries a category sidebar at the far left whose entries share
     bands with table rows; "Kid's Meals (nutrition per entrée only) Egg White
@@ -994,6 +1033,16 @@ Each cost a debugging session.
     recognised only to be ignored: adding `added sugar` to
     `ignoredHeaderWords` silently stopped that heading counting toward
     the layout and every row shifted a column.
+  - **That rotation measure is taken on the rows' WORDS, and taking it on
+    every run cost the flagship guide a page.** A merged number cell
+    ("0 0") is three characters across the width of two columns, so
+    CAVA's drinks page measured 1.74 where the page before it measured
+    0.53 — high enough to admit its own perfectly upright header, and all
+    33 drinks went out with it. The guide read 80 items instead of 113
+    and the only thing that said so was a page-count assertion in the
+    app-hosted suite, red on main and unnoticed (found 2026-08-23 while
+    fixing an unrelated document). `menu-cava-p3` now pins it in the fast
+    kit suite.
   - **When a menu will not read on the PHONE, do not debug it on the
     Mac.** `log stream --device` is gone and the XCUITest runner cannot
     be signed from an agent shell. What works: `MenuDocument.scanNote`

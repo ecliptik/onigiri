@@ -169,6 +169,113 @@ struct MenuTableParserTests {
         #expect(firstOnPageTwo.section != nil, "inherited from page 1's last heading")
     }
 
+    /// The guide's DRINKS page, and the reason it is fixtured: its rows
+    /// are mostly merged number cells ("0 0"), which measure far wider
+    /// per character than type does. That carried the median past the
+    /// threshold that tells a turned column name from an upright one,
+    /// the page's perfectly ordinary header was read as a diagonal, and
+    /// all 33 drinks vanished — the guide quietly went from 113 items to
+    /// 80, with only a page-count assertion in the app suite to say so
+    /// (2026-08-23).
+    @Test func aPageOfMergedNumberCellsKeepsItsUprightHeader() throws {
+        let rows = MenuTableParser.parse(try fixture("menu-cava-p3"))
+        #expect(rows.count >= 30)
+        let lemonade = try #require(
+            rows.first { $0.name == "Classic Lemonade (CA) - Large (22 oz)" },
+            "the page's first drink; got \(rows.prefix(3).map(\.name))")
+        expectEqual(lemonade.kcal, 290)
+        let tea = try #require(rows.first { $0.name == "Black Tea Unsweetened - Kids (12 oz)" })
+        expectEqual(tea.kcal, 0)
+        expectEqual(tea.sodiumMg, 10)
+    }
+
+    // MARK: A header printed as ONE run
+
+    /// Dave's Hot Chicken extracts its entire header — twelve column
+    /// names — as a SINGLE text run, so the split back into cells is the
+    /// only thing standing between the guide and nothing at all: it came
+    /// back "No nutrition found" through the share sheet (the user,
+    /// 2026-08-23).
+    @Test func aHeaderPrintedAsOneRunStillNamesEveryColumn() throws {
+        let rows = MenuTableParser.parse(try fixture("menu-daveshot-p2"))
+        #expect(rows.count == 25)
+        let bites = try #require(
+            rows.first { $0.name == "Dave's Bites 10 pc, Not Hot & Lite Mild Spice" },
+            "the page's first item; got \(rows.prefix(3).map(\.name))")
+        #expect(bites.serving == "299g")
+        expectEqual(bites.kcal, 650)
+        expectEqual(bites.sodiumMg, 1570)
+        expectEqual(bites.nutrients.fatG, 35)
+        expectEqual(bites.nutrients.saturatedFatG, 6)
+        expectEqual(bites.nutrients.transFatG, 0)
+        expectEqual(bites.nutrients.cholesterolMg, 100)
+        expectEqual(bites.nutrients.carbsG, 39)
+        expectEqual(bites.nutrients.fiberG, 0)
+        expectEqual(bites.nutrients.sugarG, 3)
+        expectEqual(bites.nutrients.proteinG, 41)
+        // The calorie-from-fat column is read so that it is CONSUMED,
+        // and then dropped: 260 of those 650 are fat, and no field
+        // stores it.
+        #expect(rows.allSatisfy { ($0.kcal ?? 0) >= 10 })
+    }
+
+    /// "Sides:" is a section, not a dish — and this guide sets its
+    /// section labels in the rows' own type, which every other rule here
+    /// reads as a wrapped name. It led the first item on the page.
+    @Test func aColonLabelIsASectionAndNotPartOfAName() throws {
+        let rows = MenuTableParser.parse(try fixture("menu-daveshot-p2"))
+        #expect(rows.allSatisfy { !$0.name.contains("Sides:") })
+        #expect(rows.contains { $0.section == "Sides:" })
+    }
+
+    /// The two-word column names are what say where one cell ends and
+    /// the next begins. Read a word at a time, "Trans Fat (g)" is two
+    /// matches — which cut the trans-fat column of every table in this
+    /// set in half, unnoticed only because the halves landed edge to
+    /// edge and the column merge glued them back together.
+    @Test func aTwoWordColumnNameIsOneColumn() {
+        let run = LabelObservation(text: "TRANS FAT (G)", x: 0.6, y: 0.9, w: 0.08, h: 0.01)
+        #expect(MenuTableParser.splitMergedHeaderRun(run) == [run])
+        let merged = LabelObservation(
+            text: "Total Fat (g) Sat Fat (g) Trans Fat (g)", x: 0.4, y: 0.9, w: 0.3, h: 0.01)
+        #expect(MenuTableParser.splitMergedHeaderRun(merged).map {
+            MenuTableParser.field(forHeader: $0.text)
+        } == [.fat, .saturated, .trans])
+    }
+
+    /// The last page leaves its trans-fat cell empty, so a row's sat-fat
+    /// and cholesterol figures come back as ONE run reaching across it.
+    /// Read by the run's middle, 15 mg of cholesterol was filed as 15 g
+    /// of trans fat — a figure no food carries.
+    @Test func aRunReachingAcrossABlankCellKeepsItsFiguresApart() throws {
+        let rows = MenuTableParser.parse(try fixture("menu-daveshot-p4"))
+        let mozz = try #require(rows.first { $0.name == "Dave's Hot Mozz 1 Piece - Mild-Reaper" })
+        expectEqual(mozz.nutrients.saturatedFatG, 9)
+        #expect(mozz.nutrients.transFatG == nil, "the cell is blank; nothing may fill it")
+        expectEqual(mozz.nutrients.cholesterolMg, 15)
+    }
+
+    /// The FDA footnote begins left of the value columns, so the wide
+    /// reading takes it for a name — and, carrying no numbers of its
+    /// own, it was appended to the last item on the page. Type size is
+    /// what tells small print from a wrapped name.
+    @Test func theFootnoteNeverBecomesPartOfADishsName() throws {
+        let rows = MenuTableParser.parse(try fixture("menu-daveshot-p4"))
+        #expect(rows.allSatisfy { !$0.name.lowercased().contains("recommended daily") })
+        #expect(rows.allSatisfy { $0.name.count < 80 })
+    }
+
+    /// A long name wraps onto the line ABOVE its numbers here, a whole
+    /// row pitch away — too far for `joinSubPitch` because the wrapped
+    /// row is set double height. Read upward it joined the row above and
+    /// left its own row answering to "Mild Spice".
+    @Test func aNameWrappedAboveItsNumbersJoinsItsOwnRow() throws {
+        let rows = MenuTableParser.parse(try fixture("menu-daveshot-p2"))
+        #expect(!rows.contains { $0.name == "Mild Spice" })
+        let slider = try #require(rows.first { $0.kcal == 490 && $0.sodiumMg == 680 })
+        #expect(slider.name == "Single Not Chicken Slider (no sides), Not Hot & Lite Mild Spice")
+    }
+
     // MARK: Units and shape
 
     @Test func aHeaderNamingGramsForSodiumConvertsToMilligrams() {

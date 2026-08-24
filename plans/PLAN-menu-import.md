@@ -795,3 +795,89 @@ list away after the first item until then. See
 `plans/PLAN-multi-item-import.md`; `MenuPicker` gained a running note and
 a logged-row mark, and the in-app menu picker no longer opens a full
 `FoodFormView` per dish.
+
+## Round 8 — a header printed as ONE run (2026-08-23)
+
+Dave's Hot Chicken's `DHC-Nutrition-Chart_FOODS.pdf` came back **"No
+nutrition found"** through the share sheet, four pages of clean text
+layer and 89 items (the user, 2026-08-23). Its text layer extracts the
+whole header as a SINGLE run:
+
+    Serving Size Calories Fat Calories Total Fat (g) Sat Fat (g) Trans
+    Fat (g) Cholest (mg) Sodium (mg) Carb (g) Fiber (g) Sugar (g)
+    Protein (g)
+
+`splitMergedHeaderRun` exists for exactly this (the Cheesecake booklet,
+Round 6) and it did fire — and then `header`'s column merge glued the
+pieces straight back together, because a split leaves them edge to edge
+and the merge rule was "does this run start before the last one ended",
+which an exact boundary satisfies. The page came out as **two** columns,
+`declared >= 3` rejected it, and the guide returned nothing.
+
+Which uncovered the older half of the bug: **the split matched a WORD at
+a time**, so "TRANS FAT (G)" was two matches, not one. Every table in the
+fixture set had its trans-fat heading cut in half and nobody knew,
+because the halves were being merged back on the next line. The two
+faults hid each other for as long as both were present.
+
+What changed:
+
+- **`headerMatch` reads a PHRASE, anchored, longest first.** A keyword's
+  words must line up with the run's one for one from that position —
+  unanchored, the two-word `total fat` matches "Calories Fat" (it
+  *contains* "fat") and the calorie column is swallowed. Longest wins, so
+  `trans fat` beats the bare `fat` starting at its second word. The
+  header table gained the multi-word forms that make this work
+  (`trans fat`, `saturated fat`, `total sugars`), and `fat calories` —
+  this guide prints calories-from-fat the other way round.
+- **A boundary is one expression.** Both sides of a cut come from the
+  same `edge(offset)`, and the merge asks for a real OVERLAP
+  (`columnOverlap` ≥ `sameColumnOverlap`) rather than any contact at all,
+  so a rounded boundary cannot re-fuse two cells while a stacked unit
+  line ("(mg)" under "Sodium") still merges as it always did.
+- **A multi-number run is placed from its EDGES** (`anchoredTargets`).
+  The one space in "9 15" stands for however wide a gap the table sets;
+  apportioning by character puts the second figure mid-run. This page
+  leaves trans fat blank, so a row's sat-fat and cholesterol figures
+  arrive as one run reaching across it, and both the spanned reading and
+  the apportioned one filed 15 mg of cholesterol as **15 g of trans
+  fat**. First number to the run's left edge, last to its right, the rest
+  interpolated; nil if they do not land on distinct columns in order, and
+  the old readings then run.
+- **Small print is not a name.** The FDA footnote starts left of the
+  value columns, so the wide reading takes it for a name, and carrying no
+  numbers it was appended to the last item on the page — four of five
+  pages ended in a dish called "… Recommended Daily Values for a 2,000
+  calorie diet are 78g total fat, …". `continuesAName` asks for the
+  row's own type size, the measure `isHeading` already uses in the other
+  direction.
+- **A name-only band leans to the NEARER row** (`carriesDown`), asked
+  only of a band with no figures at all: this guide wraps a long name
+  onto the line ABOVE its numbers, a whole row pitch away because the
+  wrapped row is set double height, and read upward it joined the tender
+  above it and left its own row answering to "Mild Spice". Chipotle's
+  menu merges whole blocks of table into one run, numbers and all, and
+  those still lean up — which is why the figures test is part of the
+  rule.
+- **A colon is a heading.** "Combos:", "Sides:" are set in the rows' own
+  type here, so neither the all-caps test nor the size test saw them and
+  "Combos:" became part of the first dish's name.
+
+Reads 89 of 89 items, every column, in 0.4 s with no OCR pass.
+Fixtures: `menu-daveshot-p2` (the merged header, a full row, the wrapped
+name, the colon section) and `menu-daveshot-p4` (blank cells, the
+footnote).
+
+### And the flagship guide had quietly lost a page
+
+`MenuDocumentTests.testTheWholeGuideParses` was RED on main while this
+started: the CAVA guide read 80 items, not 113. Round 7's turned-header
+detection compares a header cell's width-per-character against the
+table's own rows — and the drinks page's rows are mostly merged number
+cells ("0 0"), three characters across the width of two columns. Its
+median measured 1.74 against 0.53 on the page before it, which raised the
+threshold far enough to admit CAVA's perfectly upright header, and all 33
+drinks went out with it. `rowAspect` is now measured on the rows' WORDS
+(`looksLikeProse`), which is what the comment always said it was for.
+`menu-cava-p3` is fixtured so this fails in the fast suite next time,
+rather than in a page-count assertion nobody was reading.

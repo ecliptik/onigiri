@@ -531,10 +531,14 @@ Each cost a debugging session.
   only ("an average day"), never to judge a day. Goal shows BOTH budgets and
   they must stay TOLD APART — one label on two different numbers reads as a
   contradiction (726 kcal apart at lunchtime, 2026-08-02). Since 2026-08-18 the
-  ROW LABEL carries that distinction: `Budget, right now` under a `Budget`
+  ROW LABEL carries that distinction: `Budget, today's burn` under a `Budget`
   section (live `dayBurn − deficit`) against `Budget, average day` inside the
   collapsed "How the budget is set" — matching COMMA forms, so the two read as
-  one quantity qualified two ways. From 2026-08-11 to 2026-08-18 the SECTION
+  one quantity qualified two ways. Since 2026-08-23 the qualifier names the
+  INPUT, not the moment (`right now` → `today's burn`,
+  `plans/PLAN-budget-one-number.md`): naming the burn makes the row checkable
+  against `Burned today` minus `Deficit needed`, both already on screen, and
+  makes the PAIR state its own difference — one sum, two burns. From 2026-08-11 to 2026-08-18 the SECTION
   carried it instead (`Budget` under `Today`), which worked only while the
   visible row was a bare "Budget" — naming the row is the stronger form, since a
   label survives being read out of context and a section header does not. Don't
@@ -548,9 +552,14 @@ Each cost a debugging session.
   caption states the arithmetic in the LIVE numbers. That caption never names
   the 3,500 kcal-per-POUND constant: this screen renders in the user's unit and
   the constant is wrong in kg.
-- That `Budget` section is ONE FACT PER ROW — `Budget, right now`, `<intake
-  word> today`, `Burned today`, lower-case t (the user, 2026-08-18). The first
-  row alone breaks the `… today` shape the other two share, on purpose
+- That `Budget` section is ONE FACT PER ROW — `Budget, today's burn`, `<intake
+  word> today`, `Left today`, `Burned today`, lower-case t (the user,
+  2026-08-18). `Left today` is `budget − intake` through
+  `remainingHeadline`, so a day past its budget reads `+246 kcal over` and
+  never as a negative allowance; it sits directly under the intake row so the
+  top three read DOWN as the subtraction (2026-08-23, the user's ask — Goal
+  held both terms and quoted neither against the other). The budget
+  row alone breaks the `… today` shape the others share, on purpose
   (2026-08-23): `Budget for today` read as a FIXED daily allowance and got
   compared against a 2,000 kcal RDA — 1,361 at 9:33 am looks like starvation
   until you see it is the whole day's resting plus 21 kcal of active earned so
@@ -566,17 +575,27 @@ Each cost a debugging session.
   the old bare "Burn" did — what answers it is the disclosure's "Resting energy
   is credited at midnight, active energy as you earn it", never this section's
   footer.
-- **That footer holds ONE unconditional line, and the test it must pass is
-  saying something no ROW can** (2026-08-23). It is "Your budget grows through
-  the day as you earn active energy" — direction, which a row cannot carry
-  because a row shows a number, not which way it moves. `Budget, right now`
-  stops the figure reading as a fixed ration; only the footer says it climbs,
-  and without it someone who checks at breakfast and not again never finds out.
-  2026-08-13 emptied this footer because the caption then RESTATED the two rows
-  above it; that is the rule, not "keep the footer empty". Keep it to one clause
-  naming ACTIVE energy only — the midnight resting credit stays the
-  disclosure's, and putting both here is what made the caption long enough to
-  delete. The at-target sentence is the one conditional line beside it.
+- **That footer's test is saying something no ROW can** (2026-08-23), and it
+  now holds TWO unconditional-ish clauses that each pass it. First,
+  DIRECTION: "Your budget grows through the day as you earn active energy" —
+  a row shows a number, not which way it moves, so without this someone who
+  checks at breakfast and not again never finds out. Keep it to one clause
+  naming ACTIVE energy only; the midnight resting credit stays the
+  disclosure's, and putting both here is what made the caption long enough
+  for 2026-08-13 to delete (it had RESTATED the rows above it — that is the
+  rule, not "keep the footer empty"). Second, the RECONCILIATION: "On an
+  average day's burn the same budget is 2,369 kcal — today's burn is 773 kcal
+  short of one so far." No row can hold it, because the two budgets live in
+  different containers and one of them is collapsed; three rounds of renaming
+  left them still reading as rival allowances (the user, 2026-08-23). Rules
+  for it: state the DIFFERENCE IN BURN, never "the active energy today hasn't
+  earned" (equal only while the resting credit matches an average day's
+  measured basal, and the credit is floored by `BasalEstimate`); never
+  predict — "on an average day's burn" is a conditional and "lands near"
+  would promise the calories PLAN-earned-budget deleted the trailing average
+  for promising; and suppress it entirely when `averageBurnKcal` is nil,
+  since the plan is then riding the assumed 2,000. The at-target sentence is
+  the one conditional line beside them.
 - **`ObservedBurn` REPORTS and nothing plans from it** (2026-08-18,
   `plans/PLAN-goal-budget-reconciliation.md`). `meanDailyIntake − scaleRate ×
   3500` is what the scale says you burn, shown last in the derivation group so

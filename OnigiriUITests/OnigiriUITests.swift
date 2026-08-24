@@ -65,6 +65,59 @@ func calendarMonthCard(in app: XCUIApplication) -> XCUIElement {
 
 final class OnigiriUITests: XCTestCase {
 
+    /// One screenshot of Goal's `Budget` section, opt-in via
+    /// `TEST_RUNNER_BUDGET_SHOT=1`. It exists because the QA walkthrough's
+    /// `qa-goal` shot is NOT reliable evidence for this screen: on
+    /// 2026-08-23 both of its Goal captures were a stuck food-form sheet
+    /// (an optional Cancel that did not fire), and the test still passed —
+    /// a green run that proved nothing until the images were opened.
+    ///
+    /// It asserts the rows it means to photograph, so a capture that
+    /// lands on the wrong screen FAILS rather than filing a misleading
+    /// picture: `Left today` can only exist once the budget rows are up.
+    @MainActor
+    func testGoalBudgetShot() throws {
+        guard ProcessInfo.processInfo.environment["BUDGET_SHOT"] == "1" else {
+            throw XCTSkip("Set TEST_RUNNER_BUDGET_SHOT=1 to capture Goal's budget rows")
+        }
+        let app = XCUIApplication()
+        app.launchArguments = ["--seed-sample-data"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        switchTab(in: app, to: "Goal")
+        // The chart, progress and weight rows come first, so the Budget
+        // section starts below the fold — and a Form renders lazily, so
+        // the row does not merely sit off-screen, it does not EXIST yet.
+        // Waiting on it without scrolling is the "probe that guards
+        // nothing" failure in its other direction: a 20-second wait that
+        // could never have succeeded.
+        _ = app.staticTexts["Current weight"].waitForExistence(timeout: 20)
+        let leftRow = app.staticTexts["Left today"]
+        for _ in 0..<8 where !leftRow.exists { app.swipeUp() }
+        XCTAssertTrue(
+            leftRow.waitForExistence(timeout: 5),
+            "Goal's Budget section never appeared — the shot would be of the wrong screen"
+        )
+        XCTAssertTrue(app.staticTexts["Budget, today's burn"].exists)
+        Thread.sleep(forTimeInterval: 1.0)
+        let top = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        top.name = "goal-budget"
+        top.lifetime = .keepAlways
+        add(top)
+        // The disclosure open, so the two budgets and the reconciliation
+        // sentence are in ONE frame — the whole point of the change.
+        let disclosure = app.buttons["How the budget is set"]
+        for _ in 0..<4 where !disclosure.exists { app.swipeUp() }
+        if disclosure.waitForExistence(timeout: 5) {
+            disclosure.tap()
+            Thread.sleep(forTimeInterval: 1.0)
+            let opened = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            opened.name = "goal-budget-derivation"
+            opened.lifetime = .keepAlways
+            add(opened)
+        }
+    }
+
     @MainActor
     func testSeedGrantAndLogFlow() throws {
         let app = XCUIApplication()

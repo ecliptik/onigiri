@@ -307,7 +307,7 @@ struct GoalView: View {
     /// (the user, 2026-08-10: "there's a lot here").
     ///
     /// The two budgets must stay TOLD APART, and since 2026-08-18 the
-    /// ROW LABEL carries that — "Budget, right now" here against
+    /// ROW LABEL carries that — "Budget, today's burn" here against
     /// "Budget, average day" in the collapsed derivation group. It used
     /// to be the SECTION header ("Budget" under "Today"), which worked
     /// only while the row label was a bare "Budget"; naming the row is
@@ -315,11 +315,10 @@ struct GoalView: View {
     /// context and a section header does not. What must never come back
     /// is two rows reading plainly "Budget" — that is one number failing
     /// to match itself (the user, 2026-08-11), and it is still
-    /// forbidden. Do not bring the projection up here, and do not
-    /// collapse the two.
+    /// forbidden. Do not bring the projection up here.
     ///
     /// The COMMA form is load-bearing, and it is why this row alone
-    /// breaks the "… today" shape of the three (2026-08-23). It pairs
+    /// breaks the "… today" shape of the others (2026-08-23). It pairs
     /// with "Budget, average day" so the two read as one quantity
     /// qualified two ways — the pairing that already carries "Average
     /// daily burn" / "Average burn, from data". "Budget for today"
@@ -334,6 +333,18 @@ struct GoalView: View {
     /// earned today" is likewise out: "earned" is the VERDICT word
     /// (`isTracked` + `DayBadgeRule`) and must not name an allowance.
     ///
+    /// What the qualifier names, since 2026-08-23, is the INPUT rather
+    /// than the moment: "right now" said only WHEN, which is the half
+    /// the reader already had. Naming the burn makes the row checkable
+    /// against the two figures already on screen — "Burned today" minus
+    /// "Deficit needed" — and makes the pair with "Budget, average day"
+    /// state its own difference: one sum, two burns. Three rounds of
+    /// renaming (section header, row label, footer) had left the two
+    /// figures still reading as rival allowances (the user, 2026-08-23:
+    /// "1,596 here as a budget is different than the budget, average
+    /// day of 2,369"), which is what the footer's second clause now
+    /// answers outright.
+    ///
     /// One fact per row. The old "Budget" row printed the pair as
     /// "612 / 1595 kcal", which asks the reader to do the subtraction
     /// and never says which side is which (the user, 2026-08-18).
@@ -343,7 +354,7 @@ struct GoalView: View {
     private func todaySection(_ plan: CalorieBudget.Plan) -> some View {
         if let todayBudget {
             Section {
-                LabeledContent("Budget, right now") {
+                LabeledContent("Budget, today's burn") {
                     Text("\(todayBudget, format: .number.precision(.fractionLength(0))) kcal")
                         .monospacedDigit()
                 }
@@ -352,6 +363,24 @@ struct GoalView: View {
                 LabeledContent("\(intakeWord.label) today") {
                     Text("\(model.todayIntakeKcal, format: .number.precision(.fractionLength(0))) kcal")
                         .monospacedDigit()
+                }
+                // Directly under the two rows it comes from, so the top of
+                // the section reads DOWN as the subtraction it is
+                // (1,596 − 1,018 = 578) rather than asking the reader to do
+                // it (the user, 2026-08-23: "add the kcal left number").
+                // Goal held both terms already and quoted neither against
+                // the other — the one figure Today's ring has always led
+                // with was the one this screen made you compute.
+                //
+                // Through `remainingHeadline`, so a day past its budget
+                // reads "+246 kcal over" and never as a negative
+                // allowance — the same grammar the ring, the complication
+                // and the widget flank use.
+                if let todayLeftText {
+                    LabeledContent("Left today") {
+                        Text(todayLeftText)
+                            .monospacedDigit()
+                    }
                 }
                 // NOT "so far", and the longer label makes that MORE
                 // tempting to misread than the old bare "Burn" did:
@@ -400,6 +429,37 @@ struct GoalView: View {
                 // captions are formal register; the ROWS still say burn.
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Your budget grows through the day as you earn active energy.")
+                    // The reconciliation, and the reason this footer is two
+                    // clauses again after 2026-08-23 kept it to one. The
+                    // rule that emptied it in 2026-08-13 is "say something
+                    // no ROW can", and no row on this screen can say that
+                    // the two budgets are ONE SUM on two different burns:
+                    // they are `burn − deficit` either way, and the reader
+                    // met them in two different containers, one of them
+                    // collapsed. "1,596 here as a budget is different than
+                    // the budget, average day of 2,369" (the user,
+                    // 2026-08-23) is that gap read as a contradiction.
+                    //
+                    // Said in the LIVE numbers, like the derivation caption
+                    // the user asked for on 2026-08-18 — a relationship
+                    // stated as a formula is checkable by nobody.
+                    //
+                    // It quotes the DIFFERENCE IN BURN, not "the active
+                    // energy today hasn't earned". Those are the same
+                    // figure only while the day's resting credit matches
+                    // an average day's measured basal, and the credit is
+                    // floored by `BasalEstimate` — so the tidier sentence
+                    // is one this screen cannot prove.
+                    //
+                    // Never a prediction. "On an average day's burn" is a
+                    // conditional; "lands near" would promise the calories
+                    // PLAN-earned-budget deleted the trailing average for
+                    // promising. Suppressed entirely when the average is
+                    // absent, since the plan is then riding the assumed
+                    // 2,000 and an assumption is not a second opinion.
+                    if let averageDayReconciliation = averageDayReconciliation(plan) {
+                        Text(averageDayReconciliation)
+                    }
                     // The at-target exception, because something else
                     // changes there and nothing else says so: a zero
                     // deficit target makes `DayBadgeRule.current` return
@@ -698,6 +758,48 @@ struct GoalView: View {
         return plan.requiredDailyDeficit >= model.todayDayBurnKcal
             ? 0
             : model.todayDayBurnKcal - plan.requiredDailyDeficit
+    }
+
+    /// What is left of today's budget, rendered the one way the app
+    /// renders it. `remainingHeadline` owns the sign and the word, so a
+    /// day past its budget reads "+246 kcal over" here exactly as it does
+    /// in the ring — a negative allowance is never shown, and the "+" is
+    /// what stops a bare 246 reading as 246 still available.
+    ///
+    /// The plain "578 kcal" case drops the caption because the ROW LABEL
+    /// already carries it; "578 kcal left" beside "Left today" says it
+    /// twice.
+    private var todayLeftText: String? {
+        guard let todayBudget else { return nil }
+        let headline = CalorieBudget.remainingHeadline(todayBudget - model.todayIntakeKcal)
+        let value = headline.value.formatted(.number.precision(.fractionLength(0)))
+        return headline.over ? "+\(value) kcal over" : "\(value) kcal"
+    }
+
+    /// The sentence that makes "Budget, today's burn" and "Budget, average
+    /// day" one quantity instead of two rivals: same subtraction, two
+    /// burns, and here is how far apart the burns are right now.
+    ///
+    /// nil when there is no measured average — the plan is then built on
+    /// `projectedDailyBurn`'s assumed 2,000, and quoting an assumption as
+    /// the figure today is "short of" invents the very second opinion this
+    /// line exists to remove. The disclosure already labels that case
+    /// "(assumed)".
+    ///
+    /// Also nil on a non-positive projected budget: the goal has outrun
+    /// the average burn, which `isAggressive` says in its own section and
+    /// which this sentence would only muddle.
+    private func averageDayReconciliation(_ plan: CalorieBudget.Plan) -> String? {
+        guard let average = model.averageBurnKcal,
+              model.todayDayBurnKcal > 0,
+              plan.dailyBudget > 0
+        else { return nil }
+        let budget = plan.dailyBudget.formatted(.number.precision(.fractionLength(0)))
+        let gap = average - model.todayDayBurnKcal
+        guard gap >= 1 else {
+            return "On an average day's burn the same budget is \(budget) kcal — today's burn is already past one."
+        }
+        return "On an average day's burn the same budget is \(budget) kcal — today's burn is \(gap.formatted(.number.precision(.fractionLength(0)))) kcal short of one so far."
     }
 
     var body: some View {

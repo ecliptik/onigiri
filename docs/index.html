@@ -121,7 +121,10 @@
     cursor: pointer; display: grid; place-items: center; line-height: 1;
   }
   .theme-toggle:hover { border-color: var(--toast-deep); }
-  @media (max-width: 640px) { nav a.link { display: none; } }
+  /* 820, not 640: six links plus the brand, toggle and CTA need ~726px
+     and the nav neither wraps nor scrolls, so below this they spill out
+     of it. Reuses the breakpoint the rows already turn at. */
+  @media (max-width: 820px) { nav a.link { display: none; } }
 
   /* ---- hero ---- */
   header {
@@ -286,6 +289,7 @@
 <nav id="nav">
   <a class="brand" href="#">🍙 Onigiri</a>
   <a class="link" href="#features">Features</a>
+  <a class="link" href="#ai">Optional AI</a>
   <a class="link" href="#goal">Your goal</a>
   <a class="link" href="#privacy">Privacy</a>
   <a class="link" href="https://github.com/ecliptik/onigiri/wiki/User-Guide">Guide</a>
@@ -342,7 +346,7 @@
     <div class="media reveal d1"><div class="shot device"><video autoplay muted loop playsinline preload="metadata" src="media/add-food-dark.mp4" poster="media/add-food-dark-poster.jpg" data-app-light-src="media/add-food.mp4" data-app-light-poster="media/add-food-poster.jpg" data-app-dark-src="media/add-food-dark.mp4" data-app-dark-poster="media/add-food-dark-poster.jpg" aria-label="Tapping the add button, then logging a saved meal — the portion sheet lists the foods it contains and their calories"></video></div></div>
   </div>
 
-  <div class="row">
+  <div class="row" id="ai">
     <div class="copy reveal">
       <div class="kicker">Optional AI</div>
       <h2>Off by default. On your terms.</h2>
@@ -363,7 +367,7 @@
   <div class="row">
     <div class="copy reveal">
       <div class="kicker">A plan for your goal</div>
-      <h2>Set a target. Eat your budget.<br>Watch the trend.</h2>
+      <h2>Set a target.<br>Eat your budget.<br>Watch the trend.</h2>
       <p class="lead">Pick a weight and a date — Onigiri computes the daily deficit, turns it into
       a calorie budget, and projects your finish date from your real weigh-ins.</p>
       <ul class="feature-list">

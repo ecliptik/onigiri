@@ -19,6 +19,7 @@ here. Roadmap: `plans/PLAN.md`.
 [Budget](#the-budget-and-what-may-judge-a-day) ·
 [Weight](#weight-which-reading-may-judge) · [Watch sync](#watch-sync) ·
 [Units](#units) · [Food entry](#food-entry-search-scan-images) ·
+[Refining an estimate](#refining-an-estimate) ·
 [Library rows](#library-rows) · [Copy](#copy)
 
 ## Repo, docs, license
@@ -1084,6 +1085,54 @@ Each cost a debugging session.
   an explicit unit and drops the wrapped-name carry-forward. NEVER make those
   rules unconditional: EU panels state the unit once in the column header, and
   `euPer100gPanel`/`euTableRows` fail the moment you do.
+
+## Refining an estimate
+
+`plans/PLAN-refine-with-context.md` (2026-08-24). A photo read that
+ESTIMATES stops on `EstimateRefineStep` — what was found, plus one field
+for what it got wrong — before it reaches the food form, the confirm
+sheet, or anything else.
+
+- **Only ESTIMATES are refined; a printed panel never is.** `.label`
+  delivers as it always has. Same split as everywhere else: a
+  measurement reports, a verdict judges. Correcting a MISREAD is a
+  different job, and its surface is the form, where the fields already
+  are.
+- **The note is why the feature exists, not a garnish.** On iOS 26 the
+  on-device model NEVER SAW the photo (`identifyFood` is a relay), so it
+  answers with a TYPICAL serving — dressed, whole, average. On the
+  default engine the note is the only information about this particular
+  plate that ever reaches the model.
+- **A failed refine keeps the prior estimate on screen and says so.**
+  Every nil out of `refineEstimate` means "the estimate stands": no
+  model, a refusal, or the plausibility gate. Blanking it would cost the
+  photograph, and by then the food is eaten. `Use the first estimate`
+  exists for the same reason.
+- **The note relaxes exactly TWO guards, and only on a refine**
+  (`refineGroundingHolds`). `identifyContainmentHolds` and
+  `signNameIsGrounded` forbid the model naming a food the grounding never
+  showed — earned when "document, text, paper" invented a salad. But
+  "it's tofu, not chicken" produces a food whose words came from the
+  NOTE, so the first-read guard rejects it silently and Refine looks
+  inert. The note therefore joins the grounding vocabulary: the MODEL
+  still cannot introduce a food nobody named, the PERSON can. The
+  first-read forms are untouched and `RefineGroundingTests` pins both
+  halves — the relaxation AND its absence from the first read.
+- `RefinedFood` sums its totals FROM its components whenever it has any;
+  a figure passed beside them is never read. A prior built with parts and
+  a forgotten total read as a ZERO-kcal food and made every ratio in the
+  eval nonsense (2026-08-24).
+- Known model weakness, measured not guessed: the on-device 3B
+  re-derives portions it was told to leave alone — "it was delicious"
+  came back at 210 kcal against a 520 prior. Two prompt rounds narrowed
+  it and did not close it (`testRefineGoldenSet`'s baseline has both).
+  The mitigation is the step itself: a refine is looked at, never
+  trusted. Don't gate-tune it away.
+- Out of scope by decision: no note BEFORE the shutter (nothing to
+  correct yet, and a keyboard between the camera and the shutter costs
+  every photo to serve some), no refine inside `MenuPickerFlow` (a model
+  call would wreck a loop whose value is being fast), no component chips
+  or portion multiplier yet, nothing REMEMBERED between reads.
 
 ## Library rows
 

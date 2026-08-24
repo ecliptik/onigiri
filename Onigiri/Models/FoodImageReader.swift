@@ -12,8 +12,11 @@ enum FoodImageOutcome {
     /// blank-fill. Printed values, not estimates.
     case label(ParsedLabel)
     /// No panel in frame, but the model recognized the food itself.
-    /// Estimates — hosts caption them as such.
-    case food(ScannedProduct)
+    /// Estimates — hosts caption them as such, and `refine` is what
+    /// lets the person correct one without photographing the food again
+    /// (`plans/PLAN-refine-with-context.md`). nil means NOT refinable,
+    /// so a path opts out rather than every path opting in.
+    case food(ScannedProduct, refine: RefineContext?)
     /// The screenshot showed SEVERAL foods — a menu section, a
     /// comparison table. Which row the user meant is unknowable, and
     /// guessing logs the wrong burger, so the host asks. Never produced
@@ -49,6 +52,25 @@ enum FoodImageOutcome {
 enum FoodImageSource {
     case camera
     case imported
+}
+
+/// Everything a REFINE needs to ask again: the prior answer, what the
+/// reader knew when it produced that answer, and — for a vision-capable
+/// remote provider — the picture itself.
+///
+/// Only ESTIMATES carry one. A `.label` outcome reports figures printed
+/// on a panel, and correcting a misread is a different job from adding
+/// context (`plans/PLAN-refine-with-context.md`).
+struct RefineContext {
+    let prior: FoodIntelligence.RefinedFood
+    let grounding: FoodIntelligence.EstimateGrounding
+    /// The ALREADY-DOWNSAMPLED image the cascade worked on, never the
+    /// original bytes: the share extension has 220 MB for the decode,
+    /// Vision AND the model, and jetsam has taken it mid-decode already
+    /// (2026-08-16). `jpegForUpload` re-encodes from this on demand, and
+    /// only for a provider that can see.
+    let image: CGImage?
+    let orientation: CGImagePropertyOrientation?
 }
 
 @MainActor
@@ -97,8 +119,8 @@ enum FoodImageReader {
                 imageLog.notice("image read \(finding.severity.rawValue, privacy: .public): \(finding.reason, privacy: .private)")
             }
             return .label(checked)
-        case .food(let product):
-            return .food(product.plausible())
+        case .food(let product, let refine):
+            return .food(product.plausible(), refine: refine)
         case .candidates(let labels):
             return .candidates(labels.map(NutritionPlausibility.checked))
         case .menu, .nothing, .cancelled:
@@ -307,7 +329,14 @@ enum FoodImageReader {
             // unknowable, so ask rather than log the wrong pastry.
             if named.count > 1 { return .candidates(named.map(\.parsedLabel)) }
             if let only = named.first {
-                return .food(only.parsedLabel.scannedProduct())
+                // Refinable against the very text that named it: "it's
+                // the large one", "no glaze" (PLAN-refine-with-context).
+                return .food(
+                    only.parsedLabel.scannedProduct(),
+                    refine: RefineContext(
+                        prior: FoodIntelligence.RefinedFood(only),
+                        grounding: .signText(transcript.map(\.text).joined(separator: "\n")),
+                        image: cgImage, orientation: orientation))
             }
             // 2. No usable text — maybe it's a photo of the food itself
             //    (PLAN-identify-food).
@@ -315,7 +344,17 @@ enum FoodImageReader {
             guard !Task.isCancelled else { return .cancelled }
             if let food {
                 imageLog.notice("Photo identified: \(food.name), \(food.components.count) components, \(food.kcal) kcal")
-                return .food(food.scannedProduct)
+                // The case the refine step exists for: on-device, the
+                // model never saw this photo — it decomposed classifier
+                // labels into a TYPICAL serving. The note is the only
+                // thing that can say this plate was undressed and half
+                // eaten (PLAN-refine-with-context).
+                return .food(
+                    food.scannedProduct,
+                    refine: RefineContext(
+                        prior: FoodIntelligence.RefinedFood(food),
+                        grounding: .classifierLabels(food.groundingLabels),
+                        image: cgImage, orientation: orientation))
             }
             imageLog.notice("Photo identify came up empty")
         }

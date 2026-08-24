@@ -195,6 +195,11 @@ targets:
       # (plans/PLAN-multi-item-import.md).
       - Onigiri/Views/MenuPickerFlow.swift
       - Onigiri/Views/LogConfirmSheet.swift
+      # The check-the-estimate step, shared for the same reason: a
+      # correction that behaves differently by process is one nobody can
+      # predict (plans/PLAN-refine-with-context.md). The extension has no
+      # food form, so this is its only chance to correct an estimate.
+      - Onigiri/Views/EstimateRefineStep.swift
     dependencies:
       - package: OnigiriKit
     settings:

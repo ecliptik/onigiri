@@ -30,6 +30,8 @@ struct SharedImageSheet: View {
     @State private var menuItems: [MenuRow] = []
     @State private var menuSource: String?
     @State private var pick: Pick?
+    /// An ESTIMATE waiting to be checked — see `EstimateRefineStep`.
+    @State private var estimate: Estimate?
 
     private enum Phase: Equatable {
         case reading
@@ -38,6 +40,14 @@ struct SharedImageSheet: View {
         case handedOff
         /// A list to order from; `MenuPickerFlow` owns the screen.
         case choosing
+        /// One estimate, with a field to correct it before it fills the
+        /// form (`plans/PLAN-refine-with-context.md`).
+        case checking
+    }
+
+    private struct Estimate: Identifiable {
+        let id = UUID()
+        let context: RefineContext
     }
 
     private struct Pick: Identifiable {
@@ -90,6 +100,19 @@ struct SharedImageSheet: View {
                 suggestedSource: menuSource,
                 completion: .logging(saving: .optional, write: log),
                 onFinish: { _ in dismiss() })
+        case .checking:
+            if let estimate {
+                // Cancel, not Back: there is no camera behind a shared
+                // photo to go back TO.
+                EstimateRefineStep(
+                    context: estimate.context,
+                    backTitle: "Cancel",
+                    onBack: { dismiss() },
+                    onUse: { product in
+                        pick = Pick(product: product)
+                        phase = .handedOff
+                    })
+            }
         }
     }
 
@@ -134,9 +157,14 @@ struct SharedImageSheet: View {
         case .label(let parsed):
             phase = .handedOff
             pick = Pick(product: parsed.scannedProduct())
-        case .food(let product):
-            phase = .handedOff
-            pick = Pick(product: product)
+        case .food(let product, let refine):
+            if let refine {
+                estimate = Estimate(context: refine)
+                phase = .checking
+            } else {
+                phase = .handedOff
+                pick = Pick(product: product)
+            }
         case .candidates(let list):
             // A screenshot listing several foods — the same list a menu
             // gets, because it is the same question and a dialog could

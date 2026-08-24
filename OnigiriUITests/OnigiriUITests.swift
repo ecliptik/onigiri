@@ -3092,6 +3092,115 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertEqual(dateChip.label, afterDone, "…and the entry keeps the date it had")
     }
 
+    /// The check-the-estimate step
+    /// (`plans/PLAN-refine-with-context.md`). Opt-in via REFINE_STEP=1;
+    /// the estimate itself comes from --refine-sample, because no
+    /// headless runner can point a camera at a plate.
+    ///
+    /// It asserts the rules that survive EITHER outcome of the refine,
+    /// and that is deliberate: whether a model answers here is not
+    /// something a UI test may assume. AI ships off, but the master
+    /// switch lives in app-group defaults that outlive the install — an
+    /// eval run on the same simulator leaves it ON, which is exactly how
+    /// the first version of this test failed (2026-08-24). So:
+    ///
+    /// - a refine that DECLINES keeps the estimate and says so;
+    /// - a refine that LANDS leaves the first estimate one tap away;
+    /// - and Use hands over whatever is on screen, to the same form the
+    ///   read used to open directly.
+    @MainActor
+    func testRefineStepChecksAnEstimateBeforeItFillsAnything() throws {
+        guard ProcessInfo.processInfo.environment["REFINE_STEP"] == "1" else {
+            throw XCTSkip("Set REFINE_STEP=1 to run the refine-step test")
+        }
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--seed-sample-data", "--refine-sample"]
+        app.launch()
+        skipOnboardingIfPresent(in: app)
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        switchTab(in: app, to: "Add")
+        let logTitle = app.navigationBars["Log"]
+        if !logTitle.waitForExistence(timeout: 10) { switchTab(in: app, to: "Add") }
+        XCTAssertTrue(logTitle.waitForExistence(timeout: 10), "Log sheet should be up")
+
+        let scan = scanRow(in: app)
+        XCTAssertTrue(scan.waitForExistence(timeout: 5), "Scan row in the Log sheet")
+        scan.tap()
+        let sample = app.buttons["refineScanSample"]
+        XCTAssertTrue(sample.waitForExistence(timeout: 10),
+                      "Sample estimate row (needs --refine-sample)")
+        sample.tap()
+
+        XCTAssertTrue(app.navigationBars["Check the Estimate"].waitForExistence(timeout: 10),
+                      "The step should stand between the read and the form")
+        XCTAssertTrue(app.staticTexts["Sample Chicken Salad"].waitForExistence(timeout: 5),
+                      "the estimate, named")
+        // 520 kcal is SUMMED from the three components, never taken from
+        // the value passed beside them.
+        let firstTotal = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "520")).firstMatch
+        XCTAssertTrue(firstTotal.waitForExistence(timeout: 5),
+                      "520 kcal — summed from the components")
+        attachShot(named: "refine-step")
+
+        // Refine is a BUTTON and it needs a note: nothing to say, nothing
+        // to spend.
+        let run = app.buttons["refineRun"]
+        XCTAssertTrue(run.waitForExistence(timeout: 5), "Refine button")
+        XCTAssertFalse(run.isEnabled, "Refine with an empty note must not run")
+
+        let note = app.textFields["refineNote"]
+        XCTAssertTrue(note.waitForExistence(timeout: 5), "The note field")
+        note.tap()
+        note.typeText("no dressing")
+        XCTAssertTrue(run.isEnabled, "…and it arms once there is something to say")
+        run.tap()
+
+        // Whichever way it goes, the step has to RESOLVE — a spinner
+        // that never returns is the failure neither branch may become.
+        let revert = app.buttons["refineRevert"]
+        let unchanged = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "the estimate is unchanged")).firstMatch
+        let deadline = Date().addingTimeInterval(60)
+        while Date() < deadline, !revert.exists, !unchanged.exists {
+            _ = revert.waitForExistence(timeout: 1)
+        }
+        XCTAssertTrue(revert.exists || unchanged.exists,
+                      "a refine must either land or say it didn't")
+        attachShot(named: "refine-answered")
+
+        if revert.exists {
+            // It landed — so the first estimate must still be one tap
+            // away. A refine that comes back worse must not cost the
+            // photograph.
+            revert.tap()
+            XCTAssertTrue(firstTotal.waitForExistence(timeout: 10),
+                          "Use the first estimate restores what the read produced")
+        } else {
+            // It declined — the estimate that was there is still the best
+            // one there is, so it must still BE there.
+            XCTAssertTrue(firstTotal.exists,
+                          "a declined refine must not cost the numbers")
+        }
+        XCTAssertTrue(app.staticTexts["Sample Chicken Salad"].exists,
+                      "…nor the food")
+
+        // Use hands over exactly as the read used to, into the same form.
+        // Asserted on the NAME field, not on a navigation title: the form
+        // wears the Log sheet's chrome here (Cancel / Log / Log & Save),
+        // not "Add Food".
+        app.buttons["refineUse"].tap()
+        XCTAssertTrue(
+            app.textFields.matching(
+                NSPredicate(format: "value CONTAINS %@", "Chicken Salad")
+            ).firstMatch.waitForExistence(timeout: 15),
+            "Use should prefill the food form with the estimate on screen")
+        attachShot(named: "refine-used")
+    }
+
     /// The loop this feature exists for (`plans/PLAN-multi-item-import.md`):
     /// one read, several items. Opt-in via MENU_LOOP=1; the list itself
     /// comes from --menu-scan-sample, because no headless runner can

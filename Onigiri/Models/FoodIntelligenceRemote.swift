@@ -392,6 +392,67 @@ extension FoodIntelligence {
         return out as Data
     }
 
+    // MARK: Refine with a note
+
+    private struct RemoteRefinedFood: Decodable {
+        struct Component: Decodable {
+            let name: String
+            let portion: String
+            let kcal: Double
+            let sodiumMg: Double
+        }
+        let name: String
+        // Optional throughout: a model that omits a field degrades to a
+        // blank, never to a failed refine that costs the prior estimate.
+        let serving: String?
+        let kcal: Double
+        let sodiumMg: Double
+        let fatG: Double?
+        let carbsG: Double?
+        let proteinG: Double?
+        let fiberG: Double?
+        let sugarG: Double?
+        let components: [Component]?
+    }
+
+    /// The refine, on the user's own provider. A vision-capable one gets
+    /// the photo alongside the note; every other engine re-reads the
+    /// grounding text, exactly as the first estimate did.
+    static func refineEstimateRemote(
+        prior: RefinedFood, grounding: EstimateGrounding, note: String, photoJPEG: Data?
+    ) async -> RemoteAnswer<RefinedFood> {
+        let user = Prompts.refineEstimateUser(
+            prior: prior, grounding: grounding, note: note) + """
+             Respond with ONLY a JSON object, no prose: {"name": string \
+            (at most five words, title style), "serving": string (the \
+            portion restated briefly), "kcal": number, "sodiumMg": \
+            number, "fatG": number, "carbsG": number, "proteinG": \
+            number, "fiberG": number, "sugarG": number — grams for the \
+            portion, "components": array of at most six {"name": \
+            string, "portion": string, "kcal": number, "sodiumMg": \
+            number} — the edible parts, or an empty array when the food \
+            has no distinct parts}.
+            """
+        guard case .answered(let data) = await completeRemote(
+            system: Prompts.refineEstimateInstructions, user: user, imageJPEG: photoJPEG)
+        else { return .unavailable }
+        guard let answer = decode(RemoteRefinedFood.self, from: data) else { return .answered(nil) }
+        return .answered(refinedFood(
+            name: answer.name, serving: answer.serving ?? "",
+            kcal: answer.kcal, sodiumMg: answer.sodiumMg,
+            fatG: answer.fatG, carbsG: answer.carbsG, proteinG: answer.proteinG,
+            fiberG: answer.fiberG, sugarG: answer.sugarG,
+            components: (answer.components ?? []).map {
+                IdentifiedFood.Component(
+                    name: $0.name, portion: $0.portion,
+                    kcal: $0.kcal, sodiumMg: $0.sodiumMg)
+            },
+            grounding: grounding, note: note,
+            // The photo IS the grounding when one went with the request
+            // — same carve-out as identifyFoodRemote(photoJPEG:).
+            enforcesGrounding: photoJPEG == nil))
+    }
+
     // MARK: Screenshot nutrition import
 
     private struct RemoteScreenshotReading: Decodable {

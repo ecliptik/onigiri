@@ -41,11 +41,23 @@ struct ShareFlow: View {
     @State private var suggestedSource: String?
     @State private var linkHost: String?
     @State private var linkURL: URL?
+    /// An ESTIMATE waiting to be checked. This is the host that gains
+    /// the most from the step: an extension has no food form, so before
+    /// it the numbers a photo estimated could only be accepted or
+    /// abandoned (`plans/PLAN-refine-with-context.md`).
+    @State private var estimate: Estimate?
 
     private enum Phase: Equatable {
         case reading
         case ready
         case failed(String)
+        /// One estimate, with a field to correct it before the confirm.
+        case checking
+    }
+
+    private struct Estimate: Identifiable {
+        let id = UUID()
+        let context: RefineContext
     }
 
     var body: some View {
@@ -84,6 +96,17 @@ struct ShareFlow: View {
                     Button("Cancel", role: .cancel) { onFinish(false) }
                 }
             }
+        case .checking:
+            if let estimate {
+                EstimateRefineStep(
+                    context: estimate.context,
+                    backTitle: "Cancel",
+                    onBack: { onFinish(false) },
+                    onUse: { product in
+                        single = product.parsedLabel
+                        phase = .ready
+                    })
+            }
         case .ready:
             // `.always`: an extension has no form to save from and no
             // second visit, so a dish it logs is kept or lost here.
@@ -95,6 +118,8 @@ struct ShareFlow: View {
                 onFinish: onFinish)
         }
     }
+
+    // MARK: Estimate → the confirm's currency
 
     /// The rendered page first, then the page's own TEXT — which is the
     /// only place a collapsed accordion's figures exist.
@@ -222,17 +247,14 @@ struct ShareFlow: View {
         case .label(let parsed):
             single = parsed
             phase = .ready
-        case .food(let product):
-            var label = ParsedLabel()
-            label.name = product.name.isEmpty ? nil : product.name
-            label.kcal = product.kcal
-            label.sodiumMg = product.sodiumMg
-            label.nutrients = product.nutrients
-            label.servingDescription = product.servingDescription.isEmpty
-                ? nil : product.servingDescription
-            label.aiGenerated = product.aiGenerated
-            single = label
-            phase = .ready
+        case .food(let product, let refine):
+            if let refine {
+                estimate = Estimate(context: refine)
+                phase = .checking
+            } else {
+                single = product.parsedLabel
+                phase = .ready
+            }
         case .candidates(let list):
             // The same picker a menu gets, and for the same reason it is
             // now the app's only chooser: a list you can return to beats
@@ -284,5 +306,25 @@ struct ShareFlow: View {
         }
         WidgetReloader.reloadNow(kinds: WidgetKinds.phoneLogAffected)
         return nil
+    }
+}
+
+
+/// An estimate, in the shape the confirm sheet reads. The extension has
+/// no food form, so `ParsedLabel` is the only currency it deals in —
+/// this is the inline conversion `readImage` used to do, named and
+/// carrying the plausibility findings through so `LogConfirmSheet` can
+/// still say what was left out and why.
+private extension ScannedProduct {
+    var parsedLabel: ParsedLabel {
+        var label = ParsedLabel()
+        label.name = name.isEmpty ? nil : name
+        label.kcal = kcal
+        label.sodiumMg = sodiumMg
+        label.nutrients = nutrients
+        label.servingDescription = servingDescription.isEmpty ? nil : servingDescription
+        label.aiGenerated = aiGenerated
+        label.warnings = warnings
+        return label
     }
 }

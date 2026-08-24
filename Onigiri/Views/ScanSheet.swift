@@ -65,6 +65,10 @@ struct ScanSheet: View {
     /// the answer back. Seen on 2026-08-23 in the food form while the
     /// Log sheet, running identical code, got the ordering it wanted.
     @State private var listing: MenuListing?
+    /// The ESTIMATE to check before it goes anywhere
+    /// (`plans/PLAN-refine-with-context.md`). One value, presented with
+    /// `.sheet(item:)`, for the same reason `listing` is — see its note.
+    @State private var estimate: Estimate?
     @State private var showingMenuFile = false
 
     /// One read's list, identified per arrival so a second read
@@ -73,6 +77,13 @@ struct ScanSheet: View {
         let id = UUID()
         let rows: [MenuRow]
         let source: String?
+    }
+
+    /// One read's estimate, identified per arrival so a second read
+    /// re-presents.
+    private struct Estimate: Identifiable {
+        let id = UUID()
+        let context: RefineContext
     }
 
     /// A menu DOCUMENT chosen from Files, read exactly the way a shared
@@ -139,7 +150,8 @@ struct ScanSheet: View {
     /// from the old list, so a photographed board already ran the live
     /// camera behind its own picker.
     private var showsFrozenFrame: Bool {
-        capturedStill != nil && (isReading || delivered || listing != nil)
+        capturedStill != nil
+            && (isReading || delivered || listing != nil || estimate != nil)
     }
 
     /// UI-test hook (LABEL_SCAN=1): a bundled label photo stands in for
@@ -163,6 +175,31 @@ struct ScanSheet: View {
         MenuRow(id: 1, name: "Sample Fries", section: "Sides", kcal: 320, sodiumMg: 400),
         MenuRow(id: 2, name: "Sample Shake", section: "Drinks", kcal: 610, sodiumMg: 260),
     ]
+
+    /// UI-test hook (REFINE_STEP=1): one identified food, standing in
+    /// for a read no headless runner can perform — the camera pointed at
+    /// a plate. It skips the CASCADE on purpose; what it exercises is
+    /// the step after it (`plans/PLAN-refine-with-context.md`), where
+    /// the rules that matter live: a failed refine keeps the estimate,
+    /// Revert restores the first one, Use hands off.
+    ///
+    /// AI ships OFF, so in this run the refine genuinely declines and
+    /// the "unchanged" path is the deterministic one to assert.
+    private static let refineSampleAvailable =
+        ProcessInfo.processInfo.arguments.contains("--refine-sample")
+
+    private static var refineSample: RefineContext {
+        RefineContext(
+            prior: FoodIntelligence.RefinedFood(
+                name: "Sample Chicken Salad", serving: "", kcal: 0, sodiumMg: 0,
+                components: [
+                    .init(name: "mixed greens", portion: "2 cups", kcal: 180, sodiumMg: 220),
+                    .init(name: "grilled chicken", portion: "4 oz", kcal: 220, sodiumMg: 400),
+                    .init(name: "vinaigrette", portion: "2 tbsp", kcal: 120, sodiumMg: 200),
+                ]),
+            grounding: .classifierLabels(["salad", "chicken", "plate"]),
+            image: nil, orientation: nil)
+    }
 
     var body: some View {
         NavigationStack {
@@ -234,6 +271,29 @@ struct ScanSheet: View {
                             // for another try.
                             if logged {
                                 delivered = true
+                                dismiss()
+                            }
+                        })
+                }
+            }
+            // A single ESTIMATE gets looked at before it fills anything.
+            // Sheet OVER this one, from ONE value, exactly like the list
+            // above — and for the same two reasons.
+            .sheet(item: $estimate) { estimate in
+                NavigationStack {
+                    EstimateRefineStep(
+                        context: estimate.context,
+                        onBack: { self.estimate = nil },
+                        onUse: { product in
+                            self.estimate = nil
+                            delivered = true
+                            // Deferred one turn: this step is dismissing
+                            // while `onFood` raises the host's own
+                            // sheet, and swapping the two in one breath
+                            // tears the new one down with the old
+                            // (2026-07-22).
+                            Task {
+                                onFood(product)
                                 dismiss()
                             }
                         })
@@ -480,6 +540,14 @@ struct ScanSheet: View {
                     }
                     .accessibilityIdentifier("labelScanSample")
                 }
+                if Self.refineSampleAvailable {
+                    Button {
+                        estimate = Estimate(context: Self.refineSample)
+                    } label: {
+                        Label("Use Sample Estimate", systemImage: "testtube.2")
+                    }
+                    .accessibilityIdentifier("refineScanSample")
+                }
                 if Self.menuSampleAvailable {
                     Button {
                         listing = MenuListing(rows: Self.sampleMenu, source: "Sample Cafe")
@@ -533,10 +601,16 @@ struct ScanSheet: View {
             delivered = true
             onLabel(parsed)
             dismiss()
-        case .food(let product):
-            delivered = true
-            onFood(product)
-            dismiss()
+        case .food(let product, let refine):
+            // An estimate is checkable; anything not refinable hands off
+            // exactly as it always has.
+            if let refine {
+                estimate = Estimate(context: refine)
+            } else {
+                delivered = true
+                onFood(product)
+                dismiss()
+            }
         case .candidates(let list):
             // A screenshot listing several foods gets the same list a
             // menu does: the "Which item?" dialog could not say what had

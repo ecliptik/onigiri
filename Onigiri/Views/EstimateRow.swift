@@ -32,6 +32,15 @@ struct TapToEstimateRow<Value, ResultRow: View>: View {
     /// double-bill a BYO-AI provider.
     var isEstimating: Binding<Bool>?
     let estimate: (String) async -> Value?
+    /// Correct a result with a note, without retyping the description
+    /// (`plans/PLAN-refine-with-context.md`). "And add avocado" adds
+    /// avocado to what is on screen rather than re-deriving a whole new
+    /// answer whose every number has moved.
+    ///
+    /// nil where a host has nothing to offer — the MEAL estimate, whose
+    /// components become real, individually editable foods in the form
+    /// it opens.
+    var refine: ((Value, String) async -> Value?)?
     @ViewBuilder let resultRow: (Value) -> ResultRow
 
     private enum Phase {
@@ -45,6 +54,12 @@ struct TapToEstimateRow<Value, ResultRow: View>: View {
     /// The query the current phase belongs to.
     @State private var phaseQuery = ""
     @State private var estimateTask: Task<Void, Never>?
+    /// The refine note, and whether one is in flight. A refine keeps the
+    /// phase on `.result` — the estimate it is correcting has to stay on
+    /// screen, because a failed refine leaves it standing.
+    @State private var note = ""
+    @State private var isRefining = false
+    @State private var refineFailed = false
 
     @AppStorage(AIProviderSettings.enabledKey, store: SharedStore.defaults) private var aiEnabled = false
     @AppStorage(AIProviderSettings.hintDismissedKey, store: SharedStore.defaults) private var hintDismissed = false
@@ -101,6 +116,7 @@ struct TapToEstimateRow<Value, ResultRow: View>: View {
                     }
                 case .result(let value):
                     resultRow(value)
+                    if refine != nil { refineRow(value) }
                 case .failed:
                     Button {
                         run(trimmed)
@@ -114,6 +130,10 @@ struct TapToEstimateRow<Value, ResultRow: View>: View {
                 if updated.trimmingCharacters(in: .whitespaces) != phaseQuery {
                     cancel()
                     phase = .idle
+                    // A stale note belongs to the estimate that just
+                    // went away.
+                    note = ""
+                    refineFailed = false
                 }
             }
             // Behavior 3 — resume, don't restart from idle: a live
@@ -122,6 +142,11 @@ struct TapToEstimateRow<Value, ResultRow: View>: View {
             .onAppear {
                 if case .estimating = phase, estimateTask == nil {
                     run(phaseQuery)
+                }
+                // Behavior 3 again, for the refine: the same teardown
+                // blip would leave the note row spinning forever.
+                if case .result(let value) = phase, isRefining, estimateTask == nil {
+                    runRefine(value)
                 }
             }
             .onDisappear(perform: cancel)
@@ -132,6 +157,64 @@ struct TapToEstimateRow<Value, ResultRow: View>: View {
         estimateTask?.cancel()
         estimateTask = nil
         isEstimating?.wrappedValue = false
+        isRefining = false
+    }
+
+    /// One note, one inference, one button — never per keystroke, for
+    /// the reason at the top of this file.
+    @ViewBuilder
+    private func refineRow(_ value: Value) -> some View {
+        HStack(spacing: 8) {
+            TextField("Add context — \"no dressing\", \"ate half\"", text: $note)
+                .disabled(isRefining)
+                .accessibilityIdentifier("estimateRefineNote")
+            if isRefining {
+                ProgressView()
+            } else {
+                Button {
+                    runRefine(value)
+                } label: {
+                    Image(systemName: "arrow.trianglehead.clockwise")
+                        .foregroundStyle(Color.riceToast)
+                }
+                .buttonStyle(.plain)
+                .disabled(note.trimmingCharacters(in: .whitespaces).isEmpty)
+                .accessibilityLabel("Refine estimate")
+                .accessibilityIdentifier("estimateRefineRun")
+            }
+        }
+        if refineFailed {
+            // The estimate above is still the best one there is; saying
+            // so beats replacing it with an error.
+            Text("Couldn't refine — the estimate is unchanged.")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        }
+    }
+
+    private func runRefine(_ value: Value) {
+        guard let refine else { return }
+        let asked = note.trimmingCharacters(in: .whitespaces)
+        guard !asked.isEmpty else { return }
+        let query = phaseQuery
+        isRefining = true
+        refineFailed = false
+        estimateTask?.cancel()
+        isEstimating?.wrappedValue = true
+        estimateTask = Task {
+            let answer = await refine(value, asked)
+            guard !Task.isCancelled, query == phaseQuery else { return }
+            isRefining = false
+            isEstimating?.wrappedValue = false
+            guard let answer else {
+                refineFailed = true
+                return
+            }
+            phase = .result(answer)
+            // Applied and folded in; leaving it would re-apply it next
+            // time.
+            note = ""
+        }
     }
 
     private func run(_ trimmed: String) {

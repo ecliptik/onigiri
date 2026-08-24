@@ -17,7 +17,19 @@ struct AIEstimateSection: View {
         TapToEstimateRow(
             query: query,
             title: "Estimate with \(AIProviderSettings.selected.displayName)",
-            estimate: { await FoodIntelligence.describeFood($0) }
+            estimate: { await FoodIntelligence.describeFood($0) },
+            // The typed description is the grounding, so a note corrects
+            // the answer instead of restarting from a longer sentence
+            // (`plans/PLAN-refine-with-context.md`). describe-it never
+            // had a containment guard — the person typed the food — so
+            // nothing is relaxed here.
+            refine: { food, note in
+                await FoodIntelligence.refineEstimate(
+                    prior: FoodIntelligence.RefinedFood(food),
+                    grounding: .description(query),
+                    note: note
+                )?.describedFood
+            }
         ) { food in
             Button {
                 onPick(product(from: food))

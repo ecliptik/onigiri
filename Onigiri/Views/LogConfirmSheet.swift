@@ -123,6 +123,22 @@ struct LogConfirmSheet: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            // ABOVE the receipt, because it is what the receipt is
+            // COUNTING: every figure below is scaled by the portion, and
+            // the two controls that decide the log sat under a list long
+            // enough to push them off the screen — easy to miss, and
+            // read as settings rather than as part of the confirm (the
+            // user, 2026-08-24).
+            Section {
+                Picker("Meal", selection: $category) {
+                    ForEach(FoodCategory.allCases) { slot in
+                        Text(slot.rawValue).tag(slot)
+                    }
+                }
+                Stepper(
+                    "Quantity \(quantity.formatted(.number.precision(.fractionLength(0...2))))",
+                    value: $quantity, in: 0.25...20, step: 0.25)
+            }
             Section {
                 if written.isEmpty {
                     Text("Calories only — nothing else was published for this item.")
@@ -158,16 +174,6 @@ struct LogConfirmSheet: View {
                         Label(note, systemImage: "exclamationmark.triangle")
                     }
                 }
-            }
-            Section {
-                Picker("Meal", selection: $category) {
-                    ForEach(FoodCategory.allCases) { slot in
-                        Text(slot.rawValue).tag(slot)
-                    }
-                }
-                Stepper(
-                    "Quantity \(quantity.formatted(.number.precision(.fractionLength(0...2))))",
-                    value: $quantity, in: 0.25...20, step: 0.25)
             }
             if let saveToLibrary {
                 Section {

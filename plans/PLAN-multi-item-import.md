@@ -125,6 +125,13 @@ the receipt is the *reason* a quick confirm is acceptable here at all.
 The extension passes `saveToLibrary: .always`; the app passes
 `.optional(default: false)` so the toggle renders.
 
+**Meal and Quantity sit ABOVE the receipt** (the user, 2026-08-24). They
+began under it, where a long "Also logged" list — a menu row can carry a
+dozen figures — pushed the only two controls that decide the log off the
+bottom of the sheet. They read as settings there rather than as part of
+the confirm, and the receipt is *counting* them: every figure in it is
+scaled by the portion, so the control that scales it has to come first.
+
 ### Purpose split — which hosts loop
 
 A door that exists to FILL A FORM must not start logging.

@@ -34,6 +34,11 @@ struct QuickLogSheet: View {
 
     private var librarySort: LibrarySort { LibrarySort(rawValue: sortRaw) ?? .recent }
     @State private var searchText = ""
+    /// What's typed into the entry door's "Describe food or meal" field
+    /// — independent of `searchText`, which is library/online search
+    /// only now that the describe field has its own home
+    /// (`EntryDoorsSection`, 2026-08-29).
+    @State private var describeQuery = ""
     /// Drives the whole search-active state (not just keyboard focus):
     /// an active search hides the toolbar, so sub-sheets must be able
     /// to deactivate it entirely or Done never comes back.
@@ -250,21 +255,27 @@ struct QuickLogSheet: View {
                     // form (PLAN-entry-doors / PLAN-unified-search).
                     EntryDoorsSection(
                         scanBusy: isLookingUpBarcode,
+                        describeQuery: $describeQuery,
                         onScan: { activeSheet = .scanner(notice: nil) }
                     )
-                }
-                // Search leads with the tap-to-estimate row (AI →
-                // library → online, the user's order). An estimate opens
-                // the FULL food form, editable down to every value —
-                // the same route unknown barcodes and labels take from
-                // here (the portion shortcut made estimates the odd one
-                // out; superseded 2026-07-20, the user). Its Log action
-                // writes to the browsed day and returns here.
-                if searching {
-                    AIEstimateSection(query: searchText) { product in
-                        activeSheet = .form(ProductPrefill(
-                            product: product,
-                            provenance: product.aiEngine?.estimateCaption))
+                    // The describe field's own tap-to-estimate row,
+                    // right under where it's typed (2026-08-29) — it
+                    // used to lead the SEARCH results instead, keyed off
+                    // `searchText`; that field is library/online search
+                    // only now. An estimate opens the FULL food form,
+                    // editable down to every value — the same route
+                    // unknown barcodes and labels take from here (the
+                    // portion shortcut made estimates the odd one out;
+                    // superseded 2026-07-20, the user). Its Log action
+                    // writes to the browsed day and returns here.
+                    if FoodIntelligence.isAvailable,
+                       !describeQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                        AIEstimateSection(query: describeQuery) { product in
+                            describeQuery = ""
+                            activeSheet = .form(ProductPrefill(
+                                product: product,
+                                provenance: product.aiEngine?.estimateCaption))
+                        }
                     }
                 }
                 // Water leads the sheet, above Recent in every scope

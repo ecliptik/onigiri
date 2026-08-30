@@ -765,8 +765,52 @@ Each cost a debugging session.
   `FoodSearchSheet` with its own drifting list existed until 2026-07-13. Keep
   it that way: search behavior changes go in the shared section only. Search
   fields are the STANDARD system `.searchable` (bottom placement) everywhere —
-  the user vetoed custom bars and auto-focus; the scanner is a labeled list row
-  (`ScanRowLabel`), never a toolbar icon.
+  the user vetoed custom bars and auto-focus; the scanner is icon-only or a
+  labeled list row (`ScanRowLabel`) depending on AI availability (below),
+  never a toolbar icon.
+- **`EntryDoorsSection` splits into two doors when AI is on, one when it's
+  off** (2026-08-29, undoing part of the 2026-07 merge below on purpose —
+  the user: "make the camera button separate and [add] the text field... if
+  AI features are enabled"). AI ON: a compact icon-only camera button
+  (`DoorCircleGlyph`, the same measured circle `DoorRowLabel` draws) beside a
+  "Describe food or meal" `TextField`, one row. AI OFF: the field is hidden
+  entirely (nothing behind it works without AI) and the camera button falls
+  back to the full `ScanRowLabel` row, "Scan Barcode, Label, or Menu" — that
+  string no longer branches on `FoodIntelligence.isAvailable` itself, since
+  its one remaining caller only reaches it when that's already false.
+  - **The describe field owns its OWN query, separate from the bottom
+    `.searchable` field.** A describe field lived here once and was merged
+    into the bottom field so the screen carried one text field instead of
+    two (`AIEstimateSection`/`PLAN-unified-search` — still true below); this
+    splits it back apart, but the bottom field stays search-only this time,
+    so it is still one field per job. `QuickLogSheet.describeQuery` /
+    `FoodFormView.describeQuery` drive `AIEstimateSection` directly; the
+    bottom field (`searchText`/`dbQuery`) drives only library/online
+    results. Clear the describe query on a successful pick (mirrors what
+    `endDatabaseSearch()` did for the old merged field) or the inline
+    estimate row lingers after its job is done.
+  - **The camera button keeps the row's OLD visible text as its
+    accessibility label** ("Scan Barcode, Label, Menu, or Food"), icon-only
+    or not. `OnigiriUITests.scanRow(in:)` (and VoiceOver) find it by
+    `label BEGINSWITH 'Scan Barcode'`; the button carries this via
+    `.accessibilityLabel`, not by rendering it — verified 2026-08-29 by
+    actually running `testBarcodeLookupPrefillsForm` (Log sheet) and the
+    first leg of `testLabelScanPrefillsForm` (Add Food form) against the
+    compact layout, both green.
+  - **`FoodFormView`'s select-all-on-focus notification handler must
+    exempt the describe field too**, the same reason the bottom search
+    field is already exempt — an in-progress description must not be
+    select-all'd out from under a refocus. It has no `dbSearchActive`-style
+    flag of its own to gate on, so the exemption matches by
+    `field.accessibilityIdentifier == EntryDoorsSection
+    .describeFieldAccessibilityID` instead, since that's the only handle
+    the notification's raw `UITextField` hands back.
+  - `testLabelScanPrefillsForm`'s SECOND leg ("Scan Label row on Foods",
+    `LABEL_SCAN=1`-gated) has the SAME stale Foods-tab expectation
+    `testBarcodeLookupPrefillsForm` was fixed for below — found 2026-08-29
+    running it for the first time in this exercise, still unfixed because
+    it never runs in a normal pass. Foods still has no scan row; fix the
+    test, not the product.
 - OpenFoodFacts: the search index has NO nutrition fields — search rows lazily
   fetch the full product per barcode to show kcal/serving.
 - Text search can route to USDA FoodData Central instead (Settings → Online

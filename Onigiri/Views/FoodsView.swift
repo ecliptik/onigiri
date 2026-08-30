@@ -898,23 +898,24 @@ struct PortionTarget: Identifiable {
     }
 }
 
-/// ONE scan row, one camera behind it (the user's copy) — barcode fires
-/// live, the shutter photographs the label or, with Apple Intelligence
-/// around, the food itself (the identify cascade; the label only
-/// promises the third door when it's open). Leading icon drawn with
-/// LogButton's exact circle treatment (same font, padding, fill, rim)
-/// so the row carries the same visual weight as the + capsules beside
-/// it (the user). Shared by the Foods tab and the Log sheet.
+/// The scan door's row when Apple Intelligence is OFF — "Food" (the
+/// identify cascade) only ever promised when it can be kept, so this
+/// title drops it, unlike "Menu": a menu document is read by the
+/// deterministic table parser, open with AI switched off either way.
+/// With AI ON, `EntryDoorsSection` renders the compact camera button +
+/// describe field instead (2026-08-29) — this row is what's left for
+/// the AI-off case, so it no longer branches on
+/// `FoodIntelligence.isAvailable` itself; its one caller only reaches
+/// for it when that's already false.
+///
+/// Leading icon drawn with LogButton's exact circle treatment (same
+/// font, padding, fill, rim) so the row carries the same visual weight
+/// as the + capsules beside it (the user). Shared by the Foods tab and
+/// the Log sheet.
 struct ScanRowLabel: View {
     var body: some View {
         DoorRowLabel(
-            // "Menu" rides in BOTH variants: a menu document is read by
-            // the deterministic table parser, so that door is open with
-            // AI switched off — unlike "Food", which is the identify
-            // cascade and only ever promised when it can be kept.
-            title: FoodIntelligence.isAvailable
-                ? "Scan Barcode, Label, Menu, or Food"
-                : "Scan Barcode, Label, or Menu",
+            title: "Scan Barcode, Label, or Menu",
             // A CAMERA, not a barcode (the user, 2026-08-02): the row
             // has read labels and identified food for two releases, and
             // the barcode glyph kept promising only the first of the
@@ -938,20 +939,33 @@ struct DoorRowLabel: View {
         Label {
             Text(title)
         } icon: {
-            Image(systemName: systemImage)
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(Color.riceToast)
-                // FIXED frame, not padding: a viewfinder glyph is wider
-                // than the plus, so equal padding drew a bigger circle.
-                // 35pt matches LogButton's RENDERED circle (the plus
-                // glyph is narrower than its font's full height, so its
-                // glyph+9pt padding lands at ~35, not 39 — measured).
-                .frame(width: 35, height: 35)
-                .background(.quaternary.opacity(0.5), in: .circle)
-                .overlay(
-                    Circle().strokeBorder(Color.riceToast.opacity(0.5), lineWidth: 1)
-                )
+            DoorCircleGlyph(systemImage: systemImage)
         }
+    }
+}
+
+/// The circled glyph itself, split out of `DoorRowLabel` so the
+/// icon-only camera button beside the describe field
+/// (`EntryDoorsSection`, 2026-08-29) draws the SAME measured circle a
+/// labeled door row does — one treatment, two callers, never two copies
+/// to drift apart.
+struct DoorCircleGlyph: View {
+    let systemImage: String
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.subheadline.weight(.bold))
+            .foregroundStyle(Color.riceToast)
+            // FIXED frame, not padding: a viewfinder glyph is wider
+            // than the plus, so equal padding drew a bigger circle.
+            // 35pt matches LogButton's RENDERED circle (the plus
+            // glyph is narrower than its font's full height, so its
+            // glyph+9pt padding lands at ~35, not 39 — measured).
+            .frame(width: 35, height: 35)
+            .background(.quaternary.opacity(0.5), in: .circle)
+            .overlay(
+                Circle().strokeBorder(Color.riceToast.opacity(0.5), lineWidth: 1)
+            )
     }
 }
 

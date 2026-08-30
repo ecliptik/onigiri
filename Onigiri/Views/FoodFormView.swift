@@ -116,6 +116,11 @@ struct FoodFormView: View {
     /// separate Search Database sheet is retired.
     @State private var dbQuery = ""
     @State private var dbSearchActive = false
+    /// What's typed into the entry door's "Describe food or meal" field
+    /// — independent of `dbQuery`, which searches the online database
+    /// only now that the describe field has its own home
+    /// (`EntryDoorsSection`, 2026-08-29).
+    @State private var describeQuery = ""
     @State private var onlineSearch = OnlineFoodSearch()
     @State private var isLookingUp = false
     @State private var lookupMessage: String?
@@ -261,8 +266,23 @@ struct FoodFormView: View {
                     EntryDoorsSection(
                         scanBusy: isLookingUp,
                         scanCaption: lookupMessage,
+                        describeQuery: $describeQuery,
                         onScan: { activeSheet = .scanner(notice: nil) }
                     )
+                    // The tap-to-estimate row, right under where it's
+                    // typed (2026-08-29) — it used to lead the ONLINE
+                    // results instead, keyed off `dbQuery`; that field
+                    // searches the database only now. Picking applies
+                    // the estimate to the fields below, with the
+                    // provider caption in the scan-door slot.
+                    if FoodIntelligence.isAvailable,
+                       !describeQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                        AIEstimateSection(query: describeQuery) { product in
+                            apply(product)
+                            lookupMessage = product.aiEngine?.estimateCaption
+                            describeQuery = ""
+                        }
+                    }
                 } else if let lookupMessage {
                     // Prefilled opens hide the doors (the form isn't
                     // blank), so provenance that traveled in with the
@@ -273,18 +293,6 @@ struct FoodFormView: View {
                         Text(lookupMessage)
                             .font(.footnote)
                             .foregroundStyle(.orange)
-                    }
-                }
-
-                // The tap-to-estimate row leads the inline results
-                // (AI → online here; the form has no library rows).
-                // Picking applies the estimate to the fields below,
-                // with the provider caption in the scan-door slot.
-                if isBlankNewFood, !dbQuery.trimmingCharacters(in: .whitespaces).isEmpty {
-                    AIEstimateSection(query: dbQuery) { product in
-                        apply(product)
-                        lookupMessage = product.aiEngine?.estimateCaption
-                        endDatabaseSearch()
                     }
                 }
                 // Inline OpenFoodFacts results (the shared section) —
@@ -497,9 +505,13 @@ struct FoodFormView: View {
                 // own sheets is up (scanner, portion), its fields must
                 // not inherit the select-all. The bottom search field is
                 // exempt too — selecting-all an in-progress query on
-                // refocus would surprise.
+                // refocus would surprise — and so is the describe field,
+                // matched by accessibility identifier since it carries
+                // no active-search flag of its own to gate on.
                 guard activeSheet == nil, !dbSearchActive,
-                      let field = note.object as? UITextField else { return }
+                      let field = note.object as? UITextField,
+                      field.accessibilityIdentifier != EntryDoorsSection.describeFieldAccessibilityID
+                else { return }
                 DispatchQueue.main.async { field.selectAll(nil) }
             }
             // On a background layer: two .alert modifiers chained on the

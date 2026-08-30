@@ -127,7 +127,7 @@ struct MenuImportSheet: View {
             MenuPickerFlow(
                 rows: rows,
                 suggestedSource: detectedSource,
-                completion: .logging(saving: .optional, write: log),
+                completion: .logging(saving: .optional, write: log, saveOnly: saveOnly),
                 onFinish: { _ in dismiss() })
         case .handedOff:
             // Briefly visible behind the form; never a dead end, because
@@ -159,6 +159,13 @@ struct MenuImportSheet: View {
         guard ok else { return "Couldn't log that item. Try again." }
         // After the log, and never at the cost of it.
         if request.saveToLibrary { MenuLibrarySave.insert(request, into: context) }
+        return nil
+    }
+
+    /// The library keeps the dish; nothing goes to Health. A menu is
+    /// read once, and not every dish on it is being eaten right now.
+    private func saveOnly(_ request: MenuLogRequest) async -> String? {
+        MenuLibrarySave.insert(request, into: context)
         return nil
     }
 

@@ -12,13 +12,14 @@ import OnigiriKit
 /// `MenuPickerFlow` and a receipt that differs by process is a receipt
 /// nobody can check. It began as the extension's `ShareLogSheet`.
 ///
-/// The "Also logged" section is the reason a quick confirm is acceptable
-/// at all: this sheet showed the name, the calories and the serving while
-/// `logFood` wrote sodium and five macros beside them, and a shared page
-/// logged 810,400 mg of sodium behind it — the only place that number
-/// ever appeared was the log itself (2026-08-16,
-/// `plans/PLAN-nutrition-plausibility.md`). Never trim it back to the
-/// headline figures.
+/// The "Nutrition" section (named "Also logged" until 2026-08-29, when
+/// Save stopped making that name true for every row shown here) is the
+/// reason a quick confirm is acceptable at all: this sheet showed the
+/// name, the calories and the serving while `logFood` wrote sodium and
+/// five macros beside them, and a shared page logged 810,400 mg of
+/// sodium behind it — the only place that number ever appeared was the
+/// log itself (2026-08-16, `plans/PLAN-nutrition-plausibility.md`).
+/// Never trim it back to the headline figures.
 struct LogConfirmSheet: View {
     let label: ParsedLabel
     @Binding var category: FoodCategory
@@ -32,7 +33,12 @@ struct LogConfirmSheet: View {
     /// (`QuickLogSheet`, `purpose: .logging`). So the toggle exists, and
     /// it starts OFF.
     var saveToLibrary: Binding<Bool>?
-    let logging: Bool
+    /// Which of the confirm's two actions is running, if either — `nil`
+    /// while idle. The two share this one flag because only one can ever
+    /// be in flight (both buttons disable together), and the reader only
+    /// needs to know which verb to show.
+    enum Busy { case logging, saving }
+    var busy: Busy?
     /// Why the last attempt didn't take. Shown HERE rather than as a
     /// toast: this sheet is the top of the stack, and a toast raised by
     /// the host underneath it would be invisible at the moment it
@@ -162,10 +168,14 @@ struct LogConfirmSheet: View {
                     }
                 }
             } header: {
-                Text("Also logged")
+                Text("Nutrition")
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Everything Onigiri will write to Health, for this portion.")
+                    // Not "will write to Health": Save never does, and
+                    // even Log only reaches the library when the toggle
+                    // below is on — a claim this footer can't make for
+                    // every button on the screen (2026-08-29).
+                    Text("Everything Onigiri found for this portion.")
                     // What was REMOVED has to be said too: a figure
                     // silently dropped and a figure never read look
                     // identical here, and only one of them means the
@@ -186,9 +196,9 @@ struct LogConfirmSheet: View {
                     Text("Saved foods are one tap next time. Either way this log is kept.")
                 }
             }
-            if logging {
+            if let busy {
                 Section {
-                    HStack { ProgressView(); Text("Logging…") }
+                    HStack { ProgressView(); Text(busy == .logging ? "Logging…" : "Saving…") }
                 }
             }
             if let failure {
@@ -198,6 +208,6 @@ struct LogConfirmSheet: View {
                 }
             }
         }
-        .disabled(logging)
+        .disabled(busy != nil)
     }
 }

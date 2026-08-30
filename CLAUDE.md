@@ -848,6 +848,19 @@ Each cost a debugging session.
     no second visit. Both go through `MenuLibrarySave`, which stays
     `Food`-only: give it a `Meal` fetch and it manufactures the
     dangling-reference process kill it is immune to.
+  - **The confirm's committing action is TWO buttons, Save and Log, not
+    one** (the user, 2026-08-29: "not necessarily log it"). A menu is
+    read once and not everything on it is being eaten now — Save runs
+    `MenuLibrarySave` alone, with no HealthKit write and (in the
+    extension) no `requestAuthorization`/`logFood`/widget reload, any of
+    which would misreport what actually happened. `Completion.logging`
+    carries `write` AND `saveOnly`; every host implements both. A row
+    taken by Save gets its OWN mark (`bookmark.fill`, "Saved to
+    library") — reusing the checkmark ("Already logged") would be a
+    lie about a row Health was never told about, and
+    `MenuPickProgress.Entry.kind` carries the distinction into the
+    footer note too (verb follows the LAST action; the running count
+    counts either kind as progress).
   - Present that list from ONE value (`ScanSheet.MenuListing` via
     `.sheet(item:)`), never rows-plus-a-Bool: a sheet's content closure
     is read when it presents, so a source set in the same breath as the
@@ -855,6 +868,15 @@ Each cost a debugging session.
     menu from?" about a menu that named itself — and its `.task` never
     runs again to take it back. Cost a debugging round 2026-08-23, with
     the Log sheet passing on identical code.
+  - **The source prompt must be asked from state that survives the
+    loop, not from `MenuPicker` itself.** `MenuPicker` is a fresh view
+    value every time picking resumes after a log — the `switch` in
+    `MenuPickerFlow.content` recreates it — so `source`/`askingSource`
+    living there as local `@State` reset on every remount and
+    "Where is this menu from?" reopened after each item past the first
+    (2026-08-29). `MenuPickerFlow` now owns both as `@Binding`s down
+    into `MenuPicker`, set once in `MenuPickerFlow`'s own `.task`,
+    which — unlike a child view's — runs for the life of the import.
 - A photo with no nutrition panel is NOT a dead end (2026-08-02). The cascade
   after a failed parse is: `FoodIntelligence.readFoodSign` (the OCR TEXT — a
   bakery card, shelf sign, menu board, package front NAMES the food, which no

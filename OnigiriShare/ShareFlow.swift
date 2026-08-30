@@ -109,12 +109,16 @@ struct ShareFlow: View {
             }
         case .ready:
             // `.always`: an extension has no form to save from and no
-            // second visit, so a dish it logs is kept or lost here.
+            // second visit, so a dish LOGGED here is kept unconditionally.
+            // `saveOnly` is the extension's answer to "not necessarily
+            // log it" (the user, 2026-08-29) — the one door here that has
+            // no form and no second visit still needs a way to keep a
+            // dish without claiming you ate it.
             MenuPickerFlow(
                 rows: rows,
                 suggestedSource: suggestedSource,
                 initialPick: single,
-                completion: .logging(saving: .always, write: log),
+                completion: .logging(saving: .always, write: log, saveOnly: saveOnly),
                 onFinish: onFinish)
         }
     }
@@ -305,6 +309,20 @@ struct ShareFlow: View {
             MenuLibrarySave.insert(request, into: ModelContext(container))
         }
         WidgetReloader.reloadNow(kinds: WidgetKinds.phoneLogAffected)
+        return nil
+    }
+
+    /// The library keeps the dish; Health never hears about it — no
+    /// authorisation request, no `logFood`, no widget reload, because
+    /// nothing that feeds a burn or intake number changed. Unlike `log`'s
+    /// library write, this one is the whole errand rather than a
+    /// best-effort extra, so its failure is reported rather than
+    /// swallowed.
+    private func saveOnly(_ request: MenuLogRequest) async -> String? {
+        guard let container = try? SharedStore.modelContainer() else {
+            return "Couldn't reach the food library."
+        }
+        MenuLibrarySave.insert(request, into: ModelContext(container))
         return nil
     }
 }

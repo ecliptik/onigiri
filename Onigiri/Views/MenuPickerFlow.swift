@@ -35,10 +35,16 @@ struct MenuPickerFlow: View {
 
     /// What a pick is FOR, which is not the same question in every host.
     enum Completion {
-        /// Log it here and come back for the next one. The Log sheet,
-        /// the shared-image sheet, the menu import sheet, the share
-        /// extension.
-        case logging(saving: LibrarySaving, write: (MenuLogRequest) async -> String?)
+        /// Log it here and come back for the next one, OR save it to the
+        /// library without logging and come back for the next one — a
+        /// menu is read once and not everything on it is being eaten now
+        /// (the user, 2026-08-29). The Log sheet, the shared-image sheet,
+        /// the menu import sheet, the share extension.
+        case logging(
+            saving: LibrarySaving,
+            write: (MenuLogRequest) async -> String?,
+            saveOnly: (MenuLogRequest) async -> String?
+        )
         /// Hand the first pick to the host and stop — the Add Food
         /// form's doors FILL A FORM, they do not log, and a door that
         /// starts writing to Health from inside a form nobody asked to
@@ -58,6 +64,12 @@ struct MenuPickerFlow: View {
     }
 
     @State private var phase = Phase.picking
+    /// Set once, in this view's own `.task` — which runs for the whole
+    /// import, unlike `MenuPicker`'s, which remounts every time picking
+    /// resumes after a log. Owning it here is what makes "ask once" true
+    /// (2026-08-29).
+    @State private var source = ""
+    @State private var askingSource = false
     @State private var chosen: ParsedLabel?
     /// The row `chosen` came from, so the list can mark what already
     /// went in. Nil for `initialPick`, which came from no row.
@@ -70,7 +82,10 @@ struct MenuPickerFlow: View {
     /// screen exists to remove.
     @State private var category = FoodCategory.slot(for: .now)
     @State private var saveToLibrary = false
-    @State private var logging = false
+    /// Which of the confirm's two actions is in flight, if either — this
+    /// is what disables both buttons and picks the spinner's word
+    /// (`LogConfirmSheet.Busy`).
+    @State private var busy: LogConfirmSheet.Busy?
     /// Why the last write didn't take. Shown IN the confirm — a toast
     /// would be behind the host's own sheet.
     @State private var failure: String?
@@ -87,6 +102,9 @@ struct MenuPickerFlow: View {
     private struct Logged {
         let name: String
         let rowID: Int?
+        /// Logged to Health, or saved to the library alone — the note
+        /// and the row's own mark both need to say which.
+        let kind: MenuPickProgress.Kind
     }
 
     var body: some View {
@@ -96,12 +114,18 @@ struct MenuPickerFlow: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { leadingButton }
                 if case .confirming = phase, let chosen {
-                    ToolbarItem(placement: .confirmationAction) {
+                    ToolbarItemGroup(placement: .confirmationAction) {
                         // Top-right, matching every sheet in the app,
                         // where the committing action is never a row at
                         // the bottom of a form (the user, 2026-08-16).
+                        // TWO actions, not one: a menu is read once, and
+                        // not everything on it is being eaten right now
+                        // — Save keeps the dish without telling Health
+                        // you ate it (the user, 2026-08-29).
+                        Button("Save") { commitSave(chosen) }
+                            .disabled(busy != nil)
                         Button("Log") { commit(chosen) }
-                            .disabled(logging)
+                            .disabled(busy != nil)
                     }
                 } else if case .picking = phase, !logged.isEmpty {
                     ToolbarItem(placement: .confirmationAction) {
@@ -110,6 +134,10 @@ struct MenuPickerFlow: View {
                 }
             }
             .task {
+                source = suggestedSource ?? ""
+                // Ask only when the menu didn't say. Detection is the
+                // optimisation; this prompt is the contract.
+                if suggestedSource == nil { askingSource = true }
                 if let initialPick { await choose(initialPick, rowID: nil) }
             }
     }
@@ -120,9 +148,11 @@ struct MenuPickerFlow: View {
         case .picking:
             MenuPicker(
                 rows: rows,
-                suggestedSource: suggestedSource,
-                note: MenuPickProgress.note(logged: logged.map(\.name)),
-                loggedRowIDs: Set(logged.compactMap(\.rowID))
+                note: MenuPickProgress.note(logged.map { .init(name: $0.name, kind: $0.kind) }),
+                loggedRowIDs: Set(logged.filter { $0.kind == .logged }.compactMap(\.rowID)),
+                savedRowIDs: Set(logged.filter { $0.kind == .saved }.compactMap(\.rowID)),
+                source: $source,
+                askingSource: $askingSource
             ) { picked, row in
                 Task { await choose(picked, rowID: row.id) }
             }
@@ -139,7 +169,7 @@ struct MenuPickerFlow: View {
                     category: $category,
                     quantity: $quantity,
                     saveToLibrary: savingBinding,
-                    logging: logging,
+                    busy: busy,
                     failure: failure)
             }
         }
@@ -158,15 +188,15 @@ struct MenuPickerFlow: View {
                 failure = nil
                 phase = .picking
             }
-            .disabled(logging)
+            .disabled(busy != nil)
         } else {
             Button("Cancel", role: .cancel) { onFinish(!logged.isEmpty) }
-                .disabled(logging)
+                .disabled(busy != nil)
         }
     }
 
     private var savingBinding: Binding<Bool>? {
-        guard case .logging(let saving, _) = completion, saving == .optional else { return nil }
+        guard case .logging(let saving, _, _) = completion, saving == .optional else { return nil }
         return $saveToLibrary
     }
 
@@ -208,15 +238,15 @@ struct MenuPickerFlow: View {
     // MARK: Logging
 
     private func commit(_ label: ParsedLabel) {
-        guard case .logging(let saving, let write) = completion, !logging else { return }
-        logging = true
+        guard case .logging(let saving, let write, _) = completion, busy == nil else { return }
+        busy = .logging
         Task {
             let problem = await write(MenuLogRequest(
                 label: label,
                 category: category,
                 quantity: quantity,
                 saveToLibrary: saving == .always || saveToLibrary))
-            logging = false
+            busy = nil
             guard problem == nil else {
                 failure = problem
                 return
@@ -224,7 +254,33 @@ struct MenuPickerFlow: View {
             // A single food has no list behind it, so logging it IS the
             // whole errand.
             guard !rows.isEmpty else { return onFinish(true) }
-            logged.append(Logged(name: label.name ?? "Menu item", rowID: chosenRowID))
+            logged.append(Logged(name: label.name ?? "Menu item", rowID: chosenRowID, kind: .logged))
+            chosen = nil
+            chosenRowID = nil
+            quantity = 1
+            phase = .picking
+        }
+    }
+
+    /// The library keeps the dish; Health never hears about it. Same
+    /// shape as `commit`, on purpose — the two differ only in which
+    /// closure runs and which `Kind` the row remembers.
+    private func commitSave(_ label: ParsedLabel) {
+        guard case .logging(_, _, let saveOnly) = completion, busy == nil else { return }
+        busy = .saving
+        Task {
+            let problem = await saveOnly(MenuLogRequest(
+                label: label,
+                category: category,
+                quantity: quantity,
+                saveToLibrary: true))
+            busy = nil
+            guard problem == nil else {
+                failure = problem
+                return
+            }
+            guard !rows.isEmpty else { return onFinish(true) }
+            logged.append(Logged(name: label.name ?? "Menu item", rowID: chosenRowID, kind: .saved))
             chosen = nil
             chosenRowID = nil
             quantity = 1

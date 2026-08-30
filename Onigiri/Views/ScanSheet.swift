@@ -437,7 +437,7 @@ struct ScanSheet: View {
     private var flowCompletion: MenuPickerFlow.Completion {
         switch purpose {
         case .logging:
-            .logging(saving: .optional, write: log)
+            .logging(saving: .optional, write: log, saveOnly: saveOnly)
         case .filling:
             .filling { picked in
                 listing = nil
@@ -462,6 +462,12 @@ struct ScanSheet: View {
             quantity: request.quantity)
         guard ok else { return "Couldn't log that item. Try again." }
         if request.saveToLibrary { MenuLibrarySave.insert(request, into: context) }
+        return nil
+    }
+
+    /// The library keeps the dish; nothing goes to Health.
+    private func saveOnly(_ request: MenuLogRequest) async -> String? {
+        MenuLibrarySave.insert(request, into: context)
         return nil
     }
 

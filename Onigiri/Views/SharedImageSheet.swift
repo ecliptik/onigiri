@@ -98,7 +98,7 @@ struct SharedImageSheet: View {
             MenuPickerFlow(
                 rows: menuItems,
                 suggestedSource: menuSource,
-                completion: .logging(saving: .optional, write: log),
+                completion: .logging(saving: .optional, write: log, saveOnly: saveOnly),
                 onFinish: { _ in dismiss() })
         case .checking:
             if let estimate {
@@ -145,6 +145,12 @@ struct SharedImageSheet: View {
             quantity: request.quantity)
         guard ok else { return "Couldn't log that item. Try again." }
         if request.saveToLibrary { MenuLibrarySave.insert(request, into: context) }
+        return nil
+    }
+
+    /// The library keeps the dish; nothing goes to Health.
+    private func saveOnly(_ request: MenuLogRequest) async -> String? {
+        MenuLibrarySave.insert(request, into: context)
         return nil
     }
 

@@ -17,8 +17,6 @@ import OnigiriKit
 /// auto-focus.
 struct MenuPicker: View {
     let rows: [MenuRow]
-    /// Prefilled when the document named its restaurant, which is rare.
-    let suggestedSource: String?
     /// What has already been logged from this list, when anything has
     /// (`MenuPickProgress`).
     var note: String?
@@ -27,13 +25,23 @@ struct MenuPicker: View {
     /// already add the fries" — the row can. Keyed by ID, not name: a
     /// menu section can print "Small" twice.
     var loggedRowIDs: Set<Int> = []
+    /// Rows saved to the library WITHOUT being logged — its own mark,
+    /// because "Already logged" would be a lie for a row nobody told
+    /// Health about (the user, 2026-08-29: "not necessarily log it").
+    var savedRowIDs: Set<Int> = []
+    /// Owned by `MenuPickerFlow`, not this view: this picker remounts
+    /// every time picking resumes after a log, and a local `@State`
+    /// here reset on each remount, reopening "Where is this menu from?"
+    /// after every item past the first one (the user, 2026-08-29). The
+    /// flow sets the initial value and asks once, in its own `.task`,
+    /// which — unlike this view's — runs for the life of the import.
+    @Binding var source: String
+    @Binding var askingSource: Bool
     /// The row rides along with the label because the caller cannot
     /// recover it — by then the source prefix has been applied to the
     /// name, and two rows can carry the same one.
     let onPick: (ParsedLabel, MenuRow) -> Void
 
-    @State private var source = ""
-    @State private var askingSource = false
     @State private var query = ""
 
     var body: some View {
@@ -60,7 +68,10 @@ struct MenuPicker: View {
                 Section(section.title ?? "Menu") {
                     ForEach(section.rows) { row in
                         Button { choose(row) } label: {
-                            MenuItemRow(row: row, isLogged: loggedRowIDs.contains(row.id))
+                            MenuItemRow(
+                                row: row,
+                                isLogged: loggedRowIDs.contains(row.id),
+                                isSaved: savedRowIDs.contains(row.id))
                         }
                         .buttonStyle(.plain)
                     }
@@ -72,12 +83,6 @@ struct MenuPicker: View {
             }
         }
         .searchable(text: $query, prompt: "Search \(rows.count) items")
-        .task {
-            source = suggestedSource ?? ""
-            // Ask only when the menu didn't say. Detection is the
-            // optimisation; this prompt is the contract.
-            if suggestedSource == nil { askingSource = true }
-        }
         // A dialog, not a field buried in the list: the source is asked
         // once per import and the answer prefixes every name.
         .alert("Where is this menu from?", isPresented: $askingSource) {
@@ -86,7 +91,7 @@ struct MenuPicker: View {
             Button("Use") {}
             Button("Skip", role: .cancel) { source = "" }
         } message: {
-            Text("Onigiri couldn't find a name here. What you enter goes after each item, so \"Greek Chicken\" saves as \"Greek Chicken (CAVA)\".")
+            Text("What you enter goes after each item, so \"Greek Chicken\" saves as \"Greek Chicken (CAVA)\".")
         }
     }
 
@@ -134,6 +139,11 @@ struct MenuPicker: View {
 private struct MenuItemRow: View {
     let row: MenuRow
     let isLogged: Bool
+    /// Saved to the library, never logged. Mutually exclusive with
+    /// `isLogged` in practice (a logged row has no reason to be re-saved),
+    /// but logged wins if both are somehow true — a real log outranks a
+    /// library save.
+    let isSaved: Bool
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
@@ -152,11 +162,15 @@ private struct MenuItemRow: View {
                     .monospacedDigit()
             }
             // A mark, not a disabled row: ordering two of something is a
-            // real order, so a logged row stays tappable.
+            // real order, so a marked row stays tappable.
             if isLogged {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("Already logged")
+            } else if isSaved {
+                Image(systemName: "bookmark.fill")
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Saved to library")
             }
         }
         .contentShape(.rect)

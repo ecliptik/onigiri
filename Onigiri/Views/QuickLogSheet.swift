@@ -263,25 +263,47 @@ struct QuickLogSheet: View {
                     EntryDoorsSection(
                         scanBusy: isLookingUpBarcode,
                         describeQuery: $describeQuery,
-                        onScan: { activeSheet = .scanner(notice: nil) }
+                        onScan: { activeSheet = .scanner(notice: nil) },
+                        onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } }
                     )
-                    // The describe field's own tap-to-estimate row,
-                    // right under where it's typed (2026-08-29) — it
-                    // used to lead the SEARCH results instead, keyed off
-                    // `searchText`; that field is library/online search
-                    // only now. An estimate opens the FULL food form,
-                    // editable down to every value — the same route
-                    // unknown barcodes and labels take from here (the
-                    // portion shortcut made estimates the odd one out;
-                    // superseded 2026-07-20, the user). Its Log action
-                    // writes to the browsed day and returns here.
-                    if FoodIntelligence.isAvailable,
-                       !describeQuery.trimmingCharacters(in: .whitespaces).isEmpty {
-                        AIEstimateSection(query: describeQuery) { product in
-                            describeQuery = ""
-                            activeSheet = .form(ProductPrefill(
-                                product: product,
-                                provenance: product.aiEngine?.estimateCaption))
+                    // The describe field's own results, right under
+                    // where it's typed (2026-08-29) — it used to lead
+                    // the SEARCH results instead, keyed off `searchText`;
+                    // that field is local library search only now. AI →
+                    // online, the same order the field's own doc comment
+                    // and the rest of the app already use.
+                    if !describeQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                        // An estimate opens the FULL food form, editable
+                        // down to every value — the same route unknown
+                        // barcodes and labels take from here (the
+                        // portion shortcut made estimates the odd one
+                        // out; superseded 2026-07-20, the user). Its Log
+                        // action writes to the browsed day and returns
+                        // here.
+                        if FoodIntelligence.isAvailable {
+                            AIEstimateSection(query: describeQuery) { product in
+                                describeQuery = ""
+                                activeSheet = .form(ProductPrefill(
+                                    product: product,
+                                    provenance: product.aiEngine?.estimateCaption))
+                            }
+                        }
+                        // Moved from the bottom search field (2026-08-29)
+                        // — saved items rank in the LOCAL search above;
+                        // this is for a one-off food logged without
+                        // saving it, or a barcode-free product the
+                        // library doesn't have yet.
+                        if SharedStore.onlineLookups {
+                            OnlineResultsSection(query: describeQuery, search: onlineSearch, onPick: { product in
+                                describeQuery = ""
+                                route(product)
+                            }, onAddManually: { name in
+                                describeQuery = ""
+                                activeSheet = .form(ProductPrefill(product: ScannedProduct(
+                                    barcode: "", name: name, kcal: nil, sodiumMg: nil,
+                                    servingDescription: "", nutrients: NutrientValues()
+                                )))
+                            })
                         }
                     }
                 }
@@ -390,19 +412,6 @@ struct QuickLogSheet: View {
                         }
                     }
                 }
-
-                // Saved items rank first; the online database follows so a
-                // one-off food can be logged without saving it.
-                if SharedStore.onlineLookups, searching {
-                    OnlineResultsSection(query: searchText, search: onlineSearch, onPick: { product in
-                        route(product)
-                    }, onAddManually: { name in
-                        activeSheet = .form(ProductPrefill(product: ScannedProduct(
-                            barcode: "", name: name, kcal: nil, sodiumMg: nil,
-                            servingDescription: "", nutrients: NutrientValues()
-                        )))
-                    })
-                }
             }
             .compactSections()
             .riceCanvas()
@@ -428,20 +437,15 @@ struct QuickLogSheet: View {
             // The STANDARD system search field (Micheal: as close to
             // Apple's as possible) — the barcode scanner therefore lives
             // in the top toolbar, since the system field can't host an
-            // accessory button.
+            // accessory button. LOCAL library search only now — the
+            // online database moved to the describe field above
+            // (2026-08-29), so the prompt dropped "and More" along with
+            // it; nothing here reaches OpenFoodFacts/USDA any more.
             .searchable(
                 text: $searchText,
                 isPresented: $searchPresented,
-                prompt: "Foods, Meals, and More"
+                prompt: "Foods and Meals"
             )
-            .onSubmit(of: .search) {
-                Task { await onlineSearch.search(searchText) }
-            }
-            .onChange(of: searchText) { _, text in
-                if text.trimmingCharacters(in: .whitespaces).isEmpty {
-                    onlineSearch.clear()
-                }
-            }
             .toolbar {
                 // Cancel + Done, like every other sheet in the app (the
                 // user, 2026-07-19 — this was the ONE sheet without a
@@ -636,13 +640,21 @@ struct QuickLogSheet: View {
                 }
             } else if !searchText.isEmpty {
                 // Compact on purpose, NOT ContentUnavailableView: its
-                // full-height layout shoved the Online section's search
-                // button down under the bottom search bar.
+                // full-height layout shoved the Add Food button down
+                // under the bottom search bar.
+                //
+                // This is LOCAL search only now — the online database
+                // moved to the describe field (2026-08-29), a different
+                // control entirely, not "below" this state any more. So
+                // "Add Food" is unconditional here (it used to hide
+                // behind the online section's own dead-end handling);
+                // the copy still varies on whether online is worth
+                // pointing at.
                 VStack(spacing: 4) {
                     Text("No matches")
                         .font(.headline)
                     Text(SharedStore.onlineLookups
-                        ? "Try different words, or search online below."
+                        ? "Try different words, or describe it above to search online."
                         : "Try different words, or add it as a new food.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -650,19 +662,15 @@ struct QuickLogSheet: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
-                // The privacy-default install (lookups off) must not
-                // dead-end here — same fix as Foods (2026-07-20 audit).
-                if !SharedStore.onlineLookups {
-                    Button {
-                        activeSheet = .form(ProductPrefill(product: ScannedProduct(
-                            barcode: "",
-                            name: searchText.trimmingCharacters(in: .whitespaces),
-                            kcal: nil, sodiumMg: nil,
-                            servingDescription: "", nutrients: NutrientValues()
-                        )))
-                    } label: {
-                        Label("Add Food", systemImage: "plus")
-                    }
+                Button {
+                    activeSheet = .form(ProductPrefill(product: ScannedProduct(
+                        barcode: "",
+                        name: searchText.trimmingCharacters(in: .whitespaces),
+                        kcal: nil, sodiumMg: nil,
+                        servingDescription: "", nutrients: NutrientValues()
+                    )))
+                } label: {
+                    Label("Add Food", systemImage: "plus")
                 }
             } else if kind == .favorites {
                 Text("No favorites yet — swipe right on a food or meal to star it.")

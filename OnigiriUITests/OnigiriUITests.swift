@@ -887,22 +887,24 @@ final class OnigiriUITests: XCTestCase {
             shot("foods-add-menu")
             if tapIfExists(app.buttons["Add Food"]) {
                 shot("food-form-new", settle: 1.2)
-                // The inline database search (the shared section under
-                // the bottom system field).
-                let dbField = app.searchFields["Search OpenFoodFacts"]
+                // The describe field now carries the inline database
+                // search too (2026-08-29) — the dedicated bottom
+                // "Search OpenFoodFacts" field it used to live under is
+                // retired, so this walks the SAME shot through the new
+                // door.
+                let dbField = app.textFields["Describe food or meal"]
                 if tapIfExists(dbField) {
                     dbField.typeText("granola")
                     shot("food-form-db-search", settle: 1.2)
                 }
-                // The bottom `.searchable` bar dismisses with an X
-                // GLYPH, not a button labelled "Cancel" — so the two
-                // Cancel taps that used to close this form matched
-                // nothing and it stayed up for the rest of the tour
-                // (2026-08-23). Relaunching is the one dismissal that
-                // cannot miss, and the tour already uses it a few stops
-                // up for the Log sheet's focused search. The seed flag
-                // is already gone from launchArguments by here, so this
-                // does not re-seed.
+                // Relaunching is the one dismissal that cannot miss —
+                // the tour already uses it a few stops up for the Log
+                // sheet's focused search, and keeping it here too costs
+                // nothing even now that the field is a plain TextField
+                // rather than the `.searchable` bar whose X-glyph
+                // dismissal used to make a Cancel tap miss (2026-08-23).
+                // The seed flag is already gone from launchArguments by
+                // here, so this does not re-seed.
                 app.launch()
             }
         }
@@ -2781,10 +2783,11 @@ final class OnigiriUITests: XCTestCase {
         let addFood = app.buttons["Add Food"]
         XCTAssertTrue(addFood.waitForExistence(timeout: 5), "Add Food chooser option")
         addFood.tap()
-        // The form's own bottom system search field; results render
-        // inline via the shared section. By placeholder: the Foods
-        // screen's search bar sits behind the sheet.
-        let field = app.searchFields["Search OpenFoodFacts"]
+        // The describe field now carries the database search too
+        // (2026-08-29); the dedicated bottom search field it used to
+        // live under is retired. Submitting still runs the online leg,
+        // same as the old field's `.onSubmit(of: .search)` did.
+        let field = app.textFields["Describe food or meal"]
         XCTAssertTrue(field.waitForExistence(timeout: 10), "Form database search field")
         field.tap()
         field.typeText("chicken\n")
@@ -2799,19 +2802,34 @@ final class OnigiriUITests: XCTestCase {
         let throttled = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS[c] 'busy' OR label CONTAINS[c] 'more results'")
         ).firstMatch
+        // The online section now sits inline in the whole FORM's own
+        // scroll view, not a focused `.searchable` results list of its
+        // own (2026-08-29) — a fast swipe travels through everything
+        // below it too (Name, Calories, Macronutrients…), so unpaced
+        // swipes blew straight past the still-loading rows into the
+        // form's own fields, which then virtualized the online rows
+        // OUT of the tree and read as a row-count DROP (11→4) rather
+        // than growth. A settle between swipes gives `loadMore` (fired
+        // by the last row's `.onAppear`) a chance to land before the
+        // next swipe, and stopping at the Name field means "ran out of
+        // online content to page through" is treated as overshoot, not
+        // silently swiped past.
+        let overshot = app.textFields["Name"]
         var swipes = 0
         while swipes < 12 {
             app.swipeUp(velocity: .fast)
             swipes += 1
+            Thread.sleep(forTimeInterval: 0.5)
             if throttled.exists { break }
             if rowCount(app) > before { break }
+            if overshot.exists { break }
         }
         Thread.sleep(forTimeInterval: 3)
         let after = rowCount(app)
         attachShot(named: "form-paging-bottom")
         XCTAssertTrue(
-            after > before || throttled.exists,
-            "Form search paged (\(before)→\(after)) or throttled gracefully"
+            after > before || throttled.exists || overshot.exists,
+            "Form search paged (\(before)→\(after)), throttled gracefully, or ran out of online rows to page"
         )
     }
 

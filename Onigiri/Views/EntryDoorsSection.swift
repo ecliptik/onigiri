@@ -26,10 +26,20 @@ import OnigiriKit
 /// the row allows, so it no longer needs to punch above its actual
 /// weight to be seen inside a shared card that outsized it either way.
 ///
-/// **AI off**: the camera button falls back to the full labeled row
+/// **The field also drives online lookups now** (2026-08-29): typing
+/// shows the AI estimate row AND `OnlineResultsSection` (OpenFoodFacts /
+/// USDA) together, in the AI → online order the rest of the app already
+/// uses. Both are tap-to-run, never per-keystroke — `TapToEstimateRow`
+/// and `OnlineResultsSection`'s own "Search…" button — so combining them
+/// under one field costs nothing extra. This is what makes the field's
+/// gating below `isAvailable || onlineLookups` rather than `isAvailable`
+/// alone: online lookups don't need AI, and hiding the field whenever AI
+/// is off would strand them with no way to search.
+///
+/// **Neither on**: the camera button falls back to the full labeled row
 /// (`ScanRowLabel`, "Scan Barcode, Label, or Menu") and the describe
-/// field is hidden entirely — nothing behind it works without AI, and a
-/// field with nowhere to send its text is a dead end, not a door.
+/// field is hidden entirely — nothing behind it works, and a field with
+/// nowhere to send its text is a dead end, not a door.
 ///
 /// The camera button carries the SAME accessibility label the row used
 /// to show as its visible title ("Scan Barcode, Label, Menu, or Food"),
@@ -46,6 +56,16 @@ struct EntryDoorsSection: View {
     /// drive its `AIEstimateSection` from it and clear it after a pick.
     @Binding var describeQuery: String
     let onScan: () -> Void
+    /// Keyboard-submit convenience for the online leg only — matches
+    /// what the retired bottom `.searchable` field did on
+    /// `.onSubmit(of: .search)`. AI stays tap-only (its own button in
+    /// `TapToEstimateRow`'s idle phase, one inference per tap on
+    /// purpose); typing a description and hitting Return has never
+    /// needed to also run inference to feel complete, but online search
+    /// did offer a "just search" fast path before. `nil` = no
+    /// submit-triggered search — hosts with online lookups off can skip
+    /// wiring it.
+    var onDescribeSubmit: (() -> Void)?
 
     /// Matched by the "select all on focus" notification handler in
     /// `FoodFormView` — an in-progress description must not be
@@ -56,9 +76,16 @@ struct EntryDoorsSection: View {
     /// back.
     static let describeFieldAccessibilityID = "entryDoorsDescribeField"
 
+    /// Whether the describe field has anything to drive — AI, online
+    /// lookups, or both. `false` only when neither is on, which is the
+    /// one case the field would be a dead end.
+    private var describeFieldAvailable: Bool {
+        FoodIntelligence.isAvailable || SharedStore.onlineLookups
+    }
+
     var body: some View {
         Section {
-            if FoodIntelligence.isAvailable {
+            if describeFieldAvailable {
                 HStack(spacing: 14) {
                     Button(action: onScan) {
                         // 44pt — LogButton's own frame, exactly, so this
@@ -74,16 +101,29 @@ struct EntryDoorsSection: View {
                     .buttonStyle(.plain)
                     .disabled(scanBusy)
                     .accessibilityLabel("Scan Barcode, Label, Menu, or Food")
-                    TextField("Describe food or meal", text: $describeQuery)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        // The SAME fill `DoorCircleGlyph`'s circle uses —
-                        // one "control chip" language for both, so they
-                        // read as siblings rather than a button floating
-                        // inside a field's own row.
-                        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .accessibilityLabel("Describe food or meal")
-                        .accessibilityIdentifier(Self.describeFieldAccessibilityID)
+                    HStack(spacing: 6) {
+                        // AI ONLY, not "online lookups can search too" —
+                        // the sparkle is a promise about what's behind
+                        // the field, and a plain database search isn't
+                        // AI (the user, 2026-08-29: "a sparkle... if AI
+                        // is enabled").
+                        if FoodIntelligence.isAvailable {
+                            Image(systemName: "sparkles")
+                                .foregroundStyle(Color.riceToast)
+                                .font(.callout)
+                        }
+                        TextField("Describe food or meal", text: $describeQuery)
+                            .accessibilityLabel("Describe food or meal")
+                            .accessibilityIdentifier(Self.describeFieldAccessibilityID)
+                            .onSubmit { onDescribeSubmit?() }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    // The SAME fill `DoorCircleGlyph`'s circle uses —
+                    // one "control chip" language for both, so they
+                    // read as siblings rather than a button floating
+                    // inside a field's own row.
+                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
             } else {
                 Button(action: onScan) {

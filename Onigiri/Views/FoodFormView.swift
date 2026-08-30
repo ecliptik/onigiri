@@ -24,15 +24,6 @@ struct FoodFormView: View {
         case logging
     }
 
-    /// The field names what it queries — one database or both.
-    static var searchPrompt: String {
-        switch SharedStore.textSearchMode {
-        case .openFoodFacts: "Search OpenFoodFacts"
-        case .fdc: "Search USDA"
-        case .both: "Search online databases"
-        }
-    }
-
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
 
@@ -111,15 +102,12 @@ struct FoodFormView: View {
     }
 
     @State private var activeSheet: ActiveSheet?
-    /// The in-form OpenFoodFacts search: the STANDARD system field
-    /// (bottom-placed), results inline via the shared section — the
-    /// separate Search Database sheet is retired.
-    @State private var dbQuery = ""
-    @State private var dbSearchActive = false
-    /// What's typed into the entry door's "Describe food or meal" field
-    /// — independent of `dbQuery`, which searches the online database
-    /// only now that the describe field has its own home
-    /// (`EntryDoorsSection`, 2026-08-29).
+    /// What's typed into the entry door's "Describe food or meal" field —
+    /// drives BOTH `AIEstimateSection` and `OnlineResultsSection` now
+    /// (2026-08-29). The bottom `.searchable` field this form used to
+    /// carry for OpenFoodFacts/USDA is retired along with it — this form
+    /// has no local library to search, so once online moved here there
+    /// was nothing left for a second field to do.
     @State private var describeQuery = ""
     @State private var onlineSearch = OnlineFoodSearch()
     @State private var isLookingUp = false
@@ -200,7 +188,7 @@ struct FoodFormView: View {
 
     var body: some View {
         NavigationStack {
-            searchableForm
+            formContent
                 .navigationTitle(navigationTitleText)
                 .navigationBarTitleDisplayMode(.inline)
                 // A heading with no visual weight. NOT `.hidden()` —
@@ -220,37 +208,12 @@ struct FoodFormView: View {
         .toastHost()
     }
 
-    /// The scanner and online search exist to FILL a blank form. A form
-    /// opened FROM a search result (or editing a saved food) offering
-    /// another search was a loop — they render only for a blank new
-    /// food, the Foods-screen add path.
+    /// The scanner, describe field and online search exist to FILL a
+    /// blank form. A form opened FROM a search result (or editing a
+    /// saved food) offering another search was a loop — they render
+    /// only for a blank new food, the Foods-screen add path.
     private var isBlankNewFood: Bool {
         food == nil && prefill == nil && createdFood == nil
-    }
-
-    @ViewBuilder
-    private var searchableForm: some View {
-        if isBlankNewFood {
-            formContent
-                // The STANDARD system search field, bottom-placed like
-                // the Log sheet's — the barcode scanner sits in the top
-                // section (the system field can't host it).
-                .searchable(
-                    text: $dbQuery,
-                    isPresented: $dbSearchActive,
-                    prompt: Self.searchPrompt
-                )
-                .onSubmit(of: .search) {
-                    Task { await onlineSearch.search(dbQuery) }
-                }
-                .onChange(of: dbQuery) { _, text in
-                    if text.trimmingCharacters(in: .whitespaces).isEmpty {
-                        onlineSearch.clear()
-                    }
-                }
-        } else {
-            formContent
-        }
     }
 
     private var formContent: some View {
@@ -267,20 +230,36 @@ struct FoodFormView: View {
                         scanBusy: isLookingUp,
                         scanCaption: lookupMessage,
                         describeQuery: $describeQuery,
-                        onScan: { activeSheet = .scanner(notice: nil) }
+                        onScan: { activeSheet = .scanner(notice: nil) },
+                        onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } }
                     )
-                    // The tap-to-estimate row, right under where it's
-                    // typed (2026-08-29) — it used to lead the ONLINE
-                    // results instead, keyed off `dbQuery`; that field
-                    // searches the database only now. Picking applies
-                    // the estimate to the fields below, with the
-                    // provider caption in the scan-door slot.
-                    if FoodIntelligence.isAvailable,
-                       !describeQuery.trimmingCharacters(in: .whitespaces).isEmpty {
-                        AIEstimateSection(query: describeQuery) { product in
-                            apply(product)
-                            lookupMessage = product.aiEngine?.estimateCaption
-                            describeQuery = ""
+                    // The describe field's own results, right under
+                    // where it's typed (2026-08-29) — AI → online, the
+                    // order the field's own doc comment and the rest of
+                    // the app already use. Picking either applies the
+                    // catch to the fields below, with the provenance in
+                    // the scan-door caption slot.
+                    if !describeQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                        if FoodIntelligence.isAvailable {
+                            AIEstimateSection(query: describeQuery) { product in
+                                apply(product)
+                                lookupMessage = product.aiEngine?.estimateCaption
+                                describeQuery = ""
+                            }
+                        }
+                        // Moved from the retired bottom search field
+                        // (2026-08-29) — same section, same behavior,
+                        // just driven by the describe field now.
+                        if SharedStore.onlineLookups {
+                            OnlineResultsSection(query: describeQuery, search: onlineSearch, onPick: { product in
+                                apply(product)
+                                describeQuery = ""
+                                onlineSearch.clear()
+                            }, onAddManually: { pickedName in
+                                name = pickedName
+                                describeQuery = ""
+                                onlineSearch.clear()
+                            })
                         }
                     }
                 } else if let lookupMessage {
@@ -294,18 +273,6 @@ struct FoodFormView: View {
                             .font(.footnote)
                             .foregroundStyle(.orange)
                     }
-                }
-                // Inline OpenFoodFacts results (the shared section) —
-                // picking one prefills the fields below.
-                if isBlankNewFood, SharedStore.onlineLookups,
-                   !dbQuery.trimmingCharacters(in: .whitespaces).isEmpty {
-                    OnlineResultsSection(query: dbQuery, search: onlineSearch, onPick: { product in
-                        apply(product)
-                        endDatabaseSearch()
-                    }, onAddManually: { pickedName in
-                        name = pickedName
-                        endDatabaseSearch()
-                    })
                 }
 
                 Section {
@@ -503,12 +470,14 @@ struct FoodFormView: View {
             )) { note in
                 // The notification is app-wide: while one of this form's
                 // own sheets is up (scanner, portion), its fields must
-                // not inherit the select-all. The bottom search field is
+                // not inherit the select-all. The describe field is
                 // exempt too — selecting-all an in-progress query on
-                // refocus would surprise — and so is the describe field,
-                // matched by accessibility identifier since it carries
-                // no active-search flag of its own to gate on.
-                guard activeSheet == nil, !dbSearchActive,
+                // refocus would surprise — matched by accessibility
+                // identifier since it carries no active-search flag of
+                // its own to gate on (the bottom search field this form
+                // used to carry, and its own exemption, retired
+                // 2026-08-29 along with it).
+                guard activeSheet == nil,
                       let field = note.object as? UITextField,
                       field.accessibilityIdentifier != EntryDoorsSection.describeFieldAccessibilityID
                 else { return }
@@ -598,12 +567,6 @@ struct FoodFormView: View {
         return "Source: [OpenFoodFacts](https://world.openfoodfacts.org/product/\(barcode))"
     }
 
-    /// A database pick landed in the fields — retire the search UI.
-    private func endDatabaseSearch() {
-        dbQuery = ""
-        dbSearchActive = false
-        onlineSearch.clear()
-    }
 
     /// Duplicate-food guard: fires only for NEW foods whose prefill is
     /// already in the library (Micheal's manual-entry-then-scan case).
@@ -871,12 +834,14 @@ struct FoodFormView: View {
     private func save() {
         // The figures are committed; a published-values offer arriving
         // now has nothing left to offer against. Cancelled HERE and at
-        // Cancel rather than in an `.onDisappear` — this form is
-        // `.searchable`, and that modifier's transient teardown is what
-        // turned two sibling cancels into silent dropped work (audit,
-        // 2026-08-17). The cost of the paths not covered is one bounded
-        // lookup writing into @State that SwiftUI discards. The online
-        // search's tasks ride the same rule.
+        // Cancel rather than in an `.onDisappear` — this form USED TO be
+        // `.searchable` (retired 2026-08-29, online search moved to the
+        // describe field), and that modifier's transient teardown is
+        // what turned two sibling cancels into silent dropped work
+        // (audit, 2026-08-17) — explicit cancellation at defined points
+        // stays the rule regardless. The cost of the paths not covered
+        // is one bounded lookup writing into @State that SwiftUI
+        // discards. The online search's tasks ride the same rule.
         offerTask?.cancel()
         onlineSearch.clear()
         persist()

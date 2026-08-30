@@ -834,6 +834,56 @@ Each cost a debugging session.
     missing from Meals"). Meals still can't be BUILT from here (that stays
     in the Food Library, per the scope's own empty-state copy); the door
     just logs an individual food same as anywhere else.
+  - **The describe field carries a sparkle AND the online database now**
+    (2026-08-29, the user: "add a sparkle... if AI is enabled. Can we
+    also add in the Search OpenFoodFacts & USDA in the describe food or
+    meal?"). The sparkle sits INSIDE the field's own chip, leading the
+    typed text, and is gated on `FoodIntelligence.isAvailable` alone —
+    never on `onlineLookups` too, because it is a promise about what's
+    behind the field and a plain database search isn't AI. Typing now
+    surfaces `AIEstimateSection` AND `OnlineResultsSection` together,
+    AI → online order, both still tap-to-run (never per-keystroke) so
+    combining them costs nothing.
+    - **`EntryDoorsSection.describeFieldAvailable` is `isAvailable ||
+      onlineLookups`, not `isAvailable` alone.** Online lookups don't
+      need AI; gating the field on AI alone would strand them with
+      no way to search whenever AI is off. Only "neither is on" falls
+      back to the full labeled row.
+    - **The bottom `.searchable` field is LOCAL LIBRARY SEARCH ONLY
+      now, on both hosts** — QuickLogSheet's prompt dropped "and More"
+      (now "Foods and Meals"); FoodFormView's bottom field is RETIRED
+      entirely (`searchPrompt`, `dbQuery`, `dbSearchActive`,
+      `endDatabaseSearch` all removed) since that form has no local
+      library to search and, once online moved to the describe field,
+      nothing was left for a second field to do. The FOODS TAB's own
+      search field (`FoodsView.swift`) is UNTOUCHED and still reads
+      "Foods, Meals, and More" with its own merged AI+online+local
+      wiring — it has no `EntryDoorsSection`/describe field to move
+      those into (removed from that screen 2026-08-02), so it was
+      deliberately left alone rather than silently drifting from the
+      other two. `OnigiriUITests.testFoodsSearchAfterSave` exercises
+      it specifically and still expects the OLD prompt — don't "fix"
+      that string to match the other two hosts.
+    - **A keyboard-submit convenience survives the move**:
+      `EntryDoorsSection.onDescribeSubmit` fires only the ONLINE leg
+      (`onlineSearch.search(describeQuery)`) on Return, matching what
+      the retired bottom field's `.onSubmit(of: .search)` did. AI
+      stays tap-only, unchanged — its own button in `TapToEstimateRow`,
+      one inference per tap. `testFormSearchPaging` depends on this:
+      it submits with `"\n"` and needs a real page of online rows.
+    - **`testFormSearchPaging`'s swipe-to-paginate loop had to change,
+      not just its field lookup.** The online section used to live in
+      a FOCUSED `.searchable` results list; now it's inline in the
+      whole form's own scroll view, so a fast swipe travels through
+      everything below it too (Name, Calories, Macronutrients…).
+      Unpaced swipes blew straight past the still-loading rows into
+      the form fields, which then virtualized the online rows OUT of
+      the accessibility tree and read as a row-count DROP rather than
+      growth. Fixed with a settle between swipes (lets `loadMore` land
+      before the next one) and an explicit overshoot check (the "Name"
+      field appearing means "ran out of online rows to page through
+      here," not a bug) — both are legitimate passing outcomes now,
+      alongside real growth and the pre-existing throttle case.
 - OpenFoodFacts: the search index has NO nutrition fields — search rows lazily
   fetch the full product per barcode to show kcal/serving.
 - Text search can route to USDA FoodData Central instead (Settings → Online

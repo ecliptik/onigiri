@@ -27,6 +27,7 @@ struct TodayView: View {
     @AppStorage(SharedStore.sodiumLimitKey, store: SharedStore.defaults) private var sodiumLimitMg = 2300.0
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "remaining"
     @AppStorage(SharedStore.progressGaugesKey, store: SharedStore.defaults) private var progressGauges = false
+    @AppStorage(SharedStore.showDailyGoalCardKey, store: SharedStore.defaults) private var showDailyGoalCard = true
     // The two tracked-metric slots; @AppStorage so a Settings change
     // re-renders the row (SharedStore reads alone wouldn't).
     @AppStorage(SharedStore.trackedMetric1Key, store: SharedStore.defaults) private var trackedMetric1 = "sodium"
@@ -493,8 +494,12 @@ struct TodayView: View {
         // the headline, which it must never displace.
         goalReachedCard
         // Pure display: its numbers are on its face, and the
-        // day summary already has its one door ("Details").
-        goalCard
+        // day summary already has its one door ("Details"). Hidden
+        // entirely (card AND the no-goal fallback text alike) when the
+        // setting is off — Settings → Appearance, on by default.
+        if showDailyGoalCard {
+            goalCard
+        }
         if energyStatsStyle == "cards" {
             meterGrid
         }

@@ -850,20 +850,44 @@ Each cost a debugging session.
       no way to search whenever AI is off. Only "neither is on" falls
       back to the full labeled row.
     - **The bottom `.searchable` field is LOCAL LIBRARY SEARCH ONLY
-      now, on both hosts** — QuickLogSheet's prompt dropped "and More"
+      now, everywhere** — QuickLogSheet's prompt dropped "and More"
       (now "Foods and Meals"); FoodFormView's bottom field is RETIRED
       entirely (`searchPrompt`, `dbQuery`, `dbSearchActive`,
       `endDatabaseSearch` all removed) since that form has no local
       library to search and, once online moved to the describe field,
-      nothing was left for a second field to do. The FOODS TAB's own
-      search field (`FoodsView.swift`) is UNTOUCHED and still reads
-      "Foods, Meals, and More" with its own merged AI+online+local
-      wiring — it has no `EntryDoorsSection`/describe field to move
-      those into (removed from that screen 2026-08-02), so it was
-      deliberately left alone rather than silently drifting from the
-      other two. `OnigiriUITests.testFoodsSearchAfterSave` exercises
-      it specifically and still expects the OLD prompt — don't "fix"
-      that string to match the other two hosts.
+      nothing was left for a second field to do.
+    - **The FOODS TAB's own search field followed, one day later**
+      (2026-08-30, the user: "Update the Foods tab search field so it
+      only searches added/saved foods and meals"). It carried the SAME
+      merged AI+online+local pattern the other two hosts had before
+      this whole redesign, independently — it isn't `EntryDoorsSection`
+      and never routed through it, so the 2026-08-29 changes above
+      genuinely didn't reach it and it briefly WAS the one host still
+      un-migrated (documented as deliberate the same day; that note
+      was wrong within 24 hours — don't trust "deliberately left alone"
+      notes here without checking the date against the one you're
+      reading). `AIEstimateSection`/`OnlineResultsSection`/`onlineSearch`
+      are gone from `FoodsView.swift` entirely — no describe field to
+      move them TO, since Foods has none (removed 2026-08-02) and
+      doesn't get one now either. Add Food (`+`) is where
+      manual/photo/AI/online all still live; the search field asks a
+      narrower question, what's already in the library, and its "No
+      matches" empty state points at Add Food unconditionally rather
+      than an online section that no longer exists here. Prompt:
+      "Foods and Meals", matching the other two.
+    - **`testAddFoodFromEmptySearch` had a pre-existing, unrelated bug,
+      found while touching this same code path** (2026-08-30):
+      `app.textFields["zzqxvbnfood"]` looked up the prefilled Name
+      field BY VALUE via a bracket subscript, which only matches
+      identifier/label — and the field carries an explicit
+      `.accessibilityLabel("Name")`, so it always missed (the exact
+      trap `testLogWithoutSaving`'s own comment already named, two
+      tests down, which is how it was spotted). Fixed with a `value ==`
+      predicate, the same pattern `fieldWithValue` already uses
+      elsewhere in this file. Unrelated to the search changes — a
+      pre-existing bug this file's own tests had never caught it in,
+      since the test is opt-in (`ADD_FROM_SEARCH=1`) and never ran in
+      a normal pass.
     - **A keyboard-submit convenience survives the move**:
       `EntryDoorsSection.onDescribeSubmit` fires only the ONLINE leg
       (`onlineSearch.search(describeQuery)`) on Return, matching what

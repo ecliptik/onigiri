@@ -297,6 +297,9 @@ public enum SharedStore {
     public static let sodiumLimitKey = "sodiumLimitMg"
     public static let balanceStyleKey = "balanceStyle"
     public static let progressGaugesKey = "progressGauges"
+    /// Today's Daily Goal card — on by default; unrelated to
+    /// `showSodiumKey`/`showWaterKey` below, which are vestigial.
+    public static let showDailyGoalCardKey = "showDailyGoalCard"
     public static let showSodiumKey = "showSodium"
     public static let showWaterKey = "showWater"
     public static let remindMealsKey = "remindMeals"

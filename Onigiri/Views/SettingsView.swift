@@ -925,6 +925,7 @@ private struct AppearanceSettingsScreen: View {
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "remaining"
     @AppStorage(SharedStore.energyStatsStyleKey, store: SharedStore.defaults) private var energyStatsStyle = "cards"
     @AppStorage(SharedStore.progressGaugesKey, store: SharedStore.defaults) private var progressGauges = false
+    @AppStorage(SharedStore.showDailyGoalCardKey, store: SharedStore.defaults) private var showDailyGoalCard = true
     // Raw scope name, matching FoodsView.Scope's rawValues.
     @AppStorage(SharedStore.foodsDefaultScopeKey, store: SharedStore.defaults)
     private var foodsDefaultScope = "Foods"
@@ -1007,6 +1008,10 @@ private struct AppearanceSettingsScreen: View {
                     Text("Compact").tag("compact")
                 }
                 Toggle("Progress gauges", isOn: $progressGauges)
+                // On by default — hides the whole door to Goal (the
+                // card and its no-goal fallback text alike), not just
+                // the numbers on it.
+                Toggle("Daily Goal card", isOn: $showDailyGoalCard)
                 // Which scope the Foods tab opens on. Favorites led from
                 // 2026-07-14; the user asked for Foods on 2026-08-05 —
                 // a setting rather than a third hardcoded reversal.

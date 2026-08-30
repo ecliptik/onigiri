@@ -1612,7 +1612,7 @@ final class OnigiriUITests: XCTestCase {
         // The form dismissed back to Foods — now the search must still
         // take a tap. Diagnostic matrix: single tap, settle+retap, so
         // the failure mode (dead vs transient) is visible in the log.
-        let search = app.searchFields["Foods, Meals, and More"].firstMatch
+        let search = app.searchFields["Foods and Meals"].firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5), "Foods search field after save")
         Thread.sleep(forTimeInterval: 1.0)
         search.tap()
@@ -2563,7 +2563,14 @@ final class OnigiriUITests: XCTestCase {
         addFood.tap()
 
         // The new-food form opens with the query prefilled as the name.
-        let nameField = app.textFields["zzqxvbnfood"]
+        // By VALUE, not identifier: the Name field carries an explicit
+        // .accessibilityLabel("Name"), so a by-label/identifier lookup
+        // for the typed text itself always misses it (found 2026-08-30,
+        // pre-existing — the correct pattern already lives two tests
+        // down, in testLogWithoutSaving's own note on this exact trap).
+        let nameField = app.textFields.matching(
+            NSPredicate(format: "value == %@", "zzqxvbnfood")
+        ).firstMatch
         XCTAssertTrue(nameField.waitForExistence(timeout: 5), "Form prefilled with the query")
         attachShot(named: "search-add-food-form")
     }

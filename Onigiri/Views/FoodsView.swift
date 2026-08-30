@@ -106,7 +106,6 @@ struct FoodsView: View {
     @State private var pendingFoodDeletes: [Food] = []
     @State private var searchText = ""
     @State private var categoryFilter: FoodCategory?
-    @State private var onlineSearch = OnlineFoodSearch()
     @State private var showLibraryImporter = false
     /// The list order, remembered (the user liked the meal builder's
     /// sort menu). Default = Recent; the Favorites SCOPE owns the
@@ -242,18 +241,16 @@ struct FoodsView: View {
                 // Scanning a new food is one tap longer and the library
                 // leads with the library.
                 //
-                // Search leads with the tap-to-estimate row (AI →
-                // library → online). Foods is the library screen, so an
-                // estimate ADDS: the prefilled form opens for review,
-                // provenance riding along.
-                if searching {
-                    AIEstimateSection(query: searchText) { product in
-                        activeSheet = .form(ProductPrefill(
-                            product: product,
-                            provenance: product.aiEngine?.estimateCaption))
-                    }
-                }
-
+                // **This search is LOCAL ONLY** (2026-08-30, the user:
+                // "so it only searches added/saved foods and meals").
+                // The tap-to-estimate row and the online database used
+                // to lead here too, mirroring the Log sheet before its
+                // own describe field took them over — but Foods already
+                // has a door for AI/online/manual/photo one tap away
+                // (Add Food), so this field asks a narrower, truer
+                // question: what's already IN my library. A query that
+                // finds nothing here now points there instead of
+                // opening a second, competing route to the same finds.
                 if searching {
                     // Favorites → Foods → Meals, one home per row (a
                     // starred food is under Favorites and NOT again
@@ -307,25 +304,6 @@ struct FoodsView: View {
                         }
                     }
                 }
-
-                // Saved items always rank first; the online database is one
-                // more section below — a quick log/add without the food form.
-                if SharedStore.onlineLookups, searching {
-                    OnlineResultsSection(query: searchText, search: onlineSearch, onPick: { product in
-                        // Known barcodes log fast; new foods go through the
-                        // full prefilled form (Save / Save & Log).
-                        if let existing = foods.first(where: { $0.barcode == product.barcode }) {
-                            activeSheet = .portion(makePortionTarget(for: existing))
-                        } else {
-                            activeSheet = .form(ProductPrefill(product: product))
-                        }
-                    }, onAddManually: { name in
-                        activeSheet = .form(ProductPrefill(product: ScannedProduct(
-                            barcode: "", name: name, kcal: nil, sodiumMg: nil,
-                            servingDescription: "", nutrients: NutrientValues()
-                        )))
-                    })
-                }
             }
             .compactSections()
             .hardTopScrollEdge()
@@ -349,19 +327,14 @@ struct FoodsView: View {
             // invisible (screenshot-verified 2026-07-13, the second
             // drawer-desync after the old GeometryReader one). Pinning
             // the drawer skips the collapse/re-expand cycle entirely.
+            // LOCAL library search only (2026-08-30) — the prompt
+            // dropped "and More" along with the online/AI sections that
+            // word was covering for; Add Food carries those now.
             .searchable(
                 text: $searchText,
                 placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Foods, Meals, and More"
+                prompt: "Foods and Meals"
             )
-            .onSubmit(of: .search) {
-                Task { await onlineSearch.search(searchText) }
-            }
-            .onChange(of: searchText) { _, text in
-                if text.trimmingCharacters(in: .whitespaces).isEmpty {
-                    onlineSearch.clear()
-                }
-            }
             .toolbar {
                 // Filter + sort on the trailing edge, matching Today and
                 // Calendar: the leading ~20pt is iOS's back-swipe zone, which
@@ -719,36 +692,38 @@ struct FoodsView: View {
                 }
             } else if !searchText.isEmpty {
                 // Compact on purpose, NOT ContentUnavailableView (the
-                // Log sheet's lesson): its full-height layout shoves the
-                // Online section's search button under the search bar.
+                // original Log-sheet lesson, still true even with no
+                // Online section left to shove around).
+                //
+                // This search is LOCAL now (2026-08-30) — no online
+                // fallback lives here any more, so the copy and the Add
+                // Food button are UNCONDITIONAL regardless of the
+                // lookups setting; the button still opens the full
+                // form, which carries manual/photo/AI/online itself.
+                // The privacy-default install (lookups off) must not
+                // dead-end here — that was the original 2026-07-20 audit
+                // HIGH this state exists to fix, and staying
+                // unconditional keeps it fixed now that "online" isn't
+                // this screen's decision to gate on any more.
                 VStack(spacing: 4) {
                     Text("No matches")
                         .font(.headline)
-                    Text(SharedStore.onlineLookups
-                        ? "Try different words, or search online below."
-                        : "Try different words, or add it as a new food.")
+                    Text("Try different words, or add it as a new food.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
-                // The privacy-default install (lookups off) must not
-                // dead-end here: the online section below — and its Add
-                // Food row — never renders in that state, and this was
-                // the wall in the core "log something new" journey
-                // (2026-07-20 audit HIGH).
-                if !SharedStore.onlineLookups {
-                    Button {
-                        activeSheet = .form(ProductPrefill(product: ScannedProduct(
-                            barcode: "",
-                            name: searchText.trimmingCharacters(in: .whitespaces),
-                            kcal: nil, sodiumMg: nil,
-                            servingDescription: "", nutrients: NutrientValues()
-                        )))
-                    } label: {
-                        Label("Add Food", systemImage: "plus")
-                    }
+                Button {
+                    activeSheet = .form(ProductPrefill(product: ScannedProduct(
+                        barcode: "",
+                        name: searchText.trimmingCharacters(in: .whitespaces),
+                        kcal: nil, sodiumMg: nil,
+                        servingDescription: "", nutrients: NutrientValues()
+                    )))
+                } label: {
+                    Label("Add Food", systemImage: "plus")
                 }
             } else if currentScope == .meals && meals.isEmpty {
                 Text("No saved meals yet — tap + to build one from saved foods.")

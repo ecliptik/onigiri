@@ -123,6 +123,10 @@ struct PreferenceSnapshotTests {
         // That check is a diff of every `@AppStorage` key in
         // SettingsView against this array, and it lives in no test —
         // run it by hand when adding a setting.
-        #expect(keys.count == 53)
+        // Whether Today shows the Daily Goal card (2026-08-30) — defaults
+        // ON, so a reset that left an explicit OFF behind would silently
+        // keep the card hidden with nothing in a fresh Settings saying so.
+        #expect(keys.contains(SharedStore.showDailyGoalCardKey))
+        #expect(keys.count == 54)
     }
 }

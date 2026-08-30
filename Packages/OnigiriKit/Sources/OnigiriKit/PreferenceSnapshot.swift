@@ -73,7 +73,7 @@ public extension SharedStore {
         waterServingKey, waterGoalKey,
         waterIconKey, foodIconKey, rewardIconKey, mealIconKey,
         sodiumLimitKey, balanceStyleKey,
-        progressGaugesKey, showSodiumKey, showWaterKey,
+        progressGaugesKey, showDailyGoalCardKey, showSodiumKey, showWaterKey,
         remindMealsKey, remindWaterKey, remindStreakKey,
         remindMealsMinuteKey, remindStreakMinuteKey,
         remindWaterMinute1Key, remindWaterMinute2Key, remindWaterMinute3Key,

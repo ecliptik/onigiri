@@ -811,6 +811,29 @@ Each cost a debugging session.
     running it for the first time in this exercise, still unfixed because
     it never runs in a normal pass. Foods still has no scan row; fix the
     test, not the product.
+  - **The button and the field must draw their OWN chip each, and be sized
+    the SAME `44pt`/`.body.weight(.bold)` pairing `LogButton` uses** — both
+    corrections, same day. A plain `TextField` has no visible bound of its
+    own, so a shared row card read as one blob with the circle floating
+    inside it (the user: "doesn't look separate from the camera") — the
+    field now gets the SAME `.quaternary` fill the circle already used, so
+    each draws its own chip. That freed the button to grow past 44pt, which
+    then broke height parity with the Water row sitting right below it in
+    the same list (Log sheet, Favorites) — checkable at a glance since both
+    are on screen together, and the user caught it. `LogButton`'s frame is
+    what sets Water's row height, so matching it exactly is what makes the
+    two pills agree; don't grow the button past it again without also
+    checking that row.
+  - **The Log sheet's entry door now renders on ALL THREE scopes,
+    including Meals** (2026-08-29, reversing "on the Meals scope —
+    scanning adds a FOOD; meals are built from foods already added",
+    which had gated it out). Logging a food doesn't care which scope pill
+    is selected — that pill filters the LIST below, it was never a
+    constraint on what the door can write — so Favorites and Foods having
+    it while Meals didn't read as a gap, not a boundary (the user: "it's
+    missing from Meals"). Meals still can't be BUILT from here (that stays
+    in the Food Library, per the scope's own empty-state copy); the door
+    just logs an individual food same as anywhere else.
 - OpenFoodFacts: the search index has NO nutrition fields — search rows lazily
   fetch the full product per barcode to show kcal/serving.
 - Text search can route to USDA FoodData Central instead (Settings → Online

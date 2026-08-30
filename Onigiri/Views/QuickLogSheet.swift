@@ -247,10 +247,17 @@ struct QuickLogSheet: View {
                 // The scan entry, a labeled row like Foods' (the user:
                 // the toolbar icon was the odd one out once Foods grew
                 // its row — same affordance, same place, both screens).
-                // Hidden while searching so results lead, and on the
-                // Meals scope — scanning adds a FOOD; meals are built
-                // from foods already added (the user).
-                if !searching, kind != .meals {
+                // Hidden while searching so results lead. Used to hide
+                // on the Meals scope too ("scanning adds a FOOD; meals
+                // are built from foods already added") — restored
+                // there (the user, 2026-08-29: "it's missing from
+                // Meals"), for the SAME reason it's on every other
+                // scope: logging a food doesn't care which pill is
+                // selected, that's a filter on the list below, not a
+                // constraint on what can be logged, and Favorites/Foods
+                // having it while Meals didn't read as an omission
+                // rather than a boundary.
+                if !searching {
                     // The shared scan door, same as Foods and the food
                     // form (PLAN-entry-doors / PLAN-unified-search).
                     EntryDoorsSection(

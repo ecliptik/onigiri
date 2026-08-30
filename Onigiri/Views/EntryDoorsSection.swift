@@ -49,7 +49,10 @@ struct EntryDoorsSection: View {
             if FoodIntelligence.isAvailable {
                 HStack(spacing: 12) {
                     Button(action: onScan) {
-                        DoorCircleGlyph(systemImage: "camera")
+                        // Larger than the labeled row's glyph (the user,
+                        // 2026-08-29): standing alone with no title
+                        // beside it, the row's own 35pt read small.
+                        DoorCircleGlyph(systemImage: "camera", diameter: 44, font: .body.weight(.bold))
                     }
                     .buttonStyle(.plain)
                     .disabled(scanBusy)

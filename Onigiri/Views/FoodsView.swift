@@ -949,19 +949,31 @@ struct DoorRowLabel: View {
 /// (`EntryDoorsSection`, 2026-08-29) draws the SAME measured circle a
 /// labeled door row does — one treatment, two callers, never two copies
 /// to drift apart.
+///
+/// `diameter`/`font` default to the row's own 35pt/subheadline pairing;
+/// `EntryDoorsSection`'s STANDALONE camera button — the only thing on
+/// its side of the row, with no label beside it to lean on for weight —
+/// passes the larger pairing instead (the user, 2026-08-29: "make the
+/// camera button larger"). 44pt is Apple's own minimum tap target;
+/// `.body.weight(.bold)` is LogButton's own glyph treatment at its
+/// ~39pt circle, so scaling both up keeps the SAME proportions this
+/// treatment was measured at rather than stretching a small glyph inside
+/// a bigger ring.
 struct DoorCircleGlyph: View {
     let systemImage: String
+    var diameter: CGFloat = 35
+    var font: Font = .subheadline.weight(.bold)
 
     var body: some View {
         Image(systemName: systemImage)
-            .font(.subheadline.weight(.bold))
+            .font(font)
             .foregroundStyle(Color.riceToast)
             // FIXED frame, not padding: a viewfinder glyph is wider
             // than the plus, so equal padding drew a bigger circle.
             // 35pt matches LogButton's RENDERED circle (the plus
             // glyph is narrower than its font's full height, so its
             // glyph+9pt padding lands at ~35, not 39 — measured).
-            .frame(width: 35, height: 35)
+            .frame(width: diameter, height: diameter)
             .background(.quaternary.opacity(0.5), in: .circle)
             .overlay(
                 Circle().strokeBorder(Color.riceToast.opacity(0.5), lineWidth: 1)

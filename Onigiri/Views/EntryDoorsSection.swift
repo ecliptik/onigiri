@@ -61,18 +61,22 @@ struct EntryDoorsSection: View {
             if FoodIntelligence.isAvailable {
                 HStack(spacing: 14) {
                     Button(action: onScan) {
-                        // Bigger again (the user, 2026-08-29): freed from
-                        // matching a borderless field's row height now
-                        // that the field draws its own chip, the button
-                        // no longer has to share the row's single card.
-                        DoorCircleGlyph(systemImage: "camera", diameter: 52, font: .title3.weight(.bold))
+                        // 44pt — LogButton's own frame, exactly, so this
+                        // row's content height caps at the same place
+                        // Water's does and the two pills match (the
+                        // user, 2026-08-29). Larger read as its own
+                        // control once the field stopped sharing its
+                        // card (previous round); this is the same idea
+                        // bounded by a second row it now has to agree
+                        // with.
+                        DoorCircleGlyph(systemImage: "camera", diameter: 44, font: .body.weight(.bold))
                     }
                     .buttonStyle(.plain)
                     .disabled(scanBusy)
                     .accessibilityLabel("Scan Barcode, Label, Menu, or Food")
                     TextField("Describe food or meal", text: $describeQuery)
                         .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
+                        .padding(.vertical, 10)
                         // The SAME fill `DoorCircleGlyph`'s circle uses —
                         // one "control chip" language for both, so they
                         // read as siblings rather than a button floating
@@ -81,7 +85,6 @@ struct EntryDoorsSection: View {
                         .accessibilityLabel("Describe food or meal")
                         .accessibilityIdentifier(Self.describeFieldAccessibilityID)
                 }
-                .padding(.vertical, 4)
             } else {
                 Button(action: onScan) {
                     ScanRowLabel()

@@ -40,6 +40,20 @@ final class TodayModel {
     var creditedRestingKcal: Double {
         max(summary.restingBurnKcal, estimatedRestingKcal ?? 0)
     }
+    /// The active half of the same figure, so the two credited rows sum
+    /// to `dayBurnKcal` exactly. `TodayBurnFloor` ratchets the TOTAL, so
+    /// on a day Health has revised down there is a remainder belonging
+    /// to neither channel, and Details printed raw active beneath a
+    /// budget cut from the higher number — 499 + 1,931 under 2,444 (the
+    /// user, 2026-08-24). See `DayBudget.creditedActive` for why it
+    /// lands on active.
+    var creditedActiveKcal: Double {
+        DayBudget.creditedActive(
+            dayBurnKcal: dayBurnKcal,
+            creditedRestingKcal: creditedRestingKcal,
+            measuredActiveKcal: summary.activeBurnKcal
+        )
+    }
     /// Smoothed scale movement over the past 7 days (negative = down);
     /// nil until Health holds enough weigh-ins to say.
     private(set) var weeklyTrendLb: Double?

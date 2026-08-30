@@ -927,7 +927,12 @@ struct TodayView: View {
                 MeterCell(label: intakeWord.label, value: model.summary.intakeKcal) {
                     FoodIconView(raw: foodIcon)
                 }
-                MeterCell(label: "Active", value: model.summary.activeBurnKcal) {
+                // CREDITED active, for the same reason resting is
+                // credited below: these two meters sit under the Burned
+                // flank, which reads `dayBurnKcal`, and the ratchet's
+                // remainder has to land in one of them or the pair falls
+                // short of the total above it (the user, 2026-08-24).
+                MeterCell(label: "Active", value: model.creditedActiveKcal) {
                     Image(systemName: "flame.fill").foregroundStyle(.red)
                 }
                 // CREDITED resting, like Details and the calendar's

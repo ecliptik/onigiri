@@ -522,117 +522,55 @@ struct GoalView: View {
                     } ?? "≈ 2,000 kcal/day (assumed)")
                         .monospacedDigit()
                 }
-                // Beside the measured figure, because a cross-check is
-                // unreadable away from the thing it checks (the user,
-                // 2026-08-18). ONE LINE, like every row here — a
-                // trailing VStack overflows the width and makes
-                // LabeledContent stack label above value, which is what
-                // this row did alone at the bottom of the group.
+                // THREE ROWS WERE DELETED HERE (2026-08-24, the user:
+                // "we really should be going for simplicity"), and each
+                // had a defensible reason to exist — which is exactly
+                // how the screen ended up with four burn figures under a
+                // heading that promises one calculation. What is left is
+                // the recipe and nothing else: to lose ÷ days left is
+                // the deficit, average burn minus the deficit is the
+                // budget. Every row above is a term in that.
                 //
-                // The caption is doing two jobs. It says what the second
-                // number IS, and it BREAKS THE COLUMN: three descending
-                // figures in a row (2,784 → 2,478 → 2,320) invite being
-                // read as a derivation, and the budget below comes from
-                // the measured burn, never from this one.
+                // `Average burn, from data` (`ObservedBurn`, added
+                // 2026-08-18 to explain the predicted-vs-scale gap on
+                // "Last 30 days") was a SECOND MEASURED BURN on the one
+                // screen whose standing rule is that two burn figures
+                // must never contradict each other — and nothing planned
+                // from it by design, since it cannot tell under-logging
+                // from a wrong resting estimate from water weight.
+                // `ObservedBurn` and its tests stay in the kit; if the
+                // cross-check is ever wanted again it belongs beside the
+                // predicted-vs-actual pair it explains, not here.
                 //
-                // The label mirrors the row above so the two read as
-                // one quantity measured two ways; "Burn, from your
-                // results" and "Implied by logs and scale" both tried
-                // to carry that on their own and read oddly detached.
+                // `Resting burn, full day` and `Resting budget` explained
+                // a DAY — the floor under today's resting credit, and
+                // what that floor leaves after the deficit. Goal stopped
+                // reporting days on 2026-08-23. The cost is real and was
+                // accepted: "Burned today" reading 2,197 while Health
+                // shows 841 so far now has no explanation anywhere, and
+                // if it needs one it belongs on Today, beside the number
+                // it explains.
                 //
-                // An earlier draft printed a DELTA instead of a caption
-                // and got it wrong in a way worth remembering: computed
-                // against the mean burn over the same tracked days — the
-                // honest basis, but not the number on screen — it read
-                // "265 below measured" three rows under an "Average
-                // daily burn" the reader could see was 306 away. The
-                // caption states the causes in prose or not at all; it
-                // never puts a second measured burn on the screen.
-                if let observed = model.trend.observedBurnKcal {
-                    LabeledContent("Average burn, from data") {
-                        Text("≈ \(observed, format: .number.precision(.fractionLength(0))) kcal/day")
-                            .monospacedDigit()
-                    }
-                    Text("The first is measured. The second is what your food logs and weight change work out to — a cross-check, not a correction.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                // "Resting burn, FULL DAY" — the bare label collided with
-                // Details', which shows what Health has recorded SO FAR,
-                // and the two read as the app contradicting itself: 1,830
-                // here against 1,272 there (the user, 2026-08-02).
-                LabeledContent("Resting burn, full day") {
-                    Text(model.estimatedRestingKcal.map {
-                        "≈ \($0.formatted(.number.precision(.fractionLength(0)))) kcal/day"
-                    } ?? "Not estimated")
-                        .monospacedDigit()
-                }
-                // Kept, and now says why it is here. It is the only
-                // ESTIMATE among measured figures and it is NOT a
-                // component of the two burns above — those carry
-                // Health's own basal, this is `BasalEstimate` over body
-                // metrics, so subtracting it from them yields nothing.
-                // What it does is FLOOR the day's resting credit, which
-                // is the whole reason "Burned today" can read 2,197
-                // while Health has recorded 841 so far. Without this
-                // line that gap has no explanation anywhere in the app
-                // (the user, 2026-08-18: "do we need to put resting
-                // burn in here then?").
-                // The guaranteed floor under the budget, directly under
-                // the burn it comes from — a derived figure is unreadable
-                // away from its input, the same rule that put "Average
-                // burn, from data" beside "Average daily burn".
+                // Says what the burn above it is MADE OF (the user,
+                // 2026-08-24). It used to open "The day's energy, minus
+                // the deficit" — which is the budget, already stated by
+                // the arithmetic caption four rows up ("Your budget is
+                // your burn minus that"), and it left the one figure the
+                // reader cannot check unexplained. Two weeks, because
+                // `HealthKitService.averageDailyBurnKcal` averages 14
+                // days and skips today for being partial.
                 //
-                // This is the fixed part of the budget: resting happens
-                // whether or not you move, so taking the WHOLE deficit
-                // out of it leaves a number you have in hand at
-                // breakfast on any day, including one you never get off
-                // the sofa. It briefly sat in the Budget section above
-                // as "Resting budget" beside an "Earned by moving" row
-                // (2026-08-23, the Lifesum split); it belongs here,
-                // because it explains the budget rather than reporting
-                // a day (the user, same day).
+                // Both clauses of the second sentence keep the NOUN.
+                // Dropping it ("…, active as you earn it") made "active"
+                // read as a state of resting energy rather than a second
+                // kind of it (the user, 2026-08-13). The first sentence
+                // shares one noun across both adjectives, which is
+                // ordinary English and not that trap.
                 //
-                // Built from `BasalEstimate`, not from today's resting
-                // credit, so nothing in this group moves during a day.
-                if let resting = restingBudget {
-                    LabeledContent("Resting budget") {
-                        Text("≈ \(resting, format: .number.precision(.fractionLength(0))) kcal/day")
-                            .monospacedDigit()
-                    }
-                }
-                if model.estimatedRestingKcal != nil {
-                    Text("Estimated from your body metrics. Today's burn never counts less resting than this, even before Health has recorded it.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if restingBudget != nil {
-                    Text("The resting burn less the deficit — what the goal allows on a day you don't move at all. Anything you burn above resting is on top of it.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                // LAST, because it is a check on every row above rather
-                // than an input to any of them. "Last 30 days" has
-                // always shown a predicted change beside the actual one
-                // and left the gap unexplained — this is the gap said
-                // as one number ("shouldn't we get better at this?",
-                // the user, 2026-08-18).
-                //
-                // It REPORTS. Nothing plans from it, and `ObservedBurn`
-                // records why: the figure cannot tell under-logging from
-                // a wrong resting estimate from water weight, and
-                // feeding it back into `dayBurn` would rebuild the
-                // trailing-average substitution PLAN-earned-budget
-                // deleted — silently, which is worse than the version
-                // that was removed.
-                // Three sentences became two: this is the one place the
-                // mechanism belongs, so it keeps it and the Today
-                // footer above no longer repeats it.
-                // Both clauses keep the NOUN. Dropping it from the second
-                // ("…, active as you earn it") made "active" read as a
-                // state of resting energy rather than a second kind of
-                // it (the user, 2026-08-13).
-                Text("The day's energy, minus the deficit. Resting energy is credited at midnight, active energy as you earn it.")
+                // "Energy", not "burn": this is a caption, the formal
+                // register, while the ROW above it is a glanceable
+                // number and keeps the metaphor.
+                Text("Resting plus active energy, averaged over the past two weeks. Resting energy is credited at midnight, active energy as you earn it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if model.estimatedRestingKcal == nil {
@@ -670,24 +608,6 @@ struct GoalView: View {
             Text("\(unit.fromLb(basisLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
                 .monospacedDigit()
         }
-    }
-
-    /// The part of the budget that is already yours: the body's own
-    /// resting burn, less the WHOLE deficit the goal asks for.
-    ///
-    /// Resting happens whether or not you move, so putting the entire
-    /// deficit against it leaves a figure that holds on any day —
-    /// including one with no activity at all. It is a floor, not a
-    /// target: active energy is earned on top of it.
-    ///
-    /// nil without a resting estimate (Health cannot describe the body),
-    /// and nil when the deficit swallows it whole — a negative "already
-    /// yours" is not a smaller allowance, it is an unreachable goal, and
-    /// `isAggressive` in its own section is the sentence that case needs.
-    private var restingBudget: Double? {
-        guard let resting = model.estimatedRestingKcal, let plan else { return nil }
-        let budget = resting - plan.requiredDailyDeficit
-        return budget > 0 ? budget : nil
     }
 
     var body: some View {

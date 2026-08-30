@@ -563,11 +563,31 @@ Each cost a debugging session.
   beside it. `TodayBurnFloor` ratchets the day burn (Health revises today's
   burn DOWN mid-day).
 - Verdict-shaped numbers — Net, banked, the gauge, the balance headline — go
-  through `DayBudget.deficit`, NOT `DailyEnergySummary.balanceKcal`; the Burned
-  flank and the Active/Resting rows stay on Health's raw totals, because those
-  report a measurement rather than reach a judgment. Past days re-grade
-  themselves from Health; that's accepted, and it's less code than freezing
-  them.
+  through `DayBudget.deficit`, NOT `DailyEnergySummary.balanceKcal`. Past days
+  re-grade themselves from Health; that's accepted, and it's less code than
+  freezing them.
+- **The Active and Resting rows print the CREDITED halves, and they sum to
+  `dayBurnKcal` exactly** (`DayBudget.creditedActive`, `creditedResting`;
+  Today's meter grid and Details). This screen is a card that has to ADD UP,
+  and it has failed that test twice with raw figures: resting first (July 27,
+  fixed 2026-08-02 — 397 + 1,487 against a 607 deficit cut from 2,227), then
+  active (the user, 2026-08-24 — 499 + 1,931 against a budget cut from 2,444).
+  Both floors are invisible in a raw row: the estimate floors resting, and
+  `TodayBurnFloor` ratchets the TOTAL, so a day Health has revised down leaves
+  a remainder belonging to neither channel. It is credited to ACTIVE because
+  that is the channel Health revises (phone estimate vs watch measurement
+  reconciling) and because resting has its own floor and its own line. Health's
+  measured figure sits UNDER each row, but only past
+  `DayBudget.creditNoteThresholdKcal` (50) — "1,120 so far" for resting (still
+  accruing), "385 measured" for active (energy granted earlier today and since
+  taken back; the budget keeps the high mark and may not move against you
+  mid-day). The threshold is the ANSWER to "why two active numbers": the
+  second one explains a visible disagreement with the Health app, and a ratchet
+  remainder of a few tens of kcal is not one (the user, 2026-08-24). One
+  threshold for both rows on purpose; it bites only on active, since resting's
+  morning gap is hundreds. Don't "restore" either row to
+  `summary.activeBurnKcal` / `summary.restingBurnKcal` — that is the bug,
+  twice.
 - `CalorieBudget.projectedDailyBurn` survives for the Goal/onboarding PREVIEW
   only ("an average day"), never to judge a day. **Goal now shows exactly ONE
   budget and it is that projection** — `Daily budget`, a single row
@@ -606,22 +626,40 @@ Each cost a debugging session.
   (the user, 2026-08-18). `Days left` is a row, and a caption states the
   arithmetic in the LIVE numbers. That caption never names the 3,500
   kcal-per-POUND constant: this screen renders in the user's unit and the
-  constant is wrong in kg. The group holds `Resting budget` too —
-  `BasalEstimate` less the whole deficit, directly under the
-  `Resting burn, full day` it comes from, nil when the deficit swallows it.
-  That is the GUARANTEED floor: resting happens whether or not you move, so
-  what is left of it after the deficit is in hand at breakfast on any day.
-  It is built from the estimate, never from today's resting credit, so
-  nothing in this group moves during a day. It spent a few hours in the
-  Budget section instead, beside an `Earned by moving` row (the Lifesum
-  split — both Lifesum and MyFitnessPal set a fixed goal from a DECLARED
-  activity level and add tracker exercise on top, which is Onigiri's shape
-  with a worse baseline); it explains the budget rather than reporting a
-  day, which is the line this screen is drawn on.
+  constant is wrong in kg.
+- **The explainer holds the RECIPE AND NOTHING ELSE** (2026-08-24, the user:
+  "we really should be going for simplicity"). `Based on` / `Weight` /
+  `To lose` / `Days left` / `Deficit needed`, the arithmetic caption, and
+  `Average daily burn` — every row a term in `to lose ÷ days left = deficit`,
+  `average burn − deficit = budget`. THREE rows were cut, each of which had
+  earned its place separately, which is how the screen came to hold four burn
+  figures under a heading promising one calculation:
+  - `Average burn, from data` (`ObservedBurn`, 2026-08-18) — a SECOND
+    MEASURED BURN on the screen whose standing rule is that two burn figures
+    must never contradict each other, and one nothing planned from by design.
+    The kit type and its tests stay; if the cross-check returns it belongs
+    beside the predicted-vs-actual pair on "Last 30 days" that it explains,
+    never in the recipe.
+  - `Resting burn, full day` and `Resting budget` — both explain a DAY (the
+    floor under today's resting credit, and what that floor leaves after the
+    deficit), and Goal stopped reporting days on 2026-08-23. `Resting budget`
+    had also spent a few hours in the Budget section beside an
+    `Earned by moving` row (the Lifesum split — both Lifesum and MyFitnessPal
+    set a fixed goal from a DECLARED activity level and add tracker exercise
+    on top, which is Onigiri's shape with a worse baseline).
+
+  Accepted cost, stated so nobody "fixes" it by re-adding a row: "Burned
+  today" reading 2,197 while Health shows 841 so far now has no explanation
+  anywhere in the app, and the predicted-vs-scale gap on "Last 30 days" is
+  once again just two numbers. If either needs saying, it goes on the screen
+  that shows the number, not here. `testGoalBudgetShot` asserts all three
+  absences; the maintenance test's reveal target moved to the mechanism
+  caption, since the one row left in that mode sits ABOVE where
+  `Deficit needed` would be and made the absence check trivially true.
 - **`ObservedBurn` REPORTS and nothing plans from it** (2026-08-18,
-  `plans/PLAN-goal-budget-reconciliation.md`). `meanDailyIntake − scaleRate ×
-  3500` is what the scale says you burn, shown last in the derivation group so
-  the "Last 30 days" gap stops being a puzzle. It cannot tell under-logging from
+  `plans/PLAN-goal-budget-reconciliation.md`; OFF THE SCREEN since 2026-08-24
+  — the rule stands for whenever it comes back). `meanDailyIntake − scaleRate ×
+  3500` is what the scale says you burn. It cannot tell under-logging from
   a wrong resting estimate from Health's active energy from water weight — the
   first three would justify moving a budget and the fourth would not — so
   feeding it back into `dayBurn` would rebuild the trailing-average
@@ -629,23 +667,20 @@ Each cost a debugging session.
   is ever wanted it must be OFFERED and stored, never applied. It needs
   `ObservedBurn.minimumTrackedDays` in the window or it says nothing: the
   tracked days' mean intake stands in for every day the scale moved across.
-  It renders as ONE LINE (`Average burn, from data`) directly BENEATH
-  `Average daily burn`, because a cross-check is unreadable away from the
-  thing it checks, with a caption under the pair. That caption is load-bearing
-  twice: it says what the second number is, and it BREAKS THE COLUMN — three
-  descending figures (2,784 → 2,478 → 2,320) read as a derivation, and
-  `Budget, average day` comes from the measured burn, never from this one.
-  No delta caption: a companion "N below measured" was built and removed the
-  same day, because the honest basis for that subtraction (the mean over the
-  same tracked days) is not the burn on screen, so it read "265 below" three
-  rows under an "Average daily burn" the reader could see was 306 away. Two
-  measured burns on one screen is the very contradiction the rule forbids.
-- `Resting burn, full day` is NOT a component of either burn average above it
-  — those carry Health's measured basal, that row is `BasalEstimate` over body
-  metrics, so subtracting them yields nothing. It is kept because it FLOORS the
-  day's resting credit (`max(measured, estimate)`), which is the only
-  explanation anywhere in the app for "Burned today" reading 2,197 while Health
-  shows 841 so far. Its caption says so; don't drop the row as redundant.
+  Wherever it renders it must sit BESIDE the figure it checks (a cross-check
+  is unreadable away from that) and carry a caption saying what it is — three
+  descending figures in a column (2,784 → 2,478 → 2,320) read as a derivation
+  when the budget comes from the measured burn, never from this one. No delta
+  caption: a companion "N below measured" was built and removed the same day,
+  because the honest basis for that subtraction (the mean over the same
+  tracked days) is not the burn on screen, so it read "265 below" three rows
+  under an "Average daily burn" the reader could see was 306 away. Two
+  measured burns on one screen is the very contradiction the rule forbids —
+  which is ultimately why it left Goal.
+- `BasalEstimate` is NOT a component of any burn average — those carry
+  Health's measured basal, it is body metrics, so subtracting them yields
+  nothing. It still FLOORS the day's resting credit
+  (`max(measured, estimate)`); it just no longer says so on Goal.
 - A day's VERDICT has two gates, and both live in `StreakCalendar`:
   `isTracked` (intake ≥ `untrackedBelowKcal`, default 500 — too little
   logged to trust the numbers; Settings → Metrics tunes it, 0 disables)

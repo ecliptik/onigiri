@@ -261,11 +261,20 @@ final class OnigiriUITests: XCTestCase {
         if disclosure.waitForExistence(timeout: 5) {
             disclosure.tap()
             Thread.sleep(forTimeInterval: 1.0)
-            // `Resting budget` lives in here now, not in the Budget
-            // section — it explains the budget rather than reporting a
-            // day, which is the line this screen is drawn on.
-            for _ in 0..<6 where !app.staticTexts["Resting budget"].exists { app.swipeUp() }
-            XCTAssertTrue(app.staticTexts["Resting budget"].exists)
+            // `Average daily burn` is the LAST row of the recipe and
+            // the only burn figure left on the screen: the observed
+            // cross-check and both resting rows were cut on 2026-08-24,
+            // so reaching this one means the whole derivation is in
+            // frame. It also pins the cut — a second burn row would
+            // push it further down, and a resting row would follow it.
+            for _ in 0..<6 where !app.staticTexts["Average daily burn"].exists { app.swipeUp() }
+            XCTAssertTrue(app.staticTexts["Average daily burn"].exists)
+            for cut in ["Average burn, from data", "Resting burn, full day", "Resting budget"] {
+                XCTAssertFalse(
+                    app.staticTexts[cut].exists,
+                    "\(cut) was cut from the explainer — the recipe is the only thing in it"
+                )
+            }
             let opened = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
             opened.name = "goal-budget-derivation"
             opened.lifetime = .keepAlways
@@ -1154,13 +1163,24 @@ final class OnigiriUITests: XCTestCase {
         // already open. The Budget section going from six rows to one
         // (2026-08-23) moved everything up far enough to make that
         // coin-flip land the wrong way.
-        // `Resting burn, full day` is the target because it is inside the
+        // The mechanism caption is the target because it is inside the
         // group in BOTH modes, and it sits BELOW where `Deficit needed`
         // would be — so reaching it means the absence checked next was
-        // scrolled past, not merely unrendered.
-        let restingRow = app.staticTexts["Resting burn, full day"]
+        // scrolled past, not merely unrendered. It took over from
+        // `Resting burn, full day` when the explainer was cut back to
+        // the recipe (2026-08-24): in maintenance the group now holds
+        // one row and its captions, and that row sits ABOVE the deficit
+        // row's place, which would have made the absence below it
+        // trivially true again.
+        // Passed as an ARGUMENT, never inlined into the format string:
+        // captions change, and a quoted literal terminates on the first
+        // apostrophe one of them contains — throwing at runtime rather
+        // than failing to compile.
+        let mechanismCaption = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Resting plus active energy")
+        ).firstMatch
         XCTAssertTrue(
-            revealInBudgetExplainer(in: app, header: howSet, row: restingRow),
+            revealInBudgetExplainer(in: app, header: howSet, row: mechanismCaption),
             "The group opens")
         XCTAssertFalse(app.staticTexts["Deficit needed"].exists, "No deficit row in maintenance")
         let save = app.buttons["Save"]

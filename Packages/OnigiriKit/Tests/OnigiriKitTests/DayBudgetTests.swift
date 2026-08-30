@@ -61,6 +61,68 @@ struct DayBudgetTests {
         #expect(watchInADrawer == 1_831)
     }
 
+    // MARK: The card has to add up
+
+    /// Details prints the CREDITED halves, and they must sum to the burn
+    /// the budget and Net were cut from. The ratchet holds the total at
+    /// a high-water mark while Health revises today down, so the
+    /// difference has to land in a row or the screen cannot be added up
+    /// by hand (the user, 2026-08-24: 499 + 1,931 under a budget built
+    /// on 2,444).
+    @Test func theCreditedHalvesSumToTheBurnTheBudgetUsed() {
+        let credited = DayBudget.creditedActive(
+            dayBurnKcal: 2_444, creditedRestingKcal: 1_931, measuredActiveKcal: 499)
+        #expect(credited == 513)
+        #expect(credited + 1_931 == 2_444)
+    }
+
+    /// With nothing ratcheted or floored, the credited active IS the
+    /// measured active — no caption, no second figure, on every past day
+    /// and most of today.
+    @Test func withoutARatchetCreditedActiveIsJustMeasured() {
+        let dayBurn = DayBudget.dayBurn(
+            activeKcal: 327, restingKcal: 1_831, estimatedRestingKcal: 1_831)
+        #expect(DayBudget.creditedActive(
+            dayBurnKcal: dayBurn, creditedRestingKcal: 1_831,
+            measuredActiveKcal: 327) == 327)
+    }
+
+    /// The resting estimate flooring a morning is RESTING's story, told
+    /// in its own row: it must not leak into active, which would credit
+    /// activity nobody did.
+    @Test func theRestingFloorDoesNotBecomeActive() {
+        let dayBurn = DayBudget.dayBurn(
+            activeKcal: 50, restingKcal: 610, estimatedRestingKcal: 1_831)
+        #expect(DayBudget.creditedActive(
+            dayBurnKcal: dayBurn, creditedRestingKcal: 1_831,
+            measuredActiveKcal: 50) == 50)
+    }
+
+    /// A day burn that has not been read yet cannot print an active
+    /// figure below the one Health is reporting.
+    @Test func aStaleDayBurnNeverUndercutsTheMeasurement() {
+        #expect(DayBudget.creditedActive(
+            dayBurnKcal: 0, creditedRestingKcal: 1_831, measuredActiveKcal: 120) == 120)
+    }
+
+    /// The second figure earns its line or it doesn't appear. A ratchet
+    /// remainder of a few tens of kcal is invisible to the reader and
+    /// costs the row its simplicity (the user, 2026-08-24); the morning
+    /// resting gap the same rule governs is hundreds.
+    @Test func onlyAGapWorthExplainingPrintsTheMeasurement() {
+        let ratchetNoise = DayBudget.creditedActive(
+            dayBurnKcal: 2_444, creditedRestingKcal: 1_931, measuredActiveKcal: 499)
+        #expect(ratchetNoise - 499 < DayBudget.creditNoteThresholdKcal)
+        // A revision big enough that Onigiri and the Health app would
+        // visibly disagree still says so.
+        let realRevision = DayBudget.creditedActive(
+            dayBurnKcal: 2_600, creditedRestingKcal: 1_931, measuredActiveKcal: 499)
+        #expect(realRevision - 499 >= DayBudget.creditNoteThresholdKcal)
+        // Resting's own gap — a morning that has accrued 1,120 of an
+        // estimated 1,743 — is never in doubt.
+        #expect(1_743 - 1_120 >= DayBudget.creditNoteThresholdKcal)
+    }
+
     // MARK: Guards
 
     @Test func aNegativeTargetCannotInflateTheBudget() {

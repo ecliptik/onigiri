@@ -143,9 +143,36 @@ struct DayNutritionView: View {
                 Text("\(model.summary.intakeKcal, format: .number.precision(.fractionLength(0))) kcal")
                     .monospacedDigit()
             }
+            // The CREDITED active, in the resting row's grammar below —
+            // this card has to add up, and the ratchet's remainder has
+            // to be somewhere. Raw active sat under a budget cut from a
+            // burn 14 kcal higher, with nothing on screen accounting for
+            // the difference (the user, 2026-08-24).
+            //
+            // The measurement prints only past `creditNoteThresholdKcal`
+            // — a 14 kcal gap is not a disagreement anyone would notice,
+            // and a row that shows one number on most days is the point.
+            //
+            // "measured", not the resting row's "so far": resting is
+            // still accruing toward its estimate, while a lower active
+            // reading is energy Health granted earlier today and has
+            // since taken back. The budget keeps the high mark
+            // (`TodayBurnFloor` — it may not move against you mid-day),
+            // so the two figures are a credit and a current reading,
+            // not a progress pair.
             iconRow("Active burn", icon: { Image(systemName: "flame.fill").foregroundStyle(.red) }) {
-                Text("\(model.summary.activeBurnKcal, format: .number.precision(.fractionLength(0))) kcal")
-                    .monospacedDigit()
+                let credited = model.creditedActiveKcal
+                let measured = model.summary.activeBurnKcal
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(credited, format: .number.precision(.fractionLength(0))) kcal")
+                        .monospacedDigit()
+                    if credited - measured >= DayBudget.creditNoteThresholdKcal {
+                        Text("\(measured, format: .number.precision(.fractionLength(0))) measured")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
             }
             // The CREDITED resting — what the budget above was built
             // from — with what Health has actually recorded underneath
@@ -158,7 +185,7 @@ struct DayNutritionView: View {
                 VStack(alignment: .trailing, spacing: 2) {
                     Text("\(credited, format: .number.precision(.fractionLength(0))) kcal")
                         .monospacedDigit()
-                    if credited - measured >= 1 {
+                    if credited - measured >= DayBudget.creditNoteThresholdKcal {
                         Text("\(measured, format: .number.precision(.fractionLength(0))) \(model.isToday ? "so far" : "recorded")")
                             .font(.caption)
                             .foregroundStyle(.secondary)

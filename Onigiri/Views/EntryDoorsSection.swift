@@ -14,6 +14,18 @@ import OnigiriKit
 /// stays search-only this time, so there is still exactly one field per
 /// job, just two jobs instead of one.
 ///
+/// **The button and the field draw their OWN chip each**, not one
+/// shared row card — a plain `TextField` has no visible bound of its
+/// own, so the row's single grouped-list background read as ONE object
+/// with a circle floating inside it, button and field blurred together
+/// (the user, 2026-08-29: "doesn't look separate from the camera").
+/// Giving the field the SAME `.quaternary` chip treatment the button's
+/// circle already used makes them read as two controls with a gap
+/// between them, not one — and freed from matching the field's own
+/// (borderless, row-height) size, the button is free to be as large as
+/// the row allows, so it no longer needs to punch above its actual
+/// weight to be seen inside a shared card that outsized it either way.
+///
 /// **AI off**: the camera button falls back to the full labeled row
 /// (`ScanRowLabel`, "Scan Barcode, Label, or Menu") and the describe
 /// field is hidden entirely — nothing behind it works without AI, and a
@@ -47,20 +59,29 @@ struct EntryDoorsSection: View {
     var body: some View {
         Section {
             if FoodIntelligence.isAvailable {
-                HStack(spacing: 12) {
+                HStack(spacing: 14) {
                     Button(action: onScan) {
-                        // Larger than the labeled row's glyph (the user,
-                        // 2026-08-29): standing alone with no title
-                        // beside it, the row's own 35pt read small.
-                        DoorCircleGlyph(systemImage: "camera", diameter: 44, font: .body.weight(.bold))
+                        // Bigger again (the user, 2026-08-29): freed from
+                        // matching a borderless field's row height now
+                        // that the field draws its own chip, the button
+                        // no longer has to share the row's single card.
+                        DoorCircleGlyph(systemImage: "camera", diameter: 52, font: .title3.weight(.bold))
                     }
                     .buttonStyle(.plain)
                     .disabled(scanBusy)
                     .accessibilityLabel("Scan Barcode, Label, Menu, or Food")
                     TextField("Describe food or meal", text: $describeQuery)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        // The SAME fill `DoorCircleGlyph`'s circle uses —
+                        // one "control chip" language for both, so they
+                        // read as siblings rather than a button floating
+                        // inside a field's own row.
+                        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .accessibilityLabel("Describe food or meal")
                         .accessibilityIdentifier(Self.describeFieldAccessibilityID)
                 }
+                .padding(.vertical, 4)
             } else {
                 Button(action: onScan) {
                     ScanRowLabel()

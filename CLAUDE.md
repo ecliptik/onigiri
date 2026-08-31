@@ -400,6 +400,24 @@ Each cost a debugging session.
   PROGRAMMATIC selections assign the state directly and skip the proxy on
   purpose: the Add pill's bounce must not reset the browsed day, because the
   Log sheet it opens backfills into that day.
+- **A custom `.presentationBackground` on a sheet silently opts its toolbar
+  OUT of the automatic Liquid Glass capsule every plain `Button` gets in
+  `.cancellationAction`/`.confirmationAction` elsewhere.** `sheetCardChrome()`
+  (PortionSheet, the Edit Water sheet) and DayJumpSheet's own
+  `.presentationBackground(.thickMaterial)` all lost it this way — Cancel/Save
+  read as bare colored text, in both light and dark mode (the user,
+  2026-08-30, from-device screenshots). The fix is NOT to force
+  `.buttonStyle(.glass)` on the buttons — that was tried first and instead
+  squashed Cancel into a clipped 44pt circle (`.glass`'s compact-icon
+  fallback for a leading slot with no bar to measure against — a DIFFERENT
+  broken look, not a fix; `.glassProminent` on the trailing confirm button
+  happened to render fine, which is what made the asymmetry confusing).
+  The actual cause is that the custom background removes the sheet's own
+  nav-bar material — restoring it with `.toolbarBackground(.visible, for:
+  .navigationBar)` (`View.restoreToolbarGlass()`, Style.swift) lets the
+  PLAIN buttons resolve their normal automatic styling again, same as every
+  sheet that never opted out. Any new custom `.presentationBackground` needs
+  this too.
 
 ## App-launch landmines
 

@@ -184,6 +184,25 @@ extension View {
 }
 
 extension View {
+    /// The fix: `sheetCardChrome()`'s custom `.presentationBackground`
+    /// removes the sheet's own navigation-bar material, and THAT — not the
+    /// button code — is what silently opts a sheet out of the automatic
+    /// Liquid Glass capsule every plain toolbar `Button` gets elsewhere
+    /// (verified 2026-08-30: forcing `.buttonStyle(.glass)` on Cancel
+    /// instead squashed it into a clipped 44pt circle — `.glass`'s own
+    /// compact-icon fallback for a leading slot with no bar to measure
+    /// against, a DIFFERENT broken look, not a fix). Restoring the bar's
+    /// own visible material is what lets plain buttons resolve their
+    /// automatic styling again, same as every sheet that never opted out.
+    @ViewBuilder
+    func restoreToolbarGlass() -> some View {
+        if #available(iOS 26.0, *) {
+            self.toolbarBackground(.visible, for: .navigationBar)
+        } else {
+            self
+        }
+    }
+
     /// iOS 26's hard scroll-edge under pinned chrome (the always-on
     /// search field, the Log sheet's scope bar) — content clips
     /// crisply instead of ghosting through. A no-op on iOS 18.

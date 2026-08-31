@@ -1284,6 +1284,7 @@ struct PortionSheet: View {
         // Style.swift's sheetCardChrome, one implementation with the
         // Edit Water sheet.
         .sheetCardChrome()
+        .restoreToolbarGlass()
     }
 
     /// One Contains row. A row whose food is still in the library opens

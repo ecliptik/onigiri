@@ -269,6 +269,13 @@ struct TodayView: View {
                         nutrients: entry.nutrients.scaled(by: 1 / entry.quantity),
                         serving: entry.quantity == 1 ? "as logged" : "",
                         defaultCategory: entry.category,
+                        // Carried through so a Save-to-Library off this
+                        // sheet keeps the ✨ mark — `LogActions
+                        // .editFoodEntry` below reads it straight off
+                        // `entry`, not off this target, so its absence
+                        // here was invisible until Save-to-Library
+                        // started reading it too (2026-08-30).
+                        aiGenerated: entry.aiGenerated,
                         // Already per-portion — the sheet's Contains
                         // section scales it by the live quantity.
                         mealItems: entry.mealItems
@@ -1860,6 +1867,7 @@ private struct WaterEditSheet: View {
         // Shared card chrome — Style.swift's sheetCardChrome, one
         // implementation with FoodsView's Contains card.
         .sheetCardChrome()
+        .restoreToolbarGlass()
     }
 }
 
@@ -1925,6 +1933,7 @@ private struct DayJumpSheet: View {
         }
         .presentationDetents([.medium])
         .presentationBackground(.thickMaterial)
+        .restoreToolbarGlass()
     }
 
     private func shiftMonth(_ delta: Int) {

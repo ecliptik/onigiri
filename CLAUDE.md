@@ -1362,6 +1362,38 @@ sheet, or anything else.
   Meals drew none while Favorites, search results and the Log sheet did — the
   same meal looking like two different things depending on where it was found.
   The watch draws it too (see Watch sync for the payload rule).
+- **A logged-but-unsaved FOOD can be saved retroactively, from wherever it
+  was logged** (2026-08-30, the user: "if I eat a cupcake on Friday, but
+  only logged it, not saved it, I can go back to Friday on Sunday, then
+  log/save that food to add to Sunday"). `PortionSheet`'s edit mode
+  already has a "View Food" door when the entry's name resolves to a
+  library `Food` (`resolvedSelf`, matched by the same `ComponentMatch`
+  the Contains rows use) — the new `else if` branch is the OTHER half of
+  that door: no twin, plain food (`target.mealItems.isEmpty`, so Meals
+  are excluded — retroactively saving a MEAL is a harder, riskier problem
+  here and stayed out of scope on purpose), editing an existing entry
+  (`editDate != nil`, never a fresh log). Two rows, not one — "Save to
+  Library" alone stays reachable, matching `FoodFormView`'s Save / Save &
+  Log pair, in this sheet's row-button shape since the toolbar's trailing
+  slot already belongs to the entry's own Save.
+  - **Reuses `MenuLibrarySave.insert` rather than rolling a new insert
+    path** — the SAME `LibraryDuplicate` dedup a picked menu row already
+    goes through, from a `ParsedLabel` built out of the `PortionTarget`'s
+    PER-PORTION values (never multiplied by the sheet's own Serving
+    stepper — a library row stores one serving, not "however many were
+    eaten this time"). This is also why it stays a plain `Food` insert
+    and never touches `Meal`/`MealItem` — the same dangling-reference
+    immunity `MenuLibrarySave` was built for.
+  - **"Log Today" writes a SEPARATE, brand-new entry dated `.now` — the
+    original entry, wherever it's dated, is never moved or touched.**
+    There was no existing "log to today while browsing a past day" path
+    to reuse for this (every other write threads the BROWSED day via
+    `DayBounds.logTimestamp(for: model.selectedDate)`); this is the one
+    place that deliberately calls `LogActions.logFood` with today's
+    default `date: .now` instead. Scaled by the sheet's own current
+    Serving stepper — the same figure "Will log" already shows, so
+    there's only one number on screen to read before tapping either
+    button.
 
 ## Copy
 

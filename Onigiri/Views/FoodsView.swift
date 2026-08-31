@@ -1052,6 +1052,9 @@ struct PortionSheet: View {
     /// slot: a nested sheet is fine, it's SWAPPING one slot's binding
     /// mid-dismissal that races (the 2026-07-22 landmine).
     @State private var openFood: Food?
+    /// Guards the Save-to-Library row pair against a double tap while
+    /// the write and dismiss are still in flight.
+    @State private var isSavingToLibrary = false
 
     init(
         target: PortionTarget,
@@ -1117,6 +1120,30 @@ struct PortionSheet: View {
                             }
                         }
                         .buttonStyle(.plain)
+                    } else if target.mealItems.isEmpty, editDate != nil {
+                        // The other half of "no door to its own library
+                        // entry": a plain food that was LOGGED but never
+                        // SAVED has no entry to view, but it can still be
+                        // given one — from here, editing whichever past
+                        // day it landed on, rather than re-scanning or
+                        // re-searching it (the user, 2026-08-30: "go back
+                        // to Friday on Sunday, then log/save that food to
+                        // add to Sunday"). Two rows, not one, so saving
+                        // alone stays possible — the app's Save / Save &
+                        // Log pair (FoodFormView), in this sheet's own
+                        // row-button shape rather than a toolbar pair,
+                        // since the toolbar's trailing slot already belongs
+                        // to this entry's own Save.
+                        Button(action: saveToLibrary) {
+                            Text("Save to Library").foregroundStyle(Color.riceToast)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isSavingToLibrary)
+                        Button(action: saveAndLogToday) {
+                            Text("Save to Library & Log Today").foregroundStyle(Color.riceToast)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isSavingToLibrary)
                     }
                 } header: {
                     Text(target.name)
@@ -1129,6 +1156,8 @@ struct PortionSheet: View {
                         // the row's verb: the door says View, but the
                         // form behind it edits.
                         Text("Changes to the food apply to future logs, not this entry.")
+                    } else if target.mealItems.isEmpty, editDate != nil {
+                        Text("Uses the values above. \"Log Today\" adds a NEW entry for today — this one stays where it is.")
                     }
                 }
                 Section {
@@ -1313,6 +1342,57 @@ struct PortionSheet: View {
             }
         }
         resolvedFoods = resolved
+    }
+
+    // MARK: Save to Library (a logged-but-unsaved history entry)
+
+    /// This entry's PER-PORTION values, in the currency `MenuLibrarySave`
+    /// already knows how to dedup and insert — the same path a picked
+    /// menu row takes, so this can never mint a twin `LibraryDuplicate`
+    /// wouldn't already catch. `quantity: 1`: the request's own quantity
+    /// only matters for `saveToLibrary` in `MenuLogRequest`'s original
+    /// caller (the describe-field flow); `MenuLibrarySave.insert` never
+    /// reads it.
+    private func libraryRequest() -> MenuLogRequest {
+        var label = ParsedLabel()
+        label.name = target.name
+        label.kcal = target.kcal
+        label.sodiumMg = target.sodiumMg
+        label.nutrients = target.nutrients
+        label.servingDescription = target.serving.isEmpty ? nil : target.serving
+        label.aiGenerated = target.aiGenerated
+        return MenuLogRequest(label: label, category: category, quantity: 1, saveToLibrary: true)
+    }
+
+    private func saveToLibrary() {
+        guard !isSavingToLibrary else { return }
+        isSavingToLibrary = true
+        MenuLibrarySave.insert(libraryRequest(), into: context)
+        ToastCenter.shared.show("Saved \(target.name) to your library ✓")
+        dismiss()
+    }
+
+    /// Saves, then logs a SEPARATE new entry dated today — this entry,
+    /// wherever it's dated, is untouched. Scaled by the sheet's own
+    /// current Serving stepper, the same figure "Will log" already
+    /// shows, so there is only ever one number on screen to read before
+    /// tapping either button.
+    private func saveAndLogToday() {
+        guard !isSavingToLibrary else { return }
+        isSavingToLibrary = true
+        MenuLibrarySave.insert(libraryRequest(), into: context)
+        Task {
+            _ = await LogActions.logFood(
+                name: target.name,
+                kcal: target.kcal * quantity,
+                sodiumMg: target.sodiumMg * quantity,
+                nutrients: target.nutrients.scaled(by: quantity),
+                category: category,
+                aiGenerated: target.aiGenerated,
+                quantity: quantity
+            )
+        }
+        dismiss()
     }
 }
 

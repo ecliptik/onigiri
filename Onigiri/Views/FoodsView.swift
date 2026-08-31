@@ -1217,6 +1217,12 @@ struct PortionSheet: View {
                     }
                 }
             }
+            // Matches FoodFormView's pattern (an explicit "" title, not
+            // no title at all). Free and harmless to keep for parity —
+            // see CLAUDE.md's SwiftData/SwiftUI landmines for the actual
+            // clipped-circle Cancel bug this screen once had and why this
+            // wasn't it.
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             // Select-all on focus, like the food form: the prefilled "1"
             // is usually replaced, not appended to. This sheet has one
@@ -1284,7 +1290,6 @@ struct PortionSheet: View {
         // Style.swift's sheetCardChrome, one implementation with the
         // Edit Water sheet.
         .sheetCardChrome()
-        .restoreToolbarGlass()
     }
 
     /// One Contains row. A row whose food is still in the library opens

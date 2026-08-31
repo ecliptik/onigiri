@@ -208,6 +208,11 @@ struct TodayView: View {
                 )
                 }
             }
+            // See DisablesInteractivePop (Style.swift) — an attempted, NOT
+            // confirmed, fix for a whole-screen swipe-shift bug. Kept as an
+            // independently justified change; read the doc comment there
+            // before assuming this closed the bug.
+            .disablesInteractivePop()
             // No onDismiss refresh: every mutation a sheet can make lands
             // in didMutate → mutationVersion → refresh below; a second
             // full refresh per dismissal was pure duplication.
@@ -1746,11 +1751,21 @@ private struct HorizontalSwipeGesture: UIGestureRecognizerRepresentable {
         // recognizer's own vertical-fail is what keeps vertical drags with
         // the scroll, so simultaneous recognition only ensures a horizontal
         // swipe isn't blocked by the scroll winning arbitration first.
+        //
+        // SCOPED to UIScrollView's own pan specifically — saying yes
+        // unconditionally to every other recognizer (the original form of
+        // this method) also said yes to the NavigationStack's edge-swipe-
+        // to-pop and whatever else was listening, so a mid-row swipe
+        // dragged the WHOLE SCREEN sideways at the same time as the row's
+        // own reveal (the user, 2026-08-30, from-device screenshot — the
+        // header, ring and tab bar all shifted left together while "Snow
+        // Bread" showed its edit pill). TodayView is inside a
+        // NavigationStack, so its pop gesture is always present to ask.
         func gestureRecognizer(
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
         ) -> Bool {
-            true
+            other.view is UIScrollView
         }
     }
 }
@@ -1867,7 +1882,6 @@ private struct WaterEditSheet: View {
         // Shared card chrome — Style.swift's sheetCardChrome, one
         // implementation with FoodsView's Contains card.
         .sheetCardChrome()
-        .restoreToolbarGlass()
     }
 }
 
@@ -1933,7 +1947,6 @@ private struct DayJumpSheet: View {
         }
         .presentationDetents([.medium])
         .presentationBackground(.thickMaterial)
-        .restoreToolbarGlass()
     }
 
     private func shiftMonth(_ delta: Int) {

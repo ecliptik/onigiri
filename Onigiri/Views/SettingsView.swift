@@ -156,6 +156,14 @@ struct SettingsView: View {
     @AppStorage(SharedStore.remindWaterMinute3Key, store: SharedStore.defaults) private var remindWaterMinute3 = 19 * 60
     @AppStorage(SharedStore.onlineLookupsKey, store: SharedStore.defaults) private var onlineLookups = false
     @AppStorage(SharedStore.textSearchSourceKey, store: SharedStore.defaults) private var textSearchSource = SharedStore.textSearchSourceOFF
+    // Settings is its own UIHostingController (a sheet), so ContentView's
+    // .preferredColorScheme never reaches it — AppearanceWindow's window
+    // override covers a FRESH presentation but doesn't repaint an
+    // ALREADY-VISIBLE hierarchy (the user, 2026-08-30: the Theme picker
+    // only took effect after tapping Done and reopening). Driving this
+    // screen's own colorScheme the SwiftUI-native way makes the picker
+    // live, matching the root app.
+    @AppStorage(SharedStore.appearanceKey, store: SharedStore.defaults) private var appearance = AppTheme.system.rawValue
     // Raw unit preferences ("auto"/explicit). Observed HERE (not just in
     // the Units subscreen) so the summary row updates and the onChange
     // sync push fires from a view that stays mounted.
@@ -901,6 +909,10 @@ struct SettingsView: View {
                 )
             }
         }
+        // Own UIHostingController, own colorScheme — see the appearance
+        // property's note. Makes the Theme picker on the Appearance
+        // subscreen (pushed within this same NavigationStack) live.
+        .preferredColorScheme(AppTheme.resolve(appearance).colorScheme)
         // Transfer/backup outcomes toast; a sheet needs its own host
         // (the root's renders behind presented sheets).
         .toastHost()

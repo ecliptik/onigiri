@@ -400,24 +400,36 @@ Each cost a debugging session.
   PROGRAMMATIC selections assign the state directly and skip the proxy on
   purpose: the Add pill's bounce must not reset the browsed day, because the
   Log sheet it opens backfills into that day.
-- **A custom `.presentationBackground` on a sheet silently opts its toolbar
-  OUT of the automatic Liquid Glass capsule every plain `Button` gets in
-  `.cancellationAction`/`.confirmationAction` elsewhere.** `sheetCardChrome()`
-  (PortionSheet, the Edit Water sheet) and DayJumpSheet's own
-  `.presentationBackground(.thickMaterial)` all lost it this way — Cancel/Save
-  read as bare colored text, in both light and dark mode (the user,
-  2026-08-30, from-device screenshots). The fix is NOT to force
-  `.buttonStyle(.glass)` on the buttons — that was tried first and instead
-  squashed Cancel into a clipped 44pt circle (`.glass`'s compact-icon
-  fallback for a leading slot with no bar to measure against — a DIFFERENT
-  broken look, not a fix; `.glassProminent` on the trailing confirm button
-  happened to render fine, which is what made the asymmetry confusing).
-  The actual cause is that the custom background removes the sheet's own
-  nav-bar material — restoring it with `.toolbarBackground(.visible, for:
-  .navigationBar)` (`View.restoreToolbarGlass()`, Style.swift) lets the
-  PLAIN buttons resolve their normal automatic styling again, same as every
-  sheet that never opted out. Any new custom `.presentationBackground` needs
-  this too.
+- **`.buttonStyle(.bordered)` on the LEADING `.cancellationAction` item of a
+  toolbar renders as a ~36pt circle clipped to a text fragment ("Cancel" →
+  "n"), and this has NOTHING to do with `sheetCardChrome()` or any custom
+  `.presentationBackground`** — a landmine that cost four wrong fixes before
+  it was actually bisected (2026-08-30, PortionSheet/Edit Water/DayJumpSheet,
+  the user, from-device screenshots each round). In order, and each
+  disproven with an isolated accessibility-frame measurement, not a guess:
+  `.buttonStyle(.glass)` produces the SAME clipped circle (its compact-icon
+  fallback for a leading slot); `.toolbarBackground(.visible, for:
+  .navigationBar)` changes nothing measurable; removing `sheetCardChrome()`
+  entirely changes nothing measurable; removing the conditional `.principal`
+  "Done" item changes nothing measurable; changing `.presentationDetents`
+  changes nothing measurable. What actually isolates it: swap the LABEL from
+  "Cancel" to "Nevermind" with the SAME `.bordered` style still attached —
+  fixed (ruling out per-string special-casing, since it was accidentally
+  confounded with also removing the style in the same edit); revert the
+  label to "Cancel" and instead just remove `.buttonStyle(.bordered)` —
+  ALSO fixed. `.borderedProminent` on the same leading item, and a PLAIN
+  unstyled `Button` (no `buttonStyle` at all), both render at full natural
+  width. **The actual fix is the plain, unstyled `Button` — it gets the
+  correct automatic Liquid Glass treatment (frosted pill, tinted text) even
+  under `sheetCardChrome()`'s custom `.presentationBackground`, matching
+  every other sheet in the app** (confirmed by direct screenshot comparison
+  against the Log sheet's own Cancel/Done, 2026-08-31 — the user: "Buttons
+  should look like the Log buttons"). `.borderedProminent` was shipped
+  first as an intermediate fix because it also avoided the clip, but its
+  solid-fill look doesn't match the rest of the app and was needless —
+  don't reach for ANY custom `.buttonStyle` on a sheet's Cancel/Save pair;
+  the plain, unstyled form is correct everywhere, `sheetCardChrome()`
+  included.
 
 ## App-launch landmines
 

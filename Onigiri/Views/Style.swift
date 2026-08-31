@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import OnigiriKit
 
 /// The library-list sort, shared by the Foods screen, the Log sheet,
@@ -184,25 +185,6 @@ extension View {
 }
 
 extension View {
-    /// The fix: `sheetCardChrome()`'s custom `.presentationBackground`
-    /// removes the sheet's own navigation-bar material, and THAT — not the
-    /// button code — is what silently opts a sheet out of the automatic
-    /// Liquid Glass capsule every plain toolbar `Button` gets elsewhere
-    /// (verified 2026-08-30: forcing `.buttonStyle(.glass)` on Cancel
-    /// instead squashed it into a clipped 44pt circle — `.glass`'s own
-    /// compact-icon fallback for a leading slot with no bar to measure
-    /// against, a DIFFERENT broken look, not a fix). Restoring the bar's
-    /// own visible material is what lets plain buttons resolve their
-    /// automatic styling again, same as every sheet that never opted out.
-    @ViewBuilder
-    func restoreToolbarGlass() -> some View {
-        if #available(iOS 26.0, *) {
-            self.toolbarBackground(.visible, for: .navigationBar)
-        } else {
-            self
-        }
-    }
-
     /// iOS 26's hard scroll-edge under pinned chrome (the always-on
     /// search field, the Log sheet's scope bar) — content clips
     /// crisply instead of ghosting through. A no-op on iOS 18.
@@ -221,4 +203,46 @@ extension Font {
     /// proportional to the large controls that sit beside them. Cards keep
     /// .headline for their titles; Forms keep the system defaults.
     static let sectionHeader = Font.title3.weight(.semibold)
+}
+
+/// Disables the NavigationStack's system edge-swipe-to-pop gesture on the
+/// screen it's attached to.
+///
+/// Applied to TodayView as an attempted fix for a whole-screen horizontal
+/// shift while swiping a log row (the user, 2026-08-30, from-device
+/// screenshot: header, ring and tab bar all shifted left together while a
+/// food row showed its edit pencil) — the theory being that the row's own
+/// gesture delegate saying yes to simultaneous recognition with the
+/// enclosing ScrollView's pan (needed so a vertical scroll starting on a
+/// row still works) was ALSO letting the system's edge-pop recognizer,
+/// always present on a NavigationStack, ride along. **Confirmed NOT
+/// sufficient on its own** (the user, 2026-08-31: the bug persists after
+/// this shipped) — and further narrowed to ONE SPECIFIC CALENDAR DATE
+/// (8/30/2026), reproducing on every row that day and no other day,
+/// which this gesture-arbitration theory does not explain at all. Root
+/// cause is still open; don't treat this as the fix. Kept anyway because
+/// it's an independently safe, justified change on its own terms — a
+/// prior session already found this exact edge zone stealing taps from a
+/// button that used to sit there (see the toolbar comment above the day
+/// chevrons in TodayView.swift). Today is a TAB ROOT with nothing
+/// meaningful to pop back to by edge-swipe (its one push destination, Day
+/// Nutrition detail, still pops via its own back button).
+struct DisablesInteractivePop: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> UIViewController {
+        let controller = UIViewController()
+        controller.view.isHidden = true
+        DispatchQueue.main.async {
+            controller.navigationController?.interactivePopGestureRecognizer?.isEnabled = false
+        }
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
+}
+
+extension View {
+    /// See `DisablesInteractivePop`.
+    func disablesInteractivePop() -> some View {
+        background(DisablesInteractivePop())
+    }
 }

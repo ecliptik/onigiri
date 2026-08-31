@@ -483,6 +483,16 @@ private struct AddToLibrarySheet: View {
                     .foregroundStyle(Color.onRicePaper)
             }
             .buttonStyle(.borderedProminent)
+            // ricePaper, not the inherited riceToast — every other
+            // prominent/filled button in the app (onboarding, Done,
+            // Import, Save) overrides to this same pale cream fill, and
+            // this pair had drifted from it (design audit, 2026-08-31:
+            // "every button reads as one riceToast family" made this
+            // sheet's fill visibly darker than the rest of the app's
+            // filled buttons — a real inconsistency, not a deliberate
+            // second look). The outlined Cancel below keeps the
+            // inherited riceToast accent; only the FILL needed this.
+            .tint(.ricePaper)
             if canAddMeal {
                 Button {
                     onPick(.meal); dismiss()
@@ -493,6 +503,7 @@ private struct AddToLibrarySheet: View {
                         .foregroundStyle(Color.onRicePaper)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.ricePaper)
             }
             Button {
                 dismiss()
@@ -504,8 +515,9 @@ private struct AddToLibrarySheet: View {
             .buttonStyle(.bordered)
             Spacer(minLength: 0)
         }
-        // App accent, not the system blue Cancel — every button reads as
-        // one riceToast family (Add Food filled, the rest outlined).
+        // App accent for the OUTLINED Cancel — not the system blue.
+        // The two filled buttons above override to .ricePaper instead
+        // (see their own comment).
         .tint(.riceToast)
         .padding(.horizontal, 24)
         .presentationDetents([.height(canAddMeal ? 324 : 256)])

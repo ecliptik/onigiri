@@ -108,7 +108,8 @@ struct LibraryMaintenanceTests {
             try coordinator.persistentStores.forEach { try coordinator.remove($0) }
         }
 
-        LibraryMaintenance.repairStore(at: url)
+        let succeeded = LibraryMaintenance.repairStore(at: url)
+        #expect(succeeded, "a repair that actually ran and fixed the store must report success")
 
         // The store must now open and compute totals without trapping.
         let config = ModelConfiguration(url: url)
@@ -148,7 +149,8 @@ struct LibraryMaintenanceTests {
             try context.save()
         }
 
-        LibraryMaintenance.repairStore(at: url)
+        let succeeded = LibraryMaintenance.repairStore(at: url)
+        #expect(succeeded, "a no-op repair on a healthy store must still report success")
 
         let config = ModelConfiguration(url: url)
         let container = try ModelContainer(
@@ -159,5 +161,40 @@ struct LibraryMaintenanceTests {
         let meal = try #require(meals.first)
         #expect(meal.items.count == 2)
         #expect(meal.totalKcal == 240)
+    }
+
+    /// A fresh install (no store file yet) has nothing to repair — this
+    /// exit must report SUCCESS, or the launch-time gate in OnigiriApp
+    /// would wrongly skip repairDanglingFoodReferences on every first run.
+    @Test func repairStoreSucceedsWhenNoStoreExistsYet() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        // Deliberately not creating the directory or the file — this is
+        // the exact state a fresh install's App Group container is in.
+        let url = dir.appendingPathComponent("NeverCreated.sqlite")
+
+        #expect(LibraryMaintenance.repairStore(at: url))
+    }
+
+    /// The regression this whole return-value change exists for
+    /// (health-check audit, 2026-08-31): repairStore must report FAILURE
+    /// when it cannot actually inspect the store, so a caller can skip the
+    /// unconditional SwiftData-level touch that would otherwise crash on
+    /// a dangling reference this pass never got to see. A `Void`-returning
+    /// repairStore let this exact silent failure run straight into that
+    /// touch on every subsequent launch.
+    @Test func repairStoreReportsFailureWhenTheStoreCannotBeLoaded() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("Corrupt.sqlite")
+
+        // A file exists (so the "fresh install" exit doesn't fire) but
+        // isn't a valid SQLite store — loadPersistentStores must fail.
+        try Data("not a sqlite file".utf8).write(to: url)
+
+        let succeeded = LibraryMaintenance.repairStore(at: url)
+        #expect(!succeeded, "a store that fails to load must report failure, not silently succeed")
     }
 }

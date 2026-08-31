@@ -21,21 +21,40 @@ public enum LibraryMaintenance {
     /// nothing here is wrapped in `perform`, so an off-main caller would
     /// produce exactly the wrong-thread crash class this function exists
     /// to prevent — now a compile error rather than a convention.
+    ///
+    /// Returns whether it is SAFE to proceed to the SwiftData-level pass
+    /// (`repairDanglingFoodReferences`) — `true` for "definitely nothing to
+    /// repair" (fresh install) or "repair ran to completion, store is
+    /// clean," `false` for every exit that leaves the store's condition
+    /// UNKNOWN. The caller must gate the next pass on this: that pass
+    /// touches every `MealItem.food` unconditionally, and SwiftData KILLS
+    /// THE PROCESS the instant that property resolves a genuinely dangling
+    /// reference (CLAUDE.md's SwiftData landmine). A `Void`-returning
+    /// version of this function let a silent early exit here (a bad
+    /// bridge, a locked file, a failed save) run straight into that touch
+    /// on EVERY launch thereafter — turning a one-time repair failure into
+    /// a permanent crash loop, the exact class of bug this whole mechanism
+    /// exists to prevent (health-check audit, 2026-08-31).
+    @discardableResult
     @MainActor
-    public static func repairStore(at url: URL) {
-        // No store yet is every fresh install — silence is right there.
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
-        // The entity list is the SCHEMA's own, never a hand copy: the
-        // copy this replaced had nothing keeping it in step with
-        // `OnigiriSchemaV1.models`, so a future schema version would
-        // have silently starved the repair (audit, 2026-08-17).
-        guard let model = NSManagedObjectModel.makeManagedObjectModel(for: OnigiriSchemaV1.models)
+    public static func repairStore(at url: URL) -> Bool {
+        // No store yet is every fresh install — silence is right there,
+        // and there is nothing for the next pass to trip over.
+        guard FileManager.default.fileExists(atPath: url.path) else { return true }
+        // The entity list is the migration plan's LATEST schema, never a
+        // hand copy or a hardcoded version — a hardcoded `OnigiriSchemaV1`
+        // here silently stopped matching the on-disk store the moment
+        // OnigiriSchemaV2 shipped, which is exactly when this repair is
+        // most likely to be needed (health-check audit, 2026-08-31; see
+        // also the 2026-08-17 audit this replaced a hand copy for).
+        guard let latestSchema = OnigiriMigrationPlan.schemas.last,
+              let model = NSManagedObjectModel.makeManagedObjectModel(for: latestSchema.models)
         else {
             // The bridge failing means the repair switched itself off —
             // at exactly the moment a schema change makes it likeliest
             // to be needed. Never silent.
             maintenanceLog.error("repairStore: SwiftData model bridge failed — repair skipped")
-            return
+            return false
         }
         let container = NSPersistentContainer(name: "Onigiri", managedObjectModel: model)
         let description = NSPersistentStoreDescription(url: url)
@@ -59,7 +78,7 @@ public enum LibraryMaintenance {
             // fires first when something is actually wrong (incompatible
             // store, disk fault, bad bridge).
             maintenanceLog.error("repairStore: store load failed, repair skipped: \(loadError)")
-            return
+            return false
         }
         defer {
             // A store left mounted here would collide with SwiftData
@@ -79,7 +98,7 @@ public enum LibraryMaintenance {
             fetchedItems = try context.fetch(NSFetchRequest<NSManagedObject>(entityName: "MealItem"))
         } catch {
             maintenanceLog.error("repairStore: MealItem fetch failed, skipping repair: \(error)")
-            return
+            return false
         }
         var repaired = false
         for item in fetchedItems {
@@ -104,10 +123,19 @@ public enum LibraryMaintenance {
         // There is no reference left to dangle, which is why the repair
         // is one-directional. Don't add the other half.
         if repaired {
-            do { try context.save() } catch {
+            do {
+                try context.save()
+            } catch {
+                // The worst of the five exits: repairs were COMPUTED
+                // (deletes staged in this context) but never PERSISTED —
+                // the on-disk store still carries whatever was dangling,
+                // indistinguishable from having never looked. Must report
+                // failure like every other exit here.
                 maintenanceLog.error("repairStore: save failed, repairs not persisted: \(error)")
+                return false
             }
         }
+        return true
     }
 
     /// True only when Core Data affirmatively reports the referenced row
@@ -194,7 +222,12 @@ public enum LibraryMaintenance {
                 return !liveFoodIDs.contains(food.persistentModelID)
             }
             guard !dangling.isEmpty else { continue }
-            meal.items.removeAll { item in dangling.contains { $0 === item } }
+            // Set membership on the stable persistentModelID, not a
+            // nested identity scan — the O(n×m) form was cheap at
+            // personal-library scale but free to avoid while already
+            // touching this function (health-check audit, 2026-08-31).
+            let danglingIDs = Set(dangling.map(\.persistentModelID))
+            meal.items.removeAll { danglingIDs.contains($0.persistentModelID) }
             dangling.forEach(context.delete)
             repaired = true
         }

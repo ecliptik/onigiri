@@ -33,10 +33,21 @@ struct OnigiriApp: App {
         // judged would gate off the only recovery from a crash loop. The
         // per-launch cost (a small scan of a personal library) is the
         // cheaper side of that trade.
-        if let url = SharedStore.storeURL {
-            LibraryMaintenance.repairStore(at: url)
+        //
+        // GATED on repairStore's own result (health-check audit,
+        // 2026-08-31): repairDanglingFoodReferences touches every
+        // MealItem.food unconditionally, and SwiftData kills the process
+        // the instant that resolves a genuinely dangling reference. A
+        // Void-returning repairStore let a silent failure here (bad
+        // bridge, locked file, failed save) run straight into that touch
+        // on EVERY subsequent launch — turning a one-time repair failure
+        // into a permanent crash loop, the exact class this mechanism
+        // exists to prevent. No store to check (fresh install) counts as
+        // safe, same as repairStore's own "nothing to repair" exit.
+        let safeToProceed = SharedStore.storeURL.map { LibraryMaintenance.repairStore(at: $0) } ?? true
+        if safeToProceed {
+            LibraryMaintenance.repairDanglingFoodReferences(context: Self.container.mainContext)
         }
-        LibraryMaintenance.repairDanglingFoodReferences(context: Self.container.mainContext)
 
         let observer = HealthKitService()
         observer.startObservingLogChanges {

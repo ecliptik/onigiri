@@ -1063,18 +1063,24 @@ public final class HealthKitService {
     /// history silently loses its breakdown.
     public static let mealItemsMetadataKey = "OnigiriMealItems"
 
-    @discardableResult
-    public func logFood(
+    /// The pure half of `logFood`'s write: which of the three
+    /// correlation-metadata keys land in the sample, given the same
+    /// inputs `logFood` receives. Extracted (health-check audit,
+    /// 2026-08-31) because this exact dictionary is the load-bearing
+    /// contract CLAUDE.md's "Logging: HealthKit is the store" section
+    /// warns about — "any new log/re-log path must carry them ALL
+    /// through or edits regress and history silently loses detail" — and
+    /// until now nothing in the repo could catch a regression here
+    /// without a live HealthKit store. No HealthKit I/O in this function;
+    /// `HKMetadataKeyFoodType`/`HKMetadataKeyWasUserEntered` are plain
+    /// String constants from the framework, not live calls.
+    static func foodMetadata(
         name: String,
-        kcal: Double,
-        sodiumMg: Double,
-        nutrients: NutrientValues = NutrientValues(),
-        category: FoodCategory? = nil,
-        date: Date = .now,
-        aiGenerated: Bool = false,
-        quantity: Double = 1,
-        mealItems: [LoggedMealItem] = []
-    ) async throws -> UUID {
+        category: FoodCategory?,
+        aiGenerated: Bool,
+        quantity: Double,
+        mealItems: [LoggedMealItem]
+    ) -> [String: Any] {
         var metadata: [String: Any] = [
             HKMetadataKeyFoodType: name,
             // Manually entered, not sensor-derived — Health uses this
@@ -1093,6 +1099,25 @@ public final class HealthKitService {
         if let encoded = LoggedMealItem.encoded(mealItems) {
             metadata[Self.mealItemsMetadataKey] = encoded
         }
+        return metadata
+    }
+
+    @discardableResult
+    public func logFood(
+        name: String,
+        kcal: Double,
+        sodiumMg: Double,
+        nutrients: NutrientValues = NutrientValues(),
+        category: FoodCategory? = nil,
+        date: Date = .now,
+        aiGenerated: Bool = false,
+        quantity: Double = 1,
+        mealItems: [LoggedMealItem] = []
+    ) async throws -> UUID {
+        let metadata = Self.foodMetadata(
+            name: name, category: category, aiGenerated: aiGenerated,
+            quantity: quantity, mealItems: mealItems
+        )
         var objects: Set<HKSample> = [
             HKQuantitySample(
                 type: HKQuantityType(.dietaryEnergyConsumed),

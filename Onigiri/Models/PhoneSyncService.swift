@@ -47,17 +47,11 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
 
     @MainActor private var pendingContext: ModelContext?
     @MainActor private var pushTask: Task<Void, Never>?
-    /// Fingerprints of what was last mirrored locally / actually sent to
-    /// the watch — repeat pushes with nothing changed (every foreground,
-    /// chained Settings onChange handlers) skip the mirror write, widget
-    /// reload, and radio. Tracked separately: a send skipped because the
-    /// session wasn't ready yet must not suppress the retry.
-    @MainActor private var lastMirroredFingerprint: Int?
-    /// The goal+settings slice of the mirror fingerprint — library-only
-    /// changes (a recency bump on every log) must not reload the weight
-    /// trend widget, which reads nothing from the library mirror.
-    @MainActor private var lastSettingsFingerprint: Int?
-    @MainActor private var lastSentFingerprint: Int?
+    /// See `WatchSyncFingerprintCache` — the pure state and the
+    /// watch-reinstall invalidation rule this class relies on both live
+    /// there now, tested in isolation from WatchConnectivity/UIKit
+    /// (health-check audit, 2026-08-31).
+    @MainActor private var fingerprints = WatchSyncFingerprintCache()
 
     func activate(onActivate: @escaping @MainActor () -> Void) {
         guard WCSession.isSupported() else { return }
@@ -260,8 +254,8 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         // widgets never read them (they're the watch's inputs), and their
         // daily day-stamp turnover would fire a full reloadAll for nothing.
         let settingsFingerprint = settingsHasher.finalize()
-        if mirrorFingerprint != lastMirroredFingerprint {
-            lastMirroredFingerprint = mirrorFingerprint
+        if !fingerprints.mirrorUnchanged(from: mirrorFingerprint) {
+            fingerprints.recordMirrored(mirrorFingerprint)
             WatchSync.store(mirrorPayload)
             // Siri's parameterized phrases ("Log <meal> in Onigiri")
             // speak the mirror just written — refresh their vocabulary
@@ -271,7 +265,7 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
             // Widgets render from the mirror just written — every goal,
             // settings, and library change lands here, so this is the one
             // place a reload keeps them from going up to ~30 min stale.
-            if settingsFingerprint != lastSettingsFingerprint {
+            if !fingerprints.settingsUnchanged(from: settingsFingerprint) {
                 WidgetReloader.requestReloadAll()
             } else {
                 // Library-only (every log bumps recency and lands here):
@@ -280,7 +274,7 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
                 WidgetReloader.requestReload(kinds: WidgetKinds.phoneLogAffected)
             }
         }
-        lastSettingsFingerprint = settingsFingerprint
+        fingerprints.recordSettings(settingsFingerprint)
 
         // The send-side fingerprint latches only on a successful send: a
         // push skipped here (session still activating, watch briefly
@@ -295,7 +289,7 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         sendHasher.combine(mirrorPayload)
         sendHasher.combine(contextMeals)
         let sendFingerprint = sendHasher.finalize()
-        guard sendFingerprint != lastSentFingerprint else { return }
+        guard !fingerprints.sentUnchanged(from: sendFingerprint) else { return }
         do {
             try WCSession.default.updateApplicationContext(WatchSync.makeContext(
                 meals: contextMeals,
@@ -315,7 +309,7 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
                 planWeightDay: planWeight?.day,
                 lastLogAt: lastLogAt
             ))
-            lastSentFingerprint = sendFingerprint
+            fingerprints.recordSent(sendFingerprint)
         } catch {
             // A payload-too-large here means the watch silently stops
             // getting updates — it must at least be visible in the log.
@@ -334,26 +328,28 @@ final class PhoneSyncService: NSObject, WCSessionDelegate {
         Task { @MainActor in
             // Forget what was last SENT: this process may be talking to a
             // watch that no longer holds it (see sessionWatchStateDidChange).
-            self.lastSentFingerprint = nil
+            self.fingerprints.invalidateSent()
             self.onActivate?()
         }
     }
 
     /// The watch was paired, unpaired, or — the case that bit — had the
-    /// app REINSTALLED. A reinstall wipes the watch's library, but
-    /// `lastSentFingerprint` still holds what the OLD installation was
-    /// sent, so the next push computes an identical fingerprint and
-    /// SKIPS the send. The watch then sits on "add favorites or log food
-    /// in the app" forever while the phone's library is full, and only a
-    /// phone relaunch (which clears this in-memory state) or an unrelated
-    /// library edit breaks the deadlock (field report 2026-07-30).
+    /// app REINSTALLED. A reinstall wipes the watch's library, but the
+    /// sent fingerprint still holds what the OLD installation was sent,
+    /// so the next push computes an identical fingerprint and SKIPS the
+    /// send. The watch then sits on "add favorites or log food in the
+    /// app" forever while the phone's library is full, and only a phone
+    /// relaunch (which cleared this in-memory state) or an unrelated
+    /// library edit broke the deadlock (field report 2026-07-30). See
+    /// `WatchSyncFingerprintCache.invalidateSent` for the regression test
+    /// this exact bug now has.
     ///
     /// Clearing the fingerprint and re-pushing costs one application
     /// context update — the cheapest possible push — and only when the
     /// watch's install/pair state actually moves.
     nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
         Task { @MainActor in
-            self.lastSentFingerprint = nil
+            self.fingerprints.invalidateSent()
             self.onActivate?()
         }
     }

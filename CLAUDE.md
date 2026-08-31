@@ -351,6 +351,23 @@ Each cost a debugging session.
   row may have been deleted** — it hands back a fault whose first property
   access is that same process kill. Look it up in the loaded `@Query` arrays
   instead; not found is then simply nothing (2026-08-14).
+- **`repairStore(at:)` RETURNS whether it's safe to proceed, and the caller
+  MUST gate on it** (health-check audit, 2026-08-31). It used to be
+  `Void`-returning: a silent early exit (bad Core Data model bridge, locked
+  store file, a save that computed repairs but never persisted them) let
+  `OnigiriApp.init` call `repairDanglingFoodReferences` right after anyway —
+  which touches every `MealItem.food` unconditionally and traps the process
+  on a genuinely dangling one. That turned a ONE-TIME repair failure into a
+  crash loop on every subsequent launch, the exact class this mechanism
+  exists to prevent. `OnigiriApp.init` now only calls
+  `repairDanglingFoodReferences` when `repairStore` (or a nil store URL,
+  same as its own "nothing to repair" exit) returns `true`. Also: the
+  repair's entity list is `OnigiriMigrationPlan.schemas.last!.models`, never
+  a schema version hardcoded by name — a hardcoded `OnigiriSchemaV1` here
+  silently stops matching the on-disk store the moment `OnigiriSchemaV2`
+  ships, which is exactly when this repair is likeliest to be needed. Any
+  new call site must check the return value; don't add a second unconditional
+  caller.
 - With an inverse declared, both sides must be inserted into the context before
   linking (`MealItem(food:)` traps on never-inserted foods) — relevant in tests.
 - In tests, keep the `ModelContainer` alive for the test body; returning just a
@@ -766,7 +783,15 @@ Each cost a debugging session.
   until the phone app is relaunched or the library happens to change.
   `sessionWatchStateDidChange` now clears that fingerprint and re-pushes — it's
   the only callback that fires when `isWatchAppInstalled` moves (2026-07-30).
-  Any future send-side caching needs the same escape hatch.
+  Any future send-side caching needs the same escape hatch. The three
+  fingerprints (mirrored/settings/sent) live in `OnigiriKit.
+  WatchSyncFingerprintCache` now, not raw `Int?` properties on
+  `PhoneSyncService` — a pure, `Sendable` value type extracted specifically
+  so this exact bug has a regression test that doesn't need a live
+  `WCSession` (health-check audit, 2026-08-31). `invalidateSent()` is the
+  fix; it touches ONLY the sent half on purpose — the phone's own
+  mirrored/settings state hasn't changed just because the watch was
+  reinstalled.
 - New payload fields are OPTIONAL for version skew in both directions, and
   nil must render as the pre-feature behavior rather than a guess. Where a
   field has a meaningful `false`, send it EXPLICITLY — `SyncedMeal.isMeal` on a

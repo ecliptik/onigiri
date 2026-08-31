@@ -122,8 +122,14 @@ struct EntryDoorsSection: View {
                     // The SAME fill `DoorCircleGlyph`'s circle uses —
                     // one "control chip" language for both, so they
                     // read as siblings rather than a button floating
-                    // inside a field's own row.
-                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    // inside a field's own row. `.tertiarySystemGroupedBackground`,
+                    // not `.quaternary` — the hierarchical material
+                    // washed out light on a real device in dark mode
+                    // (the user, 2026-08-30, from-device screenshot:
+                    // "light mode button leak"); this is a flat,
+                    // deterministic system color instead, matching
+                    // `DoorCircleGlyph`'s own fix.
+                    .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
             } else {
                 Button(action: onScan) {

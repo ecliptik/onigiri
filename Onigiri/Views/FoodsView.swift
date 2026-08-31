@@ -949,7 +949,17 @@ struct DoorCircleGlyph: View {
             // glyph is narrower than its font's full height, so its
             // glyph+9pt padding lands at ~35, not 39 — measured).
             .frame(width: diameter, height: diameter)
-            .background(.quaternary.opacity(0.5), in: .circle)
+            // `.tertiarySystemGroupedBackground`, not `.quaternary`: the
+            // hierarchical material is a VIBRANCY style, not a flat
+            // color, and TodayView's own card background carries the
+            // scar from finding this out ("quaternary-over-background
+            // diverged in dark") — it renders fine in Simulator but
+            // washes out light on a real device in dark mode (the
+            // user, 2026-08-30, screenshot from-device: "light mode
+            // button leak"). This is the one-nesting-level-in system
+            // color for exactly this "chip inside a card" shape,
+            // deterministic in both modes.
+            .background(Color(.tertiarySystemGroupedBackground), in: .circle)
             .overlay(
                 Circle().strokeBorder(Color.riceToast.opacity(0.5), lineWidth: 1)
             )
@@ -983,8 +993,11 @@ struct LogButton: View {
             .foregroundStyle(Color.riceToast)
             .padding(9)
             // A static fill, NOT glassEffect: a live glass layer on
-            // every list row made Foods stutter on scroll.
-            .background(.quaternary.opacity(0.5), in: .circle)
+            // every list row made Foods stutter on scroll. See
+            // `DoorCircleGlyph` for why this is
+            // `.tertiarySystemGroupedBackground` and not `.quaternary`
+            // — the two are meant to render identically.
+            .background(Color(.tertiarySystemGroupedBackground), in: .circle)
             .overlay(
                 Circle().strokeBorder(Color.riceToast.opacity(0.5), lineWidth: 1)
             )

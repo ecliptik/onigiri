@@ -922,6 +922,11 @@ private struct AppearanceSettingsScreen: View {
     @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
     @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
     @AppStorage(SharedStore.mealIconKey, store: SharedStore.defaults) private var mealIcon = "plate"
+    // Moved from the Water subscreen (2026-08-30, the user) — every
+    // icon picker reads together now; Water keeps its goal/serving/unit
+    // knobs, which is what "one home for every water setting" was
+    // actually protecting.
+    @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
     @AppStorage(SharedStore.balanceStyleKey, store: SharedStore.defaults) private var balanceStyle = "remaining"
     @AppStorage(SharedStore.energyStatsStyleKey, store: SharedStore.defaults) private var energyStatsStyle = "cards"
     @AppStorage(SharedStore.progressGaugesKey, store: SharedStore.defaults) private var progressGauges = false
@@ -933,10 +938,34 @@ private struct AppearanceSettingsScreen: View {
     var body: some View {
         Form {
             Section {
-                // navigationLink style: menu pickers strip both image
-                // attachments and icon colors from their rows; a pushed
-                // list renders real SwiftUI rows — true colors, aligned
-                // icon column.
+                // FIRST (the user, 2026-08-30 — reversing "last" from
+                // 2026-07-29: it read better leading than trailing once
+                // this screen grew a Today-display group of its own).
+                // "Theme", not "Appearance" — this screen is already
+                // Appearance. System is the default, and the only value
+                // media/QA capture runs may see: those switch the
+                // SIMULATOR's appearance to shoot both looks, and a
+                // forced app theme would defeat that.
+                Picker("Theme", selection: $appearance) {
+                    ForEach(AppTheme.allCases, id: \.rawValue) { theme in
+                        Text(theme.label).tag(theme.rawValue)
+                    }
+                }
+                // The two Today-display toggles, grouped together (the
+                // user, 2026-08-30): both decide what's ON the Today
+                // screen, as opposed to the icon/wording choices below
+                // that decide how something already there LOOKS.
+                Toggle("Progress gauges", isOn: $progressGauges)
+                // On by default — hides the whole door to Goal (the
+                // card and its no-goal fallback text alike), not just
+                // the numbers on it.
+                Toggle("Daily Goal card", isOn: $showDailyGoalCard)
+                // The four icon pickers, grouped together (the user,
+                // 2026-08-30 — Water icon joined the trio the same day,
+                // moved out of the Water subscreen). navigationLink
+                // style: menu pickers strip both image attachments and
+                // icon colors from their rows; a pushed list renders
+                // real SwiftUI rows — true colors, aligned icon column.
                 Picker("Food icon", selection: $foodIcon) {
                     ForEach(SettingsIcons.foodOptions, id: \.tag) { option in
                         HStack(spacing: 10) {
@@ -949,8 +978,19 @@ private struct AppearanceSettingsScreen: View {
                     SettingsIcons.customRows(current: foodIcon)
                 }
                 .pickerStyle(.navigationLink)
-                // The water icon lives in the Water section — every water
-                // knob in one place (the user).
+                // The app-wide water icon (Today, log buttons, watch).
+                Picker("Water icon", selection: $waterIcon) {
+                    ForEach(SettingsIcons.waterOptions, id: \.tag) { option in
+                        HStack(spacing: 10) {
+                            WaterIconView(raw: option.tag)
+                                .frame(width: 28)
+                            Text(option.name)
+                        }
+                        .tag(option.tag)
+                    }
+                    SettingsIcons.customRows(current: waterIcon)
+                }
+                .pickerStyle(.navigationLink)
                 // The mark beside meal names in mixed lists (Favorites,
                 // the Log sheet, Today's log).
                 Picker("Meal mark", selection: $mealIcon) {
@@ -1007,11 +1047,6 @@ private struct AppearanceSettingsScreen: View {
                     Text("Cards").tag("cards")
                     Text("Compact").tag("compact")
                 }
-                Toggle("Progress gauges", isOn: $progressGauges)
-                // On by default — hides the whole door to Goal (the
-                // card and its no-goal fallback text alike), not just
-                // the numbers on it.
-                Toggle("Daily Goal card", isOn: $showDailyGoalCard)
                 // Which scope the Foods tab opens on. Favorites led from
                 // 2026-07-14; the user asked for Foods on 2026-08-05 —
                 // a setting rather than a third hardcoded reversal.
@@ -1019,17 +1054,6 @@ private struct AppearanceSettingsScreen: View {
                     Text("Foods").tag("Foods")
                     Text("Favorites").tag("Favorites")
                     Text("Meals").tag("Meals")
-                }
-                // Last, under the other choices (the user, 2026-07-29).
-                // "Theme", not "Appearance" — this screen is already
-                // Appearance. System is the default, and the only value
-                // media/QA capture runs may see: those switch the
-                // SIMULATOR's appearance to shoot both looks, and a forced
-                // app theme would defeat that.
-                Picker("Theme", selection: $appearance) {
-                    ForEach(AppTheme.allCases, id: \.rawValue) { theme in
-                        Text(theme.label).tag(theme.rawValue)
-                    }
                 }
             }
         }
@@ -1830,7 +1854,6 @@ private struct WaterSettingsScreen: View {
     @AppStorage(SharedStore.waterServingKey, store: SharedStore.defaults) private var waterServingOz = 12.0
     @AppStorage(SharedStore.waterGoalKey, store: SharedStore.defaults) private var waterGoalOz = 64.0
     @AppStorage(SharedStore.holdToLogWaterKey, store: SharedStore.defaults) private var holdToLogWater = true
-    @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
     @AppStorage(SharedStore.waterUnitKey, store: SharedStore.defaults) private var waterUnit = SharedStore.unitAutomatic
 
     private var resolvedWaterUnit: WaterUnit { WaterUnit.resolve(waterUnit) }
@@ -1900,20 +1923,6 @@ private struct WaterSettingsScreen: View {
                 // Opt-out (default on) — and the row doubles as the
                 // feature's signpost (the user).
                 Toggle("Hold + to log water", isOn: $holdToLogWater)
-                // The app-wide water icon (Today, log buttons, watch) —
-                // here unconditionally: one home for every water setting.
-                Picker("Water icon", selection: $waterIcon) {
-                    ForEach(SettingsIcons.waterOptions, id: \.tag) { option in
-                        HStack(spacing: 10) {
-                            WaterIconView(raw: option.tag)
-                                .frame(width: 28)
-                            Text(option.name)
-                        }
-                        .tag(option.tag)
-                    }
-                    SettingsIcons.customRows(current: waterIcon)
-                }
-                .pickerStyle(.navigationLink)
             }
         }
         .compactSections()

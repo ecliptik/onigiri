@@ -209,20 +209,23 @@ extension Font {
 /// screen it's attached to.
 ///
 /// Applied to TodayView as an attempted fix for a whole-screen horizontal
-/// shift while swiping a log row (the user, 2026-08-30, from-device
-/// screenshot: header, ring and tab bar all shifted left together while a
-/// food row showed its edit pencil) — the theory being that the row's own
-/// gesture delegate saying yes to simultaneous recognition with the
-/// enclosing ScrollView's pan (needed so a vertical scroll starting on a
-/// row still works) was ALSO letting the system's edge-pop recognizer,
-/// always present on a NavigationStack, ride along. **Confirmed NOT
-/// sufficient on its own** (the user, 2026-08-31: the bug persists after
-/// this shipped) — and further narrowed to ONE SPECIFIC CALENDAR DATE
-/// (8/30/2026), reproducing on every row that day and no other day,
-/// which this gesture-arbitration theory does not explain at all. Root
-/// cause is still open; don't treat this as the fix. Kept anyway because
-/// it's an independently safe, justified change on its own terms — a
-/// prior session already found this exact edge zone stealing taps from a
+/// shift while swiping a log row (the user, 2026-08-30) — the theory being
+/// that the row's own gesture delegate saying yes to simultaneous
+/// recognition with the enclosing ScrollView's pan (needed so a vertical
+/// scroll starting on a row still works) was ALSO letting the system's
+/// edge-pop recognizer, always present on a NavigationStack, ride along.
+/// **Confirmed NOT the cause** (2026-08-31): on-device diagnostic logging
+/// showed this recognizer genuinely disabled (`isEnabled=false`) while the
+/// bug still reproduced, and separately the user confirmed the swipe that
+/// triggers it starts anywhere on a row — including the trailing edge and
+/// middle — never the screen's leading edge this recognizer is scoped to.
+/// The real cause turned out to be nothing in this file, or in any of the
+/// gesture code this investigation spent most of its time on: it was a
+/// silently corrupted SwiftData `Food` LIBRARY record, fixed by editing
+/// and re-saving that one food (see `refreshAfterSwipeSettles` in
+/// TodayView.swift for the full trail). Kept anyway because it's an
+/// independently safe, justified change on its own terms — a prior
+/// session already found this exact edge zone stealing taps from a
 /// button that used to sit there (see the toolbar comment above the day
 /// chevrons in TodayView.swift). Today is a TAB ROOT with nothing
 /// meaningful to pop back to by edge-swipe (its one push destination, Day

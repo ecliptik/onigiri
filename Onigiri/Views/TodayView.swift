@@ -74,14 +74,55 @@ struct TodayView: View {
     // you want to inspect.
     @State private var collapsedSections: Set<FoodCategory> = Set(FoodCategory.allCases)
     @State private var waterCollapsed = true
-    /// True while a log row is mid swipe-to-delete, so the day-paging
-    /// swipe on the whole screen stands down. Held in an @Observable box,
-    /// NOT a plain @State the body reads: a row's swipe writes it, but the
-    /// only reader is the day-paging gesture's onEnded closure (evaluated
-    /// at gesture-end, not during body eval), so flipping it no longer
-    /// invalidates the whole screen mid-gesture — the old shared @State
-    /// turned every swipe into a full-body re-render (dead taps).
+    /// True while a log row is mid swipe-to-delete. Held in an
+    /// @Observable box, NOT a plain @State the body reads: a row's swipe
+    /// writes it, but the reader (`refreshAfterSwipeSettles`) reads it
+    /// from inside a `Task`, not from body evaluation, so flipping it no
+    /// longer invalidates the whole screen mid-gesture — the old shared
+    /// @State turned every swipe into a full-body re-render (dead taps).
+    ///
+    /// Originally written for a day-paging swipe that's since been
+    /// removed, leaving this box written but never read — until a
+    /// whole-screen corrupted-render investigation (2026-08-31, see
+    /// `refreshAfterSwipeSettles`) gave it a second, load-bearing job.
     @State private var rowSwipe = RowSwipeState()
+
+    /// Waits out any swipe in progress before running a list refresh, so
+    /// a log/delete/undo's refresh (`mutationVersion`/`healthWriteVersion`
+    /// below) can never rebuild the visible rows through `ForEach` WHILE a
+    /// row's own swipe gesture — a UIKit pan recognizer bridged in via
+    /// `UIGestureRecognizerRepresentable`, not a SwiftUI-native gesture —
+    /// is still live. Real, independently worth having: this is exactly
+    /// the job `RowSwipeState.active` was built for and never got wired
+    /// to a reader before.
+    ///
+    /// NOT the fix for the specific bug that prompted it, though —
+    /// documenting that clearly so a future reader doesn't assume this
+    /// (or the `.clipped()`/`.onAppear` reset in `LogRowSwipeActions`)
+    /// closed the case. A whole-screen shift while swiping ONE specific
+    /// logged food (never any other) survived this guard, survived
+    /// defensive clipping, and survived resetting the row's swipe state
+    /// on every appearance — two from-device recordings and on-device
+    /// console logging of every offset/translation value all came back
+    /// clean. What actually fixed it: editing that ONE food's LIBRARY
+    /// record (Foods → Edit → Save), even reverting the name right back
+    /// to its original string, and the bug stopped reproducing for good
+    /// (the user, 2026-08-31). So the true cause was something silently
+    /// wrong in that one SwiftData `Food` row — not in this gesture code
+    /// at all — and re-saving overwrote whatever it was. The bad state
+    /// isn't recoverable to inspect (Edit Food rewrites the whole
+    /// record), and the food was AI-generated, which fits: CLAUDE.md
+    /// already documents more than one measured AI-pipeline reliability
+    /// gap elsewhere (Foundation Models re-deriving a portion it was told
+    /// to leave alone; a totals-vs-components mismatch producing a
+    /// zero-kcal food). If this recurs, check the LOGGED food's own
+    /// library record before suspecting this file again.
+    private func refreshAfterSwipeSettles() async {
+        while rowSwipe.active {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        await model.refresh()
+    }
     /// The headline number follows the user's text size (Dynamic Type);
     /// minimumScaleFactor keeps huge accessibility sizes on one line.
     @ScaledMetric(relativeTo: .largeTitle) private var headlineSize = 60.0
@@ -321,7 +362,7 @@ struct TodayView: View {
         // with the first load.
         .onChange(of: model.weightHistory) { _, _ in stampMilestoneIfNew() }
         .onChange(of: toastCenter.mutationVersion) { _, _ in
-            Task { await model.refresh() }
+            Task { await refreshAfterSwipeSettles() }
         }
         // The same, for a log this app never made: the watch, a widget
         // button, Siri, another Health app. mutationVersion covers only
@@ -334,7 +375,7 @@ struct TodayView: View {
         // moment AFTER the phone comes forward, so the foreground read
         // has already run by the time it lands.
         .onChange(of: toastCenter.healthWriteVersion) { _, _ in
-            Task { await model.refresh() }
+            Task { await refreshAfterSwipeSettles() }
         }
         // A slot's nutrient changed in Settings: its day total needs a
         // fresh Health query.
@@ -1577,6 +1618,19 @@ private struct LogRowSwipeActions: ViewModifier {
     func body(content: Content) -> some View {
         content
             .offset(x: offset)
+            // Defensive containment, kept even though it turned out NOT
+            // to be the fix for the bug that prompted it (see
+            // `refreshAfterSwipeSettles` in TodayView for the actual
+            // resolution — a corrupted library Food record, fixed by
+            // re-saving it, unrelated to this gesture code). Independently
+            // worth having regardless: if a row's content ever DID render
+            // with a horizontal offset beyond what the swipe math above
+            // can produce (settle() only ever targets 0 or ±revealWidth;
+            // an active drag is hard-capped at revealWidth + stretchLimit),
+            // clipping content to its own row bounds turns "content
+            // escapes across the whole screen" into, at worst, "content
+            // briefly disappears inside its own row."
+            .clipped()
             .background {
                 ZStack {
                     if offset > 0, onEdit != nil {
@@ -1660,9 +1714,22 @@ private struct LogRowSwipeActions: ViewModifier {
                     } else {
                         settle(0)
                     }
-                    swipe.active = false
                 }
             ))
+            // Belt-and-suspenders alongside .clipped() above — see that
+            // comment and `refreshAfterSwipeSettles` in TodayView for why
+            // neither this nor the clip turned out to be the actual fix
+            // for the bug that prompted them. Kept anyway: forces this
+            // row's swipe state closed every time it (re)appears —
+            // including a section going from collapsed to expanded, which
+            // inserts this row's whole subtree (and the UIKit gesture
+            // recognizer HorizontalSwipeGesture bridges in) fresh. `offset`/
+            // `restOffset` already default to 0 for a genuinely new
+            // `@State`, so this is a no-op in the ordinary case.
+            .onAppear {
+                offset = 0
+                restOffset = 0
+            }
     }
 
     private func actionButton(
@@ -1701,6 +1768,18 @@ private struct LogRowSwipeActions: ViewModifier {
         // collapse animations keep .snappy.
         withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.8)) { offset = value }
         restOffset = value
+        // `swipe.active` means "a row is sitting open," not just "a
+        // finger is actively dragging" — the OLD unconditional clear at
+        // gesture-end left a row that settled OPEN (revealed pencil/trash,
+        // finger already lifted) reporting `active = false`, the exact gap
+        // that let a list refresh land on a still-revealed row and race
+        // its live gesture-recognizer-hosting view against a full ForEach
+        // rebuild (health-check investigation, 2026-08-31 — a from-device
+        // recording caught the corrupted frame one beat after a fresh log
+        // arrived while a row from testing sat revealed). Every path that
+        // calls `settle` — the swipe ending open OR closed, tap-elsewhere-
+        // to-close, and the reveal pills' own actions — now agrees.
+        swipe.active = value != 0
     }
 }
 

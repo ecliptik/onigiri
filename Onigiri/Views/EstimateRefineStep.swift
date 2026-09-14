@@ -83,8 +83,14 @@ struct EstimateRefineStep: View {
     // inside it breaks the toolbar.
     var body: some View {
         Form {
-            estimateSection
+            // The note leads — the user, 2026-09-14: buried under the
+            // components it was always the last thing on screen, and a
+            // multi-line note pushed "Refine" itself under the keyboard.
+            // Leading keeps both the field and the button inside the
+            // room that's always clear above the keyboard, whatever the
+            // component count below turns out to be.
             noteSection
+            estimateSection
             if !applied.isEmpty { revertSection }
         }
         .navigationTitle("Check the Estimate")

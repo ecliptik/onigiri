@@ -447,7 +447,7 @@ extension FoodIntelligence {
                     name: $0.name, portion: $0.portion,
                     kcal: $0.kcal, sodiumMg: $0.sodiumMg)
             },
-            grounding: grounding, note: note,
+            prior: prior, grounding: grounding, note: note,
             // The photo IS the grounding when one went with the request
             // — same carve-out as identifyFoodRemote(photoJPEG:).
             enforcesGrounding: photoJPEG == nil))

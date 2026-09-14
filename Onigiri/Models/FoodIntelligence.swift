@@ -1050,6 +1050,67 @@ enum FoodIntelligence {
         #endif
     }
 
+    /// Words worth matching a component's name against a note — short
+    /// connectors ("a", "of", "the") aren't specific enough to say a
+    /// note spoke to a particular component at all.
+    private static func significantWords(_ name: String) -> [String] {
+        name.lowercased()
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+            .filter { $0.count > 2 }
+    }
+
+    /// The re-derivation weakness CLAUDE.md documents in prose, backstopped
+    /// in code: the on-device model collapses onto only what the note
+    /// named instead of editing the prior list in place (the user,
+    /// 2026-09-14 — "also has chicken" on a Cheese Quesadilla came back
+    /// as bare chicken, tortilla and cheese gone, though the note never
+    /// named either for removal). Two prompt rounds narrowed this and
+    /// did not close it (`Prompts.refineEstimateInstructions`'s
+    /// comment); this is the deterministic floor under that prompt, not
+    /// a replacement for it. Restores a PRIOR component only when it is
+    /// BOTH missing from the model's answer AND never named — by any of
+    /// its own significant words — anywhere in the note. A component
+    /// the note DOES name is left to the model's own judgment (including
+    /// a removal it fails to apply, which `strikeNegated` covers next):
+    /// naming something is the person's way of saying it was looked at.
+    private static func restoreUnmentioned(
+        _ components: [IdentifiedFood.Component],
+        prior: [IdentifiedFood.Component],
+        noteLower: String
+    ) -> [IdentifiedFood.Component] {
+        guard !prior.isEmpty else { return components }
+        let present = Set(components.map { $0.name.lowercased() })
+        let restored = prior.filter { part in
+            !present.contains(part.name.lowercased())
+                && !significantWords(part.name).contains(where: noteLower.contains)
+        }
+        return restored.isEmpty ? components : components + restored
+    }
+
+    /// The other direction from `restoreUnmentioned`: a note that DOES
+    /// name a component for removal ("no beans", "without beans") but
+    /// whose model answer kept it anyway. A short, deliberately narrow
+    /// cue list — a best-effort backstop, not a parser. It can miss an
+    /// unusual phrasing (no worse than today) and it never invents a
+    /// removal the note didn't ask for, since it only ever drops a
+    /// component whose own words sit right after a removal cue.
+    private static let negationCues = ["no ", "without ", "remove ", "minus ", "hold the ", "skip the "]
+
+    private static func strikeNegated(
+        _ components: [IdentifiedFood.Component], noteLower: String
+    ) -> [IdentifiedFood.Component] {
+        components.filter { part in
+            let words = significantWords(part.name)
+            guard !words.isEmpty else { return true }
+            return !negationCues.contains { cue in
+                guard let cueRange = noteLower.range(of: cue) else { return false }
+                let after = noteLower[cueRange.upperBound...].prefix(24)
+                return words.contains { after.contains($0) }
+            }
+        }
+    }
+
     /// Assemble and gate one refined answer — shared by both engines, so
     /// they cannot drift on what makes an answer acceptable.
     /// nil anywhere here means the prior estimate stands.
@@ -1061,6 +1122,10 @@ enum FoodIntelligence {
         fatG: Double?, carbsG: Double?, proteinG: Double?,
         fiberG: Double?, sugarG: Double?,
         components rawComponents: [IdentifiedFood.Component],
+        /// The estimate this refine started from — components missing
+        /// from the model's answer are checked against IT, never just
+        /// discarded (`restoreUnmentioned`).
+        prior: RefinedFood,
         grounding: EstimateGrounding,
         note: String,
         /// False on the vision path, where the PHOTO is the grounding —
@@ -1071,14 +1136,31 @@ enum FoodIntelligence {
     ) -> RefinedFood? {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return nil }
-        let components = rawComponents
+        let noteLower = note.lowercased()
+        let cleaned = rawComponents
             .map { IdentifiedFood.Component(
                 name: $0.name.trimmingCharacters(in: .whitespacesAndNewlines),
                 portion: $0.portion.trimmingCharacters(in: .whitespacesAndNewlines),
                 kcal: max(0, min($0.kcal, 3000)),
                 sodiumMg: max(0, min($0.sodiumMg, 8000))) }
             .filter { !$0.name.isEmpty }
-            .prefix(6)
+        // restoreUnmentioned only runs on a note carrying NO negation cue
+        // at all. A cue means the note is trying to name something for
+        // removal, and it may use a word the component itself doesn't
+        // ("no dressing" naming a component called "vinaigrette") — on
+        // a note shaped like that, guessing what else to restore risks
+        // undoing a removal the model got RIGHT (measured against the
+        // refine eval, 2026-09-14: restoring unconditionally turned a
+        // passing "no dressing" into a failing one). A pure addition
+        // ("also has chicken") carries no cue and gets the full safety
+        // net; strikeNegated runs either way — it only ever removes a
+        // component whose OWN words sit after a cue, so it carries none
+        // of that risk.
+        let hasNegationCue = negationCues.contains { noteLower.contains($0) }
+        let merged = strikeNegated(
+            hasNegationCue ? cleaned : restoreUnmentioned(cleaned, prior: prior.components, noteLower: noteLower),
+            noteLower: noteLower)
+        let components = Array(merged.prefix(6))
         // Summed IN CODE where there are parts to sum — never model
         // arithmetic (IdentifiedFood's rule). A described food has no
         // parts, and there the stated totals ARE the answer.
@@ -1107,7 +1189,7 @@ enum FoodIntelligence {
             name: name,
             serving: rawServing.trimmingCharacters(in: .whitespacesAndNewlines),
             kcal: totalKcal, sodiumMg: totalSodium,
-            nutrients: nutrients, components: Array(components))
+            nutrients: nutrients, components: components)
     }
 
     /// The guard that has to move, and the only place it moves.
@@ -1761,7 +1843,7 @@ enum FoodIntelligence {
                         name: $0.name, portion: $0.portion,
                         kcal: $0.kcal, sodiumMg: $0.sodiumMg)
                 },
-                grounding: grounding, note: note)
+                prior: prior, grounding: grounding, note: note)
         } catch {
             log.notice("refine fell back: \(String(describing: error))")
             return nil

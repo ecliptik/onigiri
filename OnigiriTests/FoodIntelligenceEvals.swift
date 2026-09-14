@@ -698,8 +698,14 @@ final class FoodIntelligenceEvals: XCTestCase {
         .init(note: "it was tofu, not chicken", asks: "substitutes the protein") { _, answer in
             mentions(answer, "tofu") && !mentions(answer, "chicken")
         },
-        .init(note: "add half an avocado", asks: "adds a component and calories") { prior, answer in
+        // Also the row `restoreUnmentioned`/`strikeNegated` exist for —
+        // the user, 2026-09-14: an additive note ("also has chicken" on
+        // a Cheese Quesadilla) came back as the addition ALONE, the rest
+        // of the dish gone. This prior's other two parts are never named
+        // by the note, so a correct answer keeps both.
+        .init(note: "add half an avocado", asks: "adds a component, keeps the rest, raises calories") { prior, answer in
             answer.kcal > prior.kcal && mentions(answer, "avocado")
+                && mentions(answer, "chicken") && mentions(answer, "greens")
         },
         // The row that catches a model RE-DERIVING instead of
         // correcting: a note with no nutritional content must leave the
@@ -718,6 +724,20 @@ final class FoodIntelligenceEvals: XCTestCase {
     /// every portion, coming back at 210 kcal against a 520 kcal prior.
     /// It is why the step SHOWS the numbers before Use; a refine is not
     /// trusted, it is looked at.
+    ///
+    /// RE-MEASURED 2026-09-14 (same rig) after adding the code-side
+    /// merge (`restoreUnmentioned`/`strikeNegated` in `refinedFood`) —
+    /// still 5/5 produced, 4/5 applied, same one miss. The "add half an
+    /// avocado" row was strengthened the same day to also require
+    /// mixedgreens/chicken survive the addition (the user's report:
+    /// an additive note came back holding ONLY what it named); that
+    /// stricter check passes. First cut of the merge (no negation-cue
+    /// gate on `restoreUnmentioned`) regressed "no dressing" — the note
+    /// names "dressing", the component is "vinaigrette", a different
+    /// word, so blind restoration undid a removal the model got right.
+    /// Gating `restoreUnmentioned` off whenever the note carries ANY
+    /// negation cue fixed it back to this baseline; see the comment at
+    /// its call site.
     ///
     /// Two prompt rounds got here, and both were the eval's doing.
     /// Round 1 measured systematic portion SHRINKAGE on every sample

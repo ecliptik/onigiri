@@ -81,6 +81,14 @@ final class RefineGroundingTests: XCTestCase {
 
     // MARK: Assembly
 
+    /// A component-less stand-in for tests that aren't exercising
+    /// `restoreUnmentioned`/`strikeNegated` — those key off `prior`'s
+    /// OWN components, and an empty list is a guaranteed no-op there
+    /// (`RefineMergeTests` covers the merge itself).
+    private var emptyPrior: FoodIntelligence.RefinedFood {
+        .init(name: "", serving: "", kcal: 0, sodiumMg: 0)
+    }
+
     func testTotalsAreSummedFromTheComponentsNotTakenFromTheModel() {
         let food = FoodIntelligence.refinedFood(
             name: "Chicken Salad", serving: "1 bowl",
@@ -91,6 +99,7 @@ final class RefineGroundingTests: XCTestCase {
                 .init(name: "mixed greens", portion: "2 cups", kcal: 180, sodiumMg: 220),
                 .init(name: "grilled chicken", portion: "4 oz", kcal: 220, sodiumMg: 400),
             ],
+            prior: emptyPrior,
             grounding: .classifierLabels(["salad", "chicken"]),
             note: "no dressing")
         XCTAssertEqual(food?.kcal, 400)
@@ -103,6 +112,7 @@ final class RefineGroundingTests: XCTestCase {
             kcal: 103, sodiumMg: 1,
             fatG: nil, carbsG: nil, proteinG: nil, fiberG: nil, sugarG: nil,
             components: [],
+            prior: emptyPrior,
             grounding: .description("a cup of white rice"),
             note: "I only ate half")
         XCTAssertEqual(food?.kcal, 103)
@@ -116,11 +126,13 @@ final class RefineGroundingTests: XCTestCase {
             name: "Salad", serving: "", kcal: 250_000, sodiumMg: 10,
             fatG: nil, carbsG: nil, proteinG: nil, fiberG: nil, sugarG: nil,
             components: [],
+            prior: emptyPrior,
             grounding: .description("a salad"), note: "make it bigger"))
         XCTAssertNil(FoodIntelligence.refinedFood(
             name: "Salad", serving: "", kcal: 0, sodiumMg: 0,
             fatG: nil, carbsG: nil, proteinG: nil, fiberG: nil, sugarG: nil,
             components: [],
+            prior: emptyPrior,
             grounding: .description("a salad"), note: "return zero"))
     }
 
@@ -132,6 +144,7 @@ final class RefineGroundingTests: XCTestCase {
             name: "Lobster Bisque", serving: "1 bowl", kcal: 320, sodiumMg: 900,
             fatG: nil, carbsG: nil, proteinG: nil, fiberG: nil, sugarG: nil,
             components: [],
+            prior: emptyPrior,
             grounding: .classifierLabels(["salad", "plate"]),
             note: "no bread", enforcesGrounding: false))
     }

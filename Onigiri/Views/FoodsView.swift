@@ -358,6 +358,7 @@ struct FoodsView: View {
                             .contentTransition(.symbolEffect(.replace))
                     }
                     .accessibilityLabel("Filter by category")
+                    .recedesWithSheet(activeSheet != nil)
                     Menu {
                         Picker("Sort", selection: $sortRaw) {
                             ForEach(LibrarySort.allCases, id: \.rawValue) { option in
@@ -371,6 +372,7 @@ struct FoodsView: View {
                             .contentTransition(.symbolEffect(.replace))
                     }
                     .accessibilityLabel("Sort")
+                    .recedesWithSheet(activeSheet != nil)
                 }
             }
             // The corner + while on this tab (the toolbar "+ Add" menu
@@ -427,6 +429,7 @@ struct FoodsView: View {
             } message: {
                 Text(deleteFoodsMessage)
             }
+            .recedesBehindSheet(activeSheet != nil)
         }
         // On the NavigationStack, NOT the searchable List: presenting a
         // sheet over the search drawer's view leaves the drawer's search
@@ -1236,6 +1239,7 @@ struct PortionSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .recedesWithSheet(openFood != nil)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(editDate != nil ? "Save" : "Log") {
@@ -1254,6 +1258,7 @@ struct PortionSheet: View {
                     }
                     .fontWeight(.semibold)
                     .disabled(quantity <= 0)
+                    .recedesWithSheet(openFood != nil)
                 }
                 // Decimal pads have no return key; surface a Done while
                 // editing, like the food form.
@@ -1271,6 +1276,7 @@ struct PortionSheet: View {
                     }
                 }
             }
+            .recedesBehindSheet(openFood != nil)
         }
         // Resolve once per presentation, not per row: an @Query here
         // would materialize the whole library and re-render the sheet on

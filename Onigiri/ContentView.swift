@@ -405,6 +405,12 @@ struct ContentView: View {
             }
         ))
         .toastHost()
+        // Covers both hosts that stack a sheet over the tabs: the
+        // add-to-library chooser (this view's own showAddChooser) and a
+        // shared import (sharedImport, presented one level up on the
+        // outer Group so it can cover this sheet too — same reason
+        // that one isn't on `mainTabs` itself).
+        .recedesBehindSheet(sharedImport != nil || showAddChooser)
     }
 
     private struct TabBarMinimizePin: ViewModifier {

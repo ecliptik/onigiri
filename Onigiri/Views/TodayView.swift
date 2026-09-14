@@ -221,6 +221,7 @@ struct TodayView: View {
                         Image(systemName: "chevron.left")
                     }
                     .accessibilityLabel("Previous day")
+                    .recedesWithSheet(activeSheet != nil)
                     Button {
                         Task { await model.goToNextDay() }
                     } label: {
@@ -228,12 +229,14 @@ struct TodayView: View {
                     }
                     .disabled(model.isToday)
                     .accessibilityLabel("Next day")
+                    .recedesWithSheet(activeSheet != nil)
                     Button {
                         activeSheet = .settings
                     } label: {
                         Image(systemName: "gearshape")
                     }
                     .accessibilityLabel("Settings")
+                    .recedesWithSheet(activeSheet != nil)
                 }
             }
             .navigationDestination(for: Route.self) { route in
@@ -399,6 +402,14 @@ struct TodayView: View {
                 consumeQuickLogRequest()
             }
         }
+        // On the OUTER chain (the NavigationStack itself), not the
+        // ScrollView's — a pushed .navigationDestination (Details' day
+        // page) is a separate view the ScrollView's own modifiers never
+        // reach, so a sheet raised from there left the pushed screen
+        // crisp behind it (found live-testing the sweep, 2026-09-14).
+        // Blurring the whole stack's rendered output instead covers root
+        // AND any push depth.
+        .recedesBehindSheet(activeSheet != nil)
     }
 
     /// Present the quick-log sheet if an app-icon shortcut asked for it,

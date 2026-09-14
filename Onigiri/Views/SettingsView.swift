@@ -853,10 +853,12 @@ struct SettingsView: View {
                         }
                     }
                     .keyboardShortcut(.cancelAction)
+                    .recedesWithSheet(customIconSlot != nil)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                         .keyboardShortcut(.return, modifiers: .command)
+                        .recedesWithSheet(customIconSlot != nil)
                 }
             }
             // The forms' discard grammar (MealForm/FoodForm): edits block
@@ -916,6 +918,12 @@ struct SettingsView: View {
         // Transfer/backup outcomes toast; a sheet needs its own host
         // (the root's renders behind presented sheets).
         .toastHost()
+        // On the OUTER chain, same reason `.preferredColorScheme` above
+        // is: a pushed subscreen (Appearance, where every icon picker
+        // actually lives) is a separate view the root Form's own
+        // modifiers never reach, so this sheet left the pushed screen
+        // crisp behind it when placed there (live-tested, 2026-09-14).
+        .recedesBehindSheet(customIconSlot != nil)
         // The revealed-key re-mask (2026-07-20 audit) moved into the
         // Online Database and AI subscreens with their reveal toggles —
         // a key can only be revealed while its screen is mounted, and

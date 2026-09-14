@@ -219,8 +219,14 @@ struct ScanSheet: View {
                         dismiss()
                     }
                     .keyboardShortcut(.cancelAction)
+                    .recedesWithSheet(listing != nil || estimate != nil)
                 }
             }
+            // The camera feed stays live under `listing`/`estimate` —
+            // unlike the menu-import hosts, nothing blanks this view
+            // first — so it needs the same recede treatment the Log
+            // sheet and food form got (2026-09-14).
+            .recedesBehindSheet(listing != nil || estimate != nil)
             .onChange(of: photoItem) { _, item in
                 guard let item else { return }
                 readTask?.cancel()

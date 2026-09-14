@@ -182,6 +182,56 @@ extension View {
                 }
             }
     }
+
+    /// The counterpart to `sheetCardChrome()`: recedes the HOST's own
+    /// content while a child sheet rides its single `activeSheet` slot,
+    /// so the card in front reads as obviously the active surface. Needed
+    /// specifically where the host is ITSELF a sheet on `riceCanvas` (the
+    /// Log sheet, the food form) — there the system's default dimming
+    /// barely registers against that near-black dark-mode surface, so a
+    /// frosted card on top of it read as one continuous surface with only
+    /// the grabber between them (the user, 2026-09-13 screenshot). Blurs
+    /// content only, never the native nav bar/toolbar (SwiftUI's `.blur`
+    /// can't reach that chrome) — `recedesWithSheet()` on each toolbar
+    /// control is the other half, since Cancel/Done/the title otherwise
+    /// stayed crisp and read as still usable (the user, same round).
+    /// Respects Reduce Transparency by swapping blur for a stronger flat
+    /// scrim rather than turning the effect off outright — the host is
+    /// still visibly not the active surface either way.
+    @ViewBuilder
+    func recedesBehindSheet(_ isPresenting: Bool) -> some View {
+        modifier(RecedesBehindSheet(isPresenting: isPresenting))
+    }
+
+    /// The nav-bar half of `recedesBehindSheet()`: a toolbar button or
+    /// title lives in UIKit's own bar chrome, which `.blur` never
+    /// reaches, so it read as crisp and tappable while a child sheet
+    /// actually made it unreachable. Dims AND disables — the dimming
+    /// alone would still be a live trap for a stray tap during the
+    /// transition.
+    func recedesWithSheet(_ isPresenting: Bool) -> some View {
+        opacity(isPresenting ? 0.35 : 1)
+            .disabled(isPresenting)
+            .animation(.easeOut(duration: 0.2), value: isPresenting)
+    }
+}
+
+private struct RecedesBehindSheet: ViewModifier {
+    let isPresenting: Bool
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    func body(content: Content) -> some View {
+        content
+            .blur(radius: isPresenting && !reduceTransparency ? 12 : 0)
+            .overlay {
+                if isPresenting {
+                    Color.black.opacity(reduceTransparency ? 0.55 : 0.32)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: isPresenting)
+    }
 }
 
 extension View {

@@ -419,6 +419,7 @@ struct FoodFormView: View {
                         }
                     }
                     .keyboardShortcut(.cancelAction)
+                    .recedesWithSheet(activeSheet != nil)
                 }
                 // New foods get a PAIR, and which pair follows the route
                 // (Purpose): from the library you Save, optionally
@@ -434,14 +435,17 @@ struct FoodFormView: View {
                         }
                         .keyboardShortcut("s", modifiers: .command)
                         .disabled(!canSave)
+                        .recedesWithSheet(activeSheet != nil)
                         Button(purpose == .logging ? "Log & Save" : "Save & Log") { saveAndLog() }
                             .fontWeight(.semibold)
                             .keyboardShortcut("s", modifiers: [.command, .shift])
                             .disabled(!canSave)
+                            .recedesWithSheet(activeSheet != nil)
                     } else {
                         Button("Save") { save() }
                             .keyboardShortcut("s", modifiers: .command)
                             .disabled(!canSave)
+                            .recedesWithSheet(activeSheet != nil)
                     }
                 }
                 // Decimal pads have no return key; surface a Done while
@@ -512,6 +516,7 @@ struct FoodFormView: View {
                 Button("Keep Editing", role: .cancel) {}
             }
             .interactiveDismissDisabled(isDirty)
+            .recedesBehindSheet(activeSheet != nil)
             .sheet(item: $activeSheet, onDismiss: sheetDidDismiss) { sheet in
                 switch sheet {
                 case .scanner(let notice):

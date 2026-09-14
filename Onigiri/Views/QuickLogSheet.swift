@@ -416,6 +416,11 @@ struct QuickLogSheet: View {
             .compactSections()
             .riceCanvas()
             .hardTopScrollEdge()
+            // Plain navigationTitle would leave "Log" as native chrome
+            // recedesWithSheet() can't reach — a .principal item instead,
+            // so the title dims with Cancel/Done/Sort while a child sheet
+            // is up (the user, 2026-09-13/14: the heading still read as
+            // active). The string stays for VoiceOver/back-button text.
             .navigationTitle("Log")
             .navigationBarTitleDisplayMode(.inline)
             // Music-style: the kind pills pinned on top of the results,
@@ -455,6 +460,11 @@ struct QuickLogSheet: View {
                 // anything; Done stays the affirmative finish for
                 // multi-item lunches, in the confirm slot (top trailing,
                 // emphasized) like Settings' Done.
+                ToolbarItem(placement: .principal) {
+                    Text("Log")
+                        .font(.headline)
+                        .recedesWithSheet(activeSheet != nil)
+                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         // The in-flight online search dies with the
@@ -467,6 +477,7 @@ struct QuickLogSheet: View {
                         dismiss()
                     }
                     .keyboardShortcut(.cancelAction)
+                    .recedesWithSheet(activeSheet != nil)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
@@ -475,6 +486,7 @@ struct QuickLogSheet: View {
                     }
                     .fontWeight(.semibold)
                     .keyboardShortcut(.return, modifiers: .command)
+                    .recedesWithSheet(activeSheet != nil)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     // The Foods screen's sort circle, third surface — kept on
@@ -493,6 +505,7 @@ struct QuickLogSheet: View {
                             .contentTransition(.symbolEffect(.replace))
                     }
                     .accessibilityLabel("Sort")
+                    .recedesWithSheet(activeSheet != nil)
                 }
             }
             .task {
@@ -543,6 +556,7 @@ struct QuickLogSheet: View {
                     libraryItems = buildLibraryItems()
                 }
             }
+            .recedesBehindSheet(activeSheet != nil)
             .sheet(item: $activeSheet) { sheet in
                 switch sheet {
                 case .portion(let target):

@@ -40,8 +40,8 @@ final class GoalModel {
     private(set) var dailyLowDates: Set<Date> = []
     /// The chart's derived numbers, cached for the same reason.
     private(set) var trend = GoalTrendStats.empty
-    /// Staleness stamp for the loads (see loadIfStale).
-    private var lastLoaded: Date?
+    /// Staleness gate for the loads (see loadIfStale).
+    private var refreshGate = RefreshGate()
 
     private let health = HealthKitService()
 
@@ -53,16 +53,12 @@ final class GoalModel {
     /// window exists to stop a tab bounce replaying four 90-day reads;
     /// a real new sample is exactly what it must not suppress.
     func reload() async {
-        lastLoaded = nil
+        refreshGate.reset()
         await loadIfStale()
     }
 
     func loadIfStale() async {
-        if let last = lastLoaded,
-           Date.now.timeIntervalSince(last) < 30,
-           Calendar.current.isDate(last, inSameDayAs: .now) {
-            return
-        }
+        guard refreshGate.isStale(maxAge: 30) else { return }
         // Independent reads — concurrent, not serial (the trend chart
         // used to populate a query-chain late).
         async let weightRead = health.latestBodyMassLb()
@@ -107,7 +103,7 @@ final class GoalModel {
         // `TodayBurnFloor` ratchet went with it — TodayView and
         // `DailyPlanLoader` still drive it, and this was only ever a
         // reader.
-        lastLoaded = .now
+        refreshGate.markRefreshed()
     }
 
     /// Recompute the cached chart stats — when the HealthKit reads land

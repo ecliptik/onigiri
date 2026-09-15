@@ -75,10 +75,10 @@ final class TodayModel {
     /// Refreshes fire concurrently (task/appear/foreground/day swipes); only
     /// the newest may publish, or a slow old day overwrites the current one.
     private var refreshGeneration = 0
-    /// Completed-load stamps for the foreground gate: quick app switches
-    /// used to replay the full query set on every activation.
-    private var lastRefreshed: Date?
-    private var lastStaticLoad: Date?
+    /// Completed-load gates for the foreground refresh: quick app
+    /// switches used to replay the full query set on every activation.
+    private var refreshGate = RefreshGate()
+    private var staticGate = RefreshGate()
     /// The ToastCenter.healthWriteVersion this model last refreshed
     /// against — a bump while backgrounded (widget button, watch log)
     /// must beat the staleness gate.
@@ -190,16 +190,11 @@ final class TodayModel {
     /// write-denied hint re-checks every time (a local status read).
     func foregrounded(healthWriteVersion: Int) async {
         healthWriteDenied = health.sharingDenied()
-        let now = Date.now
-        let dayRolled = lastRefreshed.map {
-            !Calendar.current.isDate($0, inSameDayAs: now)
-        } ?? true
         let healthChanged = healthWriteVersion != seenHealthWriteVersion
-        if dayRolled || lastStaticLoad.map({ now.timeIntervalSince($0) > 300 }) ?? true {
+        if staticGate.isStale(maxAge: 300) {
             await loadStatic()
         }
-        if dayRolled || healthChanged
-            || lastRefreshed.map({ now.timeIntervalSince($0) > 30 }) ?? true {
+        if healthChanged || refreshGate.isStale(maxAge: 30) {
             seenHealthWriteVersion = healthWriteVersion
             await refresh()
         }
@@ -240,7 +235,7 @@ final class TodayModel {
         // Re-checked on every foreground: the user may have just flipped
         // access in the Health app.
         healthWriteDenied = health.sharingDenied()
-        lastStaticLoad = .now
+        staticGate.markRefreshed()
     }
 
     /// Day data only — fast enough that browsing feels immediate.
@@ -298,7 +293,7 @@ final class TodayModel {
             // keyed to today — feeding it a browsed day's burn wrote
             // that day's number into today's floor (2026-07-30).
             dayBurnKcal = isToday ? TodayBurnFloor.ratcheted(measured) : measured
-            lastRefreshed = .now
+            refreshGate.markRefreshed()
         } catch {
             guard generation == refreshGeneration else { return }
             // Transient read failures toast like every other transient

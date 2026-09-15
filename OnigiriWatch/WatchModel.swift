@@ -17,14 +17,14 @@ final class WatchModel {
     private var started = false
     /// Double-taps on a slow HealthKit write must not log twice.
     private var isLogging = false
-    /// Completed-refresh stamp: page swipes and re-activations fired a
+    /// Completed-refresh gate: page swipes and re-activations fired a
     /// full plan load each (TabView pre-renders neighbors, so one open
     /// plus a swipe could run it 3-4×).
-    private var lastRefreshed: Date?
+    private var refreshGate = RefreshGate()
     /// The refresh currently underway, so passive callers can join it —
     /// at launch, start()'s refresh plus the pre-rendered pages' onAppear
     /// used to run three concurrent full query sets before the first
-    /// completion could stamp lastRefreshed.
+    /// completion could mark the refresh gate.
     private var refreshTask: Task<Void, Never>?
 
     /// Transient line under the buttons: haptics alone made a failed
@@ -85,11 +85,7 @@ final class WatchModel {
             await running.value
             return
         }
-        if let last = lastRefreshed,
-           Date.now.timeIntervalSince(last) < maxAge,
-           Calendar.current.isDate(last, inSameDayAs: .now) {
-            return
-        }
+        guard refreshGate.isStale(maxAge: maxAge) else { return }
         await refresh()
     }
 
@@ -119,7 +115,7 @@ final class WatchModel {
         // Health failure must not make refreshIfStale suppress the retry
         // the next page swipe or wrist raise would provide.
         if entries != nil {
-            lastRefreshed = .now
+            refreshGate.markRefreshed()
         }
     }
 

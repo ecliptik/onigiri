@@ -24,19 +24,30 @@ public enum DailyPlanLoader {
         /// so the gauge, the goal line and the headline can't answer the
         /// same question differently. nil when there's no plan.
         public let dayBurnKcal: Double?
+        /// The Active/Resting credited split (`DayBudget.creditedActive`
+        /// and its inline resting counterpart) — what Today's own
+        /// meter rows show, and what the extra-large widget layout
+        /// reuses rather than re-deriving. nil alongside `dayBurnKcal`
+        /// when there's no plan or nothing measured yet.
+        public let creditedRestingKcal: Double?
+        public let creditedActiveKcal: Double?
 
         public init(
             summary: DailyEnergySummary,
             deficitTargetKcal: Double?,
             gaugeProgress: Double,
             dailyBudgetKcal: Double? = nil,
-            dayBurnKcal: Double? = nil
+            dayBurnKcal: Double? = nil,
+            creditedRestingKcal: Double? = nil,
+            creditedActiveKcal: Double? = nil
         ) {
             self.summary = summary
             self.deficitTargetKcal = deficitTargetKcal
             self.gaugeProgress = gaugeProgress
             self.dailyBudgetKcal = dailyBudgetKcal
             self.dayBurnKcal = dayBurnKcal
+            self.creditedRestingKcal = creditedRestingKcal
+            self.creditedActiveKcal = creditedActiveKcal
         }
 
         /// kcal still available to eat today, when a plan exists.
@@ -100,6 +111,15 @@ public enum DailyPlanLoader {
         // budget-shaped UI stands down (TodayView's guard). The deficit
         // target still stamps history — the goal was in force either way.
         let hasBurn = dayBurn > 0
+        // The same split Today's own meter rows show (DayBudget.swift) —
+        // resting credited up front and floored by the estimate, active
+        // never less than what was actually measured. Computed once here
+        // for both branches below rather than re-derived by every reader.
+        let creditedResting = max(summary.restingBurnKcal, estimatedRestingKcal ?? 0)
+        let creditedActive = DayBudget.creditedActive(
+            dayBurnKcal: dayBurn, creditedRestingKcal: creditedResting,
+            measuredActiveKcal: summary.activeBurnKcal
+        )
         if goal.isMaintenance {
             let plan = CalorieBudget.completedDayPlan(
                 dayBurnKcal: dayBurn, requiredDailyDeficit: 0
@@ -112,7 +132,9 @@ public enum DailyPlanLoader {
                 deficitTargetKcal: nil,
                 gaugeProgress: progress,
                 dailyBudgetKcal: hasBurn ? plan.dailyBudget : nil,
-                dayBurnKcal: hasBurn ? dayBurn : nil
+                dayBurnKcal: hasBurn ? dayBurn : nil,
+                creditedRestingKcal: hasBurn ? creditedResting : nil,
+                creditedActiveKcal: hasBurn ? creditedActive : nil
             )
         }
         guard let deficit = CalorieBudget.requiredDailyDeficit(
@@ -139,7 +161,9 @@ public enum DailyPlanLoader {
             deficitTargetKcal: plan.requiredDailyDeficit,
             gaugeProgress: progress,
             dailyBudgetKcal: hasBurn ? plan.dailyBudget : nil,
-            dayBurnKcal: hasBurn ? dayBurn : nil
+            dayBurnKcal: hasBurn ? dayBurn : nil,
+            creditedRestingKcal: hasBurn ? creditedResting : nil,
+            creditedActiveKcal: hasBurn ? creditedActive : nil
         )
     }
 

@@ -27,6 +27,25 @@ struct DaySnapshot: Codable {
     /// added after the cache shipped decodes leniently now — see the
     /// hand-written `init(from:)` below.)
     var trackedTotals: [Double]?
+    /// The Active/Resting credited split (`DayBudget`) the extra-large
+    /// widget layout shows — see `DailyPlanLoader.State`. nil for a
+    /// pre-2.27 cached snapshot, same lenient-decode treatment as
+    /// `trackedTotals`.
+    var creditedRestingKcal: Double?
+    var creditedActiveKcal: Double?
+    /// Today's log, newest first, for the extra-large layouts' spare
+    /// room. A lightweight projection of `OnigiriKit.FoodLogEntry`
+    /// (which isn't `Codable`) rather than the entry itself — this only
+    /// needs what a compact row shows. nil for a pre-2.27 cached
+    /// snapshot, same lenient-decode treatment as `trackedTotals`.
+    var loggedItems: [LoggedItemSummary]?
+
+    struct LoggedItemSummary: Codable, Identifiable {
+        var id: UUID
+        var name: String
+        var kcal: Double
+        var date: Date
+    }
 
     static let placeholder = DaySnapshot(
         summary: DailyEnergySummary(
@@ -36,7 +55,15 @@ struct DaySnapshot: Codable {
         deficitTargetKcal: 583,
         remainingKcal: 437,
         gaugeProgress: 0.38,
-        waterGoalOz: 64
+        waterGoalOz: 64,
+        creditedRestingKcal: 1120,
+        creditedActiveKcal: 385,
+        loggedItems: [
+            LoggedItemSummary(id: UUID(), name: "Greek yogurt bowl", kcal: 420, date: Date()),
+            LoggedItemSummary(id: UUID(), name: "Coffee, oat milk", kcal: 90, date: Date()),
+            LoggedItemSummary(id: UUID(), name: "Turkey sandwich", kcal: 590, date: Date()),
+            LoggedItemSummary(id: UUID(), name: "Apple", kcal: 95, date: Date()),
+        ]
     )
 
     /// The plan-state view of this snapshot, for the shared accessory
@@ -52,7 +79,9 @@ struct DaySnapshot: Codable {
             // without widening the persisted snapshot (a pre-2.13
             // last-good blob still decodes, and reconstructs the same
             // way its budget was built).
-            dayBurnKcal: budget.map { $0 + (deficitTargetKcal ?? 0) }
+            dayBurnKcal: budget.map { $0 + (deficitTargetKcal ?? 0) },
+            creditedRestingKcal: creditedRestingKcal,
+            creditedActiveKcal: creditedActiveKcal
         )
     }
 
@@ -72,7 +101,14 @@ struct DaySnapshot: Codable {
             waterGoalOz: waterGoalOz,
             needsSetup: needsSetup,
             isMaintenance: isMaintenance,
-            trackedTotals: [0, 0]
+            trackedTotals: [0, 0],
+            // Resting is credited up front from midnight — the same
+            // floor as a moment ago, not zero. Active is earned; a fresh
+            // day has earned none yet.
+            creditedRestingKcal: creditedRestingKcal,
+            creditedActiveKcal: 0,
+            // A fresh day has logged nothing yet.
+            loggedItems: []
         )
     }
 
@@ -114,6 +150,9 @@ extension DaySnapshot {
         needsSetup = try c.decodeIfPresent(Bool.self, forKey: .needsSetup) ?? false
         isMaintenance = try c.decodeIfPresent(Bool.self, forKey: .isMaintenance) ?? false
         trackedTotals = try c.decodeIfPresent([Double].self, forKey: .trackedTotals)
+        creditedRestingKcal = try c.decodeIfPresent(Double.self, forKey: .creditedRestingKcal)
+        creditedActiveKcal = try c.decodeIfPresent(Double.self, forKey: .creditedActiveKcal)
+        loggedItems = try c.decodeIfPresent([LoggedItemSummary].self, forKey: .loggedItems)
     }
 }
 
@@ -185,7 +224,10 @@ enum SnapshotLoader {
             waterGoalOz: SharedStore.waterGoalOz,
             needsSetup: needsSetup,
             isMaintenance: goal?.isMaintenance ?? false,
-            trackedTotals: await trackedTotals()
+            trackedTotals: await trackedTotals(),
+            creditedRestingKcal: state.creditedRestingKcal,
+            creditedActiveKcal: state.creditedActiveKcal,
+            loggedItems: await loggedItems()
         )
         // Same trustworthiness test as the baseline below, for the same
         // reason: a store that sealed AFTER the check above yields a zero
@@ -228,6 +270,21 @@ enum SnapshotLoader {
             }
         }
         return totals
+    }
+
+    /// Newest-first, capped — the extra-large layouts' spare room, not
+    /// a full history browser. Same query the watch's Log page already
+    /// uses (`HealthKitService.todayFoodEntries`), ~23 ms measured,
+    /// comfortably inside WidgetKit's timeline budget; the real
+    /// constraint is the reload-count budget elsewhere in this file,
+    /// not this one query's cost.
+    private static let loggedItemCap = 10
+
+    private static func loggedItems() async -> [DaySnapshot.LoggedItemSummary] {
+        let entries = (try? await HealthKitService().todayFoodEntries()) ?? []
+        return entries.prefix(loggedItemCap).map {
+            DaySnapshot.LoggedItemSummary(id: $0.id, name: $0.name, kcal: $0.kcal, date: $0.date)
+        }
     }
 
     private static let lastGoodKey = "widget.lastGoodSnapshot"

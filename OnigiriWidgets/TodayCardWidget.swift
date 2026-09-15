@@ -20,7 +20,17 @@ struct TodayCardWidget: Widget {
         }
         .configurationDisplayName("Today")
         .description("Today's balance, burned and eaten, and your tracked metrics.")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .supportedFamilies(supportedFamilies)
+    }
+
+    /// `.systemExtraLarge` needs no gate — it's an iOS 15+ family; iOS 27
+    /// only changed where it PLACES (iPad Home Screen only, until now).
+    /// `.systemExtraLargePortrait` is a genuinely new case that doesn't
+    /// exist pre-27.
+    private var supportedFamilies: [WidgetFamily] {
+        var families: [WidgetFamily] = [.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge]
+        if #available(iOS 27.0, *) { families.append(.systemExtraLargePortrait) }
+        return families
     }
 }
 
@@ -90,6 +100,9 @@ struct TodayCardView: View {
     private var summary: DailyEnergySummary { snapshot.summary }
     private var isLarge: Bool { family == .systemLarge }
     private var isSmall: Bool { family == .systemSmall }
+    private var isExtraLargePortrait: Bool {
+        if #available(iOS 27.0, *) { family == .systemExtraLargePortrait } else { false }
+    }
 
     var body: some View {
         if snapshot.needsSetup {
@@ -99,6 +112,10 @@ struct TodayCardView: View {
             ringedHeadline
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .widgetURL(logURL)
+        } else if family == .systemExtraLarge {
+            extraLargeLandscape
+        } else if isExtraLargePortrait {
+            extraLargePortrait
         } else if isLarge {
             VStack(spacing: 12) {
                 header
@@ -129,6 +146,155 @@ struct TodayCardView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    // MARK: - Extra-large (iOS 27: landscape reaches iPhone, portrait is new)
+
+    /// Landscape: the extra width goes to the Active/Resting credited
+    /// split (`DailyPlanLoader.State.creditedActiveKcal`/
+    /// `creditedRestingKcal`) — a card no other widget size has room
+    /// for, not just today's `.systemLarge` composition stretched wider.
+    private var extraLargeLandscape: some View {
+        HStack(spacing: 16) {
+            VStack(spacing: 12) {
+                header
+                Spacer(minLength: 0)
+                HStack(spacing: 12) {
+                    energyFlank(burnedKcal, "Burned")
+                    ringedHeadline
+                    energyFlank(summary.intakeKcal, "Eaten")
+                }
+                Spacer(minLength: 0)
+                trackedMetricsRow
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Divider()
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Burn breakdown")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                creditedSplit
+                loggedItemsSection(max: 4)
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Today's log, newest first — the extra-large layouts' spare room,
+    /// not just wasted space below the credited split. `max` differs by
+    /// layout: the landscape column shares its space with the credited
+    /// split above it, portrait has the whole rest of the widget.
+    @ViewBuilder
+    private func loggedItemsSection(max: Int) -> some View {
+        let items = snapshot.loggedItems ?? []
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Today's Log")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(items.prefix(max)) { item in
+                        loggedItemRow(item)
+                    }
+                }
+                if items.count > max {
+                    Text("+\(items.count - max) more")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+    }
+
+    private func loggedItemRow(_ item: DaySnapshot.LoggedItemSummary) -> some View {
+        HStack(spacing: 6) {
+            Text(item.name)
+                .font(.caption)
+                .lineLimit(1)
+            Spacer(minLength: 6)
+            Text(item.date, style: .time)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            Text(item.kcal, format: .number.precision(.fractionLength(0)))
+                .font(.caption.weight(.medium))
+                .monospacedDigit()
+                .frame(minWidth: 34, alignment: .trailing)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Portrait (iOS 27+ only): height to spend, not width — stacked
+    /// rather than a reflow of the landscape composition, per HIG.
+    private var extraLargePortrait: some View {
+        VStack(spacing: 14) {
+            header
+            HStack(spacing: 12) {
+                energyFlank(burnedKcal, "Burned")
+                ringedHeadline
+                energyFlank(summary.intakeKcal, "Eaten")
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Burn breakdown")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                creditedSplit
+            }
+            loggedItemsSection(max: 8)
+            Spacer(minLength: 0)
+            trackedMetricsRow
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// The Active/Resting credited rows, same icon language and
+    /// "measured"/"so far" sub-caption rule as Today's own meter rows
+    /// (`DayNutritionView.swift`, `DayBudget.creditNoteThresholdKcal`)
+    /// — never `summary.activeBurnKcal`/`restingBurnKcal` directly,
+    /// which is the bug those rows exist to avoid (CLAUDE.md). Absent
+    /// entirely without a plan, same as the rest of the card.
+    @ViewBuilder
+    private var creditedSplit: some View {
+        let plan = snapshot.planState
+        if let active = plan.creditedActiveKcal, let resting = plan.creditedRestingKcal {
+            VStack(alignment: .leading, spacing: 8) {
+                creditedRow(
+                    "Active burn", systemImage: "flame.fill", tint: .red,
+                    credited: active, measured: summary.activeBurnKcal, measuredCaption: "measured")
+                creditedRow(
+                    "Resting burn", systemImage: "bed.double.fill", tint: .indigo,
+                    credited: resting, measured: summary.restingBurnKcal, measuredCaption: "so far")
+            }
+        }
+    }
+
+    private func creditedRow(
+        _ label: String, systemImage: String, tint: Color,
+        credited: Double, measured: Double, measuredCaption: String
+    ) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .foregroundStyle(tint)
+                .frame(width: 18)
+            Text(label)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 4)
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(credited, format: .number.precision(.fractionLength(0)))
+                    .font(.footnote.weight(.semibold))
+                    .monospacedDigit()
+                if credited - measured >= DayBudget.creditNoteThresholdKcal {
+                    Text("\(measured.formatted(.number.precision(.fractionLength(0)))) \(measuredCaption)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .monospacedDigit()
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private var setup: some View {

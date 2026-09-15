@@ -488,6 +488,7 @@ struct SettingsView: View {
                 // mirror's face) and hosts the docs site.
                 Link("https://github.com/ecliptik/onigiri",
                      destination: URL(string: "https://github.com/ecliptik/onigiri")!)
+                    .accessibilityLabel("GitHub repository")
                 // The long-form docs, one tap from where questions
                 // arise (the user, 2026-07-20).
                 Text("[User Guide](https://github.com/ecliptik/onigiri/wiki/User-Guide) · [Privacy Policy](https://ecliptik.github.io/onigiri/privacy/)")

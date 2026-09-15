@@ -45,6 +45,11 @@ struct MenuPicker: View {
     @State private var query = ""
 
     var body: some View {
+        // Computed once per render and threaded through — sections(of:)
+        // and the empty-state check below used to each call the
+        // computed `visible` property separately, filtering the whole
+        // `rows` array twice per body (health-check audit, 2026-09-14).
+        let visible = visibleRows
         List {
             // A LIST ROW, not a bar pinned over the list: "Saving as …
             // (STEAK SHACK)" crowded the header and read as chrome
@@ -64,7 +69,7 @@ struct MenuPicker: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            ForEach(sections, id: \.title) { section in
+            ForEach(sections(of: visible), id: \.title) { section in
                 Section(section.title ?? "Menu") {
                     ForEach(section.rows) { row in
                         Button { choose(row) } label: {
@@ -100,7 +105,7 @@ struct MenuPicker: View {
         let rows: [MenuRow]
     }
 
-    private var visible: [MenuRow] {
+    private var visibleRows: [MenuRow] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return rows }
         return rows.filter {
@@ -112,7 +117,7 @@ struct MenuPicker: View {
     /// Grouped in the order the menu prints, not alphabetically — the
     /// document's own order is information ("BASES" after "CURATED
     /// BOWLS"), and sorting throws it away.
-    private var sections: [MenuSection] {
+    private func sections(of visible: [MenuRow]) -> [MenuSection] {
         var titles: [String?] = []
         var grouped: [String?: [MenuRow]] = [:]
         for row in visible {

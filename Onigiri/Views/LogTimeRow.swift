@@ -82,11 +82,13 @@ struct LogTimeRow: View {
             DatePicker("", selection: $draft, in: ...Date.now, displayedComponents: .date)
                 .datePickerStyle(.graphical)
                 .labelsHidden()
+                .accessibilityLabel("Date")
                 .padding(.horizontal)
         case .time:
             DatePicker("", selection: $draft, displayedComponents: .hourAndMinute)
                 .datePickerStyle(.wheel)
                 .labelsHidden()
+                .accessibilityLabel("Time")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }

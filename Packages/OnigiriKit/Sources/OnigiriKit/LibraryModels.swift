@@ -779,6 +779,39 @@ public enum SharedStore {
             for: schema, migrationPlan: OnigiriMigrationPlan.self,
             configurations: [ModelConfiguration()])
     }
+
+    /// Set once, the one time `OnigiriApp` has to fall back to a fresh
+    /// store because the real one wouldn't open — the app's own signal
+    /// to tell the user their library was reset, since by the time it's
+    /// checked the launch-time crash it replaces has already happened
+    /// silently.
+    public static let recoveredFromCorruptStoreKey = "recoveredFromCorruptStore"
+
+    /// Moves the store file (and its -wal/-shm sidecars, which SwiftData
+    /// needs cleared too or reopening just finds the same corrupt state)
+    /// aside rather than deleting it — a launch-time open failure this
+    /// rare is corruption or a disk fault, not something to guess at
+    /// twice, and the quarantined file stays around in case it's ever
+    /// worth a manual look (health-check audit, 2026-09-14: this is what
+    /// stands between that failure and a permanent fatalError crash
+    /// loop with no recovery at all). Returns whether anything was
+    /// actually moved — nothing to move (no store file at all) isn't
+    /// recoverable this way.
+    @discardableResult
+    public static func quarantineCorruptStore(at url: URL, suffix: String? = nil) -> Bool {
+        let fm = FileManager.default
+        let stamp = suffix ?? ISO8601DateFormatter().string(from: .now)
+        var movedAny = false
+        for ext in ["", "-wal", "-shm"] {
+            let source = URL(fileURLWithPath: url.path + ext)
+            guard fm.fileExists(atPath: source.path) else { continue }
+            let dest = URL(fileURLWithPath: source.path + ".corrupt-\(stamp)")
+            if (try? fm.moveItem(at: source, to: dest)) != nil {
+                movedAny = true
+            }
+        }
+        return movedAny
+    }
 }
 
 /// The schema, versioned the moment App Store distribution came into

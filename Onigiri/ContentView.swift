@@ -38,6 +38,11 @@ struct ContentView: View {
     /// An Optional request rather than a Bool, the same consumable
     /// pattern the quick actions use.
     @State private var sharedImport: SharedImport?
+    /// Set once, the one time the store wouldn't open at all and
+    /// OnigiriApp had to fall back to a fresh one — by the time this
+    /// checks, that already happened silently at launch, so this is the
+    /// only chance to tell the user their library was reset.
+    @State private var showStoreRecoveredAlert = false
     /// Held so the working copy can be deleted on dismiss — by then the
     /// binding itself is already nil.
     @State private var lastSharedImport: SharedImport?
@@ -72,6 +77,10 @@ struct ContentView: View {
             // renders Color.clear and the bounce onChange never fires
             // for an initial value. Land on home instead.
             if selectedTab == .log { selectedTab = .today }
+            if SharedStore.defaults.bool(forKey: SharedStore.recoveredFromCorruptStoreKey) {
+                SharedStore.defaults.removeObject(forKey: SharedStore.recoveredFromCorruptStoreKey)
+                showStoreRecoveredAlert = true
+            }
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--seed-sample-data") {
                 DebugSeeder.seedLibraryIfEmpty(context: context)
@@ -120,6 +129,12 @@ struct ContentView: View {
                 handle(action)
             }
             drainMenuInbox()
+        }
+        .alert("Library Reset", isPresented: $showStoreRecoveredAlert) {
+            Button("OK") {}
+        } message: {
+            Text("Onigiri's food library couldn't be opened and had to be reset. "
+                + "If you have a backup, restore it from Settings → Import Food Library.")
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {

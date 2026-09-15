@@ -2,17 +2,39 @@ import SwiftUI
 import SwiftData
 import UIKit
 import OnigiriKit
+import os
+
+private let appLaunchLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "launch")
 
 @main
 struct OnigiriApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     /// Shared App Group container so the widget extension sees the library.
+    ///
+    /// A store this broken — corruption, a disk fault, a genuinely
+    /// unreadable file — is rare, but a bare fatalError here used to mean
+    /// the app never launched again until someone found and deleted the
+    /// store file by hand, which essentially no one ever does
+    /// (health-check audit, 2026-09-14). Quarantining the file (never
+    /// deleting — BackupService's own JSON exports in Documents are
+    /// untouched by this either way, and the quarantined store stays on
+    /// disk if it's ever worth a manual look) and retrying ONCE against a
+    /// fresh, empty store means the app launches usable again instead of
+    /// bricked, at the cost of the library. `ContentView` checks the flag
+    /// this sets and tells the user once.
     private static let container: ModelContainer = {
         do {
             return try SharedStore.modelContainer()
         } catch {
-            fatalError("Could not open the shared data store: \(error)")
+            appLaunchLog.error("Primary store open failed, attempting recovery: \(error)")
+            if let url = SharedStore.storeURL, SharedStore.quarantineCorruptStore(at: url),
+               let recovered = try? SharedStore.modelContainer() {
+                SharedStore.defaults.set(true, forKey: SharedStore.recoveredFromCorruptStoreKey)
+                appLaunchLog.error("Recovered with a fresh, empty store after quarantining the corrupt one")
+                return recovered
+            }
+            fatalError("Could not open the shared data store, even after quarantining and retrying: \(error)")
         }
     }()
 

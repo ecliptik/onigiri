@@ -103,6 +103,60 @@ public enum AIChat {
 public enum AnthropicClient {
     static let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
 
+    /// One content block in a message — text or an inline base64 image.
+    /// A manual `Encodable` because the two cases have different JSON
+    /// shapes ({"type":"text","text":…} vs {"type":"image","source":{…}})
+    /// — the thing a `[String: Any]` + `JSONSerialization` body used to
+    /// express by just building whichever dictionary was needed
+    /// (health-check audit, 2026-09-14: replaced for the same reason the
+    /// file's own comment already flags this area as fragile — the
+    /// max_tokens/max_completion_tokens naming bug two doors down).
+    enum ContentBlock: Encodable {
+        case text(String)
+        case image(mediaType: String, base64Data: String)
+
+        private enum CodingKeys: String, CodingKey {
+            case type, text, source
+        }
+        private enum SourceCodingKeys: String, CodingKey {
+            case type
+            case mediaType = "media_type"
+            case data
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            switch self {
+            case .text(let text):
+                try container.encode("text", forKey: .type)
+                try container.encode(text, forKey: .text)
+            case .image(let mediaType, let base64Data):
+                try container.encode("image", forKey: .type)
+                var source = container.nestedContainer(keyedBy: SourceCodingKeys.self, forKey: .source)
+                try source.encode("base64", forKey: .type)
+                try source.encode(mediaType, forKey: .mediaType)
+                try source.encode(base64Data, forKey: .data)
+            }
+        }
+    }
+
+    struct Message: Encodable {
+        let role: String
+        let content: [ContentBlock]
+    }
+
+    struct MessageRequest: Encodable {
+        let model: String
+        let maxTokens: Int
+        let system: String
+        let messages: [Message]
+
+        private enum CodingKeys: String, CodingKey {
+            case model, system, messages
+            case maxTokens = "max_tokens"
+        }
+    }
+
     public static func completeJSON(
         apiKey: String,
         model: String,
@@ -119,25 +173,15 @@ public enum AnthropicClient {
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
 
-        var content: [[String: Any]] = []
+        var content: [ContentBlock] = []
         if let imageJPEG {
-            content.append([
-                "type": "image",
-                "source": [
-                    "type": "base64",
-                    "media_type": "image/jpeg",
-                    "data": imageJPEG.base64EncodedString(),
-                ],
-            ])
+            content.append(.image(mediaType: "image/jpeg", base64Data: imageJPEG.base64EncodedString()))
         }
-        content.append(["type": "text", "text": user])
-        let body: [String: Any] = [
-            "model": model,
-            "max_tokens": maxTokens,
-            "system": system,
-            "messages": [["role": "user", "content": content]],
-        ]
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        content.append(.text(user))
+        let body = MessageRequest(
+            model: model, maxTokens: maxTokens, system: system,
+            messages: [Message(role: "user", content: content)])
+        request.httpBody = try JSONEncoder().encode(body)
         return try extractContent(from: try await AIChat.data(for: request, timeout: timeout))
     }
 
@@ -169,6 +213,83 @@ public enum AnthropicClient {
 public enum OpenAICompatibleClient {
     public static let openAIBaseURL = URL(string: "https://api.openai.com/v1")!
 
+    /// A message's `content` field: OpenAI accepts either a plain string
+    /// or an array of typed parts — the union a `[String: Any]` body
+    /// used to express with `Any`. (health-check audit, 2026-09-14.)
+    enum ChatContent: Encodable {
+        case text(String)
+        case parts([ContentPart])
+
+        func encode(to encoder: Encoder) throws {
+            switch self {
+            case .text(let text):
+                var container = encoder.singleValueContainer()
+                try container.encode(text)
+            case .parts(let parts):
+                var container = encoder.unkeyedContainer()
+                for part in parts { try container.encode(part) }
+            }
+        }
+    }
+
+    /// One part of a multipart `content` array — text or an image URL
+    /// (a data: URI for an inline JPEG, same as a real one).
+    enum ContentPart: Encodable {
+        case text(String)
+        case imageURL(String)
+
+        private enum CodingKeys: String, CodingKey {
+            case type, text
+            case imageURL = "image_url"
+        }
+        private struct ImageURLBox: Encodable { let url: String }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            switch self {
+            case .text(let text):
+                try container.encode("text", forKey: .type)
+                try container.encode(text, forKey: .text)
+            case .imageURL(let url):
+                try container.encode("image_url", forKey: .type)
+                try container.encode(ImageURLBox(url: url), forKey: .imageURL)
+            }
+        }
+    }
+
+    struct ChatMessage: Encodable {
+        let role: String
+        let content: ChatContent
+    }
+
+    /// A manual `encode(to:)` because the token-cap field's KEY NAME is
+    /// itself dynamic per endpoint (`tokenParameterName(for:)`) — the
+    /// one thing a fixed `CodingKeys` enum can't express, and exactly
+    /// the field a naming mismatch already broke live once (see that
+    /// function's own comment). A `DynamicCodingKey` keeps this the only
+    /// place that's true; everything else here is ordinary `Encodable`.
+    struct ChatRequest: Encodable {
+        let model: String
+        let messages: [ChatMessage]
+        let maxTokensParameterName: String
+        let maxTokens: Int
+
+        private struct DynamicCodingKey: CodingKey {
+            let stringValue: String
+            init(_ stringValue: String) { self.stringValue = stringValue }
+            init?(stringValue: String) { self.stringValue = stringValue }
+            var intValue: Int? { nil }
+            init?(intValue: Int) { nil }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: DynamicCodingKey.self)
+            try container.encode(model, forKey: DynamicCodingKey("model"))
+            try container.encode(messages, forKey: DynamicCodingKey("messages"))
+            try container.encode(maxTokens, forKey: DynamicCodingKey(maxTokensParameterName))
+        }
+    }
+
     public static func completeJSON(
         baseURL: URL,
         apiKey: String,
@@ -190,27 +311,24 @@ public enum OpenAICompatibleClient {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
 
-        let userContent: Any
+        let userContent: ChatContent
         if let imageJPEG {
-            userContent = [
-                [
-                    "type": "image_url",
-                    "image_url": ["url": "data:image/jpeg;base64,\(imageJPEG.base64EncodedString())"],
-                ],
-                ["type": "text", "text": user],
-            ]
+            userContent = .parts([
+                .imageURL("data:image/jpeg;base64,\(imageJPEG.base64EncodedString())"),
+                .text(user),
+            ])
         } else {
-            userContent = user
+            userContent = .text(user)
         }
-        var body: [String: Any] = [
-            "model": model,
-            "messages": [
-                ["role": "system", "content": system],
-                ["role": "user", "content": userContent],
+        let body = ChatRequest(
+            model: model,
+            messages: [
+                ChatMessage(role: "system", content: .text(system)),
+                ChatMessage(role: "user", content: userContent),
             ],
-        ]
-        body[Self.tokenParameterName(for: baseURL)] = maxTokens
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            maxTokensParameterName: Self.tokenParameterName(for: baseURL),
+            maxTokens: maxTokens)
+        request.httpBody = try JSONEncoder().encode(body)
         return try extractContent(from: try await AIChat.data(for: request, timeout: timeout))
     }
 

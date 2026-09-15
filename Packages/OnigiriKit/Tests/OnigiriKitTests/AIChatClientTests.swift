@@ -40,6 +40,103 @@ struct AIChatClientTests {
         }
     }
 
+    // MARK: Anthropic request body (Encodable, not JSONSerialization —
+    // health-check audit, 2026-09-14: locks in the exact wire shape so a
+    // future change to these types can't silently drift from it)
+
+    @Test func anthropicRequestEncodesTextOnly() throws {
+        let body = AnthropicClient.MessageRequest(
+            model: "claude-haiku-4-5", maxTokens: 512, system: "You are helpful.",
+            messages: [AnthropicClient.Message(role: "user", content: [.text("hello")])])
+        let data = try JSONEncoder().encode(body)
+        let obj = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        #expect(obj["model"] as? String == "claude-haiku-4-5")
+        #expect(obj["max_tokens"] as? Int == 512)
+        #expect(obj["system"] as? String == "You are helpful.")
+        let messages = try #require(obj["messages"] as? [[String: Any]])
+        #expect(messages.count == 1)
+        #expect(messages[0]["role"] as? String == "user")
+        let content = try #require(messages[0]["content"] as? [[String: Any]])
+        #expect(content.count == 1)
+        #expect(content[0]["type"] as? String == "text")
+        #expect(content[0]["text"] as? String == "hello")
+    }
+
+    @Test func anthropicRequestEncodesImageBeforeText() throws {
+        let body = AnthropicClient.MessageRequest(
+            model: "claude-haiku-4-5", maxTokens: 512, system: "sys",
+            messages: [AnthropicClient.Message(
+                role: "user",
+                content: [.image(mediaType: "image/jpeg", base64Data: "AAAA"), .text("what is this")])])
+        let data = try JSONEncoder().encode(body)
+        let obj = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let messages = try #require(obj["messages"] as? [[String: Any]])
+        let content = try #require(messages[0]["content"] as? [[String: Any]])
+
+        #expect(content.count == 2)
+        #expect(content[0]["type"] as? String == "image")
+        let source = try #require(content[0]["source"] as? [String: Any])
+        #expect(source["type"] as? String == "base64")
+        #expect(source["media_type"] as? String == "image/jpeg")
+        #expect(source["data"] as? String == "AAAA")
+        #expect(content[1]["type"] as? String == "text")
+        #expect(content[1]["text"] as? String == "what is this")
+    }
+
+    // MARK: OpenAI-compatible request body (Encodable — same reason as
+    // the Anthropic tests above; also pins the dynamic token-parameter
+    // key name actually landing in the body, not just in isolation)
+
+    @Test func openAIRequestEncodesPlainStringContentAndTokenKey() throws {
+        let body = OpenAICompatibleClient.ChatRequest(
+            model: "gpt-5.4-nano",
+            messages: [
+                OpenAICompatibleClient.ChatMessage(role: "system", content: .text("sys")),
+                OpenAICompatibleClient.ChatMessage(role: "user", content: .text("hello")),
+            ],
+            maxTokensParameterName: "max_completion_tokens",
+            maxTokens: 256)
+        let data = try JSONEncoder().encode(body)
+        let obj = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        #expect(obj["model"] as? String == "gpt-5.4-nano")
+        #expect(obj["max_completion_tokens"] as? Int == 256)
+        #expect(obj["max_tokens"] == nil, "the OTHER key name must not also be present")
+        let messages = try #require(obj["messages"] as? [[String: Any]])
+        #expect(messages.count == 2)
+        #expect(messages[0]["role"] as? String == "system")
+        #expect(messages[0]["content"] as? String == "sys", "text-only content is a plain string, not an array")
+        #expect(messages[1]["content"] as? String == "hello")
+    }
+
+    @Test func openAIRequestEncodesMultipartContentWithImageFirst() throws {
+        let body = OpenAICompatibleClient.ChatRequest(
+            model: "llava",
+            messages: [
+                OpenAICompatibleClient.ChatMessage(
+                    role: "user",
+                    content: .parts([
+                        .imageURL("data:image/jpeg;base64,AAAA"),
+                        .text("what is this"),
+                    ])),
+            ],
+            maxTokensParameterName: "max_tokens",
+            maxTokens: 128)
+        let data = try JSONEncoder().encode(body)
+        let obj = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(obj["max_tokens"] as? Int == 128)
+        let messages = try #require(obj["messages"] as? [[String: Any]])
+        let content = try #require(messages[0]["content"] as? [[String: Any]])
+
+        #expect(content.count == 2)
+        #expect(content[0]["type"] as? String == "image_url")
+        let imageURL = try #require(content[0]["image_url"] as? [String: Any])
+        #expect(imageURL["url"] as? String == "data:image/jpeg;base64,AAAA")
+        #expect(content[1]["type"] as? String == "text")
+        #expect(content[1]["text"] as? String == "what is this")
+    }
+
     // MARK: OpenAI-compatible envelope
 
     @Test func openAIExtractsMessageContent() throws {

@@ -55,8 +55,13 @@ public enum PlanCache {
             && Calendar.current.isDate(entry.stamp, inSameDayAs: .now)
     }
 
-    /// The daily plan, computed at most once per burst per goal.
-    public static func state(goal: SyncedGoal?) async -> DailyPlanLoader.State {
+    /// The daily plan, computed at most once per burst per goal. `health`
+    /// is injectable (default: the real store) so tests can stub the
+    /// read and count invocations — the health-check audit's coverage
+    /// gap for this cache's TTL/coalescing/invalidation behavior.
+    public static func state(
+        goal: SyncedGoal?, health: any HealthPlanReading = HealthKitService()
+    ) async -> DailyPlanLoader.State {
         let version = currentVersion()
         if let cached = stateEntry, cached.goal == goal, isValid(cached.entry, version: version) {
             return cached.entry.value
@@ -64,7 +69,7 @@ public enum PlanCache {
         if let running = stateTask, running.goal == goal, running.version == version {
             return await running.task.value
         }
-        let task = Task { await DailyPlanLoader.load(goal: goal) }
+        let task = Task { await DailyPlanLoader.load(goal: goal, health: health) }
         stateTask = (task, goal, version)
         let value = await task.value
         if stateTask?.task == task {

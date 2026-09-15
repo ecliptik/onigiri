@@ -277,6 +277,32 @@ public enum AIProviderSettings {
         readSecret(account)
     }
 
+    /// Test seam: writes directly to the pre-migration (app-only,
+    /// no access group) location — simulating a key entered before the
+    /// read-through migration existed, without going through
+    /// `saveSecret`, which only ever writes the NEW location. A test
+    /// must not touch the real provider accounts.
+    public static func writeLegacySecretForTesting(_ value: String, account: String) {
+        let attributes: [String: Any] = [
+            kSecValueData as String: Data(value.utf8),
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
+        var status = SecItemUpdate(legacyQuery(account) as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            var add = legacyQuery(account)
+            add.merge(attributes) { _, new in new }
+            status = SecItemAdd(add as CFDictionary, nil)
+        }
+    }
+
+    /// Test seam: removes BOTH locations, for cleanup after a test —
+    /// `saveSecret("", account:)` would do the same thing, but existing
+    /// exactly for tests keeps that intent explicit at call sites.
+    public static func deleteSecretForTesting(_ account: String) {
+        SecItemDelete(query(account) as CFDictionary)
+        SecItemDelete(legacyQuery(account) as CFDictionary)
+    }
+
     private static func readSecret(_ account: String) -> String? {
         if let found = read(query(account)) { return found }
         guard let legacy = read(legacyQuery(account)) else { return nil }

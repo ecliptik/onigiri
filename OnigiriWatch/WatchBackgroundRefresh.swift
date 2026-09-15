@@ -20,11 +20,18 @@ import OnigiriKit
 /// them to the phone — yet it had the stalest surface and the tightest
 /// delivery cap.
 ///
-/// Deliberately the legacy `WKApplication` scheduling call, not
-/// `BGTaskScheduler`: BackgroundTasks reached watchOS at 26 and this
-/// target's floor is watchOS 10 (project.yml). Revisit if the floor ever
-/// rises past 26 — the replacement is `BGAppRefreshTaskRequest` plus a
-/// `BGTaskSchedulerPermittedIdentifiers` entry.
+/// Deliberately the legacy `WKApplication` scheduling call, still, as of
+/// watchOS 27 GA (2026-09-14): `BackgroundTasks.framework` (BGTaskScheduler,
+/// BGAppRefreshTaskRequest, submitTaskRequest, everything in it) is
+/// `API_UNAVAILABLE(watchos)` in the shipped Xcode 27.0 SDK headers —
+/// verified by an actual failed build, not assumed. A dev-tooling skill
+/// claimed "BackgroundTasks reached watchOS in 27" and that
+/// `scheduleBackgroundRefresh` was deprecated in favor of it; neither is
+/// true of this SDK — `scheduleBackgroundRefreshWithPreferredDate:...`
+/// carries no `WK_DEPRECATED_WATCHOS` annotation in
+/// `WKBackgroundTask.h`, unlike sibling APIs in the same header that
+/// genuinely are deprecated. Nothing to revisit here until Apple
+/// actually ships BackgroundTasks on watch.
 @MainActor
 enum WatchBackgroundRefresh {
     /// Rides through as the task's `userInfo` so the handler can tell

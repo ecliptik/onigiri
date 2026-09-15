@@ -166,6 +166,25 @@ struct GoalView: View {
         GoalUpsert.validate(targetLb: targetWeightLb, currentLb: planWeightLb, mode: mode)
     }
 
+    /// The date/fallback-weight/startEdited half of the comparison
+    /// `isDirty` and `hasEdits` both need — everything except how each
+    /// treats a stored target of exactly 0, which is genuinely NOT the
+    /// same between them (isDirty compares `goal.targetWeightLb` raw,
+    /// hasEdits normalizes a stored 0 to "no target"), so that part
+    /// stays a parameter rather than getting folded in here
+    /// (health-check audit, 2026-09-14: ~90% duplicated, not 100%).
+    private func targetDiffers(fromStored storedTarget: Double?, goal: GoalSettings) -> Bool {
+        if isMaintenance {
+            // The hold-near anchor is maintenance's one knob; an empty
+            // field means "keep the stored anchor", not a change.
+            return targetWeightLb.map { $0 != storedTarget } ?? false
+        }
+        return storedTarget != targetWeightLb
+            || !Calendar.current.isDate(goal.targetDate, inSameDayAs: targetDate)
+            || (model.healthWeightLb == nil && goal.fallbackCurrentWeightLb != manualWeightLb)
+            || startEdited
+    }
+
     /// Save enables only when the form is valid AND differs from the
     /// stored goal — the tab has no Cancel, so an always-on Save would
     /// invite no-ops, and an invalid save used to slip through silently.
@@ -173,15 +192,7 @@ struct GoalView: View {
         guard validation == .valid else { return false }
         guard let goal = goals.first else { return true }
         if (goal.mode ?? GoalMode.lose) != mode { return true }
-        if isMaintenance {
-            // The hold-near anchor is maintenance's one knob; an empty
-            // field means "keep the stored anchor", not a change.
-            return targetWeightLb.map { $0 != goal.targetWeightLb } ?? false
-        }
-        return goal.targetWeightLb != targetWeightLb
-            || !Calendar.current.isDate(goal.targetDate, inSameDayAs: targetDate)
-            || (model.healthWeightLb == nil && goal.fallbackCurrentWeightLb != manualWeightLb)
-            || startEdited
+        return targetDiffers(fromStored: goal.targetWeightLb, goal: goal)
     }
 
     /// The form differs from the stored goal at all, validity aside —
@@ -193,13 +204,7 @@ struct GoalView: View {
         }
         if (goal.mode ?? GoalMode.lose) != mode { return true }
         let storedTarget: Double? = goal.targetWeightLb > 0 ? goal.targetWeightLb : nil
-        if isMaintenance {
-            return targetWeightLb.map { $0 != storedTarget } ?? false
-        }
-        return storedTarget != targetWeightLb
-            || !Calendar.current.isDate(goal.targetDate, inSameDayAs: targetDate)
-            || (model.healthWeightLb == nil && goal.fallbackCurrentWeightLb != manualWeightLb)
-            || startEdited
+        return targetDiffers(fromStored: storedTarget, goal: goal)
     }
 
     /// Where the SAVED lose goal stands — under way, inside the last

@@ -14,15 +14,17 @@ import Foundation
 /// dependency at all) needs to call this too, to trace the receiving
 /// half of the hand-off, not just the sending half.
 nonisolated func viDebugLog(_ line: String) {
-    guard let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-    else { return }
-    let url = dir.appendingPathComponent("visual-intelligence-debug.log")
-    let entry = "[\(Date())] \(line)\n"
-    if let existing = try? String(contentsOf: url, encoding: .utf8) {
-        try? (existing + entry).write(to: url, atomically: true, encoding: .utf8)
-    } else {
-        try? entry.write(to: url, atomically: true, encoding: .utf8)
-    }
+    let url = URL.documentsDirectory.appendingPathComponent("visual-intelligence-debug.log")
+    var lines = (try? String(contentsOf: url, encoding: .utf8))?
+        .split(separator: "\n", omittingEmptySubsequences: true)
+        .map(String.init) ?? []
+    lines.append("[\(Date())] \(line)")
+    // Uncapped, this grew without bound over a long debugging session —
+    // same cap WidgetBurnGate's journals use (health-check audit,
+    // 2026-09-14).
+    let cap = 500
+    if lines.count > cap { lines.removeFirst(lines.count - cap) }
+    try? (lines.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
 }
 #endif
 

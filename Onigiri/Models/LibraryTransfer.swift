@@ -3,6 +3,14 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 import OnigiriKit
+import os
+
+/// `error.localizedDescription` on a decode failure is generic
+/// ("couldn't be read") and throws away exactly the detail
+/// (`DecodingError`'s key path, type mismatch, context) that explains
+/// WHY a backup file was rejected — logged here, kept out of the
+/// user-facing string below (health-check audit, 2026-09-14).
+private let transferLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "library-transfer")
 
 /// Thin app-target wrapper around `OnigiriKit.LibraryTransfer`.
 ///
@@ -41,9 +49,11 @@ enum LibraryTransfer {
                 PhoneSyncService.shared.push(from: context)
                 return message
             } catch {
+                transferLog.error("Import failed: \(String(describing: error))")
                 return "Import failed: \(error.localizedDescription)"
             }
         case .failure(let error):
+            transferLog.error("Import failed (file picker): \(String(describing: error))")
             return "Import failed: \(error.localizedDescription)"
         }
     }

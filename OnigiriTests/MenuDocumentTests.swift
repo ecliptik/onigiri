@@ -90,11 +90,22 @@ final class MenuDocumentTests: XCTestCase {
         struct Dump: Decodable { let observations: [LabelObservation] }
         // The fixtures live in the KIT's test bundle; this target reaches
         // them through the repo, which is fine for a check whose whole
-        // job is comparing the two capture paths.
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OnigiriTests
-            .deletingLastPathComponent()   // repo root
-        let url = root.appending(path:
+        // job is comparing the two capture paths. Walked up from
+        // #filePath looking for the repo root (a directory holding
+        // Packages/OnigiriKit) rather than a hardcoded parent-count —
+        // the old fixed "two levels up" broke silently if this file
+        // ever moved to a subdirectory (health-check audit, 2026-09-14).
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        while !FileManager.default.fileExists(atPath: dir.appending(path: "Packages/OnigiriKit").path) {
+            let parent = dir.deletingLastPathComponent()
+            guard parent != dir else {
+                throw NSError(
+                    domain: "MenuDocumentTests", code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "couldn't find the repo root walking up from \(#filePath)"])
+            }
+            dir = parent
+        }
+        let url = dir.appending(path:
             "Packages/OnigiriKit/Tests/OnigiriKitTests/Fixtures/\(name).json")
         return try JSONDecoder().decode(Dump.self, from: Data(contentsOf: url)).observations
     }

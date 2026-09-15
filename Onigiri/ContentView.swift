@@ -267,6 +267,14 @@ struct ContentView: View {
 
     private static let deepLinkDay: DateFormatter = {
         let formatter = DateFormatter()
+        // Fixed format, fixed locale — matching BackupService's own
+        // stamp formatter, and the same "yyyy-MM-dd" DeficitTargetHistory
+        // uses everywhere else. Without an explicit locale, a device set
+        // to a non-Gregorian calendar could misparse the numeric fields
+        // (health-check audit, 2026-09-14; no deep-link producer sends a
+        // `day` today, so currently unreachable — hardening for when
+        // one does).
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()

@@ -1403,7 +1403,12 @@ final class OnigiriUITests: XCTestCase {
         app.swipeUp()
         app.swipeUp()
         attachShot(named: "foods-scrolled-down")
-        XCTAssertTrue(search.exists, "Pinned search field visible mid-scroll")
+        // .exists alone can't catch the bug this guards: the buggy state
+        // re-expands the drawer BLANK — the field is still present in
+        // the tree, just not rendering, so .exists stayed true through
+        // it (health-check audit, 2026-09-14). isHittable is what an
+        // invisible-but-present field fails.
+        XCTAssertTrue(search.isHittable, "Pinned search field visible mid-scroll")
         app.swipeDown()
         app.swipeDown()
         attachShot(named: "foods-scrolled-back")

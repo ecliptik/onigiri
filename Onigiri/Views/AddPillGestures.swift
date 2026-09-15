@@ -1,8 +1,14 @@
 import SwiftUI
 import UIKit
 
-/// Window-level gestures for the corner "+" pill (the system search-role
-/// Tab, which exposes no SwiftUI hooks of its own).
+/// Window-level gestures for the "+" pill (the system search-role Tab,
+/// which exposes no SwiftUI hooks of its own). iOS 26 renders it as a
+/// detached corner circle; iOS 27 merges it into the same row as the other
+/// four tabs (an undocumented Apple rendering change, confirmed on-device
+/// 2026-09-14 by installing an identical build on both OSes side by side —
+/// nothing in this file changed between the two). The hit test below tracks
+/// either shape by finding Apple's own private control for it rather than
+/// guessing a screen position.
 ///
 /// TAP: intercepts the touch BEFORE the tab-bar button fires and routes to
 /// the add flow directly. This is the "+"-flash fix: letting the tab
@@ -132,18 +138,33 @@ struct AddPillGestures: UIViewRepresentable {
                 let frame = pill.convert(pill.bounds, to: window)
                 return frame.insetBy(dx: -8, dy: -8).contains(touch.location(in: window))
             }
-            // Last resort (device 2026-07-13: neither strategy above
+            // Structural path (device 2026-07-13: neither strategy above
             // found the pill — SwiftUI's tab bar keeps labels on
-            // accessibility elements, not views): the pill is the
-            // floating circle at the bottom-trailing corner, so match
-            // the region itself. Key window only, nothing presented
-            // (a sheet's own bottom corner must not log water), and
-            // compact width only — the SIZE CLASS, not a 500pt guess:
-            // Split View/Stage Manager windows cross any fixed width
-            // while the trait tracks where the tab bar actually is.
+            // accessibility elements, not views, confirmed again by
+            // dumping the live hierarchy on iOS 26.5 AND 27.0 2026-09-14:
+            // every view under the tab bar has an empty accessibilityLabel
+            // and a nil accessibilityElements on both OSes). But on both
+            // OSes the "+" is still backed by the SAME private control —
+            // a `UITabBarAuxiliaryView`/`UITabBarAuxiliaryDummyView` pair —
+            // whether it renders as the iOS 26 detached circle or gets
+            // absorbed into the iOS 27 single-row pill. Finding it by
+            // class name tracks whatever OS-drawn shape it currently is,
+            // instead of guessing a screen position that iOS 27 broke
+            // silently (no changelog entry found for the rendering
+            // change). Key window and nothing presented, same reasons as
+            // the corner guess below.
             guard window.isKeyWindow,
-                  window.rootViewController?.presentedViewController == nil,
-                  window.traitCollection.horizontalSizeClass == .compact else { return false }
+                  window.rootViewController?.presentedViewController == nil else { return false }
+            if let auxiliary = Self.findAuxiliaryTabView(in: window) {
+                let frame = auxiliary.convert(auxiliary.bounds, to: window)
+                return frame.insetBy(dx: -8, dy: -8).contains(touch.location(in: window))
+            }
+            // Last resort, if Apple ever renames the private class above:
+            // the corner region a detached circle occupies. Compact width
+            // only — the SIZE CLASS, not a 500pt guess: Split View/Stage
+            // Manager windows cross any fixed width while the trait
+            // tracks where the tab bar actually is.
+            guard window.traitCollection.horizontalSizeClass == .compact else { return false }
             let point = touch.location(in: window)
             return point.x >= window.bounds.width - 84
                 && point.y >= window.bounds.height - 130
@@ -155,6 +176,24 @@ struct AddPillGestures: UIViewRepresentable {
             }
             for sub in view.subviews.reversed() {
                 if let found = findAddPill(in: sub) { return found }
+            }
+            return nil
+        }
+
+        /// UIKit's private name for the search-role tab's own control,
+        /// unchanged by the iOS 26 → 27 rendering change (verified by
+        /// dumping the live hierarchy on both: `_UITabBarAuxiliaryView`
+        /// on 26, `_UITabBarAuxiliaryDummyView` — reached first because
+        /// subviews are walked back-to-front and it draws on top — on
+        /// 27). Reversed traversal also means this returns the widest/
+        /// topmost match, which is the one whose frame matches what's
+        /// actually visible to tap.
+        static func findAuxiliaryTabView(in view: UIView) -> UIView? {
+            if NSStringFromClass(type(of: view)).contains("TabBarAuxiliary") {
+                return view
+            }
+            for sub in view.subviews.reversed() {
+                if let found = findAuxiliaryTabView(in: sub) { return found }
             }
             return nil
         }

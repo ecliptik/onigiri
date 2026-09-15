@@ -56,7 +56,19 @@ struct ContentView: View {
             if showingOnboarding && !hasOnboarded {
                 OnboardingView()
             } else {
+                #if DEBUG
+                // plans/PLAN-tab-bar-jank.md Phase 3/4: a stock TabView of
+                // the same shape, variants by launch argument, so the
+                // Liquid Glass stick can be bisected on a simulator with
+                // ONE build. Never reachable outside DEBUG.
+                if ProcessInfo.processInfo.arguments.contains("--tab-probe-stock") {
+                    StockTabProbe()
+                } else {
+                    mainTabs
+                }
+                #else
                 mainTabs
+                #endif
             }
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
@@ -178,8 +190,15 @@ struct ContentView: View {
             handle(action)
         }
         .onChange(of: quickActions.dayRequest) { _, day in
-            // Calendar's "View day": land on Today, which consumes the date.
-            if day != nil { selectedTab = .today }
+            // Calendar's "View day": land on Today, which consumes the
+            // date. Guarded on `selectedTab != .today`: a write of the
+            // value already in place is not free for a TabView (a
+            // selection re-commit re-runs the tab bar's transition —
+            // that was the "flashes twice" of 2026-09-15, when this
+            // fired a tick after the tap handler's own write). The case
+            // this exists for (View Day, a widget deep link) is exactly
+            // the one where selectedTab ISN'T already .today.
+            if day != nil, selectedTab != .today { selectedTab = .today }
         }
         .onChange(of: quickActions.goalRequest) { _, request in
             // Today's Daily Goal card: open the Goal tab, then consume.
@@ -317,6 +336,15 @@ struct ContentView: View {
                     // The same request Calendar's "View day" raises, so
                     // this shares its consumer: it pops any pushed detail
                     // and browses, rather than reaching into TodayModel.
+                    //
+                    // Synchronous and BEFORE the selection write, as it
+                    // always was. Deferring it a runloop turn was tried
+                    // on 2026-09-15 to get the tab bar's animation out
+                    // from under it and produced a real regression — a
+                    // second commit of the same selection one tick
+                    // later, seen as Today "flashing twice" — while the
+                    // stall it was meant to fix turned out to live in
+                    // Style.swift's recede blur (plans/PLAN-tab-bar-jank.md).
                     quickActions.dayRequest = Calendar.current.startOfDay(for: .now)
                 }
                 selectedTab = tapped
@@ -495,6 +523,49 @@ struct ContentView: View {
 /// presented from ContentView so it slides up over — and hides — the
 /// search-tab bounce (a centered alert's dim let the morph flash through).
 /// The pick routes to FoodsView via QuickActions.addFoodKind.
+#if DEBUG
+/// The OS baseline for the tab-bar stick (plans/PLAN-tab-bar-jank.md):
+/// five stock `Tab`s of empty content in Onigiri's exact shape, with the
+/// suspects switchable by launch argument so each variant is one probe
+/// run, not one build:
+///   --tab-probe-stock       use this instead of mainTabs
+///   --tab-probe-no-search   drop the search-role "+" tab
+///   --tab-probe-automatic   .tabViewStyle(.automatic) instead of .sidebarAdaptable
+///   --tab-probe-no-tint     no .tint(.riceToast)
+/// If the stock shape sticks on a Calendar→Today jump too, the stall is
+/// the system's, and the app-side hunt stops.
+private struct StockTabProbe: View {
+    @State private var selection = 0
+    private var args: [String] { ProcessInfo.processInfo.arguments }
+
+    var body: some View {
+        TabView(selection: $selection) {
+            Tab("Today", systemImage: "gauge.with.needle", value: 0) { Color.clear }
+            Tab("Foods", systemImage: "fork.knife", value: 1) { Color.clear }
+            Tab("Goal", systemImage: "chart.line.downtrend.xyaxis", value: 2) { Color.clear }
+            Tab("Calendar", systemImage: "calendar", value: 3) { Color.clear }
+            if !args.contains("--tab-probe-no-search") {
+                Tab("Add", systemImage: "plus", value: 4, role: .search) { Color.clear }
+            }
+        }
+        .modifier(ProbeStyle(
+            sidebar: !args.contains("--tab-probe-automatic"),
+            tinted: !args.contains("--tab-probe-no-tint")))
+    }
+
+    private struct ProbeStyle: ViewModifier {
+        let sidebar: Bool
+        let tinted: Bool
+        func body(content: Content) -> some View {
+            let styled = Group {
+                if sidebar { content.tabViewStyle(.sidebarAdaptable) } else { content }
+            }
+            if tinted { styled.tint(.riceToast) } else { styled }
+        }
+    }
+}
+#endif
+
 private struct AddToLibrarySheet: View {
     let canAddMeal: Bool
     let onPick: (QuickActions.AddFoodKind) -> Void

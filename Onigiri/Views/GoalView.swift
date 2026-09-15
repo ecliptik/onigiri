@@ -725,12 +725,15 @@ struct GoalView: View {
             }
         }
         .task {
-            await model.loadIfStale()
+            let refreshed = await model.loadIfStale()
+            let needsDerive = refreshed || !loaded
             if !loaded, goals.first != nil {
                 applyStoredGoal()
                 loaded = true
             }
-            deriveTrendStats()
+            if needsDerive {
+                deriveTrendStats()
+            }
         }
         .onChange(of: focusedField) {
             // A tapped weight field starts with its value selected, so

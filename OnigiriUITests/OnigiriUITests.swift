@@ -2975,8 +2975,27 @@ final class OnigiriUITests: XCTestCase {
         }
 
         let allow = app.buttons["Allow"]
-        XCTAssertTrue(allow.waitForExistence(timeout: 5), "Allow should enable after Turn On All")
-        allow.tap()
+        if allow.waitForExistence(timeout: 5) {
+            allow.tap()
+        } else {
+            // iOS 27.0: the sheet's confirm row is a StaticText 'Allow'
+            // (beside 'Don’t Allow') at the very bottom of the scrolling
+            // topic list, not a Button — `app.buttons["Allow"]` finds
+            // nothing and the tree dump (2026-09-15, plans/
+            // PLAN-tab-bar-jank.md) is how that was learned. It reports
+            // a placeholder frame until scrolled into view, so scroll
+            // until it is hittable, then tap the text itself.
+            let allowText = app.staticTexts["Allow"]
+            XCTAssertTrue(allowText.waitForExistence(timeout: 5),
+                          "Allow (Button on 26.5, StaticText on 27.0) should exist after Turn On All")
+            var swipes = 0
+            while !allowText.isHittable, swipes < 20 {
+                app.swipeUp(velocity: .fast)
+                swipes += 1
+            }
+            XCTAssertTrue(allowText.isHittable, "Allow row should scroll into view")
+            allowText.tap()
+        }
         _ = sheet.waitForNonExistence(timeout: 10)
         dismissHealthSyncPrompt(in: app)
     }
@@ -3400,5 +3419,49 @@ final class OnigiriUITests: XCTestCase {
             evaluatedWith: nameField)
         wait(for: [named], timeout: 15)
         attachShot(named: "menu-fills-form")
+    }
+
+    /// Tab-bar animation probe (`TEST_RUNNER_TAB_PROBE=1`): drives the
+    /// exact tap sequence behind the Calendar→Today Liquid Glass stall so
+    /// it can be screen-recorded on a simulator (`simctl io recordVideo`)
+    /// and frame-analysed, instead of round-tripping a phone recording
+    /// per build (2026-09-15, plans/PLAN-tab-bar-jank.md). The dwells are
+    /// the point: each transition must settle before the next tap, or
+    /// the capture measures interruption rather than the animation.
+    /// Asserts nothing about smoothness — it can't; the recording is the
+    /// assertion. Today→Calendar is the control that reportedly never
+    /// sticks; the single-hop pair at the end separates "landing on
+    /// Today" from "jumping three tabs."
+    @MainActor
+    func testTabBarAnimationProbe() throws {
+        guard ProcessInfo.processInfo.environment["TAB_PROBE"] == "1" else {
+            throw XCTSkip("Set TEST_RUNNER_TAB_PROBE=1 to run the tab-bar animation probe.")
+        }
+        let app = XCUIApplication()
+        app.launchArguments = ["--seed-sample-data"]
+        // Variant selection without a rebuild: TEST_RUNNER_TAB_PROBE_ARGS
+        // ="--tab-probe-stock --tab-probe-no-search" etc. (ContentView's
+        // StockTabProbe documents the set).
+        if let extra = ProcessInfo.processInfo.environment["TAB_PROBE_ARGS"] {
+            app.launchArguments += extra.split(separator: " ").map(String.init)
+        }
+        app.launch()
+        // Health sheet only on a fresh container; the shared helper
+        // tolerates its absence and knows both the 26.5 (Button) and
+        // 27.0 (StaticText) shapes of its Allow row.
+        grantHealthAccess(in: app, timeout: 10)
+        dismissModals(in: app)
+        XCTAssertTrue(app.tabBars.buttons["Today"].waitForExistence(timeout: 10))
+        Thread.sleep(forTimeInterval: 1.5)
+        for _ in 0..<3 {
+            switchTab(in: app, to: "Calendar")
+            Thread.sleep(forTimeInterval: 1.5)
+            switchTab(in: app, to: "Today")
+            Thread.sleep(forTimeInterval: 1.5)
+        }
+        switchTab(in: app, to: "Foods")
+        Thread.sleep(forTimeInterval: 1.5)
+        switchTab(in: app, to: "Today")
+        Thread.sleep(forTimeInterval: 1.5)
     }
 }

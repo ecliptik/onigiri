@@ -448,6 +448,45 @@ Each cost a debugging session.
   the plain, unstyled form is correct everywhere, `sheetCardChrome()`
   included.
 
+- **A zero-radius `.blur` on a tab's ROOT view is not free under the
+  Liquid Glass tab bar, and only a DEVICE shows it** (2026-09-15,
+  `plans/PLAN-tab-bar-jank.md`). `recedesBehindSheet()` was
+  `.blur(radius: isPresenting ? 12 : 0)`; at 0 the filter stays attached
+  to the whole screen, which the bar samples on every frame of a
+  selection slide. On the phone (iPhone 16, iOS 27.0) a Calendar→Today
+  jump parked the glass highlight on Foods for ~200 ms — 12 static
+  frames, then the last hop — and double-flashed on arrival. Today and
+  Foods carried the modifier and stuck; Goal and Calendar carried it not
+  and never did. It now branches: no filter while idle, and the blur-in
+  no longer animates from 0 (the dim still fades). Rules learned:
+  - **The simulator cannot reproduce it, on 26.5 or 27.0** — the real
+    app and a stock five-tab `TabView` of the same shape both slide in
+    ~140 ms there. So a sim run can rule the OS OUT but cannot rule a fix
+    IN; the phone is the instrument, and the user's eye (or a phone
+    screen recording) is the assertion.
+  - **Five app-side gates changed nothing, and one "fix" regressed it.**
+    `TodayModel.start()`/`select(day:)`, `CalendarView`'s `.task`,
+    `GoalView`'s trend derive and `consumeQuickLogRequest` all ran real
+    redundant work on every tab bounce (`@Observable` never skips an
+    equal write — the `16088cc` lesson) and are gated now; that was worth
+    doing and was NOT the stall. Deferring the Today-tap `dayRequest`
+    stamp a runloop turn made a SECOND selection commit one tick later —
+    "Today flashes twice." Don't reach for main-thread theories on a
+    tab-bar animation problem before bisecting what sits UNDER the bar.
+  - Method: `testTabBarAnimationProbe` (`TEST_RUNNER_TAB_PROBE=1`, plus
+    `TEST_RUNNER_TAB_PROBE_ARGS="--tab-probe-stock"` for the OS baseline
+    or `--tab-probe-no-health` to skip the auth sheet) under
+    `xcrun simctl io <udid> recordVideo`, then
+    `scripts/analyze-tab-probe.py` — per-icon dwell FRAMES per
+    transition. The stall is a distribution, not a duration: total
+    motion barely moved, the middle of the slide did (9–11 Foods
+    frames against 2). The 27.0 sim's Health sheet has its Allow as a
+    StaticText XCUITest cannot scroll to (26.5's is a Button;
+    `grantHealthAccess` knows both) — hence the skip flag.
+  - The iOS 27 merged "+" (search-role tab drawn in the row, not the
+    26 detached circle) is Apple's platform change, not ours; accepted
+    2026-09-15.
+
 ## App-launch landmines
 
 - **Never call `WKApplication.scheduleBackgroundRefresh` from `App.init`**

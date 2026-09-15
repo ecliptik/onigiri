@@ -221,16 +221,35 @@ private struct RecedesBehindSheet: ViewModifier {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     func body(content: Content) -> some View {
-        content
-            .blur(radius: isPresenting && !reduceTransparency ? 12 : 0)
-            .overlay {
-                if isPresenting {
-                    Color.black.opacity(reduceTransparency ? 0.55 : 0.32)
-                        .ignoresSafeArea()
-                        .allowsHitTesting(false)
-                }
+        // NO blur filter while idle — the branch, not `.blur(radius:
+        // isPresenting ? 12 : 0)`. A zero-radius blur still hangs a
+        // filter on the host's whole rendered output, and the Liquid
+        // Glass tab bar samples that output every frame of a selection
+        // slide. On a DEVICE (never on a simulator) that made a
+        // Calendar→Today jump park the glass highlight on Foods for
+        // ~200 ms — Today and Foods being the two tab roots that carry
+        // this modifier, Goal and Calendar neither carrying it nor
+        // sticking. Bisected on the phone one variable at a time after
+        // five app-side gating fixes changed nothing (2026-09-15,
+        // plans/PLAN-tab-bar-jank.md, the user: "much better now").
+        // Cost: the blur-in no longer animates from 0 — it appears as
+        // the sheet starts rising, which reads fine; the dim still
+        // fades. Don't put the radius-0 form back for the animation.
+        Group {
+            if isPresenting && !reduceTransparency {
+                content.blur(radius: 12)
+            } else {
+                content
             }
-            .animation(.easeOut(duration: 0.2), value: isPresenting)
+        }
+        .overlay {
+            if isPresenting {
+                Color.black.opacity(reduceTransparency ? 0.55 : 0.32)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: isPresenting)
     }
 }
 

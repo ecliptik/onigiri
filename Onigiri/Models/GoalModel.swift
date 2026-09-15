@@ -57,8 +57,15 @@ final class GoalModel {
         await loadIfStale()
     }
 
-    func loadIfStale() async {
-        guard refreshGate.isStale(maxAge: 30) else { return }
+    /// Returns whether it actually refreshed — GoalView's `.task` uses
+    /// this to skip `deriveTrendStats()` on a tab bounce that found
+    /// nothing stale, instead of re-deriving the identical trend from
+    /// the same in-memory arrays (and re-writing `trend`, which
+    /// `@Observable` never skips for an equal value) on every visit
+    /// (2026-09-15; same missing-gate shape as `TodayModel.start()`).
+    @discardableResult
+    func loadIfStale() async -> Bool {
+        guard refreshGate.isStale(maxAge: 30) else { return false }
         // Independent reads — concurrent, not serial (the trend chart
         // used to populate a query-chain late).
         async let weightRead = health.latestBodyMassLb()
@@ -104,6 +111,7 @@ final class GoalModel {
         // `DailyPlanLoader` still drive it, and this was only ever a
         // reader.
         refreshGate.markRefreshed()
+        return true
     }
 
     /// Recompute the cached chart stats — when the HealthKit reads land

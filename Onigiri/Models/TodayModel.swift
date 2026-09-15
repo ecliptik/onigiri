@@ -108,24 +108,66 @@ final class TodayModel {
     }
 
     /// Jump straight to a day (date picker, Calendar's "View day").
+    ///
+    /// Also the destination of every TAB TAP on Today, not just a real
+    /// day jump — `ContentView`'s tab binding stamps a fresh
+    /// `dayRequest` on every activation of the Today tab — so an
+    /// unconditional `refresh()` here fired the same HealthKit storm
+    /// `start()`'s repeat-visit branch did, from a trigger that gate
+    /// didn't cover. And `@Observable` (unlike SwiftUI's own `@State`)
+    /// does NOT skip a write that equals the current value, so writing
+    /// `selectedDate`/`followsToday` unconditionally re-evaluated
+    /// TodayView's whole body on every tap. Only write (and only
+    /// reload) when the day actually changed or the data is genuinely
+    /// stale — the equality-guarded commit of `16088cc`.
+    ///
+    /// Real waste, worth removing; NOT what made the tab bar stick on
+    /// 2026-09-15 — that was Style.swift's idle recede blur, found only
+    /// after this and four sibling gates changed nothing on the phone
+    /// (plans/PLAN-tab-bar-jank.md). Don't read this gate as the fix
+    /// for a tab-bar animation problem.
     func select(day: Date) async {
-        selectedDate = min(
+        let newDate = min(
             Calendar.current.startOfDay(for: day),
             Calendar.current.startOfDay(for: .now)
         )
-        followsToday = isToday
+        let dayChanged = newDate != selectedDate
+        if dayChanged {
+            selectedDate = newDate
+            followsToday = isToday
+        }
+        guard dayChanged || refreshGate.isStale(maxAge: 30) else { return }
         await refresh()
     }
 
 
     /// One-time startup: prompt for HealthKit access if never asked, then load.
     /// The view's .task can re-fire on tab switches — only run once.
+    ///
+    /// The repeat-visit branch is gated the same way `foregrounded` already
+    /// is: an ungated `refresh()` here fired the full 5-query HealthKit
+    /// storm and its MainActor property assignments on every bounce back to
+    /// Today. Goal and Calendar's equivalents were already gated; this one
+    /// wasn't (2026-09-15). It was suspected of the tab-bar stutter of
+    /// that day and was not it — see `select(day:)` below.
     func start() async {
         guard !started else {
-            await refresh()
+            if refreshGate.isStale(maxAge: 30) {
+                await refresh()
+            }
             return
         }
         started = true
+        #if DEBUG
+        // plans/PLAN-tab-bar-jank.md: the tab-bar animation probe runs the
+        // REAL TabView on a simulator whose Health sheet XCUITest cannot
+        // get past on iOS 27.0 (its Allow is an unscrollable StaticText).
+        // The probe measures the tab bar, not the data — skip the
+        // authorization request and the first load so no sheet appears.
+        if ProcessInfo.processInfo.arguments.contains("--tab-probe-no-health") {
+            return
+        }
+        #endif
         guard HealthKitService.isAvailable else {
             errorMessage = "Health data isn't available on this device."
             return

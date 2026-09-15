@@ -421,6 +421,17 @@ struct TodayView: View {
             quickActions.dayRequest = nil
             let kind = quickActions.quickLogRequest
             quickActions.quickLogRequest = nil
+            // A plain tap on the Today TAB stamps this same request even
+            // when already showing today with no sheet to open — the
+            // common case for every tab bounce, not just a real "browse
+            // back to today." Skip the whole cascade then: no navPath
+            // reset, no Task, no model call. A real day jump (Calendar's
+            // "View day", a widget deep link, or actually browsing back
+            // first) still always runs. (2026-09-15; suspected of that
+            // day's tab-bar stall and cleared — plans/PLAN-tab-bar-jank.md.)
+            guard kind != nil
+                || Calendar.current.startOfDay(for: day) != model.selectedDate
+            else { return }
             // Pop any pushed Day Nutrition first: the sheet must open
             // over Today's root, not over a stale detail push.
             navPath.removeAll()

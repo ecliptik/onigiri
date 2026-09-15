@@ -120,7 +120,22 @@ struct CalendarView: View {
                 }
             }
         }
-        .task { await refresh() }
+        .task {
+            // Ungated until 2026-09-15: `.task` re-fires on every tab
+            // bounce back to Calendar (same shape as `TodayModel.start()`),
+            // and an unconditional `refresh()` here queried HealthKit and
+            // wrote several @Observable properties every time. Routed
+            // through the same staleness check the scenePhase handler
+            // below already uses — a fresh gate (cold launch) still reads
+            // stale, so this still refreshes on first appearance. (Found
+            // hunting that day's tab-bar stutter; it wasn't the cause —
+            // plans/PLAN-tab-bar-jank.md — but it was real waste.)
+            if model.shouldForegroundRefresh(
+                healthWriteVersion: ToastCenter.shared.healthWriteVersion
+            ) {
+                await refresh()
+            }
+        }
         // onChange covers the live case (the app is foregrounded by the
         // widget tap itself, so the request arrives while this view is
         // mounted); onAppear covers the cold launch, where the request

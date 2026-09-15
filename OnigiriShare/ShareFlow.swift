@@ -322,8 +322,8 @@ struct ShareFlow: View {
         guard let container = try? SharedStore.modelContainer() else {
             return "Couldn't reach the food library."
         }
-        MenuLibrarySave.insert(request, into: ModelContext(container))
-        return nil
+        return MenuLibrarySave.insert(request, into: ModelContext(container))
+            ? nil : "Couldn't save that to your library."
     }
 }
 

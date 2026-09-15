@@ -197,4 +197,46 @@ struct LibraryMaintenanceTests {
         let succeeded = LibraryMaintenance.repairStore(at: url)
         #expect(!succeeded, "a store that fails to load must report failure, not silently succeed")
     }
+
+    /// The case this repair now defends against (health-check audit,
+    /// 2026-09-14): the store predates every schema OnigiriMigrationPlan
+    /// has ever shipped. Before this fix `repairStore` always opened the
+    /// store with `schemas.last`'s model, so any real schema bump would
+    /// turn this into an unrecoverable version-mismatch load failure and
+    /// silently skip both repair passes right as a migration is about to
+    /// run — the exact moment relationship damage is likeliest. The plan
+    /// has only ever shipped one schema, so there is no second real one
+    /// to reproduce this with; a wholly foreign model stands in for it —
+    /// the failure this guards against is "metadata that matches no
+    /// known schema," which is the same either way.
+    @Test func repairStoreReportsFailureWhenNoKnownSchemaMatchesTheStore() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("Foreign.sqlite")
+
+        // A valid, loadable SQLite store — just built from a model with
+        // no relationship to any schema in OnigiriMigrationPlan.
+        let attribute = NSAttributeDescription()
+        attribute.name = "value"
+        attribute.attributeType = .stringAttributeType
+        let entity = NSEntityDescription()
+        entity.name = "Unrelated"
+        entity.managedObjectClassName = NSStringFromClass(NSManagedObject.self)
+        entity.properties = [attribute]
+        let foreignModel = NSManagedObjectModel()
+        foreignModel.entities = [entity]
+
+        let container = NSPersistentContainer(name: "Foreign", managedObjectModel: foreignModel)
+        let description = NSPersistentStoreDescription(url: url)
+        description.shouldAddStoreAsynchronously = false
+        container.persistentStoreDescriptions = [description]
+        container.loadPersistentStores { _, error in #expect(error == nil) }
+        let coordinator = container.persistentStoreCoordinator
+        try coordinator.persistentStores.forEach { try coordinator.remove($0) }
+
+        let succeeded = LibraryMaintenance.repairStore(at: url)
+        #expect(!succeeded, "no schema in the plan matches this store — repair must skip, not guess")
+    }
 }

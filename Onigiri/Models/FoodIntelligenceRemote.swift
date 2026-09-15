@@ -143,7 +143,16 @@ extension FoodIntelligence {
 
     private static func decode<T: Decodable>(_ type: T.Type, from data: Data?) -> T? {
         guard let data else { return nil }
-        return try? JSONDecoder().decode(type, from: data)
+        do {
+            return try JSONDecoder().decode(type, from: data)
+        } catch {
+            // This file's own contract: "log, return nil/unchanged" — a
+            // bare `try?` here left a model's malformed JSON silently
+            // indistinguishable from a model that legitimately declined
+            // (health-check audit, 2026-09-14).
+            log.error("remote decode failed for \(String(describing: type)): \(error)")
+            return nil
+        }
     }
 
     // MARK: Describe-it
@@ -543,9 +552,7 @@ extension FoodIntelligence {
         switch await completeRemote(system: system, user: user) {
         case .unavailable: return .unavailable
         case .answered(let data):
-            guard let data, let reading = try? JSONDecoder().decode(Reading.self, from: data)
-            else { return .answered(nil) }
-            return .answered(reading.restaurant)
+            return .answered(decode(Reading.self, from: data)?.restaurant)
         }
     }
 

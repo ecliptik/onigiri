@@ -212,9 +212,20 @@ private final class LoadWatcher: NSObject, WKNavigationDelegate {
     private var settled = false
 
     func wait() async throws {
-        try await withCheckedThrowingContinuation { continuation in
-            if settled { continuation.resume(); return }
-            self.continuation = continuation
+        // The render() task group races this against a timeout and
+        // cancels whichever loses — but cancellation is cooperative and a
+        // suspended continuation never notices it on its own. Without
+        // this handler, a page that never calls back leaves this task
+        // (and the WKWebView it holds) parked on the continuation
+        // forever, which structured concurrency then waits on
+        // indefinitely before the TaskGroup's scope can even return.
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                if settled { continuation.resume(); return }
+                self.continuation = continuation
+            }
+        } onCancel: {
+            Task { @MainActor in self.settle(.failure(CancellationError())) }
         }
     }
 

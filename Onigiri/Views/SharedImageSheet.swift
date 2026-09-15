@@ -144,14 +144,15 @@ struct SharedImageSheet: View {
             aiGenerated: request.label.aiGenerated,
             quantity: request.quantity)
         guard ok else { return "Couldn't log that item. Try again." }
-        if request.saveToLibrary { MenuLibrarySave.insert(request, into: context) }
+        if request.saveToLibrary, !MenuLibrarySave.insert(request, into: context) {
+            return "Logged, but couldn't save it to your library."
+        }
         return nil
     }
 
     /// The library keeps the dish; nothing goes to Health.
     private func saveOnly(_ request: MenuLogRequest) async -> String? {
-        MenuLibrarySave.insert(request, into: context)
-        return nil
+        MenuLibrarySave.insert(request, into: context) ? nil : "Couldn't save that to your library."
     }
 
     private func read() async {

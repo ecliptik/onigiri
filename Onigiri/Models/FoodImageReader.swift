@@ -343,7 +343,10 @@ enum FoodImageReader {
             let food = await FoodIntelligence.identifyFood(photo: cgImage, orientation: orientation)
             guard !Task.isCancelled else { return .cancelled }
             if let food {
-                imageLog.notice("Photo identified: \(food.name), \(food.components.count) components, \(food.kcal) kcal")
+                // kcal needs an explicit .private too — os.Logger defaults
+                // numeric interpolations to public, unlike name's String
+                // (health-check audit, 2026-09-14).
+                imageLog.notice("Photo identified: \(food.name), \(food.components.count) components, \(food.kcal, privacy: .private) kcal")
                 // The case the refine step exists for: on-device, the
                 // model never saw this photo — it decomposed classifier
                 // labels into a TYPICAL serving. The note is the only

@@ -158,15 +158,16 @@ struct MenuImportSheet: View {
             quantity: request.quantity)
         guard ok else { return "Couldn't log that item. Try again." }
         // After the log, and never at the cost of it.
-        if request.saveToLibrary { MenuLibrarySave.insert(request, into: context) }
+        if request.saveToLibrary, !MenuLibrarySave.insert(request, into: context) {
+            return "Logged, but couldn't save it to your library."
+        }
         return nil
     }
 
     /// The library keeps the dish; nothing goes to Health. A menu is
     /// read once, and not every dish on it is being eaten right now.
     private func saveOnly(_ request: MenuLogRequest) async -> String? {
-        MenuLibrarySave.insert(request, into: context)
-        return nil
+        MenuLibrarySave.insert(request, into: context) ? nil : "Couldn't save that to your library."
     }
 
     private func load() async {
@@ -235,10 +236,8 @@ struct MenuImportSheet: View {
                 // looking at and `pages` no longer holds it.
                 struct Dump: Encodable { let observations: [LabelObservation] }
                 let scanned = document.debugScanned?.first ?? document.pages.first ?? []
-                if let out = try? JSONEncoder().encode(Dump(observations: scanned)),
-                   let dir = FileManager.default.urls(
-                    for: .documentDirectory, in: .userDomainMask).first {
-                    try? out.write(to: dir.appending(path: "menu-scan-debug.json"))
+                if let out = try? JSONEncoder().encode(Dump(observations: scanned)) {
+                    try? out.write(to: URL.documentsDirectory.appending(path: "menu-scan-debug.json"))
                 }
                 #endif
                 phase = .failed(message)

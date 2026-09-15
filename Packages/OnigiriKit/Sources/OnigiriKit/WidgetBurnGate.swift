@@ -26,6 +26,13 @@ public enum WidgetBurnGate {
     static let lastReloadKey = "widget.lastBurnReloadAt"
     static let activityKey = "widget.lastBurnActivityAt"
 
+    /// "MM-dd HH:mm" for the two debug journals below — write-only
+    /// diagnostic text, never parsed back, so a verbatim format style
+    /// modernizes the equivalent `DateFormatter` cleanly here.
+    private static let journalStampFormat = Date.VerbatimFormatStyle(
+        format: "\(month: .twoDigits)-\(day: .twoDigits) \(hour: .twoDigits(clock: .twentyFourHour, hourCycle: .zeroBased)):\(minute: .twoDigits)",
+        timeZone: .current, calendar: .current)
+
     /// What a widget or complication just rendered. Called from the
     /// widget process on every timeline build, and from the coordinator
     /// when it spends a reload — without the second call, a device with
@@ -66,9 +73,8 @@ public enum WidgetBurnGate {
     private static let journalLimit = 40
 
     public static func note(activeKcal: Double, lastRendered: Double?, reloading: Bool, at date: Date = .now) {
-        let stamp = DateFormatter()
-        stamp.dateFormat = "MM-dd HH:mm"
-        let line = "\(stamp.string(from: date)) active=\(Int(activeKcal))"
+        let stamp = date.formatted(Self.journalStampFormat)
+        let line = "\(stamp) active=\(Int(activeKcal))"
             + " last=\(lastRendered.map { String(Int($0)) } ?? "-")"
             + (reloading ? " RELOAD" : "")
         var lines = SharedStore.defaults.stringArray(forKey: journalKey) ?? []
@@ -91,8 +97,7 @@ public enum WidgetBurnGate {
         active: Double, restingMeasured: Double, restingEstimate: Double?,
         weight: Double?, at date: Date = .now
     ) {
-        let stamp = DateFormatter()
-        stamp.dateFormat = "MM-dd HH:mm"
+        let stamp = date.formatted(Self.journalStampFormat)
         let values = "act=\(Int(active)) restM=\(Int(restingMeasured))"
             + " restE=\(restingEstimate.map { String(Int($0)) } ?? "NIL")"
             + " wt=\(weight.map { String(Int($0)) } ?? "NIL")"
@@ -100,9 +105,9 @@ public enum WidgetBurnGate {
         // Same numbers as last time: refresh the timestamp rather than
         // add a row, so the trail shows CHANGES.
         if let last = lines.last, last.hasSuffix(values) {
-            lines[lines.count - 1] = "\(stamp.string(from: date)) \(values)"
+            lines[lines.count - 1] = "\(stamp) \(values)"
         } else {
-            lines.append("\(stamp.string(from: date)) \(values)")
+            lines.append("\(stamp) \(values)")
         }
         if lines.count > journalLimit { lines.removeFirst(lines.count - journalLimit) }
         SharedStore.defaults.set(lines, forKey: planJournalKey)

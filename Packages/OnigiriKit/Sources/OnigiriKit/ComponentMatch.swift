@@ -42,6 +42,18 @@ public enum ComponentMatch {
         return names.firstIndex { normalized($0) == target }
     }
 
+    /// Like `index(of:in:)`, but for a `names` list the caller has
+    /// already run through `normalized` once — a loop matching several
+    /// components against the same library should normalize that
+    /// library's names ONCE, not on every component (health-check audit,
+    /// 2026-09-14: re-normalizing per call made the match O(components ×
+    /// library) instead of O(components + library)).
+    public static func index(of component: String, inNormalized normalizedNames: [String]) -> Int? {
+        let target = normalized(component)
+        guard !target.isEmpty else { return nil }
+        return normalizedNames.firstIndex { $0 == target }
+    }
+
     /// `Meal.loggedItems` writes a multiplier into the name ("2× Egg",
     /// and with fractions "1.5× Egg" — locale-formatted, so the decimal
     /// separator varies). Strip up to the first "× " rather than parsing

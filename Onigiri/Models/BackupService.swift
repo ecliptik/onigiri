@@ -11,10 +11,7 @@ enum BackupService {
     private static let keepCount = 5
 
     static var backupsDirectory: URL? {
-        guard let documents = FileManager.default.urls(
-            for: .documentDirectory, in: .userDomainMask
-        ).first else { return nil }
-        let directory = documents.appendingPathComponent("Backups", isDirectory: true)
+        let directory = URL.documentsDirectory.appendingPathComponent("Backups", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         // Elevate past the iOS default (completeUntilFirstUserAuthentication,
         // which already encrypts everything at rest): the library + weight

@@ -110,12 +110,12 @@ public enum SignText {
         guard text.contains(where: { $0.isLetter }) else { return false }
         // An ingredient list, which on these cards is slash- or
         // comma-separated: "Flour/Sugar/Salt/Egg/Milk".
-        let separators = text.filter { $0 == "/" || $0 == "," }.count
+        let separators = text.count { $0 == "/" || $0 == "," }
         if separators >= 2 { return false }
         // Mostly digits means a weight or a code that kept a stray
         // letter ("250z" — OCR of "2.5oz", language correction being
         // off on purpose).
-        return text.filter(\.isLetter).count > text.filter(\.isNumber).count
+        return text.count(where: \.isLetter) > text.count(where: \.isNumber)
     }
 
     /// Signs shout. "GREEN ONION" reads better in the form as "Green

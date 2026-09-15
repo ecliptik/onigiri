@@ -446,8 +446,11 @@ public final class HealthKitService {
         // phone and watch double-counting steps. This line is what shows
         // whether the dropped samples are the watch's, and whether they
         // sit in the same minute as a phone one.
-        let clock = DateFormatter()
-        clock.dateFormat = "HH:mm:ss"
+        // Write-only diagnostic text, never parsed back — a verbatim
+        // format style modernizes the equivalent DateFormatter cleanly.
+        let clock = Date.VerbatimFormatStyle(
+            format: "\(hour: .twoDigits(clock: .twentyFourHour, hourCycle: .zeroBased)):\(minute: .twoDigits):\(second: .twoDigits)",
+            timeZone: .current, calendar: .current)
         // The SOURCE BUNDLE, not `sample.device` — device came back nil
         // for every sample (2026-08-06: we never attach an HKDevice when
         // writing), so it cannot tell phone from watch. The bundle can:
@@ -465,7 +468,7 @@ public final class HealthKitService {
             let device = sample.sourceRevision.productType ?? "?"
             let span = sample.endDate.timeIntervalSince(sample.startDate)
             let duration = span > 0 ? "+\(Int(span))s" : ""
-            return "\(clock.string(from: sample.startDate))="
+            return "\(sample.startDate.formatted(clock))="
                 + "\(Int(sample.quantity.doubleValue(for: .kilocalorie())))"
                 + "@\(device)\(duration)"
         }.joined(separator: " ")
@@ -494,7 +497,7 @@ public final class HealthKitService {
             $0 + $1.quantity.doubleValue(for: .fluidOunceUS())
         }
         let waterBreakdown = waterSampleList.map { sample in
-            "\(clock.string(from: sample.startDate))="
+            "\(sample.startDate.formatted(clock))="
                 + "\(Int(sample.quantity.doubleValue(for: .fluidOunceUS())))"
                 + "@\(sample.sourceRevision.productType ?? "?")"
         }.joined(separator: " ")
@@ -1550,10 +1553,16 @@ private extension HKCorrelation {
     }
 
     /// Like total, but nil when the correlation carries no sample of the
-    /// type — "absent" and "zero" must round-trip differently.
+    /// type — "absent" and "zero" must round-trip differently. One
+    /// `objects(for:)` scan, not two (health-check audit, 2026-09-14) —
+    /// `total` re-scans internally, and this used to call both it AND
+    /// `objects(for:)` separately just to check emptiness first.
     func totalIfPresent(_ identifier: HKQuantityTypeIdentifier, unit: HKUnit) -> Double? {
-        objects(for: HKQuantityType(identifier)).isEmpty
-            ? nil : total(identifier, unit: unit)
+        let samples = objects(for: HKQuantityType(identifier))
+        guard !samples.isEmpty else { return nil }
+        return samples
+            .compactMap { ($0 as? HKQuantitySample)?.quantity.doubleValue(for: unit) }
+            .reduce(0, +)
     }
 
     /// The extended nutrients written by logFood, read back. Trans fat is

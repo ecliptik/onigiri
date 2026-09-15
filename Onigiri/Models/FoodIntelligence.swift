@@ -243,6 +243,12 @@ enum FoodIntelligence {
     }
 
     static func describeMeal(_ description: String) async -> DescribedMeal? {
+        // The user can switch estimates off; reading printed figures is
+        // unaffected (AIProviderSettings.estimateNutrition). Settings'
+        // own copy says this toggle covers "a described meal" too — it
+        // silently didn't until this guard (health-check audit,
+        // 2026-09-14), the one sibling entry point missing it.
+        guard AIProviderSettings.estimateNutrition else { return nil }
         // The master switch gates THIS path too (the 2026-07-20 CRITICAL:
         // a path missing this guard runs inference with AI switched off —
         // and with a stale remote provider selected, ships the user's
@@ -555,7 +561,10 @@ enum FoodIntelligence {
                 return nil
             }
             guard printedNumbers.contains(String(Int(kcal.rounded()))) else {
-                log.notice("screenshot read rejected \(name, privacy: .private): \(Int(kcal.rounded())) kcal is printed nowhere on the page")
+                // kcal needs the same .private as name — os.Logger
+                // defaults numeric interpolations to public (health-check
+                // audit, 2026-09-14).
+                log.notice("screenshot read rejected \(name, privacy: .private): \(Int(kcal.rounded()), privacy: .private) kcal is printed nowhere on the page")
                 return nil
             }
             if let sodium = food.sodiumMg,

@@ -534,8 +534,12 @@ private struct AddToLibrarySheet: View {
         }
         // App accent for the OUTLINED Cancel — not the system blue.
         // The two filled buttons above override to .ricePaper instead
-        // (see their own comment).
-        .tint(.riceToast)
+        // (see their own comment). riceToastStatus, not the plain
+        // riceToast every other .tint in the app uses — text-on-page at
+        // body size is ~3.3:1 with the plain color, failing WCAG AA;
+        // riceToastStatus is the deepened token the app already keeps
+        // for exactly this case (health-check audit, 2026-09-14).
+        .tint(.riceToastStatus)
         .padding(.horizontal, 24)
         .presentationDetents([.height(canAddMeal ? 324 : 256)])
         .presentationDragIndicator(.visible)

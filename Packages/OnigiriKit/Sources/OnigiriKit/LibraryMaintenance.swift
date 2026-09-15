@@ -41,19 +41,25 @@ public enum LibraryMaintenance {
         // No store yet is every fresh install — silence is right there,
         // and there is nothing for the next pass to trip over.
         guard FileManager.default.fileExists(atPath: url.path) else { return true }
-        // The entity list is the migration plan's LATEST schema, never a
-        // hand copy or a hardcoded version — a hardcoded `OnigiriSchemaV1`
-        // here silently stopped matching the on-disk store the moment
-        // OnigiriSchemaV2 shipped, which is exactly when this repair is
-        // most likely to be needed (health-check audit, 2026-08-31; see
-        // also the 2026-08-17 audit this replaced a hand copy for).
-        guard let latestSchema = OnigiriMigrationPlan.schemas.last,
-              let model = NSManagedObjectModel.makeManagedObjectModel(for: latestSchema.models)
-        else {
-            // The bridge failing means the repair switched itself off —
-            // at exactly the moment a schema change makes it likeliest
-            // to be needed. Never silent.
-            maintenanceLog.error("repairStore: SwiftData model bridge failed — repair skipped")
+        // The model must match what's ACTUALLY on disk, never just the
+        // newest schema the migration plan knows — this repair runs
+        // BEFORE SwiftData opens (and migrates) the store, and automatic
+        // migration is deliberately off below, so loading a store that
+        // still sits at an older schema version against the latest
+        // model would fail as a version mismatch and skip BOTH repair
+        // passes right when a migration is about to run — exactly the
+        // moment relationship damage is likeliest (health-check audit,
+        // 2026-09-14; latent today since only one schema version has
+        // ever shipped, live the moment a second one does). A hardcoded
+        // `OnigiriSchemaV1` has the same failure mode in the other
+        // direction the moment OnigiriSchemaV2 ships (2026-08-31 audit)
+        // — the fix is neither hardcoded nor always-latest, it's
+        // whichever schema the store's own metadata says it is.
+        guard let model = Self.matchingModel(forStoreAt: url) else {
+            // No schema in the plan matches — the bridge failed, or the
+            // store predates every schema on record. Either way the
+            // repair switched itself off; never silent.
+            maintenanceLog.error("repairStore: no matching schema for the on-disk store — repair skipped")
             return false
         }
         let container = NSPersistentContainer(name: "Onigiri", managedObjectModel: model)
@@ -73,26 +79,45 @@ public enum LibraryMaintenance {
         container.persistentStoreDescriptions = [description]
         var loadError: Error?
         container.loadPersistentStores { _, error in loadError = error }
+
+        // Computed BEFORE unloading below, so the unload step can fold
+        // ITS OWN outcome into the same result the caller sees. A defer
+        // can't do that: Swift captures a `return`'s value the moment
+        // that statement runs, before any deferred code executes, so a
+        // defer block that failed to unload could never downgrade an
+        // already-decided `true` — it could only log, which is what this
+        // used to do (health-check audit, 2026-09-14).
+        var repairSucceeded: Bool
         if let loadError {
             // The second exit that used to be silent — and the one that
             // fires first when something is actually wrong (incompatible
             // store, disk fault, bad bridge).
             maintenanceLog.error("repairStore: store load failed, repair skipped: \(loadError)")
-            return false
-        }
-        defer {
-            // A store left mounted here would collide with SwiftData
-            // reopening the same file, whose failure path is fatalError —
-            // an unload failure deserves a trace, not silence.
-            let coordinator = container.persistentStoreCoordinator
-            for store in coordinator.persistentStores {
-                do { try coordinator.remove(store) } catch {
-                    maintenanceLog.error("repairStore: store unload failed: \(error)")
-                }
-            }
+            repairSucceeded = false
+        } else {
+            repairSucceeded = Self.repairFetchedItems(in: container.viewContext)
         }
 
-        let context = container.viewContext
+        // Always attempted, load failure or not — coordinator.persistentStores
+        // is simply empty in that case, so this is a safe no-op then. A
+        // store left mounted here would collide with SwiftData reopening
+        // the same file, whose failure path is fatalError — never
+        // silently report success over that.
+        let coordinator = container.persistentStoreCoordinator
+        for store in coordinator.persistentStores {
+            do { try coordinator.remove(store) } catch {
+                maintenanceLog.error("repairStore: store unload failed: \(error)")
+                repairSucceeded = false
+            }
+        }
+        return repairSucceeded
+    }
+
+    /// The MealItem fetch, repair, and save — everything that needs the
+    /// store to already be loaded. Split out so `repairStore` can run the
+    /// (always-attempted) unload after this regardless of outcome and
+    /// still fold the unload's own success into what it returns.
+    private static func repairFetchedItems(in context: NSManagedObjectContext) -> Bool {
         let fetchedItems: [NSManagedObject]
         do {
             fetchedItems = try context.fetch(NSFetchRequest<NSManagedObject>(entityName: "MealItem"))
@@ -122,20 +147,37 @@ public enum LibraryMaintenance {
         // children pointing back. A deleted child is simply not returned.
         // There is no reference left to dangle, which is why the repair
         // is one-directional. Don't add the other half.
-        if repaired {
-            do {
-                try context.save()
-            } catch {
-                // The worst of the five exits: repairs were COMPUTED
-                // (deletes staged in this context) but never PERSISTED —
-                // the on-disk store still carries whatever was dangling,
-                // indistinguishable from having never looked. Must report
-                // failure like every other exit here.
-                maintenanceLog.error("repairStore: save failed, repairs not persisted: \(error)")
-                return false
-            }
+        guard repaired else { return true }
+        do {
+            try context.save()
+            return true
+        } catch {
+            // The worst of the five exits: repairs were COMPUTED
+            // (deletes staged in this context) but never PERSISTED —
+            // the on-disk store still carries whatever was dangling,
+            // indistinguishable from having never looked. Must report
+            // failure like every other exit here.
+            maintenanceLog.error("repairStore: save failed, repairs not persisted: \(error)")
+            return false
         }
-        return true
+    }
+
+    /// The `NSManagedObjectModel` for whichever schema in the migration
+    /// plan is compatible with what's actually on disk — tried newest
+    /// first, since a real version collision between two distinct
+    /// schemas should not happen, but if it somehow did the newer one is
+    /// the better guess.
+    private static func matchingModel(forStoreAt url: URL) -> NSManagedObjectModel? {
+        guard let metadata = try? NSPersistentStoreCoordinator.metadataForPersistentStore(
+            type: .sqlite, at: url)
+        else { return nil }
+        for schema in OnigiriMigrationPlan.schemas.reversed() {
+            guard let model = NSManagedObjectModel.makeManagedObjectModel(for: schema.models),
+                  model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata)
+            else { continue }
+            return model
+        }
+        return nil
     }
 
     /// True only when Core Data affirmatively reports the referenced row

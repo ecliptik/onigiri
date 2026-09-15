@@ -1138,12 +1138,12 @@ struct PortionSheet: View {
                         // since the toolbar's trailing slot already belongs
                         // to this entry's own Save.
                         Button(action: saveToLibrary) {
-                            Text("Save to Library").foregroundStyle(Color.riceToast)
+                            Text("Save to Library").foregroundStyle(Color.riceToastStatus)
                         }
                         .buttonStyle(.plain)
                         .disabled(isSavingToLibrary)
                         Button(action: saveAndLogToday) {
-                            Text("Save to Library & Log Today").foregroundStyle(Color.riceToast)
+                            Text("Save to Library & Log Today").foregroundStyle(Color.riceToastStatus)
                         }
                         .buttonStyle(.plain)
                         .disabled(isSavingToLibrary)
@@ -1379,8 +1379,11 @@ struct PortionSheet: View {
     private func saveToLibrary() {
         guard !isSavingToLibrary else { return }
         isSavingToLibrary = true
-        MenuLibrarySave.insert(libraryRequest(), into: context)
-        ToastCenter.shared.show("Saved \(target.name) to your library ✓")
+        let saved = MenuLibrarySave.insert(libraryRequest(), into: context)
+        ToastCenter.shared.show(
+            saved
+                ? "Saved \(target.name) to your library ✓"
+                : "Couldn't save \(target.name) to your library")
         dismiss()
     }
 
@@ -1392,7 +1395,7 @@ struct PortionSheet: View {
     private func saveAndLogToday() {
         guard !isSavingToLibrary else { return }
         isSavingToLibrary = true
-        MenuLibrarySave.insert(libraryRequest(), into: context)
+        let saved = MenuLibrarySave.insert(libraryRequest(), into: context)
         Task {
             _ = await LogActions.logFood(
                 name: target.name,
@@ -1403,6 +1406,9 @@ struct PortionSheet: View {
                 aiGenerated: target.aiGenerated,
                 quantity: quantity
             )
+        }
+        if !saved {
+            ToastCenter.shared.show("Logged, but couldn't save \(target.name) to your library")
         }
         dismiss()
     }

@@ -595,10 +595,13 @@ struct MealFormView: View {
             name = meal.name
             suggestedName = meal.name
         }
-        let names = foods.map(\.name)
+        // Normalized once — matching several components against the same
+        // library must not re-fold every library name per component
+        // (health-check audit, 2026-09-14).
+        let normalizedNames = foods.map { ComponentMatch.normalized($0.name) }
         var minted: [PendingComponent] = []
         for component in meal.components {
-            if let index = ComponentMatch.index(of: component.name, in: names) {
+            if let index = ComponentMatch.index(of: component.name, inNormalized: normalizedNames) {
                 let food = foods[index]
                 // Already saved: it joins as a plain pick, which is what
                 // Save would have made of it regardless. A quantity the
@@ -659,10 +662,11 @@ struct MealFormView: View {
     ///   since, and minting a twin would be wrong.
     private func mealItemsFromPending() -> [MealItem] {
         let live = foods
-        let names = live.map(\.name)
+        // Normalized once, same reason as apply(_:) above.
+        let normalizedNames = live.map { ComponentMatch.normalized($0.name) }
         var items: [MealItem] = []
         for component in pending where component.quantity > 0 {
-            if let index = ComponentMatch.index(of: component.name, in: names) {
+            if let index = ComponentMatch.index(of: component.name, inNormalized: normalizedNames) {
                 items.append(MealItem(food: live[index], quantity: component.quantity))
                 continue
             }

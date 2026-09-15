@@ -343,6 +343,12 @@ struct OnboardingView: View {
                 .padding(.bottom, 40)
         }
         .padding(.horizontal, 24)
+        // Onboarding renders as root content, not a sheet, so it isn't
+        // protected by iPadOS's automatic form-sheet width clamp either
+        // — every other screen in the app opts into this explicitly, and
+        // this one hadn't (health-check audit, 2026-09-14): full-width
+        // buttons and a stretched goalPage weight field on a 13" iPad.
+        .readableContentWidth()
     }
 
     private func advanceButton(_ title: String) -> some View {

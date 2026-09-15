@@ -3,6 +3,20 @@ import XCTest
 /// Drives the seeded app end to end: grants Health access sheets, verifies
 /// the seeded log renders on Today, and logs a food from the library.
 
+/// Polls for an element to settle into a hittable state instead of a
+/// fixed sleep, which either wastes time on a fast run or isn't long
+/// enough on a slow one — the same idiom `switchTab` already uses below.
+/// For a screenshot or an assertion that follows an animation (a
+/// disclosure expanding, a scroll settling) with no existence change of
+/// its own to wait on (health-check audit, 2026-09-14).
+@MainActor
+func settle(_ element: XCUIElement, timeout: TimeInterval = 2) {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !element.isHittable, Date() < deadline {
+        Thread.sleep(forTimeInterval: 0.1)
+    }
+}
+
 /// Tab switching that survives both idioms: the iPhone's bottom TabBar
 /// and the iPad's top bar, which exposes NO TabBar element at all.
 @MainActor
@@ -249,7 +263,7 @@ final class OnigiriUITests: XCTestCase {
                     + "simulator, erase it: a plain seed only fills an EMPTY "
                     + "store, so the previous goal is still in there"
         )
-        Thread.sleep(forTimeInterval: 1.0)
+        settle(budgetRow)
         let top = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         top.name = aggressive ? "goal-budget-aggressive" : "goal-budget"
         top.lifetime = .keepAlways
@@ -260,7 +274,7 @@ final class OnigiriUITests: XCTestCase {
         for _ in 0..<4 where !disclosure.exists { app.swipeUp() }
         if disclosure.waitForExistence(timeout: 5) {
             disclosure.tap()
-            Thread.sleep(forTimeInterval: 1.0)
+            settle(disclosure)
             // `Average daily burn` is the LAST row of the recipe and
             // the only burn figure left on the screen: the observed
             // cross-check and both resting rows were cut on 2026-08-24,

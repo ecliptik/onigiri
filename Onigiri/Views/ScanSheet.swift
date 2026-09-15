@@ -94,9 +94,19 @@ struct ScanSheet: View {
         readingStatus = "Looking for nutrition…"
         failureMessage = nil
         defer { isReading = false }
-        do {
-            let document = try await MenuDocumentReader.readOCR(url)
-            let rows = MenuTableParser.parse(pages: document.pages)
+        // Read AND parse off the main actor — see ShareFlow/MenuImportSheet.
+        let outcome = await Task.detached(priority: .userInitiated) {
+            () -> Result<(MenuDocument, [MenuRow]), Error> in
+            do {
+                let document = try await MenuDocumentReader.readOCR(url)
+                return .success((document, MenuTableParser.parse(pages: document.pages)))
+            } catch { return .failure(error) }
+        }.value
+
+        switch outcome {
+        case .failure:
+            failureMessage = "Onigiri couldn't open that document."
+        case .success(let (document, rows)):
             guard !rows.isEmpty else {
                 failureMessage = "No nutrition found in that document. Try a photo or screenshot of one item."
                 return
@@ -106,8 +116,6 @@ struct ScanSheet: View {
                 source = await FoodIntelligence.readMenuSource(pages: document.pages)
             }
             listing = MenuListing(rows: rows, source: source)
-        } catch {
-            failureMessage = "Onigiri couldn't open that document."
         }
     }
     @State private var isReading = false
@@ -488,14 +496,15 @@ struct ScanSheet: View {
             aiGenerated: request.label.aiGenerated,
             quantity: request.quantity)
         guard ok else { return "Couldn't log that item. Try again." }
-        if request.saveToLibrary { MenuLibrarySave.insert(request, into: context) }
+        if request.saveToLibrary, !MenuLibrarySave.insert(request, into: context) {
+            return "Logged, but couldn't save it to your library."
+        }
         return nil
     }
 
     /// The library keeps the dish; nothing goes to Health.
     private func saveOnly(_ request: MenuLogRequest) async -> String? {
-        MenuLibrarySave.insert(request, into: context)
-        return nil
+        MenuLibrarySave.insert(request, into: context) ? nil : "Couldn't save that to your library."
     }
 
     private func captureLabel() async {

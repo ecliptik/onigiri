@@ -74,6 +74,11 @@ struct MenuPickerFlow: View {
     /// The row `chosen` came from, so the list can mark what already
     /// went in. Nil for `initialPick`, which came from no row.
     @State private var chosenRowID: Int?
+    /// The in-flight `choose()` estimation, so Back can cancel it — an
+    /// uncancelled one used to land after Back reset `phase` to
+    /// `.picking` and force `.confirming` back open for the item the
+    /// user had just backed out of (health-check audit, 2026-09-14).
+    @State private var estimateTask: Task<Void, Never>?
     @State private var logged: [Logged] = []
     /// Reset per item. The MEAL below deliberately is not.
     @State private var quantity = 1.0
@@ -138,7 +143,10 @@ struct MenuPickerFlow: View {
                 // Ask only when the menu didn't say. Detection is the
                 // optimisation; this prompt is the contract.
                 if suggestedSource == nil { askingSource = true }
-                if let initialPick { await choose(initialPick, rowID: nil) }
+                // Stored the same as every other pick's, so Back can
+                // cancel this one too if it's shown during this estimate
+                // (rows non-empty behind the initial pick).
+                if let initialPick { estimateTask = Task { await choose(initialPick, rowID: nil) } }
             }
     }
 
@@ -154,7 +162,7 @@ struct MenuPickerFlow: View {
                 source: $source,
                 askingSource: $askingSource
             ) { picked, row in
-                Task { await choose(picked, rowID: row.id) }
+                estimateTask = Task { await choose(picked, rowID: row.id) }
             }
         case .estimating(let name):
             ContentUnavailableView {
@@ -183,6 +191,8 @@ struct MenuPickerFlow: View {
     private var leadingButton: some View {
         if phase != .picking, !rows.isEmpty {
             Button("Back") {
+                estimateTask?.cancel()
+                estimateTask = nil
                 chosen = nil
                 chosenRowID = nil
                 failure = nil
@@ -222,6 +232,11 @@ struct MenuPickerFlow: View {
                 label.aiGenerated = true
             }
         }
+        // Back cancels this task while the estimate was in flight — the
+        // user already left this item, so landing in .confirming (or
+        // handing a stale pick to a .filling host) now would silently
+        // override that.
+        guard !Task.isCancelled else { return }
         // AI off, or the model declined: hand over what the menu said and
         // nothing more. A half-filled form beats an invented number.
         switch completion {
@@ -316,7 +331,14 @@ struct MenuLogRequest {
 /// against, and it is only safe after the Core Data pass `OnigiriApp`
 /// runs first. Do not give this function a `Meal` fetch.
 enum MenuLibrarySave {
-    static func insert(_ request: MenuLogRequest, into context: ModelContext) {
+    /// Returns whether the food is actually in the library afterward —
+    /// already there (the duplicate check) counts as success, a failed
+    /// write does not. Every caller shows a success mark off this instead
+    /// of assuming the write took (audit, 2026-09-14): a `try?` here used
+    /// to swallow the result and every host showed "Saved to library"
+    /// unconditionally, including on a failed disk write.
+    @discardableResult
+    static func insert(_ request: MenuLogRequest, into context: ModelContext) -> Bool {
         // The app's duplicate rule trims and case-folds; an exact-match
         // predicate did neither, so the same dish with any difference in
         // capitalisation minted a twin (audit, 2026-08-17). `nameMatches`
@@ -326,7 +348,7 @@ enum MenuLibrarySave {
         let name = request.name
         let existing = (try? context.fetch(FetchDescriptor<Food>())) ?? []
         guard !existing.contains(where: { LibraryDuplicate.nameMatches($0.name, name) })
-        else { return }
+        else { return true }
         let label = request.label
         let food = Food(name: name, kcal: label.kcal ?? 0, sodiumMg: label.sodiumMg ?? 0)
         food.nutrients = label.nutrients
@@ -337,6 +359,12 @@ enum MenuLibrarySave {
         // reaches.
         food.lastUsedAt = .now
         context.insert(food)
-        try? context.save()
+        do {
+            try context.save()
+            return true
+        } catch {
+            context.delete(food)
+            return false
+        }
     }
 }

@@ -345,6 +345,27 @@ struct ScanSheet: View {
             dismiss()
         }
         .ignoresSafeArea()
+        // The nav bar (Cancel) floats as bare Liquid Glass directly over
+        // whatever the camera sees — no card background behind it like a
+        // sheet has, and the live feed can be any color/brightness. A
+        // bright frame (the user, 2026-09-14: a light nutrition label)
+        // washed the glass pill out until "Cancel" was barely legible.
+        // Not a button-styling fix — CLAUDE.md is explicit that a custom
+        // `.buttonStyle` on a Cancel item is the WRONG fix elsewhere in
+        // this app — this is the standard camera-UI answer instead: a
+        // subtle top-edge scrim, the same trick Camera.app and most
+        // scanners use, so the toolbar stays legible regardless of
+        // content underneath.
+        .overlay(alignment: .top) {
+            LinearGradient(
+                colors: [.black.opacity(0.35), .clear],
+                startPoint: .top, endPoint: .bottom
+            )
+            .frame(height: 140)
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
         // Under the controls overlay below, so the progress capsule and
         // the shutter stay legible on top of the frozen frame.
         .overlay {

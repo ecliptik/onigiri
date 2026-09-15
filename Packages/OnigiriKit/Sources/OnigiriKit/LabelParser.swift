@@ -309,6 +309,24 @@ public enum LabelParser {
     /// keep their line breaks: each wrapped line becomes its own band,
     /// which is what lets a merged "Saturated … ⏎ + Trans …" cell claim
     /// two nutrients and a stacked "2252/ ⏎ 539" cell read as kJ/kcal.
+    ///
+    /// One table per call, spanning the whole synthetic square —
+    /// deliberately NOT generalized to stack several independent tables
+    /// into one square for a single `MenuTableParser.parse` call.
+    /// Tried and reverted: `MenuTableParser` recognizes exactly one
+    /// header per call (by design — see its own header-inheritance
+    /// rules), so a second table's header row gets read as a numberless
+    /// band and glued onto its own first data row ("Item" + "Cola" →
+    /// "Item Cola", numbers correct, name silently wrong) rather than
+    /// being recognized as a second header. Caught by
+    /// `MenuTableParserTests.aSingleDocumentTableParsesCleanly`'s
+    /// sibling case before it shipped. Multi-table pages fall through to
+    /// the existing OCR/geometry path instead (see `MenuDocument.swift`,
+    /// which only takes this path when exactly one qualifying table was
+    /// found) — solving multi-independent-header pages properly means
+    /// parsing each table separately and merging `MenuRow` results,
+    /// which needs `observations(on page:...)`'s single-parse-per-call
+    /// contract to change, not just this function.
     public static func observations(fromTableRows tableRows: [[String]]) -> [LabelObservation] {
         let maxColumns = tableRows.map(\.count).max() ?? 0
         guard maxColumns > 0 else { return [] }

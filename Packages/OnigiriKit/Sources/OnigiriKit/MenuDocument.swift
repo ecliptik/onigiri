@@ -215,12 +215,32 @@ public nonisolated enum MenuDocumentReader {
         }
         budget -= 1
         var whole: [LabelObservation] = []
-        if let image = render(page),
-           let runs = try? await LabelScan.observations(from: image) {
-            whole = runs
-            if !MenuTableParser.parse(runs).isEmpty {
-                stages.append("whole=\(runs.count)!")
-                return runs
+        if let image = render(page) {
+            // Try the semantic table model first — it beats raw-geometry
+            // row association when the page yields one, same reasoning
+            // as LabelScan.scan()'s single-label path. Only when the
+            // page reads as EXACTLY ONE table: MenuTableParser
+            // recognizes one header per call, so a page Vision segments
+            // into several independent tables (each with its own header)
+            // falls through to the existing OCR/geometry path below
+            // instead, unchanged — see LabelParser.observations(
+            // fromTableRows:)'s doc comment for why stacking multiple
+            // tables into one parse was tried and reverted.
+            if #available(iOS 26.0, macOS 26.0, *),
+               let tables = try? await LabelScan.documentTables(from: image, orientation: nil),
+               tables.count == 1 {
+                let tableRuns = LabelParser.observations(fromTableRows: tables[0])
+                if !MenuTableParser.parse(tableRuns).isEmpty {
+                    stages.append("doctable=\(tableRuns.count)!")
+                    return tableRuns
+                }
+            }
+            if let runs = try? await LabelScan.observations(from: image) {
+                whole = runs
+                if !MenuTableParser.parse(runs).isEmpty {
+                    stages.append("whole=\(runs.count)!")
+                    return runs
+                }
             }
         }
         stages.append("whole=\(whole.count)")

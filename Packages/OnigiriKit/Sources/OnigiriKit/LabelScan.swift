@@ -54,6 +54,26 @@ public enum LabelScan {
             row.map { $0.content.text.transcript }
         }
     }
+
+    /// iOS 26: EVERY table on the page as semantic cell-transcript grids
+    /// — unlike `tableRows(from:)` above (which keeps only the single
+    /// largest table, right for a label's one panel), a menu page
+    /// routinely holds several category tables side by side and picking
+    /// only the biggest would silently drop the rest. nil when the
+    /// document model finds no plausible table at all.
+    @available(iOS 26.0, macOS 26.0, *)
+    static func documentTables(
+        from image: CGImage,
+        orientation: CGImagePropertyOrientation?
+    ) async throws -> [[[String]]]? {
+        let request = RecognizeDocumentsRequest()
+        let results = try await request.perform(on: image, orientation: orientation)
+        guard let document = results.first?.document else { return nil }
+        let tables = document.tables
+            .filter { $0.rows.count >= 3 }
+            .map { table in table.rows.map { row in row.map { $0.content.text.transcript } } }
+        return tables.isEmpty ? nil : tables
+    }
     /// Runs the app's OCR configuration: `.accurate`, language correction
     /// OFF — correction "fixes" label numerics ("0g" → "Og") and unit
     /// strings, which the parser's own fixups handle deterministically.

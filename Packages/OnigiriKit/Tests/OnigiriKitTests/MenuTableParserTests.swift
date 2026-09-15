@@ -19,6 +19,27 @@ struct MenuTableParserTests {
         #expect(label.warnings.map(\.severity) == [.dropped])
     }
 
+    // MARK: iOS 26 documents-request tables (RecognizeDocumentsRequest)
+
+    /// A menu page that reads as exactly ONE document table (the only
+    /// case `MenuDocument.observations(on page:...)` actually takes this
+    /// path for), as `RecognizeDocumentsRequest` would hand it back —
+    /// never committed as a real fixture, no source PDFs are checked in
+    /// (see CLAUDE.md).
+    @Test func aSingleDocumentTableParsesCleanly() throws {
+        let burgers: [[String]] = [
+            ["Item", "Calories", "Fat (g)", "Sodium (mg)", "Carbs (g)", "Protein (g)"],
+            ["Cheeseburger", "300", "15", "600", "30", "17"],
+            ["Bacon Burger", "450", "25", "800", "32", "24"],
+        ]
+        let rows = MenuTableParser.parse(LabelParser.observations(fromTableRows: burgers))
+        #expect(rows.count == 2, "got \(rows.map(\.name))")
+        let cheeseburger = try #require(rows.first { $0.name == "Cheeseburger" })
+        expectEqual(cheeseburger.kcal, 300)
+        expectEqual(cheeseburger.sodiumMg, 600)
+        expectEqual(cheeseburger.nutrients.proteinG, 17)
+    }
+
     private func fixture(_ name: String) throws -> [LabelObservation] {
         struct Dump: Decodable { let observations: [LabelObservation] }
         let url = try #require(

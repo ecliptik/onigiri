@@ -528,9 +528,10 @@ Each cost a debugging session.
     be written from the selection setter, and a fix is verified on a
     build with every diagnostic toggle at its shipping value.
 
-- **Every screen's header is a NATIVE `.inlineLarge` title
-  (`inlineLargeTitle`, Style.swift) and nothing draws its own** — a day
-  lost each way, 2026-09-16 (`plans/PLAN-log-sheet-layout.md`, the
+- **Every TAB ROOT's header is a NATIVE `.inlineLarge` title
+  (`inlineLargeTitle`, Style.swift) and nothing draws its own; a SHEET
+  keeps the standard inline title with Cancel LEADING** — a day lost
+  each way, 2026-09-16 (`plans/PLAN-log-sheet-layout.md`, the
   addendum). The user wants title and controls on ONE row; plain
   `.large` floats the trailing items in a pill above the title, and iOS
   27 collapses a large title to inline whenever an always-visible search
@@ -540,8 +541,14 @@ Each cost a debugging session.
   top inset put Goal ~22pt below Today, List/Form row insets put Foods
   and Goal 16pt right of it. Rules that come with the mode: a LEADING
   toolbar item lands on a row above the title (or in overflow, in a
-  sheet), so a sheet's Cancel is trailing, split from Done by a
-  `ToolbarSpacer`; List/Form hosts need `flushTopContent()` or they gain
+  sheet), which is why the mode is for tab roots ONLY — the Log sheet
+  wore it for a day with Cancel moved trailing, and scrolled, the
+  compact title could not center behind three trailing controls and sat
+  at the left edge, unlike every other sheet (the user, from device, the
+  same afternoon; the same preference was stated 2026-07-19). Don't put
+  a sheet on `.inlineLarge` again; `testHeaderShots` asserts the Log
+  sheet's Cancel-left, centered-title shape at rest and scrolled.
+  List/Form hosts need `flushTopContent()` or they gain
   ~35pt of top inset ScrollView hosts don't; a native title cannot be a
   button (a `.principal` item renders beside it, not instead of it —
   Today's Jump to date is the calendar button in the pill for that

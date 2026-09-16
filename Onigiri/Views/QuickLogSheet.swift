@@ -247,8 +247,8 @@ struct QuickLogSheet: View {
                 // overscroll while a pinned `safeAreaInset` (measured
                 // against the LIST, not the nav bar) does not, and the
                 // two visibly slid apart mid-gesture (the user, screen
-                // recording). The title is `.inlineLarge` now and never
-                // grows, so pinning would work again; it stays a row
+                // recording). The title is inline now and never grows,
+                // so pinning would work again; it stays a row
                 // because Foods' is one and the two screens should
                 // scroll the same way. Hidden while searching, same as
                 // Foods: a query crosses every scope, so no segment can
@@ -430,18 +430,34 @@ struct QuickLogSheet: View {
             .compactSections()
             .riceCanvas()
             .hardTopScrollEdge()
-            // The one header shape (`inlineLargeTitle`, Style.swift):
-            // "Log" large at the left, Cancel · Sort · Done beside it,
-            // the search drawer directly beneath — Foods' header,
-            // natively. `flushTopContent` is the List half of it. A
-            // native title can't be reached by `recedesWithSheet()`, so
-            // it stays crisp while a child sheet is up (the compact
-            // `.principal` title used to dim, 2026-09-13/14); the dimmed
-            // buttons plus `recedesBehindSheet()`'s blur/scrim on the
-            // list still say "something else is active" — the user took
-            // that trade for the large title on 2026-09-16, and it
-            // stands.
-            .inlineLargeTitle("Log")
+            // A STANDARD sheet header, like every other sheet in the app
+            // (Settings, Add Food, Edit Meal…): "Log" inline and
+            // centered, Cancel leading, Sort + Done trailing, the search
+            // drawer directly beneath. This sheet spent one day
+            // (2026-09-15 evening → 09-16) on the tabs' `.inlineLarge`
+            // header with Cancel moved trailing — under that mode a
+            // leading item in a sheet lands in the overflow menu — and
+            // the collapsed state gave it away: with three trailing
+            // controls the compact title can't center, so it sat at the
+            // left edge with the buttons opposite, unlike any other
+            // sheet (the user, 2026-09-16, from device: "Log heading in
+            // the middle and Cancel button on the left side, like all
+            // other menu screens"). The same preference was stated once
+            // before (2026-07-19: this was the ONE sheet without a
+            // leading Cancel). The large "Log" went with the mode; a
+            // sheet with Cancel/Done is inline-titled in every Apple app
+            // too. `.inlineLarge` is for the four TAB ROOTS only
+            // (`inlineLargeTitle`, Style.swift). `flushTopContent` stays:
+            // the List's extra top inset is NOT exclusive to that mode —
+            // measured without it, this sheet's scope row sat ~63pt
+            // under the search field against Foods' ~27pt. A native
+            // title can't be reached by `recedesWithSheet()`, so it stays
+            // crisp while a child sheet is up; the dimmed buttons plus
+            // `recedesBehindSheet()`'s scrim on the list still say
+            // "something else is active" (accepted 2026-09-16, and it
+            // stands).
+            .navigationTitle("Log")
+            .navigationBarTitleDisplayMode(.inline)
             .flushTopContent()
             // The STANDARD system search field, pinned in the TOP
             // drawer now — matching Foods, via the shared
@@ -485,17 +501,15 @@ struct QuickLogSheet: View {
                 )
             }
             .toolbar {
-                // Cancel · Sort · Done, ALL trailing: under `.inlineLarge`
-                // a leading item is pushed onto a row above the title (or
-                // into an overflow menu, in a sheet) — the two-row header
-                // this pass exists to remove — so Cancel left its native
-                // `.cancellationAction` slot. It keeps its own pill,
-                // split from Sort + Done by the spacer (iOS 26; plain text
-                // buttons below the floor), so it still reads as the
-                // opposite of Done rather than one of three siblings.
-                // Logging commits immediately with its own Undo, so both
-                // buttons just dismiss.
-                ToolbarItem(placement: .topBarTrailing) {
+                // Cancel leading, Sort + Done trailing — the shape every
+                // other sheet in the app has (the user, 2026-07-19 and
+                // again 2026-09-16). Logging commits immediately with its
+                // own Undo, so both buttons just dismiss: Cancel is the
+                // muscle-memory bail-out that can't accidentally log
+                // anything; Done stays the affirmative finish for
+                // multi-item lunches, in the confirm slot (emphasized)
+                // like Settings' Done.
+                ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         // The in-flight online search dies with the
                         // sheet — clear() cancels its search/page tasks
@@ -509,11 +523,20 @@ struct QuickLogSheet: View {
                     .keyboardShortcut(.cancelAction)
                     .recedesWithSheet(activeSheet != nil)
                 }
-                if #available(iOS 26.0, *) {
-                    ToolbarSpacer(.fixed, placement: .topBarTrailing)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    sortMenu
+                // Sort is the item that may overflow first on iOS 27 —
+                // Done (`.confirmationAction`) already resists it, and
+                // the search drawer above means a narrow bar (large
+                // Dynamic Type) has less room than it used to
+                // (`plans/PLAN-log-sheet-layout.md`, 2026-09-15).
+                // `.visibilityPriority` attaches to the ToolbarItem
+                // itself, not the view inside it, so the branch has to
+                // repeat the ToolbarItem — `sortMenu` keeps the Menu's
+                // own body from being duplicated.
+                if #available(iOS 27.0, *) {
+                    ToolbarItem(placement: .topBarTrailing) { sortMenu }
+                        .visibilityPriority(.low)
+                } else {
+                    ToolbarItem(placement: .topBarTrailing) { sortMenu }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {

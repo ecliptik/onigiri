@@ -424,6 +424,21 @@ side. The pinned door bar rides above the keyboard.
   slot.
 - Log sheet: large "Log" at the left, a Cancel pill and a Sort + Done
   pill at the right, search beneath — Foods' header, natively.
+  **Reversed the same afternoon** (the user, from device, with the list
+  scrolled: "Log heading in the middle and Cancel button on the left
+  side, like all other menu screens"). Under `.inlineLarge` the compact
+  title the scroll collapses to cannot center behind three trailing
+  controls, so it sat at the left edge with Cancel opposite — the one
+  sheet in the app shaped that way, and the complaint of 2026-07-19 over
+  again. The sheet is a standard inline-titled sheet once more: Cancel in
+  `.cancellationAction`, Sort + Done trailing, search beneath.
+  `flushTopContent` stays — measured without it the scope row sat ~63pt
+  under the field against Foods' ~27pt, so that inset is a List-in-a-
+  sheet thing, not an `.inlineLarge` one. The large "Log" went with the
+  mode, since a leading
+  item under it lands in a sheet's overflow menu; `.inlineLarge` is for
+  the four tab roots only, and `testHeaderShots` now asserts the sheet's
+  shape at rest and scrolled.
 - Foods: Filter and Sort stay two separate circles (the user's Apple
   Music reference), via the spacer.
 

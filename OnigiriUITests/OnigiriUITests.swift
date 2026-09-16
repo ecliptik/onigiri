@@ -2445,7 +2445,42 @@ final class OnigiriUITests: XCTestCase {
         if addTab.waitForExistence(timeout: 5), addTab.isHittable {
             addTab.tap()
             attachShot(named: "log-sheet", settle: 2)
+            // The Log sheet is a SHEET, not a fifth tab: "Log" inline
+            // and centered with Cancel at its LEFT, like Settings and
+            // Add Food — at rest AND scrolled. It wore the tabs'
+            // `.inlineLarge` header for one day (2026-09-16) with Cancel
+            // moved trailing, and scrolled, the compact title sat at
+            // the left edge behind three trailing controls (the user,
+            // from device). Asserted both ways so it can't drift back —
+            // though an inline title has no collapsed state, so the
+            // at-rest check is the load-bearing one; the seeded
+            // Favorites list is three rows and the swipe below scrolls
+            // nothing on a phone (the two shots were byte-identical,
+            // 2026-09-16). It bites only on a library long enough to
+            // scroll.
+            let logBar = app.navigationBars["Log"]
+            XCTAssertTrue(logBar.waitForExistence(timeout: 5), "Log sheet should be up")
+            assertSheetHeader(logBar, title: "Log")
+            app.swipeUp()
+            attachShot(named: "log-sheet-scrolled", settle: 2)
+            assertSheetHeader(logBar, title: "Log")
         }
+    }
+
+    /// The standard sheet header shape: Cancel entirely LEFT of the
+    /// title, and the title centered in its bar (±4pt). A title that
+    /// could not center reads as the tab-root header instead.
+    private func assertSheetHeader(_ bar: XCUIElement, title: String,
+                                   file: StaticString = #filePath, line: UInt = #line) {
+        let titleText = bar.staticTexts[title].firstMatch
+        let cancel = bar.buttons["Cancel"].firstMatch
+        XCTAssertTrue(titleText.waitForExistence(timeout: 3),
+                      "\(title) title in the bar", file: file, line: line)
+        XCTAssertTrue(cancel.exists, "Cancel in the bar", file: file, line: line)
+        XCTAssertLessThan(cancel.frame.maxX, titleText.frame.minX,
+                          "Cancel should sit left of the title", file: file, line: line)
+        XCTAssertEqual(titleText.frame.midX, bar.frame.midX, accuracy: 4,
+                       "\(title) should be centered in the bar", file: file, line: line)
     }
 
     /// Scrolls until `element` materializes, or gives up. Form rows below

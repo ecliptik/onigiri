@@ -130,9 +130,11 @@ extension View {
     /// row with the trailing toolbar items (`.inlineLarge`, iOS 17+), so
     /// title and controls read as one header on every screen, and the
     /// search drawer — where there is one — sits directly beneath them.
-    /// Today, Foods, Goal, Calendar and the Log sheet all go through
+    /// Today, Foods, Goal and Calendar — the four TAB ROOTS — go through
     /// this; nothing draws its own title (2026-09-16, the user, after
     /// the in-content detour below — `plans/PLAN-log-sheet-layout.md`).
+    /// SHEETS do not: the Log sheet wore this header for one day and
+    /// left it the same afternoon (the first rule below).
     ///
     /// Why this mode and not the two obvious alternatives, each measured
     /// on the 26.5, 27.0 and 18.6 simulators:
@@ -155,9 +157,15 @@ extension View {
     ///
     /// Two rules come with the mode. A LEADING toolbar item is pushed
     /// onto a row above the title (or into an overflow menu, in a
-    /// sheet) — the two-row header this exists to remove — so a sheet's
-    /// Cancel goes trailing, split from Done by a `ToolbarSpacer`. And
-    /// a List/Form host needs `flushTopContent()` below, or it picks up
+    /// sheet) — the two-row header this exists to remove — which is why
+    /// the mode is for tab roots ONLY. A sheet's Cancel belongs on the
+    /// left, and moving it trailing to fit this mode showed on scroll:
+    /// the compact title the scroll collapses to can't center behind
+    /// three trailing controls and sat at the left edge, unlike every
+    /// other sheet (the Log sheet, 2026-09-16, the user from device).
+    /// A sheet keeps the standard inline title, Cancel in
+    /// `.cancellationAction`, Done in `.confirmationAction`. And a
+    /// List/Form host needs `flushTopContent()` below, or it picks up
     /// ~35pt of extra top inset under this mode that a ScrollView host
     /// does not.
     func inlineLargeTitle(_ title: String) -> some View {
@@ -170,8 +178,13 @@ extension View {
     /// adds to those two containers lives (measured: Foods' scope row
     /// sat ~57pt under the search field with it, ~22pt without — the
     /// same gap a plain `.large` title leaves). Not for ScrollView hosts
-    /// (Today, Calendar); they never had the gap. iOS 26+ only, which
-    /// is where it was measured — the 18.6 sim showed no gap to remove.
+    /// (Today, Calendar); they never had the gap. Not exclusive to
+    /// `.inlineLarge` either: the Log sheet's List — a plain `.inline`
+    /// title in a sheet, search drawer beneath — showed the same inset
+    /// with this removed (scope row ~63pt under the field against
+    /// Foods' ~27pt, 26.5 sim, 2026-09-16), so it keeps the modifier.
+    /// iOS 26+ only, which is where it was measured — the 18.6 sim
+    /// showed no gap to remove.
     /// The QA walkthrough's Goal stop used to scroll back to the top by
     /// a fixed swipe COUNT, which this margin change threw off; it
     /// scrolls until the field is hittable now, so don't read an old

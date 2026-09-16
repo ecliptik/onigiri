@@ -81,7 +81,15 @@ struct EntryDoorDescribeField: View {
                     .foregroundStyle(Color.riceToast)
                     .font(.callout)
             }
-            TextField("Describe food or meal", text: $describeQuery)
+            // An explicit prompt at `.secondary`: the default placeholder
+            // is the tertiary label color, which on the bar's glass
+            // capsule over the dark rice canvas read too faint (the user,
+            // 2026-09-16: "a bit too light to read on the Dark theme").
+            // Still visibly a placeholder — typed text is primary.
+            TextField(
+                "Describe food or meal", text: $describeQuery,
+                prompt: Text("Describe food or meal").foregroundStyle(.secondary)
+            )
                 .accessibilityLabel("Describe food or meal")
                 .accessibilityIdentifier(Self.accessibilityID)
                 .onSubmit { onDescribeSubmit?() }

@@ -547,6 +547,12 @@ struct TodayView: View {
                     .padding(24)
             }
             .frame(width: min(ringDiameter, 260), height: min(ringDiameter, 260))
+            // Breathing room under the header: with the title native the
+            // content starts right beneath the nav bar, and the ring's top
+            // arc sat within a few points of the day-nav/Settings pill
+            // (the user, 2026-09-16). The plain headline is short enough
+            // not to crowd it and keeps the tighter start.
+            .padding(.top, 12)
         } else {
             balanceHeadline
         }

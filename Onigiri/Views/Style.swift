@@ -296,14 +296,14 @@ extension View {
     /// Log sheet, the food form) — there the system's default dimming
     /// barely registers against that near-black dark-mode surface, so a
     /// frosted card on top of it read as one continuous surface with only
-    /// the grabber between them (the user, 2026-09-13 screenshot). Blurs
-    /// content only, never the native nav bar/toolbar (SwiftUI's `.blur`
-    /// can't reach that chrome) — `recedesWithSheet()` on each toolbar
-    /// control is the other half, since Cancel/Done/the title otherwise
-    /// stayed crisp and read as still usable (the user, same round).
-    /// Respects Reduce Transparency by swapping blur for a stronger flat
-    /// scrim rather than turning the effect off outright — the host is
-    /// still visibly not the active surface either way.
+    /// the grabber between them (the user, 2026-09-13 screenshot). A plain
+    /// dim — the system's own idiom (the 2026-09-16 A/B against three
+    /// materials, below) — drawn as an overlay, so on a NavigationStack
+    /// host it covers the bar too; `recedesWithSheet()` on each toolbar
+    /// control is still the other half, since a dimmed Cancel/Done is
+    /// otherwise a live trap for a stray tap. Reduce Transparency gets a
+    /// stronger dim rather than nothing — the host is still visibly not
+    /// the active surface either way.
     @ViewBuilder
     func recedesBehindSheet(_ isPresenting: Bool) -> some View {
         modifier(RecedesBehindSheet(isPresenting: isPresenting))
@@ -322,52 +322,9 @@ extension View {
     }
 }
 
-#if DEBUG
-/// DEBUG-only A/B for the recede look (2026-09-16): the user compares
-/// the candidates on the PHONE from one deploy (Settings → Appearance →
-/// Sheet recede), then the losers are deleted. Not a product setting —
-/// it never ships, and nothing outside DEBUG reads it.
-enum RecedeStyle: String, CaseIterable {
-    case material, thin, ultraThin, scrim
-    static let debugKey = "debugRecedeStyle"
-
-    var label: String {
-        switch self {
-        case .material: "Regular material"
-        case .thin: "Thin material"
-        case .ultraThin: "Ultra-thin material"
-        case .scrim: "Scrim only"
-        }
-    }
-}
-#endif
-
 private struct RecedesBehindSheet: ViewModifier {
     let isPresenting: Bool
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    #if DEBUG
-    @AppStorage(RecedeStyle.debugKey) private var debugStyle = RecedeStyle.ultraThin.rawValue
-    #endif
-
-    /// Which frost, if any. Reduce Transparency swaps it for the
-    /// stronger flat scrim below rather than turning the recede off.
-    private var frost: Material? {
-        guard !reduceTransparency else { return nil }
-        #if DEBUG
-        switch RecedeStyle(rawValue: debugStyle) ?? .ultraThin {
-        case .material: return .regularMaterial
-        case .thin: return .thinMaterial
-        case .ultraThin: return .ultraThinMaterial
-        case .scrim: return nil
-        }
-        #else
-        // Ultra-thin: the closest of the system materials to the 12pt
-        // blur this replaced — regular hides a dark-mode list outright
-        // and thin nearly so (27.0 sim, 2026-09-16). Pending the user's
-        // on-device pick from the DEBUG picker.
-        return .ultraThinMaterial
-        #endif
-    }
 
     func body(content: Content) -> some View {
         // An OVERLAY — never a modifier on `content`, and never an `if`
@@ -392,21 +349,19 @@ private struct RecedesBehindSheet: ViewModifier {
         //   after an interactively dismissed child had already left
         //   (plans/PLAN-sheet-dismiss-latency.md;
         //   testSheetRoundTripKeepsFoodsScroll bites on the branch).
-        // The material frosts what sits behind it without entering
-        // the content's modifier chain, and the `if` lives INSIDE the
-        // overlay, where insertion and removal cost one rectangle.
+        // The `if` lives INSIDE the overlay, where insertion and
+        // removal cost one rectangle. A plain dim, not a material: the
+        // same day's on-device A/B put regular, thin and ultra-thin
+        // materials beside this scrim and the user could not tell the
+        // three apart — "go with whatever is most like other Apple
+        // apps", which dim the view behind a sheet and never frost it.
         content
             .overlay {
                 if isPresenting {
-                    ZStack {
-                        if let frost {
-                            Rectangle().fill(frost)
-                        }
-                        Color.black.opacity(reduceTransparency ? 0.55 : 0.32)
-                    }
-                    .ignoresSafeArea()
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
+                    Color.black.opacity(reduceTransparency ? 0.55 : 0.32)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
                 }
             }
             .animation(.easeOut(duration: 0.2), value: isPresenting)

@@ -118,7 +118,11 @@ branch form to prove it bites before the fix landed.
 - Recede looks, dark mode, portion sheet over the Log sheet: REGULAR
   material hides the list entirely; THIN nearly so; ULTRA-THIN ghosts the
   rows the way the 12pt blur did; SCRIM leaves them crisp but dimmed.
-  Ultra-thin is the DEBUG picker's default pending the user's choice.
+  The user, with all four on the phone: "honestly can't tell the
+  difference between regular, thin and ultra thin material. Let's just
+  go with whatever is most like other Apple apps" — which dim the view
+  behind a sheet and never frost it. SCRIM ONLY shipped; the picker and
+  the material paths are deleted.
 - The food form's Log route: `log()` now calls `dismiss()` in the same
   turn as the portion sheet's own, so form and portion sheet leave in
   ONE cascade. `testLogWithoutSaving` (`LOG_WITHOUT_SAVING=1`, opt-in,

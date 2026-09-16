@@ -477,8 +477,10 @@ Each cost a debugging session.
   jump parked the glass highlight on Foods for ~200 ms — 12 static
   frames, then the last hop — and double-flashed on arrival. Today and
   Foods carried the modifier and stuck; Goal and Calendar carried it not
-  and never did. It is an OVERLAY now — material + scrim, inserted only
-  while presenting, so nothing touches the content while idle. (The
+  and never did. It is an OVERLAY now — a plain scrim, inserted only
+  while presenting, so nothing touches the content while idle; the
+  user chose the dim over three materials on-device, "whatever is most
+  like other Apple apps". (The
   branch form that first fixed it re-created the host on every sheet;
   see the identity landmine above.) Rules learned:
   - **The simulator cannot reproduce it, on 26.5 or 27.0** — the real

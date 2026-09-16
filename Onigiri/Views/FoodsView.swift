@@ -320,21 +320,15 @@ struct FoodsView: View {
             // the floating tab bar (untappable) and drops the large
             // title. Bottom search in a TabView belongs to the search
             // tab; ours is the Add pill, by ruling. iOS 18 is the same
-            // drawer either way.
-            // displayMode .always: with the pinned scope bar's
-            // safeAreaInset below it, the default hide-on-scroll drawer
-            // re-expands BLANK after a scroll — element present, field
-            // invisible (screenshot-verified 2026-07-13, the second
-            // drawer-desync after the old GeometryReader one). Pinning
-            // the drawer skips the collapse/re-expand cycle entirely.
+            // drawer either way. This is now the shared `librarySearch`
+            // placement (`plans/PLAN-log-sheet-layout.md`, 2026-09-15) —
+            // the Log sheet and the rest of the library screens all
+            // take the same top drawer now, so this call is unchanged
+            // visually but shares the definition.
             // LOCAL library search only (2026-08-30) — the prompt
             // dropped "and More" along with the online/AI sections that
             // word was covering for; Add Food carries those now.
-            .searchable(
-                text: $searchText,
-                placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Foods and Meals"
-            )
+            .librarySearch(text: $searchText, prompt: "Foods and Meals")
             .toolbar {
                 // Filter + sort on the trailing edge, matching Today and
                 // Calendar: the leading ~20pt is iOS's back-swipe zone, which

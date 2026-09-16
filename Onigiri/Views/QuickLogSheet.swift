@@ -39,10 +39,6 @@ struct QuickLogSheet: View {
     /// only now that the describe field has its own home
     /// (`EntryDoorsSection`, 2026-08-29).
     @State private var describeQuery = ""
-    /// Drives the whole search-active state (not just keyboard focus):
-    /// an active search hides the toolbar, so sub-sheets must be able
-    /// to deactivate it entirely or Done never comes back.
-    @State private var searchPresented = false
     @State private var isLogging = false
     @State private var onlineSearch = OnlineFoodSearch()
     @State private var isLookingUpBarcode = false
@@ -244,28 +240,18 @@ struct QuickLogSheet: View {
         let groups = searching ? searchGroups(items) : []
         NavigationStack {
             List {
-                // The scan entry, a labeled row like Foods' (the user:
-                // the toolbar icon was the odd one out once Foods grew
-                // its row — same affordance, same place, both screens).
-                // Hidden while searching so results lead. Used to hide
-                // on the Meals scope too ("scanning adds a FOOD; meals
-                // are built from foods already added") — restored
-                // there (the user, 2026-08-29: "it's missing from
-                // Meals"), for the SAME reason it's on every other
-                // scope: logging a food doesn't care which pill is
-                // selected, that's a filter on the list below, not a
-                // constraint on what can be logged, and Favorites/Foods
-                // having it while Meals didn't read as an omission
-                // rather than a boundary.
+                // The camera/describe doors used to lead this list as a
+                // row (the user: same affordance as Foods' scan row).
+                // They now float in a bar at the bottom of the sheet
+                // instead (`LogSheetDoorBar`, wired via `.entryDoorBar`
+                // below) — search moved to the top drawer, and the
+                // doors moved to the functional layer so they read as
+                // distinct chrome rather than another row
+                // (`plans/PLAN-log-sheet-layout.md`, 2026-09-15). The
+                // bar hides on the SAME `searching` predicate this
+                // block already gates on, so nothing about WHEN it
+                // shows changed — only where it renders.
                 if !searching {
-                    // The shared scan door, same as Foods and the food
-                    // form (PLAN-entry-doors / PLAN-unified-search).
-                    EntryDoorsSection(
-                        scanBusy: isLookingUpBarcode,
-                        describeQuery: $describeQuery,
-                        onScan: { activeSheet = .scanner(notice: nil) },
-                        onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } }
-                    )
                     // The describe field's own results, right under
                     // where it's typed (2026-08-29) — it used to lead
                     // the SEARCH results instead, keyed off `searchText`;
@@ -439,18 +425,47 @@ struct QuickLogSheet: View {
                 // say what you're looking at.
                 isHidden: searching
             )
-            // The STANDARD system search field (Micheal: as close to
-            // Apple's as possible) — the barcode scanner therefore lives
-            // in the top toolbar, since the system field can't host an
-            // accessory button. LOCAL library search only now — the
-            // online database moved to the describe field above
+            // The STANDARD system search field, pinned in the TOP
+            // drawer now — matching Foods, via the shared
+            // `librarySearch` placement (`plans/PLAN-log-sheet-layout.md`,
+            // 2026-09-15; this sheet used to take the bottom-aligned
+            // default, the one visible difference from Foods'
+            // placement argument). The barcode scanner lives in the
+            // floating door bar now, not the toolbar — the system
+            // field still can't host an accessory button, but the
+            // scanner no longer needs one. LOCAL library search only —
+            // the online database lives in the describe field above
             // (2026-08-29), so the prompt dropped "and More" along with
             // it; nothing here reaches OpenFoodFacts/USDA any more.
-            .searchable(
-                text: $searchText,
-                isPresented: $searchPresented,
-                prompt: "Foods and Meals"
-            )
+            //
+            // NO `isPresented` binding, unlike the bottom-aligned pill
+            // this sheet used before (which needed one to hide its own
+            // full-screen search overlay). Foods' own top drawer never
+            // tracks one either. Tried and measured NOT to work under
+            // `.navigationBarDrawer(.always)`: once the field is tapped,
+            // its underlying search controller keeps replacing
+            // Cancel/Log/Sort/Done with its own "Close" control for the
+            // rest of this screen's life, and no combination of
+            // `isPresented = false`, `.searchFocused`, clearing the
+            // query, or remounting the List via `.id()` undid it
+            // (measured, `testLogWithoutSaving`,
+            // `plans/PLAN-log-sheet-layout.md`, 2026-09-15) — so this
+            // sheet stopped fighting that state entirely, matching
+            // Foods.
+            .librarySearch(text: $searchText, prompt: "Foods and Meals")
+            // The floating door bar: camera + describe, hidden on the
+            // same `searching` predicate the list already uses. Sits
+            // below the list, above the home indicator; empties its
+            // content rather than dropping the modifier (see
+            // `entryDoorBar`'s own doc comment for why).
+            .entryDoorBar(isHidden: searching) {
+                LogSheetDoorBar(
+                    scanBusy: isLookingUpBarcode,
+                    describeQuery: $describeQuery,
+                    onScan: { activeSheet = .scanner(notice: nil) },
+                    onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } }
+                )
+            }
             .toolbar {
                 // Cancel + Done, like every other sheet in the app (the
                 // user, 2026-07-19 — this was the ONE sheet without a
@@ -488,24 +503,20 @@ struct QuickLogSheet: View {
                     .keyboardShortcut(.return, modifiers: .command)
                     .recedesWithSheet(activeSheet != nil)
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    // The Foods screen's sort circle, third surface — kept on
-                    // the trailing edge to match Foods/Today/Calendar (and
-                    // clear of the leading back-swipe zone).
-                    Menu {
-                        Picker("Sort", selection: $sortRaw) {
-                            ForEach(LibrarySort.allCases, id: \.rawValue) { option in
-                                Text(option.label).tag(option.rawValue)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: librarySort == .recent
-                              ? "arrow.up.arrow.down.circle"
-                              : "arrow.up.arrow.down.circle.fill")
-                            .contentTransition(.symbolEffect(.replace))
-                    }
-                    .accessibilityLabel("Sort")
-                    .recedesWithSheet(activeSheet != nil)
+                // Sort is the item that may overflow first on iOS 27 —
+                // Done (`.confirmationAction`) already resists it, and
+                // the search drawer above means a narrow bar (large
+                // Dynamic Type) has less room than it used to
+                // (`plans/PLAN-log-sheet-layout.md`, 2026-09-15).
+                // `.visibilityPriority` attaches to the ToolbarItem
+                // itself, not the view inside it, so the branch has to
+                // repeat the ToolbarItem — `sortMenu` keeps the Menu's
+                // own body from being duplicated.
+                if #available(iOS 27.0, *) {
+                    ToolbarItem(placement: .topBarTrailing) { sortMenu }
+                        .visibilityPriority(.low)
+                } else {
+                    ToolbarItem(placement: .topBarTrailing) { sortMenu }
                 }
             }
             .task {
@@ -548,78 +559,84 @@ struct QuickLogSheet: View {
             // it when any sub-sheet opens so the sheet comes back to
             // its resting state after logging.
             .onChange(of: activeSheet?.id) { _, id in
-                if id != nil {
-                    searchPresented = false
-                } else {
+                if id == nil {
                     // A form or portion sheet just closed — values or
                     // recency may have moved; refresh the cache.
                     libraryItems = buildLibraryItems()
                 }
             }
             .recedesBehindSheet(activeSheet != nil)
-            .sheet(item: $activeSheet) { sheet in
-                switch sheet {
-                case .portion(let target):
-                    PortionSheet(target: target) { quantity, category, _ in
-                        // Confirm only. The reconstructed Item below has
-                        // no model refs, so `log`'s own bump can't reach
-                        // the library row — this is what does.
-                        markUsed(target.source)
-                        log(
-                            Item(id: target.name, name: target.name, detail: target.serving,
-                                 kcal: target.kcal, sodiumMg: target.sodiumMg,
-                                 nutrients: target.nutrients, isFavorite: false, category: nil,
-                                 aiGenerated: target.aiGenerated,
-                                 baseQuantity: target.baseQuantity,
-                                 mealItems: target.mealItems),
-                            quantity: quantity,
-                            category: category
-                        )
-                    }
-                    .presentationDetents([.medium, .large])
-                case .scanner(let notice):
-                    // A parsed label takes the unknown-barcode route: the
-                    // single sheet slot re-presents as the prefilled food
-                    // form, whose Log action returns here with logDate
-                    // intact. Deferred one turn — the sheet dismisses
-                    // itself right after this closure, and a synchronous
-                    // swap gets torn down by that dismissal.
-                    // `.logging` + `logDate`: a menu or multi-food read
-                    // here is ordered from — pick, confirm, log, back to
-                    // the list — and it writes into the day this sheet is
-                    // browsing, not today
-                    // (`plans/PLAN-multi-item-import.md`).
-                    ScanSheet(onCode: { code in
-                        lookUpBarcode(code)
-                    }, onLabel: { parsed in
-                        let prefill = ProductPrefill(product: parsed.scannedProduct())
-                        Task { activeSheet = .form(prefill) }
-                    }, onFood: { product in
-                        // An identified food photo takes the same route:
-                        // the prefilled form, whose Log action returns
-                        // here with logDate intact.
-                        let prefill = ProductPrefill(product: product)
-                        Task { activeSheet = .form(prefill) }
-                    }, purpose: .logging, logDate: logDate, notice: notice)
-                case .form(let prefill):
-                    // New foods go through the full form — reviewable and
-                    // complete. Its Log action returns here (the sheet stays
-                    // open for the next item). AI-estimate prefills carry
-                    // their provenance caption in. `.logging`: you came here
-                    // to log, so the form offers Log / Log & Save — saving to
-                    // the library is the option, not the price of admission.
-                    FoodFormView(
-                        food: nil, prefill: prefill.product,
-                        prefillMessage: prefill.provenance, logDate: logDate,
-                        purpose: .logging)
-                case .editFood(let food):
-                    FoodFormView(food: food)
-                case .editMeal(let meal):
-                    MealFormView(meal: meal)
-                }
-            }
             .fileImporter(isPresented: $showLibraryImporter, allowedContentTypes: [.json]) { result in
                 ToastCenter.shared.show(LibraryTransfer.handlePickedFile(result, context: context))
+            }
+        }
+        // On the NavigationStack, NOT the searchable List — matching
+        // FoodsView's own fix: presenting a sheet over the search
+        // drawer's view leaves the drawer's search controller unable to
+        // take focus after the dismissal, taps land but the keyboard
+        // never rises (iOS 26). This sheet moved to the top drawer with
+        // `librarySearch` above, which is what makes this landmine
+        // reachable here now (`plans/PLAN-log-sheet-layout.md`,
+        // 2026-09-15).
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .portion(let target):
+                PortionSheet(target: target) { quantity, category, _ in
+                    // Confirm only. The reconstructed Item below has
+                    // no model refs, so `log`'s own bump can't reach
+                    // the library row — this is what does.
+                    markUsed(target.source)
+                    log(
+                        Item(id: target.name, name: target.name, detail: target.serving,
+                             kcal: target.kcal, sodiumMg: target.sodiumMg,
+                             nutrients: target.nutrients, isFavorite: false, category: nil,
+                             aiGenerated: target.aiGenerated,
+                             baseQuantity: target.baseQuantity,
+                             mealItems: target.mealItems),
+                        quantity: quantity,
+                        category: category
+                    )
+                }
+                .presentationDetents([.medium, .large])
+            case .scanner(let notice):
+                // A parsed label takes the unknown-barcode route: the
+                // single sheet slot re-presents as the prefilled food
+                // form, whose Log action returns here with logDate
+                // intact. Deferred one turn — the sheet dismisses
+                // itself right after this closure, and a synchronous
+                // swap gets torn down by that dismissal.
+                // `.logging` + `logDate`: a menu or multi-food read
+                // here is ordered from — pick, confirm, log, back to
+                // the list — and it writes into the day this sheet is
+                // browsing, not today
+                // (`plans/PLAN-multi-item-import.md`).
+                ScanSheet(onCode: { code in
+                    lookUpBarcode(code)
+                }, onLabel: { parsed in
+                    let prefill = ProductPrefill(product: parsed.scannedProduct())
+                    Task { activeSheet = .form(prefill) }
+                }, onFood: { product in
+                    // An identified food photo takes the same route:
+                    // the prefilled form, whose Log action returns
+                    // here with logDate intact.
+                    let prefill = ProductPrefill(product: product)
+                    Task { activeSheet = .form(prefill) }
+                }, purpose: .logging, logDate: logDate, notice: notice)
+            case .form(let prefill):
+                // New foods go through the full form — reviewable and
+                // complete. Its Log action returns here (the sheet stays
+                // open for the next item). AI-estimate prefills carry
+                // their provenance caption in. `.logging`: you came here
+                // to log, so the form offers Log / Log & Save — saving to
+                // the library is the option, not the price of admission.
+                FoodFormView(
+                    food: nil, prefill: prefill.product,
+                    prefillMessage: prefill.provenance, logDate: logDate,
+                    purpose: .logging)
+            case .editFood(let food):
+                FoodFormView(food: food)
+            case .editMeal(let meal):
+                MealFormView(meal: meal)
             }
         }
         .toastHost()
@@ -700,6 +717,28 @@ struct QuickLogSheet: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// The Foods screen's sort circle, third surface — kept on the
+    /// trailing edge to match Foods/Today/Calendar (and clear of the
+    /// leading back-swipe zone). Its own property so the iOS 27
+    /// `.visibilityPriority` branch in the toolbar above doesn't have
+    /// to declare this Menu twice.
+    private var sortMenu: some View {
+        Menu {
+            Picker("Sort", selection: $sortRaw) {
+                ForEach(LibrarySort.allCases, id: \.rawValue) { option in
+                    Text(option.label).tag(option.rawValue)
+                }
+            }
+        } label: {
+            Image(systemName: librarySort == .recent
+                  ? "arrow.up.arrow.down.circle"
+                  : "arrow.up.arrow.down.circle.fill")
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .accessibilityLabel("Sort")
+        .recedesWithSheet(activeSheet != nil)
     }
 
     /// The fast portion sheet for a barcode the library already knows.

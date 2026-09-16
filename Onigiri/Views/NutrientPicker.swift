@@ -56,7 +56,9 @@ struct NutrientPickerView: View {
         .readableContentWidth(groupedBackground: true)
         .navigationTitle("Tracked Metric")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $searchText, prompt: "Search nutrients")
+        // Top drawer — the shared `librarySearch` placement
+        // (`plans/PLAN-log-sheet-layout.md`, 2026-09-15).
+        .librarySearch(text: $searchText, prompt: "Search nutrients")
     }
 
     private var anyMatches: Bool {

@@ -390,12 +390,14 @@ struct MealFormView: View {
             .riceCanvas()
             .navigationTitle(meal == nil ? "New Meal" : "Edit Meal")
             .navigationBarTitleDisplayMode(.inline)
-            // System search, matching Foods and the Log sheet (bottom
-            // placement on iOS 26). The prompt names both jobs: the same
-            // field filters the library and describes a meal — the
-            // one-field decision from PLAN-unified-search, not a second
-            // door (2026-07-29).
-            .searchable(text: $foodFilter, prompt: "Search foods or describe a meal")
+            // System search, top drawer — the shared `librarySearch`
+            // placement (`plans/PLAN-log-sheet-layout.md`, 2026-09-15;
+            // this used to differ from Foods, taking the bottom-aligned
+            // default). The prompt names both jobs: the same field
+            // filters the library and describes a meal — the one-field
+            // decision from PLAN-unified-search, not a second door
+            // (2026-07-29).
+            .librarySearch(text: $foodFilter, prompt: "Search foods or describe a meal")
             // The cancel used to live in an `.onDisappear` right here,
             // on the searchable List itself — which fires on the
             // TRANSIENT teardown every keyboard dismissal produces

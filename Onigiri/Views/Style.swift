@@ -153,6 +153,73 @@ extension View {
 }
 
 extension View {
+    /// The app's ONE search-field placement: the standard system field,
+    /// pinned in the top drawer regardless of platform version — the
+    /// Foods tab's placement (`plans/PLAN-log-sheet-layout.md`,
+    /// 2026-09-15), now shared so a fifth field can't quietly drift onto
+    /// the bottom-aligned default. `.always`, not the plain drawer: with
+    /// a pinned top `safeAreaInset` below it (a scope bar), the
+    /// hide-on-scroll drawer re-expands BLANK after a scroll — element
+    /// present, field invisible (screenshot-verified 2026-07-13,
+    /// FoodsView). Pinning skips that collapse/re-expand cycle.
+    /// `isPresented` is optional — only a host that reads whether search
+    /// is active (the Log sheet hides its own toolbar while searching)
+    /// needs to pass one.
+    @ViewBuilder
+    func librarySearch(
+        text: Binding<String>, prompt: LocalizedStringKey,
+        isPresented: Binding<Bool>? = nil
+    ) -> some View {
+        if let isPresented {
+            searchable(
+                text: text, isPresented: isPresented,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: prompt
+            )
+        } else {
+            searchable(
+                text: text,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: prompt
+            )
+        }
+    }
+
+    /// The Log sheet's floating door bar container
+    /// (`plans/PLAN-log-sheet-layout.md`): pinned bottom chrome that
+    /// stays attached at all times — `isHidden` empties the bar's
+    /// CONTENT rather than dropping the modifier, the same discipline
+    /// `scopeBar(isHidden:)` above already documents (wrapping the whole
+    /// call in an `if` would re-create the List underneath it mid-
+    /// search). `safeAreaBar` (iOS 26+) gives the system's own
+    /// scroll-edge blur and insets the list so its last rows scroll
+    /// clear of the bar, which retires the flow test's manual ~180pt
+    /// bottom-zone scroll allowance; iOS 18 falls back to a plain
+    /// `.bar`-material inset, matching the scope bar's own floor
+    /// treatment.
+    @ViewBuilder
+    func entryDoorBar<Bar: View>(
+        isHidden: Bool, @ViewBuilder bar: @escaping () -> Bar
+    ) -> some View {
+        if #available(iOS 26.0, *) {
+            self.safeAreaBar(edge: .bottom) {
+                if !isHidden { bar() }
+            }
+        } else {
+            self.safeAreaInset(edge: .bottom, spacing: 0) {
+                if !isHidden {
+                    bar()
+                        .padding(.horizontal)
+                        .padding(.bottom, 8)
+                        .padding(.top, 6)
+                        .background(.bar)
+                }
+            }
+        }
+    }
+}
+
+extension View {
     /// The warm paper canvas for grouped sheets and forms that don't
     /// go through readableContentWidth (Log sheet, Settings, the food
     /// and meal forms) — one surface color everywhere, with the

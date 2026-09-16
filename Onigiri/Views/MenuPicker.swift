@@ -13,8 +13,11 @@ import OnigiriKit
 /// only chooser in the product: the multi-food screenshot read raises it
 /// too, mapped through `MenuRow`. What makes a long menu usable is the
 /// same thing that makes the rest of the app usable — the standard
-/// system search field, bottom placement, no custom bar and no
-/// auto-focus.
+/// system search field, top drawer, no custom bar and no auto-focus.
+/// The placement is INLINED rather than routed through `Style.swift`'s
+/// shared `librarySearch` helper: this file also compiles into
+/// `OnigiriShare` (project.yml), which doesn't carry `Style.swift`, so
+/// the shared modifier isn't visible there.
 struct MenuPicker: View {
     let rows: [MenuRow]
     /// What has already been logged from this list, when anything has
@@ -87,7 +90,18 @@ struct MenuPicker: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .searchable(text: $query, prompt: "Search \(rows.count) items")
+        // Pinned top drawer, matching the rest of the library screens
+        // (`plans/PLAN-log-sheet-layout.md`, 2026-09-15; this used to
+        // take the bottom-aligned default). `.always`, not the plain
+        // drawer: see `librarySearch`'s own doc comment in Style.swift
+        // for why — inlined here rather than calling that helper since
+        // this file also compiles into OnigiriShare, which doesn't
+        // carry Style.swift.
+        .searchable(
+            text: $query,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Search \(rows.count) items"
+        )
         // A dialog, not a field buried in the list: the source is asked
         // once per import and the answer prefixes every name.
         .alert("Where is this menu from?", isPresented: $askingSource) {

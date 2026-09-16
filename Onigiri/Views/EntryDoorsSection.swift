@@ -87,49 +87,31 @@ struct EntryDoorsSection: View {
         Section {
             if describeFieldAvailable {
                 HStack(spacing: 14) {
-                    Button(action: onScan) {
-                        // 44pt — LogButton's own frame, exactly, so this
-                        // row's content height caps at the same place
-                        // Water's does and the two pills match (the
-                        // user, 2026-08-29). Larger read as its own
-                        // control once the field stopped sharing its
-                        // card (previous round); this is the same idea
-                        // bounded by a second row it now has to agree
-                        // with.
+                    // 44pt — LogButton's own frame, exactly, so this
+                    // row's content height caps at the same place
+                    // Water's does and the two pills match (the
+                    // user, 2026-08-29). Larger read as its own
+                    // control once the field stopped sharing its
+                    // card (previous round); this is the same idea
+                    // bounded by a second row it now has to agree
+                    // with.
+                    EntryDoorScanButton(scanBusy: scanBusy, onScan: onScan) {
                         DoorCircleGlyph(systemImage: "camera", diameter: 44, font: .body.weight(.bold))
                     }
-                    .buttonStyle(.plain)
-                    .disabled(scanBusy)
-                    .accessibilityLabel("Scan Barcode, Label, Menu, or Food")
-                    HStack(spacing: 6) {
-                        // AI ONLY, not "online lookups can search too" —
-                        // the sparkle is a promise about what's behind
-                        // the field, and a plain database search isn't
-                        // AI (the user, 2026-08-29: "a sparkle... if AI
-                        // is enabled").
-                        if FoodIntelligence.isAvailable {
-                            Image(systemName: "sparkles")
-                                .foregroundStyle(Color.riceToast)
-                                .font(.callout)
-                        }
-                        TextField("Describe food or meal", text: $describeQuery)
-                            .accessibilityLabel("Describe food or meal")
-                            .accessibilityIdentifier(Self.describeFieldAccessibilityID)
-                            .onSubmit { onDescribeSubmit?() }
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    // The SAME fill `DoorCircleGlyph`'s circle uses —
-                    // one "control chip" language for both, so they
-                    // read as siblings rather than a button floating
-                    // inside a field's own row. `.tertiarySystemGroupedBackground`,
-                    // not `.quaternary` — the hierarchical material
-                    // washed out light on a real device in dark mode
-                    // (the user, 2026-08-30, from-device screenshot:
-                    // "light mode button leak"); this is a flat,
-                    // deterministic system color instead, matching
-                    // `DoorCircleGlyph`'s own fix.
-                    .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    EntryDoorDescribeField(describeQuery: $describeQuery, onDescribeSubmit: onDescribeSubmit)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        // The SAME fill `DoorCircleGlyph`'s circle uses —
+                        // one "control chip" language for both, so they
+                        // read as siblings rather than a button floating
+                        // inside a field's own row. `.tertiarySystemGroupedBackground`,
+                        // not `.quaternary` — the hierarchical material
+                        // washed out light on a real device in dark mode
+                        // (the user, 2026-08-30, from-device screenshot:
+                        // "light mode button leak"); this is a flat,
+                        // deterministic system color instead, matching
+                        // `DoorCircleGlyph`'s own fix.
+                        .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
             } else {
                 Button(action: onScan) {
@@ -150,6 +132,186 @@ struct EntryDoorsSection: View {
                     .font(.footnote)
                     .foregroundStyle(.orange)
             }
+        }
+    }
+}
+
+/// The camera door's button: glyph + accessibility label + the
+/// disabled/action wiring, extracted so the Add Food form's in-list row
+/// and the Log sheet's floating bar (`LogSheetDoorBar`,
+/// `plans/PLAN-log-sheet-layout.md`, 2026-09-15) can't say something
+/// different about what a tap does. Each caller supplies its own
+/// rendering of the glyph — the chip circle here, glass there.
+struct EntryDoorScanButton<Content: View>: View {
+    var scanBusy = false
+    let onScan: () -> Void
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        Button(action: onScan) { content() }
+            .buttonStyle(.plain)
+            .disabled(scanBusy)
+            .accessibilityLabel("Scan Barcode, Label, Menu, or Food")
+    }
+}
+
+/// The describe field itself: sparkle + `TextField` + its accessibility
+/// identifier/label + submit wiring, extracted for the same reason as
+/// `EntryDoorScanButton` above — `describeFieldAccessibilityID` is what
+/// `FoodFormView`'s select-all-on-focus handler matches against, and a
+/// second hand-copied field could silently stop matching it. Callers
+/// wrap this in their own padding/background; it draws no chrome of its
+/// own.
+struct EntryDoorDescribeField: View {
+    @Binding var describeQuery: String
+    var onDescribeSubmit: (() -> Void)?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            // AI ONLY, not "online lookups can search too" — the
+            // sparkle is a promise about what's behind the field, and a
+            // plain database search isn't AI (the user, 2026-08-29:
+            // "a sparkle... if AI is enabled").
+            if FoodIntelligence.isAvailable {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(Color.riceToast)
+                    .font(.callout)
+            }
+            TextField("Describe food or meal", text: $describeQuery)
+                .accessibilityLabel("Describe food or meal")
+                .accessibilityIdentifier(EntryDoorsSection.describeFieldAccessibilityID)
+                .onSubmit { onDescribeSubmit?() }
+        }
+    }
+}
+
+/// The Log sheet's floating door bar (`plans/PLAN-log-sheet-layout.md`,
+/// 2026-09-15): the camera and describe door, pulled OFF the list and
+/// into the functional layer so they read as distinct chrome rather
+/// than another row — Liquid Glass on iOS 26+, camera tinted (the app's
+/// one primary action per the HIG's "tint one, not everything" rule),
+/// describe plain. Shares `EntryDoorScanButton`/`EntryDoorDescribeField`
+/// with `EntryDoorsSection` (the Add Food form's in-list chip) so the
+/// glyph, the label, and the accessibility contract can't drift between
+/// the two homes — only the surrounding chrome differs.
+///
+/// Hosted through `View.entryDoorBar(isHidden:bar:)` (Style.swift),
+/// never presented directly — that modifier is what keeps the bar's
+/// container attached while search is active, emptying its content
+/// instead of dropping it (the `scopeBar(isHidden:)` discipline).
+struct LogSheetDoorBar: View {
+    var scanBusy = false
+    @Binding var describeQuery: String
+    let onScan: () -> Void
+    var onDescribeSubmit: (() -> Void)?
+
+    /// Same rule as the form's chip: a field with nowhere to send its
+    /// text is a dead end, not a door.
+    private var describeFieldAvailable: Bool {
+        FoodIntelligence.isAvailable || SharedStore.onlineLookups
+    }
+
+    var body: some View {
+        Group {
+            if describeFieldAvailable {
+                // GlassEffectContainer: glass can't sample glass, and
+                // without it the circle and the capsule fight each
+                // other at 14pt apart (Liquid Glass guidance). Below
+                // the floor there's no glass to coordinate, so a plain
+                // HStack does the same job.
+                if #available(iOS 26.0, *) {
+                    GlassEffectContainer(spacing: 14) {
+                        HStack(spacing: 14) {
+                            scanControl
+                            describeControl
+                        }
+                    }
+                } else {
+                    HStack(spacing: 14) {
+                        scanControl
+                        describeControl
+                    }
+                }
+            } else {
+                // Neither AI nor online: one full-width labeled door,
+                // matching `ScanRowLabel`'s copy — the field would be a
+                // dead end with nothing behind it.
+                EntryDoorScanButton(scanBusy: scanBusy, onScan: onScan) {
+                    fallbackLabel
+                }
+            }
+        }
+        .padding(.horizontal)
+        .padding(.bottom, 8)
+    }
+
+    private var fallbackLabel: some View {
+        HStack(spacing: 10) {
+            if scanBusy {
+                ProgressView()
+            } else {
+                Image(systemName: "camera")
+                    .font(.body.weight(.semibold))
+            }
+            Text("Scan Barcode, Label, or Menu")
+                .font(.body.weight(.semibold))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .modifier(DoorBarChrome(tinted: true, shape: AnyShape(RoundedRectangle(cornerRadius: 22, style: .continuous))))
+    }
+
+    private var scanControl: some View {
+        EntryDoorScanButton(scanBusy: scanBusy, onScan: onScan) {
+            Group {
+                if scanBusy {
+                    ProgressView()
+                } else {
+                    // No explicit foreground override on 26+: glass
+                    // supplies vibrant, legible content automatically
+                    // (Liquid Glass guidance) — riceToast here is only
+                    // for the pre-26 chip fallback, matching
+                    // `DoorCircleGlyph`'s own treatment.
+                    Image(systemName: "camera")
+                        .font(.body.weight(.bold))
+                        .foregroundStyle(preGlassForeground)
+                }
+            }
+            .frame(width: 44, height: 44)
+        }
+        .modifier(DoorBarChrome(tinted: true, shape: AnyShape(Circle())))
+    }
+
+    private var describeControl: some View {
+        EntryDoorDescribeField(describeQuery: $describeQuery, onDescribeSubmit: onDescribeSubmit)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .modifier(DoorBarChrome(tinted: false, shape: AnyShape(Capsule())))
+    }
+
+    private var preGlassForeground: Color {
+        if #available(iOS 26.0, *) { .primary } else { .riceToast }
+    }
+}
+
+/// The floating bar's per-control chrome: Liquid Glass on iOS 26+
+/// (tinted riceToast for the camera, plain regular for the describe
+/// capsule — one tint, not two, per the HIG's "when everything is
+/// tinted, nothing stands out" rule); the existing
+/// `.tertiarySystemGroupedBackground` chip below the floor, matching
+/// `EntryDoorsSection`'s own fallback exactly.
+private struct DoorBarChrome: ViewModifier {
+    var tinted: Bool
+    var shape: AnyShape
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.glassEffect(
+                tinted ? .regular.tint(.riceToast).interactive() : .regular.interactive(),
+                in: shape
+            )
+        } else {
+            content.background(Color(.tertiarySystemGroupedBackground), in: shape)
         }
     }
 }

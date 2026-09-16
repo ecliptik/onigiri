@@ -2066,15 +2066,23 @@ private struct DayJumpSheet: View {
             .navigationTitle(displayedMonth.formatted(.dateTime.month(.wide).year()))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                // Cancel alone on the left; BOTH month chevrons together
+                // on the right, the Calendar tab's own group. The
+                // previous-month chevron used to sit at `.topBarLeading`
+                // beside Cancel (also leading, in a sheet), and iOS 26
+                // fuses adjacent items into one glass pill — it read as a
+                // single "< Cancel" control (the user, from-device
+                // screenshot, 2026-09-16).
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
                         shiftMonth(-1)
                     } label: {
                         Image(systemName: "chevron.left")
                     }
                     .accessibilityLabel("Previous month")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         shiftMonth(1)
                     } label: {
@@ -2082,9 +2090,6 @@ private struct DayJumpSheet: View {
                     }
                     .disabled(calendar.isDate(displayedMonth, equalTo: .now, toGranularity: .month))
                     .accessibilityLabel("Next month")
-                }
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
                 }
             }
         }

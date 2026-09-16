@@ -42,6 +42,13 @@ struct CalendarView: View {
         NavigationStack(path: $navPath) {
             ScrollView {
                 VStack(spacing: Layout.screenSpacing) {
+                    // The month title and its chevrons, sharing one row
+                    // (`LargeTitleHeaderRow`, Style.swift) — replacing
+                    // the native large title, whose trailing toolbar
+                    // buttons floated as their own glass pill above it
+                    // with a visible gap on iOS 26 (the user, from-device
+                    // screenshot, 2026-09-16).
+                    monthHeaderRow
                     // Stats first — they were below the fold at the bottom.
                     summaryCard
                     // Region-scoped swipes: the grid pages months, the day
@@ -77,31 +84,10 @@ struct CalendarView: View {
             }
             // Grouped surface idiom, app-wide (see TodayView).
             .readableContentWidth(groupedBackground: true)
-            // Month chevrons in the nav bar with the month as the title —
-            // the same browsing pattern as Today.
-            .navigationTitle(displayedMonth.formatted(.dateTime.month(.wide).year()))
-            .toolbar {
-                // Both month chevrons on the trailing edge, matching Today's
-                // day chevrons: the leading ~20pt is iOS's back-swipe zone,
-                // which intermittently stole taps from a control placed there
-                // (see TodayView, v2.5.10). The month title holds the leading
-                // side; nothing tappable sits in the edge gesture's path.
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button {
-                        shiftMonth(-1)
-                    } label: {
-                        Image(systemName: "chevron.left")
-                    }
-                    .accessibilityLabel("Previous month")
-                    Button {
-                        shiftMonth(1)
-                    } label: {
-                        Image(systemName: "chevron.right")
-                    }
-                    .disabled(calendar.isDate(displayedMonth, equalTo: .now, toGranularity: .month))
-                    .accessibilityLabel("Next month")
-                }
-            }
+            // Blank: the title renders in-content now (`monthHeaderRow`),
+            // matching Today/Foods/Goal — VoiceOver's tab-switch
+            // announcement reads the Tab's own label, not this string.
+            .navigationTitle("")
             // INSIDE the NavigationStack's content, and it has to be.
             // `navigationDestination` resolves against the stack it is
             // declared WITHIN, so attached to the stack itself — one
@@ -504,6 +490,46 @@ struct CalendarView: View {
         guard request == true else { return }
         quickActions.calendarRootRequest = nil
         navPath.removeAll()
+    }
+
+    /// The month title and its chevrons, sharing one row
+    /// (`LargeTitleHeaderRow`, Style.swift) instead of a native large
+    /// title + `ToolbarItemGroup` — same two controls, same
+    /// accessibility labels; only the host and its chrome changed.
+    /// `addsHorizontalPadding: false`: this row lives in the SAME
+    /// `VStack` as `summaryCard`/`MonthGridView` below it, which already
+    /// wraps everything in one shared `.padding(.horizontal)` — adding
+    /// the row's own 16pt on top would indent it twice as far from the
+    /// edge as its siblings.
+    private var monthHeaderRow: some View {
+        LargeTitleHeaderRow(addsHorizontalPadding: false) {
+            Text(displayedMonth.formatted(.dateTime.month(.wide).year()))
+                .font(.largeTitle.bold())
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        } controls: {
+            HStack(spacing: 4) {
+                Button {
+                    shiftMonth(-1)
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .frame(minWidth: 32, minHeight: 32)
+                }
+                .accessibilityLabel("Previous month")
+                Button {
+                    shiftMonth(1)
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .frame(minWidth: 32, minHeight: 32)
+                }
+                .disabled(calendar.isDate(displayedMonth, equalTo: .now, toGranularity: .month))
+                .accessibilityLabel("Next month")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.riceToast)
+            .headerControlChrome()
+        }
     }
 
     private var summaryCard: some View {

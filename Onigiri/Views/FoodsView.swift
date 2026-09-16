@@ -209,6 +209,31 @@ struct FoodsView: View {
             : []
         NavigationStack {
             List {
+                // The title and its Filter/Sort controls, sharing one
+                // row (`LargeTitleHeaderRow`, Style.swift) — replacing
+                // the native large title, whose trailing toolbar
+                // buttons floated as their own glass pill above it with
+                // a visible gap on iOS 26 (the user, from-device
+                // screenshot, 2026-09-16). A list ROW, matching the
+                // scope picker just below it, and for the same original
+                // reason that row isn't a pinned `safeAreaInset`: a top
+                // inset suppresses large-title rendering (see the scope
+                // picker's own comment) — moot now since there's no
+                // native large title left to suppress, but the row
+                // approach was already proven safe here. Unconditional,
+                // unlike the scope picker: the title stays put while
+                // searching.
+                Section {
+                    LargeTitleHeaderRow {
+                        Text("Foods")
+                            .font(.largeTitle.bold())
+                            .foregroundStyle(.primary)
+                    } controls: {
+                        foodsHeaderControls
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                }
                 // The scope picker rides IN the list, not a pinned
                 // safeAreaInset: any top inset suppresses large-title
                 // rendering (screenshot-verified twice — blank title
@@ -308,7 +333,11 @@ struct FoodsView: View {
             .compactSections()
             .hardTopScrollEdge()
             .readableContentWidth(groupedBackground: true)
-            .navigationTitle("Foods")
+            // Blank: the title now renders in-content (the row above),
+            // matching Today. VoiceOver's tab-switch announcement reads
+            // the Tab's own label ("Foods"), not this string — the same
+            // reasoning Today's already-shipped blank title relies on.
+            .navigationTitle("")
             .fileImporter(isPresented: $showLibraryImporter, allowedContentTypes: [.json]) { result in
                 ToastCenter.shared.show(LibraryTransfer.handlePickedFile(result, context: context))
             }
@@ -329,46 +358,6 @@ struct FoodsView: View {
             // dropped "and More" along with the online/AI sections that
             // word was covering for; Add Food carries those now.
             .librarySearch(text: $searchText, prompt: "Foods and Meals")
-            .toolbar {
-                // Filter + sort on the trailing edge, matching Today and
-                // Calendar: the leading ~20pt is iOS's back-swipe zone, which
-                // intermittently steals taps from a control placed there
-                // (v2.5.10). The title holds the left; nothing tappable sits
-                // in the edge gesture's path.
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Menu {
-                        Picker("Category", selection: $categoryFilter) {
-                            Text("All").tag(FoodCategory?.none)
-                            ForEach(FoodCategory.allCases) { option in
-                                Text(option.rawValue).tag(FoodCategory?.some(option))
-                            }
-                        }
-                    } label: {
-                        Image(systemName: categoryFilter == nil
-                              ? "line.3.horizontal.decrease.circle"
-                              : "line.3.horizontal.decrease.circle.fill")
-                            // The fill/unfill swap morphs instead of
-                            // hard-cutting (iOS 17 API, floor-safe).
-                            .contentTransition(.symbolEffect(.replace))
-                    }
-                    .accessibilityLabel("Filter by category")
-                    .recedesWithSheet(activeSheet != nil)
-                    Menu {
-                        Picker("Sort", selection: $sortRaw) {
-                            ForEach(LibrarySort.allCases, id: \.rawValue) { option in
-                                Text(option.label).tag(option.rawValue)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: librarySort == .recent
-                              ? "arrow.up.arrow.down.circle"
-                              : "arrow.up.arrow.down.circle.fill")
-                            .contentTransition(.symbolEffect(.replace))
-                    }
-                    .accessibilityLabel("Sort")
-                    .recedesWithSheet(activeSheet != nil)
-                }
-            }
             // The corner + while on this tab (the toolbar "+ Add" menu
             // consolidated into it): a Food-or-Meal chooser. Consumable
             // Optional, checked on change and appear (the Bool-flag
@@ -737,6 +726,51 @@ struct FoodsView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// Filter + sort, now trailing the title in the header row instead
+    /// of the nav bar's `ToolbarItemGroup` they used to be — same two
+    /// controls, same order, same accessibility labels; only the host
+    /// and its chrome changed. One shared `recedesWithSheet` for the
+    /// pair now (they always moved together as a `ToolbarItemGroup`
+    /// too), matching Today's day-nav pill.
+    private var foodsHeaderControls: some View {
+        HStack(spacing: 4) {
+            Menu {
+                Picker("Category", selection: $categoryFilter) {
+                    Text("All").tag(FoodCategory?.none)
+                    ForEach(FoodCategory.allCases) { option in
+                        Text(option.rawValue).tag(FoodCategory?.some(option))
+                    }
+                }
+            } label: {
+                Image(systemName: categoryFilter == nil
+                      ? "line.3.horizontal.decrease.circle"
+                      : "line.3.horizontal.decrease.circle.fill")
+                    // The fill/unfill swap morphs instead of
+                    // hard-cutting (iOS 17 API, floor-safe).
+                    .contentTransition(.symbolEffect(.replace))
+                    .frame(minWidth: 32, minHeight: 32)
+            }
+            .accessibilityLabel("Filter by category")
+            Menu {
+                Picker("Sort", selection: $sortRaw) {
+                    ForEach(LibrarySort.allCases, id: \.rawValue) { option in
+                        Text(option.label).tag(option.rawValue)
+                    }
+                }
+            } label: {
+                Image(systemName: librarySort == .recent
+                      ? "arrow.up.arrow.down.circle"
+                      : "arrow.up.arrow.down.circle.fill")
+                    .contentTransition(.symbolEffect(.replace))
+                    .frame(minWidth: 32, minHeight: 32)
+            }
+            .accessibilityLabel("Sort")
+        }
+        .foregroundStyle(Color.riceToast)
+        .headerControlChrome()
+        .recedesWithSheet(activeSheet != nil)
     }
 
     private func consumeAddFoodKind() {

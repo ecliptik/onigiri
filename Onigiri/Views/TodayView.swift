@@ -425,30 +425,23 @@ struct TodayView: View {
     }
 
     /// The day heading and its day-nav/Settings controls, sharing ONE
-    /// row (the user, 2026-09-16, from-device screenshot: the chevrons
-    /// and gear used to float as their own glass pill in the nav bar,
-    /// sitting ABOVE this in-content title with a visible gap — reading
-    /// as two disconnected header rows instead of one). Every other
-    /// large-title tab (Foods, Goal, Calendar) puts its title and its
-    /// trailing bar buttons at the same visual height for free, because
-    /// both live in the SAME native nav-bar chrome; Today's title is
-    /// deliberately custom content instead (see `dayTitleButton`'s own
-    /// doc comment for why), so getting the same result here means
-    /// putting the controls in the row by hand and giving them the
-    /// matching glass chrome manually (`dayControlChrome`) — the nav
-    /// bar itself now carries no toolbar items at all.
+    /// row via the shared `LargeTitleHeaderRow` (the user, 2026-09-16,
+    /// from-device screenshot: the chevrons and gear used to float as
+    /// their own glass pill in the nav bar, sitting ABOVE this
+    /// in-content title with a visible gap — reading as two
+    /// disconnected header rows instead of one; the SAME thing turned
+    /// out to be true of every OTHER large-title tab too, since a
+    /// native large title's trailing toolbar buttons float in their own
+    /// pill by default on iOS 26 — see `LargeTitleHeaderRow`'s own doc
+    /// comment). Today's title was already custom content (see
+    /// `dayTitleButton`'s doc comment for why); the nav bar itself now
+    /// carries no toolbar items at all.
     private var dayHeaderRow: some View {
-        HStack(alignment: .center, spacing: 8) {
+        LargeTitleHeaderRow {
             dayTitleButton
-            Spacer(minLength: 8)
+        } controls: {
             dayNavigationControls
         }
-        // Measured against Foods/Goal screenshots: the system large
-        // title sits at a 16pt leading inset and ~4pt lower than this
-        // in-content title's natural position — matched exactly so the
-        // header doesn't jump when switching tabs.
-        .padding(.horizontal, 16)
-        .padding(.top, 4)
     }
 
     /// The large title, rendered in-content so it's a one-tap door to
@@ -486,9 +479,10 @@ struct TodayView: View {
     /// instead of the nav bar's `ToolbarItemGroup` they used to be —
     /// same three controls, same order, same accessibility labels;
     /// only the host and its chrome changed. Grouped in one shared
-    /// glass pill (`dayControlChrome`) to match what `ToolbarItemGroup`
-    /// rendered automatically, since plain content doesn't pick up
-    /// Liquid Glass on its own the way a real toolbar item does.
+    /// glass pill (`headerControlChrome()`, Style.swift) to match what
+    /// `ToolbarItemGroup` rendered automatically, since plain content
+    /// doesn't pick up Liquid Glass on its own the way a real toolbar
+    /// item does.
     private var dayNavigationControls: some View {
         HStack(spacing: 4) {
             Button {
@@ -522,33 +516,11 @@ struct TodayView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(Color.riceToast)
-        .modifier(DayControlChrome())
+        .headerControlChrome()
         // One dim/disable for the whole pill — matches what three
         // individually-receding toolbar buttons looked like, since they
         // always moved together anyway.
         .recedesWithSheet(activeSheet != nil)
-    }
-
-    /// The day-nav/Settings pill's own chrome: Liquid Glass on iOS 26+
-    /// (one shared capsule for all three icons, matching what
-    /// `ToolbarItemGroup` gave the same buttons for free when they
-    /// lived in the nav bar); a `.bar`-material capsule below the
-    /// floor, the same fallback shape `ScopeBar`'s own pinned inset
-    /// uses elsewhere in the app.
-    private struct DayControlChrome: ViewModifier {
-        func body(content: Content) -> some View {
-            if #available(iOS 26.0, *) {
-                content
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .glassEffect(.regular.interactive(), in: .capsule)
-            } else {
-                content
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(.bar, in: .capsule)
-            }
-        }
     }
 
     /// What the big number shows, and its budget — the two inputs the

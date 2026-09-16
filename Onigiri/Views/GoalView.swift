@@ -598,6 +598,25 @@ struct GoalView: View {
     /// out which half was the control (the user, 2026-08-08) — and
     /// split like this the pair explains itself, so the caption that
     /// used to sit under it is gone.
+    /// Cancel ↔ Save, now trailing the title in the header row instead
+    /// of the nav bar's opposite-corner `ToolbarItem`s they used to be.
+    /// Cancel appears once there's anything to back out of (edits,
+    /// valid or not, or an open keyboard) and DISCARDS: it restores the
+    /// stored goal and drops the keyboard. Keeping edits while closing
+    /// the keyboard is the scroll (interactive dismiss) or Save.
+    private var goalHeaderControls: some View {
+        HStack(spacing: 8) {
+            if hasEdits || focusedField != nil {
+                Button("Cancel") { revertEdits() }
+            }
+            Button("Save") { save() }
+                .keyboardShortcut("s", modifiers: .command)
+                .disabled(!isDirty)
+                .fontWeight(.semibold)
+        }
+        .headerControlChrome()
+    }
+
     @ViewBuilder
     private func weightBasisRow(basisLb: Double) -> some View {
         Picker("Based on", selection: Binding(
@@ -618,6 +637,28 @@ struct GoalView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // The title and its Cancel/Save controls, sharing one
+                // row (`LargeTitleHeaderRow`, Style.swift) — replacing
+                // the native large title, whose trailing toolbar
+                // buttons floated as their own glass pill above it with
+                // a visible gap on iOS 26 (the user, from-device
+                // screenshot, 2026-09-16). Cancel moves from the
+                // LEADING edge (its native `.cancellationAction` slot)
+                // to sit beside Save here — a deliberate simplification,
+                // since this row has only one trailing slot to put
+                // controls in; the two actions next to each other is
+                // still a legible, common pairing.
+                Section {
+                    LargeTitleHeaderRow {
+                        Text("Goal")
+                            .font(.largeTitle.bold())
+                            .foregroundStyle(.primary)
+                    } controls: {
+                        goalHeaderControls
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                }
                 // Mode first (the user: the Lose/Maintain choice tops the
                 // screen), then the trend chart, then the knobs.
                 Section {
@@ -702,27 +743,10 @@ struct GoalView: View {
             }
             .compactSections()
             .readableContentWidth(groupedBackground: true)
-            .navigationTitle("Goal")
+            // Blank: the title renders in-content now (the row above),
+            // matching Today/Foods/Calendar.
+            .navigationTitle("")
             .scrollDismissesKeyboard(.interactively)
-            .toolbar {
-                // Cancel ↔ Save, the same pair as every sheet — the
-                // styled principal "Done" read as belonging to nothing.
-                // Cancel appears once there's anything to back out of
-                // (edits, valid or not, or an open keyboard) and
-                // DISCARDS: it restores the stored goal and drops the
-                // keyboard. Keeping edits while closing the keyboard is
-                // the scroll (interactive dismiss) or Save.
-                if hasEdits || focusedField != nil {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { revertEdits() }
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
-                        .keyboardShortcut("s", modifiers: .command)
-                        .disabled(!isDirty)
-                }
-            }
         }
         .task {
             let refreshed = await model.loadIfStale()

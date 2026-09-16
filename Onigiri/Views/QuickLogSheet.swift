@@ -240,6 +240,36 @@ struct QuickLogSheet: View {
         let groups = searching ? searchGroups(items) : []
         NavigationStack {
             List {
+                // The title and its Cancel/Sort/Done controls, sharing
+                // one row (`LargeTitleHeaderRow`, Style.swift) —
+                // replacing the native large title entirely, which both
+                // floated its trailing buttons as their own glass pill
+                // ABOVE the title AND grew taller on pull-down overscroll
+                // (the very growth that outran the pinned scope bar,
+                // above). A title that is plain content never grows, so
+                // this removes the jank at its root instead of just
+                // treating the scope bar's symptom of it. Unconditional,
+                // like Foods: the title stays put while searching.
+                Section {
+                    LargeTitleHeaderRow {
+                        Text("Log")
+                            .font(.largeTitle.bold())
+                            .foregroundStyle(.primary)
+                            // Today's OWN "Log" section header is also
+                            // plain `Text("Log")`, and a sheet doesn't
+                            // remove the screen beneath it from the
+                            // accessibility tree — so while this sheet
+                            // is up over Today, TWO StaticTexts read
+                            // exactly "Log". An explicit identifier is
+                            // what tests can match unambiguously; label
+                            // text alone can't.
+                            .accessibilityIdentifier("logSheetTitle")
+                    } controls: {
+                        logHeaderControls
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                }
                 // The scope picker rides IN the list now, matching
                 // Foods exactly — it used to be pinned above the list
                 // via a `safeAreaInset` ("Music-style"), which fought
@@ -433,21 +463,25 @@ struct QuickLogSheet: View {
             .compactSections()
             .riceCanvas()
             .hardTopScrollEdge()
-            // LARGE title, matching Foods' header exactly — the search
-            // drawer, the doors bar, and now the title all read as one
-            // consistent header shape across the two screens (the user,
-            // 2026-09-16, from-device screenshots: the compact title
-            // this used to carry made the two screens look
-            // inconsistent even though the search field itself was
-            // already identical). This gives up the 2026-09-13/14 fix
-            // where the title dimmed alongside Cancel/Sort/Done while a
-            // child sheet was up — a native large title can't be
-            // reached by `.recedesWithSheet()` the way a custom
-            // `.principal` item could. The dimmed Cancel/Sort/Done
-            // buttons plus `recedesBehindSheet()`'s blur/scrim on the
-            // whole list still say "something else is active"; only the
-            // title text itself no longer joins in.
-            .navigationTitle("Log")
+            // Blank: the title renders in-content now (the row above,
+            // `LargeTitleHeaderRow`), matching Today/Foods/Goal/Calendar
+            // — a two-step journey. First it went from a compact
+            // `.principal` title to a NATIVE large title to match Foods'
+            // header shape (the user, 2026-09-16), which gave up the
+            // 2026-09-13/14 fix where the title dimmed alongside
+            // Cancel/Sort/Done while a child sheet was up (a native
+            // large title can't be reached by `.recedesWithSheet()` the
+            // way the custom `.principal` item could). Then the native
+            // large title turned out to grow taller on pull-down
+            // overscroll independently of the pinned scope bar beneath
+            // it, which is what actually caused the jank the user saw
+            // on video — so the title became in-content plain text
+            // instead, which never grows, closing the gap at its root
+            // rather than only fixing what it broke downstream. The
+            // dimmed Cancel/Sort/Done buttons plus `recedesBehindSheet()`'s
+            // blur/scrim on the whole list still say "something else is
+            // active."
+            .navigationTitle("")
             // The STANDARD system search field, pinned in the TOP
             // drawer now — matching Foods, via the shared
             // `librarySearch` placement (`plans/PLAN-log-sheet-layout.md`,
@@ -488,54 +522,6 @@ struct QuickLogSheet: View {
                     onScan: { activeSheet = .scanner(notice: nil) },
                     onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } }
                 )
-            }
-            .toolbar {
-                // Cancel + Done, like every other sheet in the app (the
-                // user, 2026-07-19 — this was the ONE sheet without a
-                // leading Cancel). Logging commits immediately (with its
-                // own Undo), so both buttons just dismiss: Cancel is the
-                // muscle-memory bail-out that can't accidentally log
-                // anything; Done stays the affirmative finish for
-                // multi-item lunches, in the confirm slot (top trailing,
-                // emphasized) like Settings' Done.
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        // The in-flight online search dies with the
-                        // sheet — clear() cancels its search/page tasks
-                        // instead of letting them keep the model alive
-                        // for one wasted round trip (audit, 2026-08-17;
-                        // deliberately here, never .onDisappear —
-                        // CLAUDE.md's .searchable teardown trap).
-                        onlineSearch.clear()
-                        dismiss()
-                    }
-                    .keyboardShortcut(.cancelAction)
-                    .recedesWithSheet(activeSheet != nil)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        onlineSearch.clear()
-                        dismiss()
-                    }
-                    .fontWeight(.semibold)
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .recedesWithSheet(activeSheet != nil)
-                }
-                // Sort is the item that may overflow first on iOS 27 —
-                // Done (`.confirmationAction`) already resists it, and
-                // the search drawer above means a narrow bar (large
-                // Dynamic Type) has less room than it used to
-                // (`plans/PLAN-log-sheet-layout.md`, 2026-09-15).
-                // `.visibilityPriority` attaches to the ToolbarItem
-                // itself, not the view inside it, so the branch has to
-                // repeat the ToolbarItem — `sortMenu` keeps the Menu's
-                // own body from being duplicated.
-                if #available(iOS 27.0, *) {
-                    ToolbarItem(placement: .topBarTrailing) { sortMenu }
-                        .visibilityPriority(.low)
-                } else {
-                    ToolbarItem(placement: .topBarTrailing) { sortMenu }
-                }
             }
             .task {
                 if !kindLoaded {
@@ -742,6 +728,42 @@ struct QuickLogSheet: View {
     /// leading back-swipe zone). Its own property so the iOS 27
     /// `.visibilityPriority` branch in the toolbar above doesn't have
     /// to declare this Menu twice.
+    /// Cancel/Sort/Done, now trailing the title in the header row
+    /// instead of the nav bar's opposite-corner `ToolbarItem`s they
+    /// used to be (Cancel was `.cancellationAction`, leading; Done was
+    /// `.confirmationAction`, trailing — both now sit together on the
+    /// one trailing slot the row has). Same three controls, same
+    /// keyboard shortcuts, same dismiss behavior — logging commits
+    /// immediately with its own Undo, so both buttons just dismiss.
+    /// The iOS 27 toolbar-overflow priority Sort used to carry
+    /// (`.visibilityPriority`) is gone with the toolbar itself — that
+    /// API only means something for REAL toolbar items, and plain
+    /// content has no overflow menu to sink into.
+    private var logHeaderControls: some View {
+        HStack(spacing: 8) {
+            Button("Cancel") {
+                // The in-flight online search dies with the sheet —
+                // clear() cancels its search/page tasks instead of
+                // letting them keep the model alive for one wasted
+                // round trip (audit, 2026-08-17; deliberately here,
+                // never .onDisappear — CLAUDE.md's .searchable teardown
+                // trap).
+                onlineSearch.clear()
+                dismiss()
+            }
+            .keyboardShortcut(.cancelAction)
+            sortMenu
+            Button("Done") {
+                onlineSearch.clear()
+                dismiss()
+            }
+            .fontWeight(.semibold)
+            .keyboardShortcut(.return, modifiers: .command)
+        }
+        .headerControlChrome()
+        .recedesWithSheet(activeSheet != nil)
+    }
+
     private var sortMenu: some View {
         Menu {
             Picker("Sort", selection: $sortRaw) {

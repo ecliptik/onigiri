@@ -219,6 +219,23 @@ struct LogSheetDoorBar: View {
                 // other at 14pt apart (Liquid Glass guidance). Below
                 // the floor there's no glass to coordinate, so a plain
                 // HStack does the same job.
+                //
+                // Camera LEADING, describe field trailing — tried the
+                // reverse (the user, 2026-09-16: "the camera button on
+                // log is on the right of the search") and it silently
+                // broke real barcode scanning: `testBarcodeLookupPrefillsForm`
+                // failed twice, reproducibly, with the tap on the camera
+                // never opening the scanner at all — no crash, no error,
+                // just a no-op. Swapping the two views' ORDER in this
+                // HStack was the only change between a passing and a
+                // failing run (isolated by testing each independently);
+                // the exact mechanism wasn't found (a `GlassEffectContainer`
+                // hit-testing quirk when the fixed-size circle trails a
+                // flexible-width field is the leading suspect, but
+                // unconfirmed) and wasn't worth guessing further at
+                // under time pressure. Don't reorder these two without
+                // re-running that test on a device — it will not fail
+                // loudly.
                 if #available(iOS 26.0, *) {
                     GlassEffectContainer(spacing: 14) {
                         HStack(spacing: 14) {
@@ -256,10 +273,17 @@ struct LogSheetDoorBar: View {
             Text("Scan Barcode, Label, or Menu")
                 .font(.body.weight(.semibold))
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, minHeight: Self.controlHeight)
         .modifier(DoorBarChrome(tinted: true, shape: AnyShape(RoundedRectangle(cornerRadius: 22, style: .continuous))))
     }
+
+    /// 50pt — matched against the rows above it (the AI estimate row,
+    /// the online search row, the Water row below), which all read
+    /// visibly taller than this bar's original 44pt (Apple's minimum
+    /// tap target, but too skinny sitting under full-height list rows —
+    /// the user, from-device screenshot, 2026-09-16). Both controls
+    /// share this height so their tops and bottoms line up.
+    private static let controlHeight: CGFloat = 50
 
     private var scanControl: some View {
         EntryDoorScanButton(scanBusy: scanBusy, onScan: onScan) {
@@ -273,19 +297,22 @@ struct LogSheetDoorBar: View {
                     // for the pre-26 chip fallback, matching
                     // `DoorCircleGlyph`'s own treatment.
                     Image(systemName: "camera")
-                        .font(.body.weight(.bold))
+                        .font(.title3.weight(.bold))
                         .foregroundStyle(preGlassForeground)
                 }
             }
-            .frame(width: 44, height: 44)
+            .frame(width: Self.controlHeight, height: Self.controlHeight)
         }
         .modifier(DoorBarChrome(tinted: true, shape: AnyShape(Circle())))
     }
 
     private var describeControl: some View {
         EntryDoorDescribeField(describeQuery: $describeQuery, onDescribeSubmit: onDescribeSubmit)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            // minHeight, not a fixed height: large Dynamic Type sizes
+            // need MORE than 50pt for the field's text to fit, and a
+            // fixed frame would clip it.
+            .frame(minHeight: Self.controlHeight)
             .modifier(DoorBarChrome(tinted: false, shape: AnyShape(Capsule())))
     }
 

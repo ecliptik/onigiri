@@ -858,9 +858,16 @@ final class OnigiriUITests: XCTestCase {
         }
         if tapIfExists(logShakeRow) {
             shot("portion-sheet")
-            // The Log sheet's own dismiss is "Done" now, so the only
-            // Cancel on screen is the portion sheet's.
-            app.buttons.matching(identifier: "Cancel").allElementsBoundByIndex.last?.tap()
+            // Two "Cancel" buttons exist while the portion sheet is up:
+            // the portion sheet's own (enabled) and the Log sheet's
+            // (disabled underneath it, via `recedesWithSheet` — the
+            // Log sheet's Cancel moved from nav-bar chrome into plain
+            // content on 2026-09-16, `plans/PLAN-log-sheet-layout.md`,
+            // which changed which one `.last` picked out and broke this
+            // assumption). Filter for the ENABLED one instead of
+            // guessing at tree order.
+            app.buttons.matching(identifier: "Cancel").allElementsBoundByIndex
+                .first(where: \.isEnabled)?.tap()
         }
         // Search state last: focusing the field replaces toolbar buttons,
         // so the sheet gets torn down by relaunching instead.
@@ -2704,7 +2711,16 @@ final class OnigiriUITests: XCTestCase {
         // detour above leaves the tab selection mid-bounce, and a
         // search field on some other screen would silently absorb the
         // query.
-        let logTitle = app.navigationBars["Log"]
+        // By IDENTIFIER, not `navigationBars["Log"]`: the Log sheet's
+        // title moved from a native nav-bar title into plain content
+        // (`LargeTitleHeaderRow`, `plans/PLAN-log-sheet-layout.md`,
+        // 2026-09-16 — the same header-consistency pass that gave
+        // Today/Foods/Goal/Calendar in-content titles too), so there is
+        // no more navigation bar named "Log" to find — and a bare
+        // `staticTexts["Log"]` is ambiguous too, since Today's OWN "Log"
+        // section header is also plain `Text("Log")` and stays in the
+        // tree underneath this sheet.
+        let logTitle = app.staticTexts["logSheetTitle"]
         if !logTitle.waitForExistence(timeout: 10) {
             switchTab(in: app, to: "Add")
         }
@@ -3205,7 +3221,9 @@ final class OnigiriUITests: XCTestCase {
         grantHealthAccess(in: app, timeout: 10)
 
         switchTab(in: app, to: "Add")
-        let logTitle = app.navigationBars["Log"]
+        // By IDENTIFIER, not `navigationBars["Log"]` — see the same
+        // note where this pattern first appears in this file.
+        let logTitle = app.staticTexts["logSheetTitle"]
         if !logTitle.waitForExistence(timeout: 10) { switchTab(in: app, to: "Add") }
         XCTAssertTrue(logTitle.waitForExistence(timeout: 10), "Log sheet should be up")
 
@@ -3312,7 +3330,9 @@ final class OnigiriUITests: XCTestCase {
         grantHealthAccess(in: app, timeout: 10)
 
         switchTab(in: app, to: "Add")   // the corner + pill opens the Log sheet
-        let logTitle = app.navigationBars["Log"]
+        // By IDENTIFIER, not `navigationBars["Log"]` — see the same
+        // note where this pattern first appears in this file.
+        let logTitle = app.staticTexts["logSheetTitle"]
         if !logTitle.waitForExistence(timeout: 10) { switchTab(in: app, to: "Add") }
         XCTAssertTrue(logTitle.waitForExistence(timeout: 10), "Log sheet should be up")
 

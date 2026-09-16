@@ -537,7 +537,15 @@ struct OnlineResultsSection: View {
     var onAddManually: ((String) -> Void)?
 
     var body: some View {
-        Section("Online") {
+        // No section header (the user, 2026-09-16, from-device
+        // screenshot: "just the two choices to describe with AI or
+        // search" — the AI estimate row above this carries none either,
+        // and an "Online" label between two options read as a heavier
+        // grouping than the flow actually has). Both current callers
+        // (QuickLogSheet's and FoodFormView's describe fields) want
+        // this, and are the only callers left — Foods dropped this
+        // section entirely on 2026-08-30.
+        Section {
             if search.isSearching {
                 HStack(spacing: 8) {
                     ProgressView()

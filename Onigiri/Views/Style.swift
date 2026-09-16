@@ -125,6 +125,77 @@ struct ScopeBar<Tag: Hashable>: View {
     }
 }
 
+/// A large title and its trailing controls sharing ONE row, in-content
+/// rather than native nav-bar chrome (2026-09-16, the user, from-device
+/// screenshots of Today/Foods/Goal/Calendar/the Log sheet: a native
+/// large title's trailing toolbar buttons float as their own Liquid
+/// Glass pill ABOVE the title with a visible gap — correct iOS 26
+/// behavior, not a bug, but the user wants every screen's title and
+/// controls to read as one header instead). A NATIVE large title also
+/// grows taller on pull-down overscroll, independently of anything a
+/// pinned `safeAreaInset` tracks — the Log sheet's scope-bar jank
+/// (`plans/PLAN-log-sheet-layout.md`) was that growth outrunning a
+/// fixed-position sibling; a title that is plain content instead never
+/// grows, so nothing downstream of it can desync from it either.
+/// `titleContent` sits leading (usually `Text(title).font(.largeTitle
+/// .bold())`) at a 16pt horizontal / 4pt top inset — measured against
+/// an unmodified native large title so switching tabs doesn't jump the
+/// header — baked into this row rather than repeated per call site;
+/// `controls` trails, wrapped by the caller in `headerControlChrome()`
+/// so several icons read as one shared pill, matching what a real
+/// `ToolbarItemGroup` gave them for free as nav-bar chrome.
+///
+/// `addsHorizontalPadding` defaults to `true` for hosts with no
+/// competing inset of their own (Today/Foods/Goal/the Log sheet all
+/// zero out any container padding around this row specifically so its
+/// own 16pt is the only one). Pass `false` where the host ALREADY
+/// wraps every sibling in the same padding (Calendar's outer VStack) —
+/// stacking both would indent this row twice as far as everything
+/// beside it.
+struct LargeTitleHeaderRow<TitleContent: View, Controls: View>: View {
+    // `addsHorizontalPadding` sits BEFORE the two @ViewBuilder closures
+    // in the synthesized memberwise init on purpose — Swift's multiple
+    // trailing-closure sugar (`LargeTitleHeaderRow { … } controls: { … }`)
+    // requires the closures to be the LAST parameters; moving this one
+    // after them would silently break every call site that uses it.
+    var addsHorizontalPadding: Bool = true
+    @ViewBuilder var titleContent: () -> TitleContent
+    @ViewBuilder var controls: () -> Controls
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            titleContent()
+            Spacer(minLength: 8)
+            controls()
+        }
+        .padding(.horizontal, addsHorizontalPadding ? 16 : 0)
+        .padding(.top, 4)
+    }
+}
+
+extension View {
+    /// The shared chrome for a `LargeTitleHeaderRow`'s trailing
+    /// controls: Liquid Glass on iOS 26+ (one capsule for the whole
+    /// group, interactive); a `.bar`-material capsule below the floor
+    /// (the same fallback shape `ScopeBar`'s own pinned inset uses
+    /// elsewhere). One shared definition so the four/five screens using
+    /// this pattern can't visually drift from each other.
+    @ViewBuilder
+    func headerControlChrome() -> some View {
+        if #available(iOS 26.0, *) {
+            self
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .glassEffect(.regular.interactive(), in: .capsule)
+        } else {
+            self
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.bar, in: .capsule)
+        }
+    }
+}
+
 extension View {
     /// Pins a ScopeBar above a library list, styled like the Log
     /// sheet's: horizontal padding, bar material, stays put while the

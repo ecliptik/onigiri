@@ -673,6 +673,24 @@ Each cost a debugging session.
 
 - HealthKit holds the logs (food/sodium/water samples); SwiftData holds only the
   library (foods, meals, goals). Do not add a second source of truth for logs.
+- **`TodayPrime` is Today's FIRST FRAME, not a store** (2026-09-16,
+  `plans/PLAN-today-first-paint.md`). `TodayModel` used to start at
+  literal zeros and paint them as facts — "0 kcal balance", the
+  add-a-weigh-in hint, "Nothing logged yet." — for the ~half second
+  HealthKit takes to wake on a cold launch, then jump (the user). Now
+  `TodayModel.init` reads `TodayPrimeStore` (one JSON file in Caches,
+  `TodayPrime` in the kit) and shows last night's real numbers; with no
+  valid prime the summary is `.redacted(.placeholder)` and the empty-log
+  and weigh-in texts wait. The contract that keeps the rule above true:
+  the prime is written ONLY after Health answered for TODAY with the
+  static reads in (`storePrime`), never by a log; nothing reads it but
+  `init`; `isValid` refuses another calendar day or schema, and
+  `isTrustworthy` refuses the all-zero day a sealed store returns (the
+  widget's own "poisoned last-good" lesson). Don't reach for it as a
+  data path — it is a picture of the last refresh, and the next refresh
+  replaces every field. `start()` also runs the static and day reads side
+  by side now; the day used to queue behind weight history it didn't
+  need, and the resting estimate landed alone a beat before the rest.
 - Three correlation-metadata keys, and any new log/re-log path must carry them
   ALL through or edits regress and history silently loses detail:
   - `OnigiriMealCategory` — the meal slot. Absent ⇒ inferred from time of day

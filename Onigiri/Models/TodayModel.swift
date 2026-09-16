@@ -69,9 +69,28 @@ final class TodayModel {
     /// with an opaque toast, so Today shows a recovery hint instead.
     private(set) var healthWriteDenied = false
     private(set) var selectedDate = Calendar.current.startOfDay(for: .now)
+    /// The first frame's numbers came from `TodayPrimeStore` — last
+    /// night's or this morning's real values, not yet confirmed by
+    /// Health. The view treats primed and loaded alike; only a screen
+    /// with NEITHER shows placeholders (`TodayView.awaitingFirstLoad`).
+    private(set) var isPrimed = false
+    /// Health has answered at least once this launch.
+    private(set) var hasLoaded = false
+    /// `loadStatic` has completed once — the prime is written only from
+    /// a state that has the weight, trend and resting estimate, or the
+    /// next launch would open on the add-a-weigh-in hint.
+    private var staticLoaded = false
 
     private let health = HealthKitService()
     private var started = false
+
+    init() {
+        // Before the first frame: a few KB from Caches, valid only for
+        // today. Nothing here is a fact until `refresh()` says so.
+        if let prime = TodayPrimeStore.load() {
+            apply(prime)
+        }
+    }
     /// Refreshes fire concurrently (task/appear/foreground/day swipes); only
     /// the newest may publish, or a slow old day overwrites the current one.
     private var refreshGeneration = 0
@@ -141,6 +160,55 @@ final class TodayModel {
     }
 
 
+    private func apply(_ prime: TodayPrime) {
+        summary = prime.summary
+        foodLog = prime.foodLog
+        foodByCategory = Dictionary(grouping: prime.foodLog, by: \.category)
+        waterLog = prime.waterLog
+        trackedTotals = prime.trackedTotals
+        currentWeightLb = prime.currentWeightLb
+        averageBurnKcal = prime.averageBurnKcal
+        estimatedRestingKcal = prime.estimatedRestingKcal
+        dayBurnKcal = prime.dayBurnKcal
+        weeklyTrendLb = prime.weeklyTrendLb
+        weightHistory = prime.weightHistory
+        isPrimed = true
+    }
+
+    /// Today's last-good frame for the next cold launch. Only today
+    /// (a browsed day is not tomorrow's first frame), only once Health
+    /// has actually answered AND the static reads are in, and the store
+    /// itself refuses an untrustworthy zero day (`TodayPrime`).
+    private func storePrime() {
+        guard isToday, hasLoaded, staticLoaded else { return }
+        TodayPrimeStore.store(TodayPrime(
+            day: selectedDate, summary: summary, dayBurnKcal: dayBurnKcal,
+            estimatedRestingKcal: estimatedRestingKcal, currentWeightLb: currentWeightLb,
+            averageBurnKcal: averageBurnKcal, weeklyTrendLb: weeklyTrendLb,
+            weightHistory: weightHistory, trackedTotals: trackedTotals,
+            foodLog: foodLog, waterLog: waterLog
+        ))
+    }
+
+    /// ONE burn figure for the whole screen, computed here rather than
+    /// per view body: TodayBurnFloor WRITES as it reads, and a body
+    /// re-runs on every unrelated state change. Called after the day's
+    /// read lands and again once `loadStatic` delivers the resting
+    /// estimate, since the two now run side by side on a cold launch.
+    private func rederiveDayBurn() {
+        let measured = DayBudget.dayBurn(
+            activeKcal: summary.activeBurnKcal,
+            restingKcal: summary.restingBurnKcal,
+            estimatedRestingKcal: estimatedRestingKcal
+        )
+        // Ratcheted for TODAY only: Health revising burn down
+        // (watch↔phone sample reconciliation) must not move the
+        // budget against the user mid-day, and the floor's mark is
+        // keyed to today — feeding it a browsed day's burn wrote
+        // that day's number into today's floor (2026-07-30).
+        dayBurnKcal = isToday ? TodayBurnFloor.ratcheted(measured) : measured
+    }
+
     /// One-time startup: prompt for HealthKit access if never asked, then load.
     /// The view's .task can re-fire on tab switches — only run once.
     ///
@@ -200,8 +268,22 @@ final class TodayModel {
             }
         }
         #endif
-        await loadStatic()
+        // Side by side, not in sequence: the day's five reads used to
+        // queue behind the static four, so the kcal and the log waited
+        // on weight history they don't need — and the resting estimate
+        // then landed alone, a beat before everything else, a second
+        // staged jump on the same cold launch (frame-counted on the
+        // 26.5 sim, 2026-09-16). MainActor default isolation: both run
+        // on the main actor and interleave only at their awaits.
+        async let staticLoad: () = loadStatic()
         await refresh()
+        await staticLoad
+        // The day landed first (or with a primed estimate): fold the
+        // estimate in now, then the frame is worth keeping for next time.
+        if hasLoaded {
+            rederiveDayBurn()
+            storePrime()
+        }
         #if DEBUG
         // One line per launch per day: merged vs per-source vs plain
         // samples vs correlations, with timings. Yesterday comes along
@@ -278,6 +360,7 @@ final class TodayModel {
         // access in the Health app.
         healthWriteDenied = health.sharingDenied()
         staticGate.markRefreshed()
+        staticLoaded = true
     }
 
     /// Day data only — fast enough that browsing feels immediate.
@@ -321,21 +404,10 @@ final class TodayModel {
                 loaded1 ?? slotSummaryValue(slot: 1, from: loadedSummary),
                 loaded2 ?? slotSummaryValue(slot: 2, from: loadedSummary),
             ]
-            // ONE burn figure for the whole screen, computed once here
-            // rather than per view body: TodayBurnFloor WRITES as it
-            // reads, and a body re-runs on every unrelated state change.
-            let measured = DayBudget.dayBurn(
-                activeKcal: loadedSummary.activeBurnKcal,
-                restingKcal: loadedSummary.restingBurnKcal,
-                estimatedRestingKcal: estimatedRestingKcal
-            )
-            // Ratcheted for TODAY only: Health revising burn down
-            // (watch↔phone sample reconciliation) must not move the
-            // budget against the user mid-day, and the floor's mark is
-            // keyed to today — feeding it a browsed day's burn wrote
-            // that day's number into today's floor (2026-07-30).
-            dayBurnKcal = isToday ? TodayBurnFloor.ratcheted(measured) : measured
+            rederiveDayBurn()
             refreshGate.markRefreshed()
+            hasLoaded = true
+            storePrime()
         } catch {
             guard generation == refreshGeneration else { return }
             // Transient read failures toast like every other transient

@@ -33,7 +33,7 @@ public struct LoggedMealItem: Codable, Sendable, Hashable {
 
 /// One logged eating event, as read back from HealthKit.
 /// `id` is the HealthKit correlation UUID, usable for deletion.
-public struct FoodLogEntry: Identifiable, Sendable, Equatable {
+public struct FoodLogEntry: Identifiable, Sendable, Equatable, Codable {
     public let id: UUID
     public let name: String
     public let kcal: Double

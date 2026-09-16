@@ -4,7 +4,7 @@ import Foundation
 /// Raw scale readings swing a pound or two day to day; the moving average
 /// is what goal progress and projections should use.
 public enum WeightTrend {
-    public struct Point: Sendable, Equatable {
+    public struct Point: Sendable, Equatable, Codable {
         public let date: Date
         public let weightLb: Double
 

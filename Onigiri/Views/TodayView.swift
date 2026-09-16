@@ -186,6 +186,9 @@ struct TodayView: View {
                     paneLayout {
                         VStack(spacing: Layout.screenSpacing) { summaryStack }
                             .frame(maxWidth: .infinity)
+                            // Skeleton, not zeros, until something real
+                            // is known — see `awaitingFirstLoad`.
+                            .redacted(reason: awaitingFirstLoad ? .placeholder : [])
                         VStack(spacing: Layout.screenSpacing) { logStack(scrollProxy) }
                             .frame(maxWidth: .infinity)
                     }
@@ -516,6 +519,13 @@ struct TodayView: View {
     /// shared readout needs. `dailyBudgetKcal` is nil without a usable
     /// goal, which collapses the tap cycle to balance ↔ eaten.
     private var headlineMode: HeadlineMode { HeadlineMode(rawValue: balanceStyle) ?? .remaining }
+    /// Neither a prime from the last launch nor a Health answer yet —
+    /// the one state that shows placeholders instead of numbers
+    /// (`TodayPrime`, OnigiriKit). Zeros used to paint here as real
+    /// values for HealthKit's cold-launch wake-up: "0 kcal balance",
+    /// the add-a-weigh-in hint, "Nothing logged yet.", then the jump
+    /// (the user, 2026-09-16; `plans/PLAN-today-first-paint.md`).
+    private var awaitingFirstLoad: Bool { !model.hasLoaded && !model.isPrimed }
 
     private var dailyBudgetKcal: Double? {
         goals.first.flatMap { plan(for: $0) }?.dailyBudget
@@ -884,7 +894,10 @@ struct TodayView: View {
                     showsPaceWarning: showsPaceWarning(for: goal)
                 )
                 .equatable()
-            } else {
+            } else if goals.isEmpty || !awaitingFirstLoad {
+                // The weigh-in hint waits for Health to answer (the
+                // weight basis is a Health read); the no-goal one is a
+                // SwiftData fact and may show at once.
                 Text(goals.isEmpty
                      ? "Set a weight goal in the Goal tab to track your daily deficit here."
                      : "Add a weigh-in (or set your current weight in the Goal tab) to track your daily deficit.")
@@ -1239,7 +1252,7 @@ struct TodayView: View {
             .padding(.horizontal)
             .id(ScrollTarget.logHeader)
 
-            if model.foodLog.isEmpty {
+            if model.foodLog.isEmpty, !awaitingFirstLoad {
                 Text(model.isToday ? "Nothing logged yet." : "Nothing was logged this day.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)

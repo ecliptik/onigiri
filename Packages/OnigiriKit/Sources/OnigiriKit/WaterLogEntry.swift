@@ -1,7 +1,7 @@
 import Foundation
 
 /// One logged water serving, as read back from HealthKit.
-public struct WaterLogEntry: Identifiable, Sendable, Equatable {
+public struct WaterLogEntry: Identifiable, Sendable, Equatable, Codable {
     public let id: UUID
     public let oz: Double
     public let date: Date

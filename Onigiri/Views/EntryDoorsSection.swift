@@ -185,20 +185,23 @@ struct EntryDoorDescribeField: View {
     }
 }
 
-/// The Log sheet's floating door bar (`plans/PLAN-log-sheet-layout.md`,
-/// 2026-09-15): the camera and describe door, pulled OFF the list and
-/// into the functional layer so they read as distinct chrome rather
-/// than another row — Liquid Glass on iOS 26+, camera tinted (the app's
-/// one primary action per the HIG's "tint one, not everything" rule),
-/// describe plain. Shares `EntryDoorScanButton`/`EntryDoorDescribeField`
-/// with `EntryDoorsSection` (the Add Food form's in-list chip) so the
-/// glyph, the label, and the accessibility contract can't drift between
-/// the two homes — only the surrounding chrome differs.
+/// The Log sheet's camera + describe door (`plans/PLAN-log-sheet-layout.md`,
+/// 2026-09-15): pulled OFF the list-row chip `EntryDoorsSection` still
+/// uses in the Add Food form, into its own glass-chrome pill — Liquid
+/// Glass on iOS 26+, camera tinted (the app's one primary action per
+/// the HIG's "tint one, not everything" rule), describe plain. Shares
+/// `EntryDoorScanButton`/`EntryDoorDescribeField` with `EntryDoorsSection`
+/// so the glyph, the label, and the accessibility contract can't drift
+/// between the two homes — only the surrounding chrome differs.
 ///
-/// Hosted through `View.entryDoorBar(isHidden:bar:)` (Style.swift),
-/// never presented directly — that modifier is what keeps the bar's
-/// container attached while search is active, emptying its content
-/// instead of dropping it (the `scopeBar(isHidden:)` discipline).
+/// Rendered as the trailing row in QuickLogSheet's List, hidden while
+/// searching (an ordinary `if !searching` around the `Section`, not a
+/// pinned container) — it used to be pinned to the screen's bottom
+/// edge via a `safeAreaBar`, which left a visible gap above it on a
+/// short list (Favorites is often just two or three rows); as a
+/// trailing row it now sits right after whatever content precedes it,
+/// at the cost of no longer being reachable without scrolling on a
+/// long one (the user, 2026-09-16, chose that trade explicitly).
 struct LogSheetDoorBar: View {
     var scanBusy = false
     @Binding var describeQuery: String

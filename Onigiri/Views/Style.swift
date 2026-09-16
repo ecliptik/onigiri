@@ -256,38 +256,16 @@ extension View {
         }
     }
 
-    /// The Log sheet's floating door bar container
-    /// (`plans/PLAN-log-sheet-layout.md`): pinned bottom chrome that
-    /// stays attached at all times — `isHidden` empties the bar's
-    /// CONTENT rather than dropping the modifier, the same discipline
-    /// `scopeBar(isHidden:)` above already documents (wrapping the whole
-    /// call in an `if` would re-create the List underneath it mid-
-    /// search). `safeAreaBar` (iOS 26+) gives the system's own
-    /// scroll-edge blur and insets the list so its last rows scroll
-    /// clear of the bar, which retires the flow test's manual ~180pt
-    /// bottom-zone scroll allowance; iOS 18 falls back to a plain
-    /// `.bar`-material inset, matching the scope bar's own floor
-    /// treatment.
-    @ViewBuilder
-    func entryDoorBar<Bar: View>(
-        isHidden: Bool, @ViewBuilder bar: @escaping () -> Bar
-    ) -> some View {
-        if #available(iOS 26.0, *) {
-            self.safeAreaBar(edge: .bottom) {
-                if !isHidden { bar() }
-            }
-        } else {
-            self.safeAreaInset(edge: .bottom, spacing: 0) {
-                if !isHidden {
-                    bar()
-                        .padding(.horizontal)
-                        .padding(.bottom, 8)
-                        .padding(.top, 6)
-                        .background(.bar)
-                }
-            }
-        }
-    }
+    // `entryDoorBar` (a `safeAreaBar`-pinned container for
+    // `LogSheetDoorBar`) lived here from 2026-09-15 to -16. Retired: the
+    // user found it left a large empty gap above the door bar whenever
+    // the list was short (Favorites is often just two or three rows) —
+    // a `safeAreaBar`/`safeAreaInset` pins to the SCREEN's edge
+    // regardless of how much content precedes it. `LogSheetDoorBar` is
+    // a plain trailing List row in QuickLogSheet now, so it sits right
+    // after whatever content is actually there. Cost: on a long list it
+    // no longer stays reachable without scrolling to the bottom, which
+    // the user accepted explicitly in exchange for closing the gap.
 }
 
 extension View {

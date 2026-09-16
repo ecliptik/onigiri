@@ -459,6 +459,27 @@ struct QuickLogSheet: View {
                         }
                     }
                 }
+                // The camera/describe doors, now the LAST row instead
+                // of a bar pinned to the screen's bottom edge (the
+                // user, 2026-09-16: pinning via `safeAreaBar` left a
+                // big empty gap above it whenever the list was short —
+                // Favorites is often just two or three rows). This
+                // trades away "always reachable without scrolling on a
+                // long list" for "never floats over empty space on a
+                // short one." Hidden while searching, same as every
+                // other door-adjacent control on this screen.
+                if !searching {
+                    Section {
+                        LogSheetDoorBar(
+                            scanBusy: isLookingUpBarcode,
+                            describeQuery: $describeQuery,
+                            onScan: { activeSheet = .scanner(notice: nil) },
+                            onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } }
+                        )
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                    }
+                }
             }
             .compactSections()
             .riceCanvas()
@@ -510,19 +531,6 @@ struct QuickLogSheet: View {
             // sheet stopped fighting that state entirely, matching
             // Foods.
             .librarySearch(text: $searchText, prompt: "Foods and Meals")
-            // The floating door bar: camera + describe, hidden on the
-            // same `searching` predicate the list already uses. Sits
-            // below the list, above the home indicator; empties its
-            // content rather than dropping the modifier (see
-            // `entryDoorBar`'s own doc comment for why).
-            .entryDoorBar(isHidden: searching) {
-                LogSheetDoorBar(
-                    scanBusy: isLookingUpBarcode,
-                    describeQuery: $describeQuery,
-                    onScan: { activeSheet = .scanner(notice: nil) },
-                    onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } }
-                )
-            }
             .task {
                 if !kindLoaded {
                     kindLoaded = true

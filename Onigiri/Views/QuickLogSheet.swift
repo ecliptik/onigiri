@@ -240,6 +240,37 @@ struct QuickLogSheet: View {
         let groups = searching ? searchGroups(items) : []
         NavigationStack {
             List {
+                // The scope picker rides IN the list now, matching
+                // Foods exactly — it used to be pinned above the list
+                // via a `safeAreaInset` ("Music-style"), which fought
+                // the large title's own collapse/expand animation once
+                // this sheet adopted one: pulling down desynced the
+                // pinned pills from the native title+search chrome
+                // above them, both visibly sliding apart mid-gesture
+                // (the user, from-device screen recording, 2026-09-16).
+                // Foods never pins its own scope row for exactly this
+                // reason — a `safeAreaInset` is measured against the
+                // LIST's frame, not the nav bar's, and a large title
+                // grows past its resting height during overscroll in a
+                // way only native chrome (or an ordinary scrolling row)
+                // tracks correctly. Hidden while searching, same as
+                // Foods: a query crosses every scope, so no segment can
+                // be the true one.
+                if !searching {
+                    Section {
+                        ScopeBar(
+                            options: [
+                                // Favorites leads (the user), matching Foods.
+                                ("Favorites", QuickActions.QuickLogKind.favorites),
+                                ("Foods", .foods),
+                                ("Meals", .meals),
+                            ],
+                            selection: $kind
+                        )
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                    }
+                }
                 // The camera/describe doors used to lead this list as a
                 // row (the user: same affordance as Foods' scan row).
                 // They now float in a bar at the bottom of the sheet
@@ -417,22 +448,6 @@ struct QuickLogSheet: View {
             // whole list still say "something else is active"; only the
             // title text itself no longer joins in.
             .navigationTitle("Log")
-            // Music-style: the kind pills pinned on top of the results,
-            // not scrolled away with them. Favorites replaced "All"; the
-            // mixed view earned its keep only as a favorites shelf.
-            .scopeBar(
-                options: [
-                    // Favorites leads (the user), matching Foods.
-                    ("Favorites", QuickActions.QuickLogKind.favorites),
-                    ("Foods", .foods),
-                    ("Meals", .meals),
-                ],
-                selection: $kind,
-                // A query crosses every scope, so no segment can be the
-                // true one — the bar steps aside and the group headers
-                // say what you're looking at.
-                isHidden: searching
-            )
             // The STANDARD system search field, pinned in the TOP
             // drawer now — matching Foods, via the shared
             // `librarySearch` placement (`plans/PLAN-log-sheet-layout.md`,

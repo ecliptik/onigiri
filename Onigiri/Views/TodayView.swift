@@ -169,7 +169,7 @@ struct TodayView: View {
                     // door to the day summary. Only captions are tappable —
                     // a link around the whole headline swallowed half of
                     // the day-paging swipes.
-                    dayTitleButton
+                    dayHeaderRow
                         .id(ScrollTarget.dayTop)
                     // iPad/regular width: the summary beside the log,
                     // not a phone column stretched across the canvas.
@@ -205,40 +205,6 @@ struct TodayView: View {
             // itself stays (day chevrons, gear); its title is empty.
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                // Nothing lives on the leading edge: the left ~20pt is iOS's
-                // back-swipe zone, and a control there (the old previous-day
-                // chevron) had its taps intermittently stolen by that gesture
-                // — the button highlighted but the action never fired ("takes
-                // 3 taps", the user). Today is this stack's root, so back-swipe
-                // does nothing here anyway. All controls sit on the trailing
-                // edge, which has no such gesture; Settings keeps its top-right
-                // corner and the day chevrons pair up just to its left.
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button {
-                        Task { await model.goToPreviousDay() }
-                    } label: {
-                        Image(systemName: "chevron.left")
-                    }
-                    .accessibilityLabel("Previous day")
-                    .recedesWithSheet(activeSheet != nil)
-                    Button {
-                        Task { await model.goToNextDay() }
-                    } label: {
-                        Image(systemName: "chevron.right")
-                    }
-                    .disabled(model.isToday)
-                    .accessibilityLabel("Next day")
-                    .recedesWithSheet(activeSheet != nil)
-                    Button {
-                        activeSheet = .settings
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .accessibilityLabel("Settings")
-                    .recedesWithSheet(activeSheet != nil)
-                }
-            }
             .navigationDestination(for: Route.self) { route in
                 switch route {
                 case .nutrition: DayNutritionView(
@@ -458,6 +424,33 @@ struct TodayView: View {
         return model.selectedDate.formatted(.dateTime.weekday(.abbreviated).month(.wide).day())
     }
 
+    /// The day heading and its day-nav/Settings controls, sharing ONE
+    /// row (the user, 2026-09-16, from-device screenshot: the chevrons
+    /// and gear used to float as their own glass pill in the nav bar,
+    /// sitting ABOVE this in-content title with a visible gap — reading
+    /// as two disconnected header rows instead of one). Every other
+    /// large-title tab (Foods, Goal, Calendar) puts its title and its
+    /// trailing bar buttons at the same visual height for free, because
+    /// both live in the SAME native nav-bar chrome; Today's title is
+    /// deliberately custom content instead (see `dayTitleButton`'s own
+    /// doc comment for why), so getting the same result here means
+    /// putting the controls in the row by hand and giving them the
+    /// matching glass chrome manually (`dayControlChrome`) — the nav
+    /// bar itself now carries no toolbar items at all.
+    private var dayHeaderRow: some View {
+        HStack(alignment: .center, spacing: 8) {
+            dayTitleButton
+            Spacer(minLength: 8)
+            dayNavigationControls
+        }
+        // Measured against Foods/Goal screenshots: the system large
+        // title sits at a 16pt leading inset and ~4pt lower than this
+        // in-content title's natural position — matched exactly so the
+        // header doesn't jump when switching tabs.
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
+    }
+
     /// The large title, rendered in-content so it's a one-tap door to
     /// the month grid (the system title menu forced a "Jump to date…"
     /// intermediate tap).
@@ -469,6 +462,13 @@ struct TodayView: View {
                 Text(dayTitle)
                     .font(.largeTitle.bold())
                     .foregroundStyle(.primary)
+                    // The row now has real competition for width (the
+                    // day-nav/Settings pill trailing it) — long day
+                    // titles ("Wednesday, September 16") need to give
+                    // ground rather than push the pill off-screen or
+                    // wrap awkwardly.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                 // A calendar glyph, not a chevron: it SAYS what the tap
                 // opens (the month grid) instead of just "something
                 // drops down" (the user).
@@ -478,15 +478,77 @@ struct TodayView: View {
             }
         }
         .buttonStyle(.plain)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        // Measured against Foods/Goal screenshots: the system large
-        // title sits at a 16pt leading inset and ~4pt lower than this
-        // in-content title's natural position — matched exactly so the
-        // header doesn't jump when switching tabs.
-        .padding(.horizontal, 16)
-        .padding(.top, 4)
         .accessibilityLabel("\(dayTitle). Jump to date")
         .accessibilityIdentifier("dayTitleButton")
+    }
+
+    /// Day-paging + Settings, trailing the title in `dayHeaderRow` now
+    /// instead of the nav bar's `ToolbarItemGroup` they used to be —
+    /// same three controls, same order, same accessibility labels;
+    /// only the host and its chrome changed. Grouped in one shared
+    /// glass pill (`dayControlChrome`) to match what `ToolbarItemGroup`
+    /// rendered automatically, since plain content doesn't pick up
+    /// Liquid Glass on its own the way a real toolbar item does.
+    private var dayNavigationControls: some View {
+        HStack(spacing: 4) {
+            Button {
+                Task { await model.goToPreviousDay() }
+            } label: {
+                Image(systemName: "chevron.left")
+                    .frame(minWidth: 32, minHeight: 32)
+            }
+            .accessibilityLabel("Previous day")
+            Button {
+                Task { await model.goToNextDay() }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .frame(minWidth: 32, minHeight: 32)
+            }
+            .disabled(model.isToday)
+            .accessibilityLabel("Next day")
+            Button {
+                activeSheet = .settings
+            } label: {
+                Image(systemName: "gearshape")
+                    .frame(minWidth: 32, minHeight: 32)
+            }
+            .accessibilityLabel("Settings")
+            // A toolbar item's icon picks up an accessibility
+            // identifier matching its SF Symbol name automatically
+            // (via UIKit bridging); a plain content Button does not —
+            // stated explicitly since one test finds this button by
+            // that identifier rather than its label.
+            .accessibilityIdentifier("gearshape")
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.riceToast)
+        .modifier(DayControlChrome())
+        // One dim/disable for the whole pill — matches what three
+        // individually-receding toolbar buttons looked like, since they
+        // always moved together anyway.
+        .recedesWithSheet(activeSheet != nil)
+    }
+
+    /// The day-nav/Settings pill's own chrome: Liquid Glass on iOS 26+
+    /// (one shared capsule for all three icons, matching what
+    /// `ToolbarItemGroup` gave the same buttons for free when they
+    /// lived in the nav bar); a `.bar`-material capsule below the
+    /// floor, the same fallback shape `ScopeBar`'s own pinned inset
+    /// uses elsewhere in the app.
+    private struct DayControlChrome: ViewModifier {
+        func body(content: Content) -> some View {
+            if #available(iOS 26.0, *) {
+                content
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+            } else {
+                content
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.bar, in: .capsule)
+            }
+        }
     }
 
     /// What the big number shows, and its budget — the two inputs the

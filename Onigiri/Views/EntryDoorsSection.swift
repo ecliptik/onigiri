@@ -81,14 +81,19 @@ struct EntryDoorDescribeField: View {
                     .foregroundStyle(Color.riceToast)
                     .font(.callout)
             }
-            // An explicit prompt at `.secondary`: the default placeholder
-            // is the tertiary label color, which on the bar's glass
-            // capsule over the dark rice canvas read too faint (the user,
-            // 2026-09-16: "a bit too light to read on the Dark theme").
-            // Still visibly a placeholder — typed text is primary.
+            // An explicit prompt in a CONCRETE color, `Color(.secondaryLabel)`,
+            // not the hierarchical `.secondary`. The default placeholder
+            // (tertiary) read too faint on the bar's glass capsule over
+            // the dark canvas (the user, 2026-09-16: "a bit too light to
+            // read on the Dark theme"), and `.secondary` still did on the
+            // PHONE while looking fine on the simulator: inside
+            // `glassEffect` a hierarchical style is rendered vibrant —
+            // blended with the backdrop — and a dark backdrop dims it
+            // again; a concrete Color is drawn as-is. Typed text stays
+            // primary, so this still reads as a placeholder.
             TextField(
                 "Describe food or meal", text: $describeQuery,
-                prompt: Text("Describe food or meal").foregroundStyle(.secondary)
+                prompt: Text("Describe food or meal").foregroundStyle(Color(.secondaryLabel))
             )
                 .accessibilityLabel("Describe food or meal")
                 .accessibilityIdentifier(Self.accessibilityID)

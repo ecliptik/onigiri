@@ -598,25 +598,6 @@ struct GoalView: View {
     /// out which half was the control (the user, 2026-08-08) — and
     /// split like this the pair explains itself, so the caption that
     /// used to sit under it is gone.
-    /// Cancel ↔ Save, now trailing the title in the header row instead
-    /// of the nav bar's opposite-corner `ToolbarItem`s they used to be.
-    /// Cancel appears once there's anything to back out of (edits,
-    /// valid or not, or an open keyboard) and DISCARDS: it restores the
-    /// stored goal and drops the keyboard. Keeping edits while closing
-    /// the keyboard is the scroll (interactive dismiss) or Save.
-    private var goalHeaderControls: some View {
-        HStack(spacing: 8) {
-            if hasEdits || focusedField != nil {
-                Button("Cancel") { revertEdits() }
-            }
-            Button("Save") { save() }
-                .keyboardShortcut("s", modifiers: .command)
-                .disabled(!isDirty)
-                .fontWeight(.semibold)
-        }
-        .headerControlChrome()
-    }
-
     @ViewBuilder
     private func weightBasisRow(basisLb: Double) -> some View {
         Picker("Based on", selection: Binding(
@@ -637,43 +618,6 @@ struct GoalView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // The title and its Cancel/Save controls, sharing one
-                // row (`LargeTitleHeaderRow`, Style.swift) — replacing
-                // the native large title, whose trailing toolbar
-                // buttons floated as their own glass pill above it with
-                // a visible gap on iOS 26 (the user, from-device
-                // screenshot, 2026-09-16). Cancel moves from the
-                // LEADING edge (its native `.cancellationAction` slot)
-                // to sit beside Save here — a deliberate simplification,
-                // since this row has only one trailing slot to put
-                // controls in; the two actions next to each other is
-                // still a legible, common pairing.
-                Section {
-                    LargeTitleHeaderRow {
-                        Text("Goal")
-                            .font(.largeTitle.bold())
-                            .foregroundStyle(.primary)
-                    } controls: {
-                        goalHeaderControls
-                    }
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
-                    // A `Form` carries its own fixed top inset before
-                    // the first section — the exact gap a native large
-                    // title never had to fight, since that lived in
-                    // separate nav-bar chrome (the user, from-device
-                    // screenshot, 2026-09-16: Goal's in-content title
-                    // sat visibly lower than Today's and Calendar's,
-                    // plain ScrollViews with no such inset). A negative
-                    // offset on just THIS row cancels it — measured
-                    // against those two screenshots — without touching
-                    // `.contentMargins` on the whole Form, which changes
-                    // the scroll view's own geometry and broke the QA
-                    // walkthrough's hardcoded swipe-count return to the
-                    // top for the weight field (reproduced twice; this
-                    // row-local fix doesn't move that geometry at all).
-                    .padding(.top, -32)
-                }
                 // Mode first (the user: the Lose/Maintain choice tops the
                 // screen), then the trend chart, then the knobs.
                 Section {
@@ -758,10 +702,41 @@ struct GoalView: View {
             }
             .compactSections()
             .readableContentWidth(groupedBackground: true)
-            // Blank: the title renders in-content now (the row above),
-            // matching Today/Foods/Calendar.
-            .navigationTitle("")
+            // The one header shape (`inlineLargeTitle`, Style.swift):
+            // "Goal" and its Cancel/Save on one row. `flushTopContent`
+            // is the Form half of it — without it this mode adds ~35pt
+            // of top inset that Today (a ScrollView) never gets, which
+            // is exactly the misalignment the in-content title tried
+            // to paper over with a negative offset.
+            .inlineLargeTitle("Goal")
+            .flushTopContent()
             .scrollDismissesKeyboard(.interactively)
+            .toolbar {
+                // Cancel ↔ Save, the same pair as every sheet. Cancel
+                // appears once there's anything to back out of (edits,
+                // valid or not, or an open keyboard) and DISCARDS: it
+                // restores the stored goal and drops the keyboard.
+                // Keeping edits while closing the keyboard is the scroll
+                // (interactive dismiss) or Save. TRAILING, not the
+                // `.cancellationAction` slot it held before 2026-09-16:
+                // under `.inlineLarge` a leading item lands on a row
+                // above the title. Its own pill, split from Save by the
+                // spacer (iOS 26; plain text buttons below the floor),
+                // so it still reads as the opposite of Save.
+                if hasEdits || focusedField != nil {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Cancel") { revertEdits() }
+                    }
+                    if #available(iOS 26.0, *) {
+                        ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .keyboardShortcut("s", modifiers: .command)
+                        .disabled(!isDirty)
+                }
+            }
         }
         .task {
             let refreshed = await model.loadIfStale()

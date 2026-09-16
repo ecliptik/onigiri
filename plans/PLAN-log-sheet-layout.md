@@ -1,6 +1,8 @@
 # PLAN — Log sheet: search on top, the doors floating at the bottom (2026-09-15)
 
-> **DECIDED, not yet built** (2026-09-15, the user, via AskUserQuestion):
+> **Built 2026-09-15. The HEADER shape was revised the next day — read
+> the addendum at the end before trusting anything below about titles or
+> toolbars.** Decided 2026-09-15 (the user, via AskUserQuestion):
 > floating glass door bar (Option A) · camera tinted, describe plain ·
 > all five search fields move to the top drawer · the Add Food form keeps
 > its in-form doors section, sharing controls with the bar rather than
@@ -311,3 +313,110 @@ rendering, Axiom says confirm against the SDK first.
    but not a fix in (the tab-bar lesson).
 7. Media: the Log sheet is in `docs/media/add-food*.mp4` and the site
    stills, both appearances. Recapture after the user signs off, not before.
+
+---
+
+## Addendum — the in-content detour, and the header shape that stuck (2026-09-16)
+
+Parts 1 and 2 shipped on 2026-09-15 as planned. The following day turned
+into a header-consistency pass that went wrong in a way worth recording,
+because the wrong turn looked right on the first screen it was tried on.
+
+### What went wrong
+
+- The user, from device: on iOS 26 a large title's trailing toolbar items
+  float in their own glass pill ABOVE the title, with a visible gap. They
+  wanted title and controls on ONE row, on every screen.
+- The fix built that day replaced every native title with an in-content
+  row (`LargeTitleHeaderRow`: `Text(title).font(.largeTitle.bold())` plus
+  the controls in a hand-drawn glass capsule, as the first List/Form
+  section or the top of the ScrollView). It looked right on Today and
+  Calendar — plain ScrollViews — and was then applied to Foods, Goal and
+  the Log sheet.
+- On the two screens with a search field the system drawer is NAV-BAR
+  chrome, so it rendered ABOVE the in-content row: search field, then an
+  empty 44pt nav-bar band above it, then the title. Goal's row sat ~22pt
+  lower than Today's (a Form's own top inset; a `-32pt` offset was added
+  and did not fully cancel it). List and Form row insets pushed the Foods
+  and Goal titles 16pt further right than Today's and Calendar's. Four
+  screens, four offset hacks, still misaligned — and the door bar, moved
+  into the list as its last row the same day to close the empty canvas a
+  pinned bar leaves under a short list, was then hidden until the list
+  was scrolled to its end on any real library.
+- The user, next morning: "horrible UI/UX regression."
+
+### What was measured before choosing again
+
+A throwaway probe app (five tabs shaped like the app's, a sheet shaped
+like the Log sheet, placeholder rows), run on the 27.0, 26.5 and 18.6
+simulators, one title strategy per launch argument:
+
+| Strategy | Result |
+|---|---|
+| `.large` + `.topBarTrailing` | The pill-above-the-title look the user rejected. On iOS 27 with an always-visible drawer the large title is not drawn at all — it collapses to an inline one (26.5 still draws it). |
+| `ToolbarItemPlacement.largeTitle` (iOS 26) | REPLACES the title with the item's content, centered. Suppressed entirely whenever the search drawer is present. In the sheet it took Cancel and Done down with it — the header was just "Log", inline, no buttons. Not an option. |
+| `.toolbarTitleDisplayMode(.inlineLarge)` (iOS 17+) | Title large at the left, trailing items on the SAME row in a system pill, search drawer directly beneath. Same top-left corner on every container. Collapses to a compact title on scroll with the pill still visible. Identical on 26.5 and 27.0; the same layout on 18.6. |
+| `.inlineLarge` + a `.principal` item | The principal content rendered in the compact row above AND the native title still rendered below it — duplicated, not replaced. So a native title cannot be a button. |
+
+Four behaviours of `.inlineLarge` that shaped the build:
+
+- A LEADING toolbar item is pushed onto a row above the title (a tab
+  root) or into an overflow menu (a sheet). So the Log sheet's Cancel is
+  trailing, split from Sort + Done by `ToolbarSpacer(.fixed)` into its
+  own pill; Goal's conditional Cancel likewise.
+- A List or Form host picks up ~35pt of extra top inset under this mode
+  that a ScrollView host does not (Foods' scope row sat ~57pt under the
+  search field against ~22pt with a plain `.large` title).
+  `.contentMargins(.top, 0, for: .scrollContent)` removes it — that is
+  `flushTopContent()`. It changes the Form's scroll geometry, which is
+  what broke the QA walkthrough's fixed eight-swipe return to the top on
+  Goal the first time it was tried; the walkthrough scrolls until the
+  field is hittable now.
+- A native title never shrinks and never wraps: it truncates. On 26/27
+  it truncates at the pill; on 18.6 a long title runs UNDER the trailing
+  items instead (the probe's "Tue, September 15" collided with a
+  three-icon pill). This is what sized Today's and Calendar's titles
+  (decisions below).
+- On the 26.5 simulator an `.inlineLarge` title's ACCESSIBILITY LABEL
+  sticks on its first value when `.navigationTitle` changes — "Today"
+  while yesterday is on screen. The probe reproduced it in that mode
+  alone (`.inline` updates, and 27.0 updates in every mode), so it is a
+  platform bug, fixed on the OS the phone runs. It means no UI test may
+  read the day off the title text: `testTodayTabReturnsToTodaysDate`
+  reads the Next-day chevron's enabled state instead, and
+  `dayHeading(in:)` exists for the title's FRAME only.
+
+While search is focused the title row hides and the drawer shows the
+system close control — the same thing Foods did before this plan, and
+what the 2026-09-15 note about `isPresented` describes from the other
+side. The pinned door bar rides above the keyboard.
+
+### Decisions (the user, 2026-09-16, with the probe screenshots in hand)
+
+- Every screen: native `.inlineLarge` title via `inlineLargeTitle` in
+  Style.swift. `LargeTitleHeaderRow`, `headerControlChrome`,
+  `headerCircleChrome`, Goal's `-32pt` offset and the Log sheet's
+  `logSheetTitle` identifier are gone.
+- Door bar: PINNED (`entryDoorBar`, back from 48633bf), over the empty
+  canvas a short list leaves. Chosen with the trailing-row version in
+  hand.
+- Today: fully native. Jump to date is the calendar button leading the
+  trailing pill, beside the day chevrons and Settings; the tappable
+  title is gone. That FOUR-item pill leaves the title ~150pt on a 402pt
+  phone, and a native title cannot shrink to fit: "Yesterday" rendered
+  as "Yesterd…" in the first build and "Tue, Sep 15" would too. Offered
+  the choice — dates only, a three-item pill with Jump to date in a
+  title menu, or a custom in-content header for Today alone — the user
+  kept the fourth pill item: the title reads "Today" or a bare date
+  ("Sep 14"). Net change from before this whole plan: the controls stay
+  reachable when scrolled, where the in-content row scrolled away.
+- Calendar: "Sep 2026", not "September 2026" — the wide month truncated
+  beside the chevron pill ("September 20…"). The pushed month detail
+  keeps the wide form; its title is inline and has the whole bar.
+- Log sheet: large "Log" at the left, a Cancel pill and a Sort + Done
+  pill at the right, search beneath — Foods' header, natively.
+- Foods: Filter and Sort stay two separate circles (the user's Apple
+  Music reference), via the spacer.
+
+`testHeaderShots` now asserts that the four tab titles share a top-left
+corner, so the next misalignment is red instead of a screenshot.

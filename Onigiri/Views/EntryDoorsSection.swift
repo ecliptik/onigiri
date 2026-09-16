@@ -194,14 +194,12 @@ struct EntryDoorDescribeField: View {
 /// so the glyph, the label, and the accessibility contract can't drift
 /// between the two homes — only the surrounding chrome differs.
 ///
-/// Rendered as the trailing row in QuickLogSheet's List, hidden while
-/// searching (an ordinary `if !searching` around the `Section`, not a
-/// pinned container) — it used to be pinned to the screen's bottom
-/// edge via a `safeAreaBar`, which left a visible gap above it on a
-/// short list (Favorites is often just two or three rows); as a
-/// trailing row it now sits right after whatever content precedes it,
-/// at the cost of no longer being reachable without scrolling on a
-/// long one (the user, 2026-09-16, chose that trade explicitly).
+/// PINNED below QuickLogSheet's List via `entryDoorBar` (Style.swift),
+/// hidden while searching. It spent part of 2026-09-16 as the list's
+/// trailing row instead, to close the empty canvas a short Favorites
+/// list leaves above a pinned bar — and was then unreachable on any
+/// real library without scrolling to the very end. The user chose
+/// pinned with both in hand; `entryDoorBar`'s doc comment has the rest.
 struct LogSheetDoorBar: View {
     var scanBusy = false
     @Binding var describeQuery: String

@@ -6,7 +6,7 @@ import OnigiriKit
 /// The library: saved foods and one-tap meals. Rows tap to edit; the +
 /// capsule logs (foods through the portion sheet, meals one-tap).
 /// Structured like the Log sheet (1.8.1): a Foods/Meals/Favorites scope
-/// bar on top, search at the bottom on iOS 26, filterable by category,
+/// bar on top, search in the top drawer, filterable by category,
 /// favorites floating to the top. The entry doors that used to sit
 /// under the scope bar moved out entirely (2026-08-02) — see the note
 /// in `body`.
@@ -209,31 +209,6 @@ struct FoodsView: View {
             : []
         NavigationStack {
             List {
-                // The title and its Filter/Sort controls, sharing one
-                // row (`LargeTitleHeaderRow`, Style.swift) — replacing
-                // the native large title, whose trailing toolbar
-                // buttons floated as their own glass pill above it with
-                // a visible gap on iOS 26 (the user, from-device
-                // screenshot, 2026-09-16). A list ROW, matching the
-                // scope picker just below it, and for the same original
-                // reason that row isn't a pinned `safeAreaInset`: a top
-                // inset suppresses large-title rendering (see the scope
-                // picker's own comment) — moot now since there's no
-                // native large title left to suppress, but the row
-                // approach was already proven safe here. Unconditional,
-                // unlike the scope picker: the title stays put while
-                // searching.
-                Section {
-                    LargeTitleHeaderRow {
-                        Text("Foods")
-                            .font(.largeTitle.bold())
-                            .foregroundStyle(.primary)
-                    } controls: {
-                        foodsHeaderControls
-                    }
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
-                }
                 // The scope picker rides IN the list, not a pinned
                 // safeAreaInset: any top inset suppresses large-title
                 // rendering (screenshot-verified twice — blank title
@@ -333,11 +308,31 @@ struct FoodsView: View {
             .compactSections()
             .hardTopScrollEdge()
             .readableContentWidth(groupedBackground: true)
-            // Blank: the title now renders in-content (the row above),
-            // matching Today. VoiceOver's tab-switch announcement reads
-            // the Tab's own label ("Foods"), not this string — the same
-            // reasoning Today's already-shipped blank title relies on.
-            .navigationTitle("")
+            // The one header shape (`inlineLargeTitle`, Style.swift):
+            // "Foods" and its Filter/Sort on one row, the search drawer
+            // directly beneath. `flushTopContent` is the List half of it.
+            .inlineLargeTitle("Foods")
+            .flushTopContent()
+            .toolbar {
+                // Filter and Sort as two SEPARATE circles, not one fused
+                // pill — Apple Music's Search tab was the user's reference
+                // (2026-09-16): its trailing control is one clean isolated
+                // circle. Adjacent toolbar items share a pill by default
+                // on iOS 26; the fixed spacer is what splits them (below
+                // the floor they're plain icons and it's a no-op). Both
+                // trailing: the leading ~20pt is iOS's back-swipe zone,
+                // which intermittently steals taps from a control placed
+                // there (v2.5.10).
+                ToolbarItem(placement: .topBarTrailing) {
+                    filterMenu
+                }
+                if #available(iOS 26.0, *) {
+                    ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    sortMenu
+                }
+            }
             .fileImporter(isPresented: $showLibraryImporter, allowedContentTypes: [.json]) { result in
                 ToastCenter.shared.show(LibraryTransfer.handlePickedFile(result, context: context))
             }
@@ -728,38 +723,9 @@ struct FoodsView: View {
         }
     }
 
-    /// Filter + sort, now trailing the title in the header row instead
-    /// of the nav bar's `ToolbarItemGroup` they used to be — same two
-    /// controls, same order, same accessibility labels; only the host
-    /// and its chrome changed. One shared `recedesWithSheet` for the
-    /// pair now (they always moved together as a `ToolbarItemGroup`
-    /// too), matching Today's day-nav pill.
-    /// Filter and Sort each get their OWN circle now, not one shared
-    /// pill (`headerCircleChrome()`, Style.swift) — matching Apple
-    /// Music's Search tab, whose own trailing control is a single clean
-    /// isolated circle rather than a merged group (the user, holding up
-    /// that screen as the reference, 2026-09-16). They're two distinct
-    /// actions, so two distinct circles reads truer to that than one
-    /// pill fusing them together the way Today's day-nav trio (one
-    /// genuinely single control cluster) still does.
-    private var foodsHeaderControls: some View {
-        Group {
-            // GlassEffectContainer: glass can't sample glass, and two
-            // separate circles this close together fight each other
-            // without one (Liquid Glass guidance) — the same reason
-            // `LogSheetDoorBar` needs it. No glass to coordinate below
-            // the floor, so a plain HStack does the same job there.
-            if #available(iOS 26.0, *) {
-                GlassEffectContainer(spacing: 10) {
-                    HStack(spacing: 10) { filterMenu; sortMenu }
-                }
-            } else {
-                HStack(spacing: 10) { filterMenu; sortMenu }
-            }
-        }
-        .recedesWithSheet(activeSheet != nil)
-    }
-
+    /// The two library controls, toolbar items again after a day as an
+    /// in-content pill (2026-09-16) — same labels, same order, each
+    /// receding with a child sheet on its own.
     private var filterMenu: some View {
         Menu {
             Picker("Category", selection: $categoryFilter) {
@@ -775,11 +741,9 @@ struct FoodsView: View {
                 // The fill/unfill swap morphs instead of hard-cutting
                 // (iOS 17 API, floor-safe).
                 .contentTransition(.symbolEffect(.replace))
-                .foregroundStyle(Color.riceToast)
-                .frame(width: 34, height: 34)
         }
-        .headerCircleChrome()
         .accessibilityLabel("Filter by category")
+        .recedesWithSheet(activeSheet != nil)
     }
 
     private var sortMenu: some View {
@@ -794,11 +758,9 @@ struct FoodsView: View {
                   ? "arrow.up.arrow.down.circle"
                   : "arrow.up.arrow.down.circle.fill")
                 .contentTransition(.symbolEffect(.replace))
-                .foregroundStyle(Color.riceToast)
-                .frame(width: 34, height: 34)
         }
-        .headerCircleChrome()
         .accessibilityLabel("Sort")
+        .recedesWithSheet(activeSheet != nil)
     }
 
     private func consumeAddFoodKind() {

@@ -164,13 +164,12 @@ struct TodayView: View {
             ScrollViewReader { scrollProxy in
             ScrollView {
                 VStack(spacing: Layout.screenSpacing) {
-                    // The day title is the date-jump door (one tap to the
-                    // month grid); "Details" under the headline is the one
-                    // door to the day summary. Only captions are tappable —
-                    // a link around the whole headline swallowed half of
-                    // the day-paging swipes.
-                    dayHeaderRow
-                        .id(ScrollTarget.dayTop)
+                    // "Details" under the headline is the one door to the
+                    // day summary. Only captions are tappable — a link
+                    // around the whole headline swallowed half of the
+                    // day-paging swipes. (The day title is native nav-bar
+                    // chrome now — see `dayToolbar`; it led this stack as
+                    // a tappable in-content button until 2026-09-16.)
                     // iPad/regular width: the summary beside the log,
                     // not a phone column stretched across the canvas.
                     // AnyLayout, NOT an if/else on the size class: the
@@ -190,6 +189,10 @@ struct TodayView: View {
                         VStack(spacing: Layout.screenSpacing) { logStack(scrollProxy) }
                             .frame(maxWidth: .infinity)
                     }
+                    // The Log master toggle's "back to the top" anchor —
+                    // the top of the content, now that nothing sits above
+                    // the panes (the title row used to carry it).
+                    .id(ScrollTarget.dayTop)
                 }
                 .padding(.bottom, 24)
             }
@@ -199,12 +202,18 @@ struct TodayView: View {
             // both modes (quaternary-over-background diverged in dark).
             // Two panes need more canvas than one phone column.
             .readableContentWidth(max: hSizeClass == .regular ? 1100 : 700, groupedBackground: true)
-            // The large title is rendered in-content (dayTitleButton) so
-            // one tap opens the month grid directly — the system title
-            // menu forced an intermediate "Jump to date…" tap. The bar
-            // itself stays (day chevrons, gear); its title is empty.
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
+            // The one header shape (`inlineLargeTitle`, Style.swift): the
+            // day as a NATIVE title, the calendar/day-nav/Settings pill
+            // beside it on the same row (`dayToolbar`). The title was a
+            // tappable in-content button from 2.1 until 2026-09-16 — one
+            // tap to the month grid, because the system title MENU forced
+            // an intermediate "Jump to date…" tap. With every other screen
+            // on a native title the user chose native here too, and Jump
+            // to date became the calendar button in the pill: still one
+            // tap, same door, and the pill stays reachable when scrolled
+            // where the in-content row scrolled away with the title.
+            .inlineLargeTitle(dayTitle)
+            .toolbar { dayToolbar }
             .navigationDestination(for: Route.self) { route in
                 switch route {
                 case .nutrition: DayNutritionView(
@@ -420,107 +429,68 @@ struct TodayView: View {
 
     private var dayTitle: String {
         if model.isToday { return "Today" }
-        if Calendar.current.isDateInYesterday(model.selectedDate) { return "Yesterday" }
-        return model.selectedDate.formatted(.dateTime.weekday(.abbreviated).month(.wide).day())
+        // A bare date ("Sep 14") for every other day — no "Yesterday",
+        // no weekday. The title shares its row with a four-item pill
+        // (calendar · prev · next · gear) that leaves it ~150pt on a
+        // 402pt phone, and a NATIVE title can't shrink to fit the way
+        // the old in-content one did: "Yesterday" rendered as
+        // "Yesterd…" and "Tue, Sep 15" would too (from-sim screenshot,
+        // 2026-09-16). The user chose the fourth pill item over the
+        // longer words.
+        return model.selectedDate.formatted(.dateTime.month(.abbreviated).day())
     }
 
-    /// The day heading and its day-nav/Settings controls, sharing ONE
-    /// row via the shared `LargeTitleHeaderRow` (the user, 2026-09-16,
-    /// from-device screenshot: the chevrons and gear used to float as
-    /// their own glass pill in the nav bar, sitting ABOVE this
-    /// in-content title with a visible gap — reading as two
-    /// disconnected header rows instead of one; the SAME thing turned
-    /// out to be true of every OTHER large-title tab too, since a
-    /// native large title's trailing toolbar buttons float in their own
-    /// pill by default on iOS 26 — see `LargeTitleHeaderRow`'s own doc
-    /// comment). Today's title was already custom content (see
-    /// `dayTitleButton`'s doc comment for why); the nav bar itself now
-    /// carries no toolbar items at all.
-    private var dayHeaderRow: some View {
-        LargeTitleHeaderRow {
-            dayTitleButton
-        } controls: {
-            dayNavigationControls
-        }
-    }
-
-    /// The large title, rendered in-content so it's a one-tap door to
-    /// the month grid (the system title menu forced a "Jump to date…"
-    /// intermediate tap).
-    private var dayTitleButton: some View {
-        Button {
-            activeSheet = .datePicker
-        } label: {
-            HStack(spacing: 8) {
-                Text(dayTitle)
-                    .font(.largeTitle.bold())
-                    .foregroundStyle(.primary)
-                    // The row now has real competition for width (the
-                    // day-nav/Settings pill trailing it) — long day
-                    // titles ("Wednesday, September 16") need to give
-                    // ground rather than push the pill off-screen or
-                    // wrap awkwardly.
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                // A calendar glyph, not a chevron: it SAYS what the tap
-                // opens (the month grid) instead of just "something
-                // drops down" (the user).
+    /// Jump to date · previous day · next day · Settings, one trailing
+    /// pill beside the native title (`inlineLargeTitle`). Nothing lives
+    /// on the leading edge: the left ~20pt is iOS's back-swipe zone, and
+    /// a control there (the old previous-day chevron) had its taps
+    /// intermittently stolen by that gesture — the button highlighted
+    /// but the action never fired ("takes 3 taps", the user). Today is
+    /// this stack's root, so back-swipe does nothing here anyway. Each
+    /// item recedes with a child sheet on its own, as the toolbar items
+    /// did before the 2026-09-16 in-content detour.
+    @ToolbarContentBuilder
+    private var dayToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            // A calendar glyph, not a chevron: it SAYS what the tap
+            // opens (the month grid) instead of just "something drops
+            // down" (the user). It rode beside the title text while the
+            // title was the button; it IS the button now.
+            Button {
+                activeSheet = .datePicker
+            } label: {
                 Image(systemName: "calendar")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(Color.nori)
             }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(dayTitle). Jump to date")
-        .accessibilityIdentifier("dayTitleButton")
-    }
-
-    /// Day-paging + Settings, trailing the title in `dayHeaderRow` now
-    /// instead of the nav bar's `ToolbarItemGroup` they used to be —
-    /// same three controls, same order, same accessibility labels;
-    /// only the host and its chrome changed. Grouped in one shared
-    /// glass pill (`headerControlChrome()`, Style.swift) to match what
-    /// `ToolbarItemGroup` rendered automatically, since plain content
-    /// doesn't pick up Liquid Glass on its own the way a real toolbar
-    /// item does.
-    private var dayNavigationControls: some View {
-        HStack(spacing: 4) {
+            .accessibilityLabel("Jump to date")
+            .accessibilityIdentifier("jumpToDate")
+            .recedesWithSheet(activeSheet != nil)
             Button {
                 Task { await model.goToPreviousDay() }
             } label: {
                 Image(systemName: "chevron.left")
-                    .frame(minWidth: 32, minHeight: 32)
             }
             .accessibilityLabel("Previous day")
+            .recedesWithSheet(activeSheet != nil)
             Button {
                 Task { await model.goToNextDay() }
             } label: {
                 Image(systemName: "chevron.right")
-                    .frame(minWidth: 32, minHeight: 32)
             }
             .disabled(model.isToday)
             .accessibilityLabel("Next day")
+            .recedesWithSheet(activeSheet != nil)
             Button {
                 activeSheet = .settings
             } label: {
                 Image(systemName: "gearshape")
-                    .frame(minWidth: 32, minHeight: 32)
             }
             .accessibilityLabel("Settings")
-            // A toolbar item's icon picks up an accessibility
-            // identifier matching its SF Symbol name automatically
-            // (via UIKit bridging); a plain content Button does not —
-            // stated explicitly since one test finds this button by
-            // that identifier rather than its label.
+            // A toolbar item's icon usually picks up an identifier
+            // matching its SF Symbol name through UIKit bridging; stated
+            // explicitly since one test finds this button by it.
             .accessibilityIdentifier("gearshape")
+            .recedesWithSheet(activeSheet != nil)
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(Color.riceToast)
-        .headerControlChrome()
-        // One dim/disable for the whole pill — matches what three
-        // individually-receding toolbar buttons looked like, since they
-        // always moved together anyway.
-        .recedesWithSheet(activeSheet != nil)
     }
 
     /// What the big number shows, and its budget — the two inputs the

@@ -125,121 +125,64 @@ struct ScopeBar<Tag: Hashable>: View {
     }
 }
 
-/// A large title and its trailing controls sharing ONE row, in-content
-/// rather than native nav-bar chrome (2026-09-16, the user, from-device
-/// screenshots of Today/Foods/Goal/Calendar/the Log sheet: a native
-/// large title's trailing toolbar buttons float as their own Liquid
-/// Glass pill ABOVE the title with a visible gap — correct iOS 26
-/// behavior, not a bug, but the user wants every screen's title and
-/// controls to read as one header instead). A NATIVE large title also
-/// grows taller on pull-down overscroll, independently of anything a
-/// pinned `safeAreaInset` tracks — the Log sheet's scope-bar jank
-/// (`plans/PLAN-log-sheet-layout.md`) was that growth outrunning a
-/// fixed-position sibling; a title that is plain content instead never
-/// grows, so nothing downstream of it can desync from it either.
-/// `titleContent` sits leading (usually `Text(title).font(.largeTitle
-/// .bold())`) at a 16pt horizontal / 4pt top inset — measured against
-/// an unmodified native large title so switching tabs doesn't jump the
-/// header — baked into this row rather than repeated per call site;
-/// `controls` trails, wrapped by the caller in `headerControlChrome()`
-/// so several icons read as one shared pill, matching what a real
-/// `ToolbarItemGroup` gave them for free as nav-bar chrome.
-///
-/// `addsHorizontalPadding` defaults to `true` for hosts with no
-/// competing inset of their own (Today/Foods/Goal/the Log sheet all
-/// zero out any container padding around this row specifically so its
-/// own 16pt is the only one). Pass `false` where the host ALREADY
-/// wraps every sibling in the same padding (Calendar's outer VStack) —
-/// stacking both would indent this row twice as far as everything
-/// beside it.
-struct LargeTitleHeaderRow<TitleContent: View, Controls: View>: View {
-    // `addsHorizontalPadding` sits BEFORE the two @ViewBuilder closures
-    // in the synthesized memberwise init on purpose — Swift's multiple
-    // trailing-closure sugar (`LargeTitleHeaderRow { … } controls: { … }`)
-    // requires the closures to be the LAST parameters; moving this one
-    // after them would silently break every call site that uses it.
-    var addsHorizontalPadding: Bool = true
-    @ViewBuilder var titleContent: () -> TitleContent
-    @ViewBuilder var controls: () -> Controls
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 8) {
-            titleContent()
-            Spacer(minLength: 8)
-            controls()
-        }
-        .padding(.horizontal, addsHorizontalPadding ? 16 : 0)
-        .padding(.top, 4)
-    }
-}
-
 extension View {
-    /// The shared chrome for a `LargeTitleHeaderRow`'s trailing
-    /// controls: Liquid Glass on iOS 26+ (one capsule for the whole
-    /// group, interactive); a `.bar`-material capsule below the floor
-    /// (the same fallback shape `ScopeBar`'s own pinned inset uses
-    /// elsewhere). One shared definition so the four/five screens using
-    /// this pattern can't visually drift from each other.
+    /// The app's ONE header shape: a NATIVE large title that shares its
+    /// row with the trailing toolbar items (`.inlineLarge`, iOS 17+), so
+    /// title and controls read as one header on every screen, and the
+    /// search drawer — where there is one — sits directly beneath them.
+    /// Today, Foods, Goal, Calendar and the Log sheet all go through
+    /// this; nothing draws its own title (2026-09-16, the user, after
+    /// the in-content detour below — `plans/PLAN-log-sheet-layout.md`).
+    ///
+    /// Why this mode and not the two obvious alternatives, each measured
+    /// on the 26.5, 27.0 and 18.6 simulators:
+    /// - Plain `.large` floats the trailing items in their own glass
+    ///   pill ABOVE the title (the user's original complaint), and iOS
+    ///   27 no longer draws a large title above an always-visible search
+    ///   drawer at all — it silently collapses to an inline one.
+    /// - An IN-CONTENT title row (built 2026-09-16, reverted the same
+    ///   day) fixed the pill and broke the rest: the drawer is nav-bar
+    ///   chrome, so it rendered ABOVE the row on Foods and the Log
+    ///   sheet; a Form's own top inset pushed Goal's row lower than
+    ///   Today's; List/Form row insets shifted those titles 16pt right
+    ///   of the ScrollView screens'. Four screens, four offset hacks,
+    ///   still misaligned. `.inlineLarge` puts the title where the
+    ///   system puts it and asks nothing of the container.
+    /// - `ToolbarItemPlacement.largeTitle` (iOS 26) is not a third way:
+    ///   it REPLACES the title with centered content, is suppressed
+    ///   entirely whenever the search drawer is present, and in a sheet
+    ///   it dropped Cancel and Done along with the title it replaced.
+    ///
+    /// Two rules come with the mode. A LEADING toolbar item is pushed
+    /// onto a row above the title (or into an overflow menu, in a
+    /// sheet) — the two-row header this exists to remove — so a sheet's
+    /// Cancel goes trailing, split from Done by a `ToolbarSpacer`. And
+    /// a List/Form host needs `flushTopContent()` below, or it picks up
+    /// ~35pt of extra top inset under this mode that a ScrollView host
+    /// does not.
+    func inlineLargeTitle(_ title: String) -> some View {
+        navigationTitle(title)
+            .toolbarTitleDisplayMode(.inlineLarge)
+    }
+
+    /// The List/Form half of `inlineLargeTitle`: zero the scroll
+    /// content's top margin, which is where the extra inset that mode
+    /// adds to those two containers lives (measured: Foods' scope row
+    /// sat ~57pt under the search field with it, ~22pt without — the
+    /// same gap a plain `.large` title leaves). Not for ScrollView hosts
+    /// (Today, Calendar); they never had the gap. iOS 26+ only, which
+    /// is where it was measured — the 18.6 sim showed no gap to remove.
+    /// The QA walkthrough's Goal stop used to scroll back to the top by
+    /// a fixed swipe COUNT, which this margin change threw off; it
+    /// scrolls until the field is hittable now, so don't read an old
+    /// note about "contentMargins broke the walkthrough" as a reason to
+    /// drop this.
     @ViewBuilder
-    func headerControlChrome() -> some View {
+    func flushTopContent() -> some View {
         if #available(iOS 26.0, *) {
-            self
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .glassEffect(.regular.interactive(), in: .capsule)
+            self.contentMargins(.top, 0, for: .scrollContent)
         } else {
             self
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(.bar, in: .capsule)
-        }
-    }
-
-    /// A single header control in its OWN circle, rather than fused
-    /// into one shared pill with its neighbors — matching Apple Music's
-    /// own Search tab, where the trailing control is one clean isolated
-    /// circle rather than a merged group (the user, 2026-09-16, holding
-    /// up Music's Search tab as the reference: "Food[s] header and
-    /// search should look like how Music search does"). Foods' Filter
-    /// and Sort are two logically separate actions, so each gets this
-    /// individually instead of sharing `headerControlChrome()`'s one
-    /// capsule; wrap the icon in a fixed-size frame BEFORE calling this
-    /// so the circle doesn't hug the glyph unevenly.
-    @ViewBuilder
-    func headerCircleChrome() -> some View {
-        if #available(iOS 26.0, *) {
-            self.glassEffect(.regular.interactive(), in: .circle)
-        } else {
-            self
-                .padding(8)
-                .background(.bar, in: .circle)
-        }
-    }
-}
-
-extension View {
-    /// Pins a ScopeBar above a library list, styled like the Log
-    /// sheet's: horizontal padding, bar material, stays put while the
-    /// results scroll (Music-style). SHEETS ONLY — a top safeAreaInset
-    /// suppresses large-title rendering, so the Foods TAB renders its
-    /// ScopeBar as a list row instead.
-    /// `isHidden` empties the inset — a search crosses every scope, so
-    /// a highlighted segment would contradict the list below it.
-    func scopeBar<Tag: Hashable>(
-        options: [(label: String, tag: Tag)], selection: Binding<Tag>,
-        isHidden: Bool = false
-    ) -> some View {
-        safeAreaInset(edge: .top, spacing: 0) {
-            // Hidden = an EMPTY inset, NOT a dropped modifier: wrapping
-            // the whole `.scopeBar(…)` call in an `if` changes the
-            // modifier chain's identity, which re-creates the List
-            // underneath it and loses its state mid-search.
-            if !isHidden {
-                ScopeBar(options: options, selection: selection)
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
-                    .background(.bar)
-            }
         }
     }
 }
@@ -277,16 +220,42 @@ extension View {
         }
     }
 
-    // `entryDoorBar` (a `safeAreaBar`-pinned container for
-    // `LogSheetDoorBar`) lived here from 2026-09-15 to -16. Retired: the
-    // user found it left a large empty gap above the door bar whenever
-    // the list was short (Favorites is often just two or three rows) —
-    // a `safeAreaBar`/`safeAreaInset` pins to the SCREEN's edge
-    // regardless of how much content precedes it. `LogSheetDoorBar` is
-    // a plain trailing List row in QuickLogSheet now, so it sits right
-    // after whatever content is actually there. Cost: on a long list it
-    // no longer stays reachable without scrolling to the bottom, which
-    // the user accepted explicitly in exchange for closing the gap.
+    /// The Log sheet's PINNED door bar (`LogSheetDoorBar`): below the
+    /// list, above the home indicator, riding up with the keyboard.
+    /// `safeAreaBar` on iOS 26+ (the system's scroll-edge treatment,
+    /// and it insets the list so the last rows scroll clear); a
+    /// `.bar`-material `safeAreaInset` below the floor. `isHidden`
+    /// EMPTIES the bar rather than dropping the modifier — an `if`
+    /// around the whole call changes the List's modifier chain and
+    /// re-creates it mid-search.
+    ///
+    /// Pinned, not a trailing List row, and this was decided TWICE
+    /// (2026-09-16, the user). Pinned first; then, because a short
+    /// Favorites list left empty canvas between its last row and the
+    /// bar, moved into the list as its last row — where on a real
+    /// library it was never on screen at all until the list had been
+    /// scrolled to its end ("hiding it completely"). With both versions
+    /// in hand the user chose pinned: the canvas under a short list is
+    /// what every iOS bottom bar looks like over a short screen. Don't
+    /// move it back into the list.
+    @ViewBuilder
+    func entryDoorBar<Bar: View>(
+        isHidden: Bool, @ViewBuilder bar: @escaping () -> Bar
+    ) -> some View {
+        if #available(iOS 26.0, *) {
+            self.safeAreaBar(edge: .bottom) {
+                if !isHidden { bar() }
+            }
+        } else {
+            self.safeAreaInset(edge: .bottom, spacing: 0) {
+                if !isHidden {
+                    bar()
+                        .padding(.top, 6)
+                        .background(.bar)
+                }
+            }
+        }
+    }
 }
 
 extension View {

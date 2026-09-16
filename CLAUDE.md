@@ -487,6 +487,40 @@ Each cost a debugging session.
     26 detached circle) is Apple's platform change, not ours; accepted
     2026-09-15.
 
+- **Every screen's header is a NATIVE `.inlineLarge` title
+  (`inlineLargeTitle`, Style.swift) and nothing draws its own** — a day
+  lost each way, 2026-09-16 (`plans/PLAN-log-sheet-layout.md`, the
+  addendum). The user wants title and controls on ONE row; plain
+  `.large` floats the trailing items in a pill above the title, and iOS
+  27 collapses a large title to inline whenever an always-visible search
+  drawer is present. An in-content title row was built to fix the pill
+  and misaligned every screen a different way: the drawer is nav-bar
+  chrome and rendered ABOVE the row on Foods and the Log sheet, a Form's
+  top inset put Goal ~22pt below Today, List/Form row insets put Foods
+  and Goal 16pt right of it. Rules that come with the mode: a LEADING
+  toolbar item lands on a row above the title (or in overflow, in a
+  sheet), so a sheet's Cancel is trailing, split from Done by a
+  `ToolbarSpacer`; List/Form hosts need `flushTopContent()` or they gain
+  ~35pt of top inset ScrollView hosts don't; a native title cannot be a
+  button (a `.principal` item renders beside it, not instead of it —
+  Today's Jump to date is the calendar button in the pill for that
+  reason) and cannot SHRINK (Today's four-item pill leaves it ~150pt, so
+  the title is "Today" or a bare date like "Sep 14", and Calendar's is
+  "Sep 2026" — "Yesterday" and "September 2026" both truncated, the user
+  chose the pill items over the words); `ToolbarItemPlacement.largeTitle`
+  is NOT an alternative — it replaces the title with centered content, is
+  suppressed by the drawer, and in a sheet took Cancel/Done down with it;
+  and on the 26.5 SIM an `.inlineLarge` title's accessibility label
+  sticks on its first value when the title changes (platform bug; 27.0
+  updates), so no UI test reads the day off the title — the Next-day
+  chevron's enabled state says it. `testHeaderShots` asserts the four
+  tab titles share a top-left corner.
+- **The Log sheet's door bar is PINNED (`entryDoorBar`), decided twice.**
+  Moved into the list as its last row to close the empty canvas a short
+  list leaves above a pinned bar, it was then off screen on every real
+  library until the list was scrolled to its end (the user, 2026-09-16:
+  "hiding it completely"). Pinned won with both versions in hand.
+
 ## App-launch landmines
 
 - **Never call `WKApplication.scheduleBackgroundRefresh` from `App.init`**
@@ -858,8 +892,10 @@ Each cost a debugging session.
   database search) render the shared `OnlineResultsSection` — a separate
   `FoodSearchSheet` with its own drifting list existed until 2026-07-13. Keep
   it that way: search behavior changes go in the shared section only. Search
-  fields are the STANDARD system `.searchable` (bottom placement) everywhere —
-  the user vetoed custom bars and auto-focus; the scanner is icon-only or a
+  fields are the STANDARD system `.searchable`, pinned in the top drawer
+  everywhere (`librarySearch`, Style.swift — the bottom pill was the Log
+  sheet's until 2026-09-15) — the user vetoed custom bars and auto-focus;
+  the scanner is icon-only or a
   labeled list row (`ScanRowLabel`) depending on AI availability (below),
   never a toolbar icon.
 - **`EntryDoorsSection` splits into two doors when AI is on, one when it's

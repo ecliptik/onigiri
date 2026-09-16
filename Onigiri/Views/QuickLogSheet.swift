@@ -240,50 +240,17 @@ struct QuickLogSheet: View {
         let groups = searching ? searchGroups(items) : []
         NavigationStack {
             List {
-                // The title and its Cancel/Sort/Done controls, sharing
-                // one row (`LargeTitleHeaderRow`, Style.swift) —
-                // replacing the native large title entirely, which both
-                // floated its trailing buttons as their own glass pill
-                // ABOVE the title AND grew taller on pull-down overscroll
-                // (the very growth that outran the pinned scope bar,
-                // above). A title that is plain content never grows, so
-                // this removes the jank at its root instead of just
-                // treating the scope bar's symptom of it. Unconditional,
-                // like Foods: the title stays put while searching.
-                Section {
-                    LargeTitleHeaderRow {
-                        Text("Log")
-                            .font(.largeTitle.bold())
-                            .foregroundStyle(.primary)
-                            // Today's OWN "Log" section header is also
-                            // plain `Text("Log")`, and a sheet doesn't
-                            // remove the screen beneath it from the
-                            // accessibility tree — so while this sheet
-                            // is up over Today, TWO StaticTexts read
-                            // exactly "Log". An explicit identifier is
-                            // what tests can match unambiguously; label
-                            // text alone can't.
-                            .accessibilityIdentifier("logSheetTitle")
-                    } controls: {
-                        logHeaderControls
-                    }
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
-                }
-                // The scope picker rides IN the list now, matching
-                // Foods exactly — it used to be pinned above the list
-                // via a `safeAreaInset` ("Music-style"), which fought
-                // the large title's own collapse/expand animation once
-                // this sheet adopted one: pulling down desynced the
-                // pinned pills from the native title+search chrome
-                // above them, both visibly sliding apart mid-gesture
-                // (the user, from-device screen recording, 2026-09-16).
-                // Foods never pins its own scope row for exactly this
-                // reason — a `safeAreaInset` is measured against the
-                // LIST's frame, not the nav bar's, and a large title
-                // grows past its resting height during overscroll in a
-                // way only native chrome (or an ordinary scrolling row)
-                // tracks correctly. Hidden while searching, same as
+                // The scope picker rides IN the list, matching Foods
+                // exactly. It was pinned above the list ("Music-style")
+                // until 2026-09-16, when this sheet briefly carried a
+                // native `.large` title: that grows on pull-down
+                // overscroll while a pinned `safeAreaInset` (measured
+                // against the LIST, not the nav bar) does not, and the
+                // two visibly slid apart mid-gesture (the user, screen
+                // recording). The title is `.inlineLarge` now and never
+                // grows, so pinning would work again; it stays a row
+                // because Foods' is one and the two screens should
+                // scroll the same way. Hidden while searching, same as
                 // Foods: a query crosses every scope, so no segment can
                 // be the true one.
                 if !searching {
@@ -459,50 +426,23 @@ struct QuickLogSheet: View {
                         }
                     }
                 }
-                // The camera/describe doors, now the LAST row instead
-                // of a bar pinned to the screen's bottom edge (the
-                // user, 2026-09-16: pinning via `safeAreaBar` left a
-                // big empty gap above it whenever the list was short —
-                // Favorites is often just two or three rows). This
-                // trades away "always reachable without scrolling on a
-                // long list" for "never floats over empty space on a
-                // short one." Hidden while searching, same as every
-                // other door-adjacent control on this screen.
-                if !searching {
-                    Section {
-                        LogSheetDoorBar(
-                            scanBusy: isLookingUpBarcode,
-                            describeQuery: $describeQuery,
-                            onScan: { activeSheet = .scanner(notice: nil) },
-                            onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } }
-                        )
-                        .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets())
-                    }
-                }
             }
             .compactSections()
             .riceCanvas()
             .hardTopScrollEdge()
-            // Blank: the title renders in-content now (the row above,
-            // `LargeTitleHeaderRow`), matching Today/Foods/Goal/Calendar
-            // — a two-step journey. First it went from a compact
-            // `.principal` title to a NATIVE large title to match Foods'
-            // header shape (the user, 2026-09-16), which gave up the
-            // 2026-09-13/14 fix where the title dimmed alongside
-            // Cancel/Sort/Done while a child sheet was up (a native
-            // large title can't be reached by `.recedesWithSheet()` the
-            // way the custom `.principal` item could). Then the native
-            // large title turned out to grow taller on pull-down
-            // overscroll independently of the pinned scope bar beneath
-            // it, which is what actually caused the jank the user saw
-            // on video — so the title became in-content plain text
-            // instead, which never grows, closing the gap at its root
-            // rather than only fixing what it broke downstream. The
-            // dimmed Cancel/Sort/Done buttons plus `recedesBehindSheet()`'s
-            // blur/scrim on the whole list still say "something else is
-            // active."
-            .navigationTitle("")
+            // The one header shape (`inlineLargeTitle`, Style.swift):
+            // "Log" large at the left, Cancel · Sort · Done beside it,
+            // the search drawer directly beneath — Foods' header,
+            // natively. `flushTopContent` is the List half of it. A
+            // native title can't be reached by `recedesWithSheet()`, so
+            // it stays crisp while a child sheet is up (the compact
+            // `.principal` title used to dim, 2026-09-13/14); the dimmed
+            // buttons plus `recedesBehindSheet()`'s blur/scrim on the
+            // list still say "something else is active" — the user took
+            // that trade for the large title on 2026-09-16, and it
+            // stands.
+            .inlineLargeTitle("Log")
+            .flushTopContent()
             // The STANDARD system search field, pinned in the TOP
             // drawer now — matching Foods, via the shared
             // `librarySearch` placement (`plans/PLAN-log-sheet-layout.md`,
@@ -531,6 +471,60 @@ struct QuickLogSheet: View {
             // sheet stopped fighting that state entirely, matching
             // Foods.
             .librarySearch(text: $searchText, prompt: "Foods and Meals")
+            // The camera + describe doors, PINNED below the list and
+            // above the home indicator (`entryDoorBar`, Style.swift, has
+            // the twice-decided history); it empties on the same
+            // `searching` predicate that hides the scope row, rather
+            // than dropping the modifier.
+            .entryDoorBar(isHidden: searching) {
+                LogSheetDoorBar(
+                    scanBusy: isLookingUpBarcode,
+                    describeQuery: $describeQuery,
+                    onScan: { activeSheet = .scanner(notice: nil) },
+                    onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } }
+                )
+            }
+            .toolbar {
+                // Cancel · Sort · Done, ALL trailing: under `.inlineLarge`
+                // a leading item is pushed onto a row above the title (or
+                // into an overflow menu, in a sheet) — the two-row header
+                // this pass exists to remove — so Cancel left its native
+                // `.cancellationAction` slot. It keeps its own pill,
+                // split from Sort + Done by the spacer (iOS 26; plain text
+                // buttons below the floor), so it still reads as the
+                // opposite of Done rather than one of three siblings.
+                // Logging commits immediately with its own Undo, so both
+                // buttons just dismiss.
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Cancel") {
+                        // The in-flight online search dies with the
+                        // sheet — clear() cancels its search/page tasks
+                        // instead of letting them keep the model alive
+                        // for one wasted round trip (audit, 2026-08-17;
+                        // deliberately here, never .onDisappear —
+                        // CLAUDE.md's .searchable teardown trap).
+                        onlineSearch.clear()
+                        dismiss()
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    .recedesWithSheet(activeSheet != nil)
+                }
+                if #available(iOS 26.0, *) {
+                    ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    sortMenu
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        onlineSearch.clear()
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .recedesWithSheet(activeSheet != nil)
+                }
+            }
             .task {
                 if !kindLoaded {
                     kindLoaded = true
@@ -733,45 +727,7 @@ struct QuickLogSheet: View {
 
     /// The Foods screen's sort circle, third surface — kept on the
     /// trailing edge to match Foods/Today/Calendar (and clear of the
-    /// leading back-swipe zone). Its own property so the iOS 27
-    /// `.visibilityPriority` branch in the toolbar above doesn't have
-    /// to declare this Menu twice.
-    /// Cancel/Sort/Done, now trailing the title in the header row
-    /// instead of the nav bar's opposite-corner `ToolbarItem`s they
-    /// used to be (Cancel was `.cancellationAction`, leading; Done was
-    /// `.confirmationAction`, trailing — both now sit together on the
-    /// one trailing slot the row has). Same three controls, same
-    /// keyboard shortcuts, same dismiss behavior — logging commits
-    /// immediately with its own Undo, so both buttons just dismiss.
-    /// The iOS 27 toolbar-overflow priority Sort used to carry
-    /// (`.visibilityPriority`) is gone with the toolbar itself — that
-    /// API only means something for REAL toolbar items, and plain
-    /// content has no overflow menu to sink into.
-    private var logHeaderControls: some View {
-        HStack(spacing: 8) {
-            Button("Cancel") {
-                // The in-flight online search dies with the sheet —
-                // clear() cancels its search/page tasks instead of
-                // letting them keep the model alive for one wasted
-                // round trip (audit, 2026-08-17; deliberately here,
-                // never .onDisappear — CLAUDE.md's .searchable teardown
-                // trap).
-                onlineSearch.clear()
-                dismiss()
-            }
-            .keyboardShortcut(.cancelAction)
-            sortMenu
-            Button("Done") {
-                onlineSearch.clear()
-                dismiss()
-            }
-            .fontWeight(.semibold)
-            .keyboardShortcut(.return, modifiers: .command)
-        }
-        .headerControlChrome()
-        .recedesWithSheet(activeSheet != nil)
-    }
-
+    /// leading back-swipe zone).
     private var sortMenu: some View {
         Menu {
             Picker("Sort", selection: $sortRaw) {

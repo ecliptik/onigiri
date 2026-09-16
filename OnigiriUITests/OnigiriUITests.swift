@@ -178,6 +178,24 @@ func closeSettings(in app: XCUIApplication) {
     done.tap()
 }
 
+/// Today's day heading — a NATIVE `.inlineLarge` title since 2026-09-16
+/// (`inlineLargeTitle`, Style.swift). It was a tappable in-content button
+/// carrying "<day>. Jump to date" before; Jump to date is its own button
+/// in the trailing pill now (`jumpToDate`). Scoped to the navigation bar
+/// on purpose: Today's body has plain texts of its own, and the Log
+/// sheet's title is another nav-bar text — call this with no sheet up.
+///
+/// READ ITS FRAME, NOT ITS LABEL, on the 26.5 sim: under `.inlineLarge`
+/// that OS leaves the title's accessibility label on its FIRST value
+/// after the day changes — "Today" while yesterday is on screen. A probe
+/// app reproduced it in that mode alone (`.inline` and 27.0 both update),
+/// so it is a platform bug, not ours. Which day is showing is read off
+/// the Next-day chevron's enabled state instead (disabled only on today).
+@MainActor
+func dayHeading(in app: XCUIApplication) -> XCUIElement {
+    app.navigationBars.staticTexts.firstMatch
+}
+
 /// The Calendar tab's MONTH summary card, which pushes the month detail.
 /// Since 2.1 the day card ALSO shows "Details ›" (grammar unified), so a
 /// bare detailsLink is ambiguous on this tab — target the month card by
@@ -524,10 +542,10 @@ final class OnigiriUITests: XCTestCase {
                       "Full swipe should delete the water row outright")
         XCTAssertTrue(app.buttons["Undo"].waitForExistence(timeout: 5),
                       "Delete should offer Undo in the toast")
-        // The in-content title still reads "Today" (a page would say
-        // "Yesterday"); the nav bar no longer carries the day title.
-        XCTAssertTrue(app.buttons["dayTitleButton"].label.hasPrefix("Today"),
-                      "A row swipe must not page to another day")
+        // Still on today: the Next-day chevron is disabled only there
+        // (the title's label is unreliable on 26.5 — see `dayHeading`).
+        XCTAssertFalse(app.buttons["Next day"].isEnabled,
+                       "A row swipe must not page to another day")
 
         // Swipe RIGHT on a food row reveals Edit (library-consistent);
         // 150pt opens the reveal without committing. Editing to 2
@@ -860,12 +878,10 @@ final class OnigiriUITests: XCTestCase {
             shot("portion-sheet")
             // Two "Cancel" buttons exist while the portion sheet is up:
             // the portion sheet's own (enabled) and the Log sheet's
-            // (disabled underneath it, via `recedesWithSheet` — the
-            // Log sheet's Cancel moved from nav-bar chrome into plain
-            // content on 2026-09-16, `plans/PLAN-log-sheet-layout.md`,
-            // which changed which one `.last` picked out and broke this
-            // assumption). Filter for the ENABLED one instead of
-            // guessing at tree order.
+            // (disabled underneath it, via `recedesWithSheet`). Filter
+            // for the ENABLED one instead of guessing at tree order — a
+            // `.last` pick broke the day the Log sheet's Cancel moved
+            // between chrome and content (2026-09-16).
             app.buttons.matching(identifier: "Cancel").allElementsBoundByIndex
                 .first(where: \.isEnabled)?.tap()
         }
@@ -982,8 +998,11 @@ final class OnigiriUITests: XCTestCase {
         // Back to the top for the weight field, and out via Cancel —
         // Goal's toolbar is Cancel ↔ Save, so the "Done" this used to
         // tap has not existed since 2026-08-18 and the keyboard stayed
-        // up into the next stop.
-        for _ in 0..<8 { app.swipeDown() }
+        // up into the next stop. Scroll UNTIL the field is hittable,
+        // not a fixed swipe count: the count silently depended on the
+        // Form's exact scroll geometry and broke the moment
+        // `flushTopContent()` changed it (2026-09-16).
+        for _ in 0..<10 where !app.textFields.firstMatch.isHittable { app.swipeDown() }
         if tapIfExists(app.textFields.firstMatch) {
             shot("goal-keyboard")
             tapIfExists(app.buttons["Cancel"].firstMatch, timeout: 2)
@@ -2310,9 +2329,27 @@ final class OnigiriUITests: XCTestCase {
         // iPad capture, and Today is the shot this recapture needs; grabbing
         // it up front makes the capture independent of that tap.
         attachShot(named: "tab-today", settle: 3)
+        var titleFrames = ["Today": dayHeading(in: app).frame]
         for tab in ["Foods", "Goal", "Calendar"] {
             switchTab(in: app, to: tab)
             attachShot(named: "tab-\(tab.lowercased())", settle: 2)
+            titleFrames[tab] = app.navigationBars.staticTexts.firstMatch.frame
+        }
+        // The headers ALIGN: every tab draws one native `.inlineLarge`
+        // title (`inlineLargeTitle`, Style.swift), so all four title
+        // frames share a top-left corner. This is the assertion the
+        // 2026-09-16 in-content detour never had — Foods' title sat
+        // ~150pt lower than Today's and 16pt further right, Goal's
+        // ~22pt lower, and nothing red said so.
+        let reference = titleFrames["Today"]!
+        // A title that was never found has a zero frame, and four zero
+        // frames "align" perfectly — guard the reference first.
+        XCTAssertGreaterThan(reference.width, 0, "Today's title should be in the nav bar")
+        for (tab, frame) in titleFrames.sorted(by: { $0.key < $1.key }) {
+            XCTAssertEqual(frame.minX, reference.minX, accuracy: 1,
+                           "\(tab)'s title left edge should match Today's")
+            XCTAssertEqual(frame.minY, reference.minY, accuracy: 1,
+                           "\(tab)'s title top edge should match Today's")
         }
         // The Foods library segment — Favorites is the default and shows
         // only the starred item; the README's Foods shot wants the list.
@@ -2330,6 +2367,14 @@ final class OnigiriUITests: XCTestCase {
             attachShot(named: "foods-search-active", settle: 2)
             app.typeText("egg")
             attachShot(named: "foods-search-typed", settle: 2)
+            // Leave search before switching tabs: with the drawer
+            // focused the tab bar is present but NOT hittable, and
+            // switchTab fails loudly on exactly that (2026-09-16). The
+            // drawer's close control is the X button labelled "Close"
+            // — NOT "Cancel", which is what a bottom-placed search bar
+            // shows (measured in the accessibility tree, iOS 26.5).
+            let closeSearch = app.buttons["Close"].firstMatch
+            if closeSearch.waitForExistence(timeout: 3) { closeSearch.tap() }
         }
         switchTab(in: app, to: "Today")
         // Tolerant: the corner slot's element shape differs on iPad and
@@ -2711,16 +2756,11 @@ final class OnigiriUITests: XCTestCase {
         // detour above leaves the tab selection mid-bounce, and a
         // search field on some other screen would silently absorb the
         // query.
-        // By IDENTIFIER, not `navigationBars["Log"]`: the Log sheet's
-        // title moved from a native nav-bar title into plain content
-        // (`LargeTitleHeaderRow`, `plans/PLAN-log-sheet-layout.md`,
-        // 2026-09-16 — the same header-consistency pass that gave
-        // Today/Foods/Goal/Calendar in-content titles too), so there is
-        // no more navigation bar named "Log" to find — and a bare
-        // `staticTexts["Log"]` is ambiguous too, since Today's OWN "Log"
-        // section header is also plain `Text("Log")` and stays in the
-        // tree underneath this sheet.
-        let logTitle = app.staticTexts["logSheetTitle"]
+        // The nav bar named by the sheet's NATIVE title. (A bare
+        // `staticTexts["Log"]` would be ambiguous: Today's own "Log"
+        // section header is plain `Text("Log")` and stays in the tree
+        // underneath this sheet.)
+        let logTitle = app.navigationBars["Log"]
         if !logTitle.waitForExistence(timeout: 10) {
             switchTab(in: app, to: "Add")
         }
@@ -2957,7 +2997,7 @@ final class OnigiriUITests: XCTestCase {
         start.tap()
 
         // Landed in the app with the goal saved.
-        XCTAssertTrue(app.buttons["dayTitleButton"].waitForExistence(timeout: 10),
+        XCTAssertTrue(app.buttons["jumpToDate"].waitForExistence(timeout: 10),
                       "Onboarding hands off to Today")
         switchTab(in: app, to: "Goal")
         // "190" lives in the target field's VALUE (editable), and the
@@ -3043,50 +3083,39 @@ final class OnigiriUITests: XCTestCase {
         grantHealthAccess(in: app, timeout: 30)
         grantHealthAccess(in: app, timeout: 10)
 
-        // The in-content large title doubles as the date control, and its
-        // label carries the browsed day ("Today. Jump to date").
-        let dayTitle = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS 'Jump to date'")
-        ).firstMatch
-        XCTAssertTrue(dayTitle.waitForExistence(timeout: 30), "Today's date control should render")
-        XCTAssertTrue(
-            dayTitle.label.contains("Today"),
-            "should open on today, got '\(dayTitle.label)'"
-        )
+        // Which day is showing is read off the NEXT-day chevron: it is
+        // disabled on today and enabled on any other day. Not the title
+        // text — on the iOS 26.5 sim the native `.inlineLarge` title's
+        // accessibility label sticks on "Today" after the day changes
+        // (a platform bug, fixed in 27.0; `dayHeading(in:)` explains),
+        // so a title read here would pass or fail by OS version, not by
+        // behaviour.
+        XCTAssertTrue(app.buttons["jumpToDate"].waitForExistence(timeout: 30),
+                      "Today's header should render")
+        let nextDay = app.buttons["Next day"]
+        XCTAssertTrue(nextDay.waitForExistence(timeout: 10), "day pager should exist")
+        XCTAssertFalse(nextDay.isEnabled, "should open on today (Next day disabled)")
 
         // Page back. Asserting the move is load-bearing: without it a
-        // tab tap that does nothing would still end on "Today" and this
+        // tab tap that does nothing would still end on today and this
         // test would pass while proving nothing.
         let previousDay = app.buttons["Previous day"]
-        XCTAssertTrue(previousDay.waitForExistence(timeout: 10), "day pager should exist")
         previousDay.tap()
         previousDay.tap()
-        let movedAway = expectation(
-            for: NSPredicate(format: "NOT (label CONTAINS 'Today')"),
-            evaluatedWith: dayTitle
-        )
-        wait(for: [movedAway], timeout: 10)
+        let onAnotherDay = NSPredicate(format: "isEnabled == true")
+        let onToday = NSPredicate(format: "isEnabled == false")
+        wait(for: [expectation(for: onAnotherDay, evaluatedWith: nextDay)], timeout: 10)
 
         // The re-tap: already on Today, two days back.
         switchTab(in: app, to: "Today")
-        let cameHome = expectation(
-            for: NSPredicate(format: "label CONTAINS 'Today'"),
-            evaluatedWith: dayTitle
-        )
-        wait(for: [cameHome], timeout: 10)
+        wait(for: [expectation(for: onToday, evaluatedWith: nextDay)], timeout: 10)
 
         // And from another tab, since "always" covers that too.
         previousDay.tap()
-        wait(for: [expectation(
-            for: NSPredicate(format: "NOT (label CONTAINS 'Today')"),
-            evaluatedWith: dayTitle
-        )], timeout: 10)
+        wait(for: [expectation(for: onAnotherDay, evaluatedWith: nextDay)], timeout: 10)
         switchTab(in: app, to: "Foods")
         switchTab(in: app, to: "Today")
-        wait(for: [expectation(
-            for: NSPredicate(format: "label CONTAINS 'Today'"),
-            evaluatedWith: dayTitle
-        )], timeout: 10)
+        wait(for: [expectation(for: onToday, evaluatedWith: nextDay)], timeout: 10)
     }
 
     /// Moving a log entry in time must be finishable and abandonable.
@@ -3221,9 +3250,7 @@ final class OnigiriUITests: XCTestCase {
         grantHealthAccess(in: app, timeout: 10)
 
         switchTab(in: app, to: "Add")
-        // By IDENTIFIER, not `navigationBars["Log"]` — see the same
-        // note where this pattern first appears in this file.
-        let logTitle = app.staticTexts["logSheetTitle"]
+        let logTitle = app.navigationBars["Log"]
         if !logTitle.waitForExistence(timeout: 10) { switchTab(in: app, to: "Add") }
         XCTAssertTrue(logTitle.waitForExistence(timeout: 10), "Log sheet should be up")
 
@@ -3330,9 +3357,7 @@ final class OnigiriUITests: XCTestCase {
         grantHealthAccess(in: app, timeout: 10)
 
         switchTab(in: app, to: "Add")   // the corner + pill opens the Log sheet
-        // By IDENTIFIER, not `navigationBars["Log"]` — see the same
-        // note where this pattern first appears in this file.
-        let logTitle = app.staticTexts["logSheetTitle"]
+        let logTitle = app.navigationBars["Log"]
         if !logTitle.waitForExistence(timeout: 10) { switchTab(in: app, to: "Add") }
         XCTAssertTrue(logTitle.waitForExistence(timeout: 10), "Log sheet should be up")
 

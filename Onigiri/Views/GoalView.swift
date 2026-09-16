@@ -658,6 +658,21 @@ struct GoalView: View {
                     }
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets())
+                    // A `Form` carries its own fixed top inset before
+                    // the first section — the exact gap a native large
+                    // title never had to fight, since that lived in
+                    // separate nav-bar chrome (the user, from-device
+                    // screenshot, 2026-09-16: Goal's in-content title
+                    // sat visibly lower than Today's and Calendar's,
+                    // plain ScrollViews with no such inset). A negative
+                    // offset on just THIS row cancels it — measured
+                    // against those two screenshots — without touching
+                    // `.contentMargins` on the whole Form, which changes
+                    // the scroll view's own geometry and broke the QA
+                    // walkthrough's hardcoded swipe-count return to the
+                    // top for the weight field (reproduced twice; this
+                    // row-local fix doesn't move that geometry at all).
+                    .padding(.top, -32)
                 }
                 // Mode first (the user: the Lose/Maintain choice tops the
                 // screen), then the trend chart, then the knobs.

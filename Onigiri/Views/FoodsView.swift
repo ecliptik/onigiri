@@ -734,43 +734,71 @@ struct FoodsView: View {
     /// and its chrome changed. One shared `recedesWithSheet` for the
     /// pair now (they always moved together as a `ToolbarItemGroup`
     /// too), matching Today's day-nav pill.
+    /// Filter and Sort each get their OWN circle now, not one shared
+    /// pill (`headerCircleChrome()`, Style.swift) — matching Apple
+    /// Music's Search tab, whose own trailing control is a single clean
+    /// isolated circle rather than a merged group (the user, holding up
+    /// that screen as the reference, 2026-09-16). They're two distinct
+    /// actions, so two distinct circles reads truer to that than one
+    /// pill fusing them together the way Today's day-nav trio (one
+    /// genuinely single control cluster) still does.
     private var foodsHeaderControls: some View {
-        HStack(spacing: 4) {
-            Menu {
-                Picker("Category", selection: $categoryFilter) {
-                    Text("All").tag(FoodCategory?.none)
-                    ForEach(FoodCategory.allCases) { option in
-                        Text(option.rawValue).tag(FoodCategory?.some(option))
-                    }
+        Group {
+            // GlassEffectContainer: glass can't sample glass, and two
+            // separate circles this close together fight each other
+            // without one (Liquid Glass guidance) — the same reason
+            // `LogSheetDoorBar` needs it. No glass to coordinate below
+            // the floor, so a plain HStack does the same job there.
+            if #available(iOS 26.0, *) {
+                GlassEffectContainer(spacing: 10) {
+                    HStack(spacing: 10) { filterMenu; sortMenu }
                 }
-            } label: {
-                Image(systemName: categoryFilter == nil
-                      ? "line.3.horizontal.decrease.circle"
-                      : "line.3.horizontal.decrease.circle.fill")
-                    // The fill/unfill swap morphs instead of
-                    // hard-cutting (iOS 17 API, floor-safe).
-                    .contentTransition(.symbolEffect(.replace))
-                    .frame(minWidth: 32, minHeight: 32)
+            } else {
+                HStack(spacing: 10) { filterMenu; sortMenu }
             }
-            .accessibilityLabel("Filter by category")
-            Menu {
-                Picker("Sort", selection: $sortRaw) {
-                    ForEach(LibrarySort.allCases, id: \.rawValue) { option in
-                        Text(option.label).tag(option.rawValue)
-                    }
-                }
-            } label: {
-                Image(systemName: librarySort == .recent
-                      ? "arrow.up.arrow.down.circle"
-                      : "arrow.up.arrow.down.circle.fill")
-                    .contentTransition(.symbolEffect(.replace))
-                    .frame(minWidth: 32, minHeight: 32)
-            }
-            .accessibilityLabel("Sort")
         }
-        .foregroundStyle(Color.riceToast)
-        .headerControlChrome()
         .recedesWithSheet(activeSheet != nil)
+    }
+
+    private var filterMenu: some View {
+        Menu {
+            Picker("Category", selection: $categoryFilter) {
+                Text("All").tag(FoodCategory?.none)
+                ForEach(FoodCategory.allCases) { option in
+                    Text(option.rawValue).tag(FoodCategory?.some(option))
+                }
+            }
+        } label: {
+            Image(systemName: categoryFilter == nil
+                  ? "line.3.horizontal.decrease.circle"
+                  : "line.3.horizontal.decrease.circle.fill")
+                // The fill/unfill swap morphs instead of hard-cutting
+                // (iOS 17 API, floor-safe).
+                .contentTransition(.symbolEffect(.replace))
+                .foregroundStyle(Color.riceToast)
+                .frame(width: 34, height: 34)
+        }
+        .headerCircleChrome()
+        .accessibilityLabel("Filter by category")
+    }
+
+    private var sortMenu: some View {
+        Menu {
+            Picker("Sort", selection: $sortRaw) {
+                ForEach(LibrarySort.allCases, id: \.rawValue) { option in
+                    Text(option.label).tag(option.rawValue)
+                }
+            }
+        } label: {
+            Image(systemName: librarySort == .recent
+                  ? "arrow.up.arrow.down.circle"
+                  : "arrow.up.arrow.down.circle.fill")
+                .contentTransition(.symbolEffect(.replace))
+                .foregroundStyle(Color.riceToast)
+                .frame(width: 34, height: 34)
+        }
+        .headerCircleChrome()
+        .accessibilityLabel("Sort")
     }
 
     private func consumeAddFoodKind() {

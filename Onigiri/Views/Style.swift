@@ -194,6 +194,27 @@ extension View {
                 .background(.bar, in: .capsule)
         }
     }
+
+    /// A single header control in its OWN circle, rather than fused
+    /// into one shared pill with its neighbors — matching Apple Music's
+    /// own Search tab, where the trailing control is one clean isolated
+    /// circle rather than a merged group (the user, 2026-09-16, holding
+    /// up Music's Search tab as the reference: "Food[s] header and
+    /// search should look like how Music search does"). Foods' Filter
+    /// and Sort are two logically separate actions, so each gets this
+    /// individually instead of sharing `headerControlChrome()`'s one
+    /// capsule; wrap the icon in a fixed-size frame BEFORE calling this
+    /// so the circle doesn't hug the glyph unevenly.
+    @ViewBuilder
+    func headerCircleChrome() -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular.interactive(), in: .circle)
+        } else {
+            self
+                .padding(8)
+                .background(.bar, in: .circle)
+        }
+    }
 }
 
 extension View {

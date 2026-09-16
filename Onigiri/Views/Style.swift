@@ -322,40 +322,94 @@ extension View {
     }
 }
 
+#if DEBUG
+/// DEBUG-only A/B for the recede look (2026-09-16): the user compares
+/// the candidates on the PHONE from one deploy (Settings → Appearance →
+/// Sheet recede), then the losers are deleted. Not a product setting —
+/// it never ships, and nothing outside DEBUG reads it.
+enum RecedeStyle: String, CaseIterable {
+    case material, thin, ultraThin, scrim
+    static let debugKey = "debugRecedeStyle"
+
+    var label: String {
+        switch self {
+        case .material: "Regular material"
+        case .thin: "Thin material"
+        case .ultraThin: "Ultra-thin material"
+        case .scrim: "Scrim only"
+        }
+    }
+}
+#endif
+
 private struct RecedesBehindSheet: ViewModifier {
     let isPresenting: Bool
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    #if DEBUG
+    @AppStorage(RecedeStyle.debugKey) private var debugStyle = RecedeStyle.ultraThin.rawValue
+    #endif
+
+    /// Which frost, if any. Reduce Transparency swaps it for the
+    /// stronger flat scrim below rather than turning the recede off.
+    private var frost: Material? {
+        guard !reduceTransparency else { return nil }
+        #if DEBUG
+        switch RecedeStyle(rawValue: debugStyle) ?? .ultraThin {
+        case .material: return .regularMaterial
+        case .thin: return .thinMaterial
+        case .ultraThin: return .ultraThinMaterial
+        case .scrim: return nil
+        }
+        #else
+        // Ultra-thin: the closest of the system materials to the 12pt
+        // blur this replaced — regular hides a dark-mode list outright
+        // and thin nearly so (27.0 sim, 2026-09-16). Pending the user's
+        // on-device pick from the DEBUG picker.
+        return .ultraThinMaterial
+        #endif
+    }
 
     func body(content: Content) -> some View {
-        // NO blur filter while idle — the branch, not `.blur(radius:
-        // isPresenting ? 12 : 0)`. A zero-radius blur still hangs a
-        // filter on the host's whole rendered output, and the Liquid
-        // Glass tab bar samples that output every frame of a selection
-        // slide. On a DEVICE (never on a simulator) that made a
-        // Calendar→Today jump park the glass highlight on Foods for
-        // ~200 ms — Today and Foods being the two tab roots that carry
-        // this modifier, Goal and Calendar neither carrying it nor
-        // sticking. Bisected on the phone one variable at a time after
-        // five app-side gating fixes changed nothing (2026-09-15,
-        // plans/PLAN-tab-bar-jank.md, the user: "much better now").
-        // Cost: the blur-in no longer animates from 0 — it appears as
-        // the sheet starts rising, which reads fine; the dim still
-        // fades. Don't put the radius-0 form back for the animation.
-        Group {
-            if isPresenting && !reduceTransparency {
-                content.blur(radius: 12)
-            } else {
-                content
-            }
-        }
-        .overlay {
-            if isPresenting {
-                Color.black.opacity(reduceTransparency ? 0.55 : 0.32)
+        // An OVERLAY — never a modifier on `content`, and never an `if`
+        // AROUND `content`. Two lessons, a day apart:
+        // - 2026-09-15: `.blur(radius: isPresenting ? 12 : 0)` keeps a
+        //   filter on the host's whole rendered output at radius 0,
+        //   which the Liquid Glass tab bar samples every frame of a
+        //   selection slide; on a DEVICE (never a simulator) a
+        //   Calendar→Today jump parked the highlight on Foods ~200 ms
+        //   (plans/PLAN-tab-bar-jank.md). So nothing may touch the
+        //   content while idle.
+        // - 2026-09-16: the fix for that — `Group { if isPresenting {
+        //   content.blur(radius: 12) } else { content } }` — swapped
+        //   between two view TYPES, which changes the content's
+        //   structural identity. Every present and every dismiss tore
+        //   the whole host subtree down and rebuilt it on the main
+        //   thread in the dismissal's own transaction: Today's entire
+        //   NavigationStack under a closing Log sheet (its `.sheet`
+        //   slot, `.task`, scroll offset and all), the Foods List under
+        //   a closing food form. Cancel/Done "didn't register, then
+        //   did" on the phone, and the un-blur was a hard cut ~360 ms
+        //   after an interactively dismissed child had already left
+        //   (plans/PLAN-sheet-dismiss-latency.md;
+        //   testSheetRoundTripKeepsFoodsScroll bites on the branch).
+        // The material frosts what sits behind it without entering
+        // the content's modifier chain, and the `if` lives INSIDE the
+        // overlay, where insertion and removal cost one rectangle.
+        content
+            .overlay {
+                if isPresenting {
+                    ZStack {
+                        if let frost {
+                            Rectangle().fill(frost)
+                        }
+                        Color.black.opacity(reduceTransparency ? 0.55 : 0.32)
+                    }
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
+                    .transition(.opacity)
+                }
             }
-        }
-        .animation(.easeOut(duration: 0.2), value: isPresenting)
+            .animation(.easeOut(duration: 0.2), value: isPresenting)
     }
 }
 

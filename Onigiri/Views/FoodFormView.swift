@@ -908,7 +908,13 @@ struct FoodFormView: View {
         // closing is routine.
         guard portionSheetWasUp else { return }
         portionSheetWasUp = false
-        guard !portionDidLog else { return }
+        if portionDidLog {
+            // Logged: `log` already dismissed this form in the same
+            // turn as the portion sheet; if the cascade somehow left it
+            // standing, leave now rather than linger.
+            dismiss()
+            return
+        }
         // A cancelled portion means opposite things on the two routes,
         // and getting this wrong destroys work. After Save & Log the
         // food is already safely in the library, so saying so and
@@ -931,6 +937,15 @@ struct FoodFormView: View {
             row.lastUsedAt = .now
             context.saveOrLog("recency")
         }
+        // Leave NOW, in the same turn as the portion sheet's own
+        // dismiss(), so both go in ONE cascade (UIKit takes a presented
+        // child down with its presenter) instead of two slides in a
+        // row — and never wait on the HealthKit write below, which is
+        // what held this form on screen after the portion sheet had
+        // gone (the user, 2026-09-16: "slow to do anything"). A failed
+        // write still reports through logFood's own "Couldn't log"
+        // toast; nothing on this form could have helped it.
+        dismiss()
         Task {
             let logged = await LogActions.logFood(
                 name: target.name,
@@ -945,7 +960,7 @@ struct FoodFormView: View {
             if logged {
                 onLogged?()
             }
-            dismiss()
+            // No dismiss() here — see above; the form is already gone.
         }
     }
 

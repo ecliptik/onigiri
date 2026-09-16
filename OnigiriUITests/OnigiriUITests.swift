@@ -1456,6 +1456,80 @@ final class OnigiriUITests: XCTestCase {
         )
     }
 
+    /// A sheet round trip must leave its host's subtree alone
+    /// (`RecedesBehindSheet`, Style.swift). Scroll the Foods list well
+    /// past its top, open a row's edit form, Cancel — and the row is
+    /// still where it was. The 2026-09-15 blur BRANCH (`if isPresenting
+    /// { content.blur } else { content }`) rebuilt the whole host on
+    /// every present AND dismiss: this list snapped back to its top,
+    /// Today's NavigationStack was re-created under the closing Log
+    /// sheet, and Cancel/Done in both dialogs read as sluggish on the
+    /// phone (the user, 2026-09-16; `plans/PLAN-sheet-dismiss-latency.md`).
+    /// Fails against that branch; passes on the overlay form. Asserts
+    /// hittability and the row's frame, never existence — a reset list
+    /// still "has" the row.
+    @MainActor
+    func testSheetRoundTripKeepsFoodsScroll() throws {
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        // Big library: the four-item seed never scrolls.
+        app.launchArguments = ["--seed-sample-data", "--seed-big-library"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        switchTab(in: app, to: "Foods")
+        // Rows, not their "Log …" + buttons, which carry the same name.
+        let rows = app.descendants(matching: .any).matching(NSPredicate(
+            format: "label CONTAINS 'Filler food' AND NOT (label BEGINSWITH 'Log ')"
+        ))
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 10), "Big library seeded")
+        // The list's top is whichever filler leads at rest (the Recent
+        // sort puts the fillers, created last, ahead of the four named
+        // seeds — which sit 30 rows down, virtualized out of the tree).
+        let topLabel = rows.firstMatch.label
+        let topRow = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@", topLabel)
+        ).firstMatch
+        XCTAssertTrue(topRow.isHittable, "Top row on screen at rest")
+
+        // Scroll until the list's top is off screen, then anchor on a
+        // row sitting mid-screen, clear of the drawer and the tab bar.
+        var anchor: XCUIElement?
+        for _ in 0..<6 {
+            app.swipeUp()
+            Thread.sleep(forTimeInterval: 0.6)
+            guard !topRow.isHittable else { continue }
+            let screenMidY = app.frame.midY
+            anchor = rows.allElementsBoundByIndex.first {
+                $0.isHittable && abs($0.frame.midY - screenMidY) < 150
+            }
+            if anchor != nil { break }
+        }
+        let row = try XCTUnwrap(anchor, "A filler row mid-screen with the list's top scrolled away")
+        let label = row.label
+        let yBefore = row.frame.minY
+        attachShot(named: "foods-scrolled-before-sheet")
+
+        // The row itself (not its +) opens the edit form.
+        row.tap()
+        let cancel = app.buttons["Cancel"].firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10), "Edit form opened")
+        XCTAssertTrue(app.textFields["Name"].waitForExistence(timeout: 5), "Edit form shows the Name field")
+        cancel.tap()
+        XCTAssertTrue(cancel.waitForNonExistence(timeout: 10), "Edit form dismissed")
+        attachShot(named: "foods-scrolled-after-sheet", settle: 1.0)
+
+        let after = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@", label)
+        ).firstMatch
+        XCTAssertTrue(after.waitForExistence(timeout: 5), "Row still in the tree after the round trip")
+        XCTAssertTrue(after.isHittable, "Row still on screen after the sheet round trip")
+        XCTAssertEqual(after.frame.minY, yBefore, accuracy: 4,
+                       "List kept its scroll offset across the sheet round trip")
+        XCTAssertFalse(topRow.isHittable, "List did not snap back to its top")
+    }
+
     /// Barcode → OpenFoodFacts lookup prefills the food form. Uses the
     /// manual-entry fallback (no camera in the simulator) and live network.
     @MainActor
@@ -2803,7 +2877,27 @@ final class OnigiriUITests: XCTestCase {
         // It logged: the entry is on Today. The log's meal groups render
         // COLLAPSED on a seeded day, so expand them before looking, and
         // scroll — the slot may sit below the fold.
-        app.buttons["Done"].firstMatch.tap()
+        //
+        // The form and the portion sheet leave in ONE cascade after Log
+        // (2026-09-16), and the Log sheet comes back still SEARCHING the
+        // dead-end query — where the top drawer's search controller has
+        // swapped Cancel/Sort/Done for its own "Close" (the iOS 26
+        // landmine measured here on 2026-09-15). Wait for the sheet to
+        // be back, end the search, then Done. Tapping Done straight
+        // after Log found no Done at all: two failures, 2026-09-16, one
+        // per reason.
+        let closeSearch = app.buttons["Close"].firstMatch
+        for _ in 0..<40 where !(closeSearch.exists && closeSearch.isHittable) {
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        XCTAssertTrue(closeSearch.isHittable, "Log sheet back (still searching) after the form left")
+        closeSearch.tap()
+        let done = app.buttons["Done"].firstMatch
+        for _ in 0..<20 where !(done.exists && done.isHittable) {
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        XCTAssertTrue(done.isHittable, "Log sheet's Done back once the search is closed")
+        done.tap()
         switchTab(in: app, to: "Today")
         let entry = app.staticTexts[oneOff]
         let expandAll = app.buttons.matching(

@@ -192,7 +192,7 @@ struct QuickLogSheet: View {
     }
 
     /// The BROWSING pool: the selected scope, ranked purely by recency
-    /// (Micheal: no favorite boost — "what I actually eat" order), name
+    /// (the user: no favorite boost — "what I actually eat" order), name
     /// for stability.
     ///
     /// Search does NOT come through here. It used to, and the scope

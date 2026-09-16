@@ -328,6 +328,26 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
 
 Each cost a debugging session.
 
+- **An `if/else` that wraps `content` two different ways changes the
+  content's IDENTITY, and a view modifier is the easiest place to write
+  one** (2026-09-16, `plans/PLAN-sheet-dismiss-latency.md`).
+  `RecedesBehindSheet` shipped for a day as `Group { if isPresenting {
+  content.blur(radius: 12) } else { content } }` — the 2026-09-15 fix for
+  the tab-bar stall below. The branches are different view TYPES, so
+  every sheet present AND dismiss tore the host's whole subtree down and
+  rebuilt it on the main thread in the dismissal's own transaction:
+  Today's entire NavigationStack under a closing Log sheet (`.sheet`
+  slot, `.task`, scroll offset and all), the Foods List under a closing
+  food form. Cancel/Done "didn't register, then did" on the phone, and
+  the un-blur was a hard cut ~360 ms after an interactively dismissed
+  child had already left (27.0 sim, frame-counted). The recede is an
+  OVERLAY now: the `if` lives inside `.overlay`, where it costs one
+  rectangle, and nothing touches the content while idle, which is what
+  the tab-bar rule needs. Same family as TodayView's `AnyLayout` pane
+  switch and `entryDoorBar`'s "empty the bar, don't drop the modifier".
+  `testSheetRoundTripKeepsFoodsScroll` bites on the branch form. When a
+  modifier must vary by state, vary a VALUE (an opacity, an overlay's
+  presence, a layout) — never which modifiers wrap `content`.
 - Every relationship needs an explicit inverse. Without one, deleting the target
   leaves a dangling reference, and SwiftData KILLS THE PROCESS ("backing data
   could no longer be found") on the next property access — the app crash-looped
@@ -457,8 +477,10 @@ Each cost a debugging session.
   jump parked the glass highlight on Foods for ~200 ms — 12 static
   frames, then the last hop — and double-flashed on arrival. Today and
   Foods carried the modifier and stuck; Goal and Calendar carried it not
-  and never did. It now branches: no filter while idle, and the blur-in
-  no longer animates from 0 (the dim still fades). Rules learned:
+  and never did. It is an OVERLAY now — material + scrim, inserted only
+  while presenting, so nothing touches the content while idle. (The
+  branch form that first fixed it re-created the host on every sheet;
+  see the identity landmine above.) Rules learned:
   - **The simulator cannot reproduce it, on 26.5 or 27.0** — the real
     app and a stock five-tab `TabView` of the same shape both slide in
     ~140 ms there. So a sim run can rule the OS OUT but cannot rule a fix

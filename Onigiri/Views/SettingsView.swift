@@ -955,6 +955,9 @@ private struct AppearanceSettingsScreen: View {
     // Raw scope name, matching FoodsView.Scope's rawValues.
     @AppStorage(SharedStore.foodsDefaultScopeKey, store: SharedStore.defaults)
     private var foodsDefaultScope = "Foods"
+    #if DEBUG
+    @AppStorage(RecedeStyle.debugKey) private var recedeStyle = RecedeStyle.ultraThin.rawValue
+    #endif
 
     var body: some View {
         Form {
@@ -972,6 +975,16 @@ private struct AppearanceSettingsScreen: View {
                         Text(theme.label).tag(theme.rawValue)
                     }
                 }
+                #if DEBUG
+                // DEBUG A/B only (2026-09-16): how the host recedes
+                // behind a sheet — see `RecedeStyle` (Style.swift).
+                // Deleted once the user has chosen on the phone.
+                Picker("Sheet recede", selection: $recedeStyle) {
+                    ForEach(RecedeStyle.allCases, id: \.rawValue) { style in
+                        Text(style.label).tag(style.rawValue)
+                    }
+                }
+                #endif
                 // The two Today-display toggles, grouped together (the
                 // user, 2026-08-30): both decide what's ON the Today
                 // screen, as opposed to the icon/wording choices below

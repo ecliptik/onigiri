@@ -402,13 +402,21 @@ struct QuickLogSheet: View {
             .compactSections()
             .riceCanvas()
             .hardTopScrollEdge()
-            // Plain navigationTitle would leave "Log" as native chrome
-            // recedesWithSheet() can't reach — a .principal item instead,
-            // so the title dims with Cancel/Done/Sort while a child sheet
-            // is up (the user, 2026-09-13/14: the heading still read as
-            // active). The string stays for VoiceOver/back-button text.
+            // LARGE title, matching Foods' header exactly — the search
+            // drawer, the doors bar, and now the title all read as one
+            // consistent header shape across the two screens (the user,
+            // 2026-09-16, from-device screenshots: the compact title
+            // this used to carry made the two screens look
+            // inconsistent even though the search field itself was
+            // already identical). This gives up the 2026-09-13/14 fix
+            // where the title dimmed alongside Cancel/Sort/Done while a
+            // child sheet was up — a native large title can't be
+            // reached by `.recedesWithSheet()` the way a custom
+            // `.principal` item could. The dimmed Cancel/Sort/Done
+            // buttons plus `recedesBehindSheet()`'s blur/scrim on the
+            // whole list still say "something else is active"; only the
+            // title text itself no longer joins in.
             .navigationTitle("Log")
-            .navigationBarTitleDisplayMode(.inline)
             // Music-style: the kind pills pinned on top of the results,
             // not scrolled away with them. Favorites replaced "All"; the
             // mixed view earned its keep only as a favorites shelf.
@@ -475,11 +483,6 @@ struct QuickLogSheet: View {
                 // anything; Done stays the affirmative finish for
                 // multi-item lunches, in the confirm slot (top trailing,
                 // emphasized) like Settings' Done.
-                ToolbarItem(placement: .principal) {
-                    Text("Log")
-                        .font(.headline)
-                        .recedesWithSheet(activeSheet != nil)
-                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         // The in-flight online search dies with the

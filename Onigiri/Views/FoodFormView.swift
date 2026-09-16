@@ -218,56 +218,46 @@ struct FoodFormView: View {
 
     private var formContent: some View {
             Form {
-                // The scanner leads the form as a labeled row (Micheal's
-                // pick — the toolbar icon crowded the Save cluster);
-                // lookup status lands right beneath it. The search field
-                // lives at the bottom, system placement.
-                // The shared scan door — identical on Foods, the Log
-                // sheet, and here (PLAN-entry-doors). The scan door
-                // shows this form's lookup provenance in its caption.
-                if isBlankNewFood {
-                    EntryDoorsSection(
-                        scanBusy: isLookingUp,
-                        scanCaption: lookupMessage,
-                        describeQuery: $describeQuery,
-                        onScan: { activeSheet = .scanner(notice: nil) },
-                        onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } }
-                    )
-                    // The describe field's own results, right under
-                    // where it's typed (2026-08-29) — AI → online, the
-                    // order the field's own doc comment and the rest of
-                    // the app already use. Picking either applies the
-                    // catch to the fields below, with the provenance in
-                    // the scan-door caption slot.
-                    if !describeQuery.trimmingCharacters(in: .whitespaces).isEmpty {
-                        if FoodIntelligence.isAvailable {
-                            AIEstimateSection(query: describeQuery) { product in
-                                apply(product)
-                                lookupMessage = product.aiEngine?.estimateCaption
-                                describeQuery = ""
-                            }
-                        }
-                        // Moved from the retired bottom search field
-                        // (2026-08-29) — same section, same behavior,
-                        // just driven by the describe field now.
-                        if SharedStore.onlineLookups {
-                            OnlineResultsSection(query: describeQuery, search: onlineSearch, onPick: { product in
-                                apply(product)
-                                describeQuery = ""
-                                onlineSearch.clear()
-                            }, onAddManually: { pickedName in
-                                name = pickedName
-                                describeQuery = ""
-                                onlineSearch.clear()
-                            })
+                // The camera + describe doors are the PINNED bar under
+                // this form (`entryDoorBar`, below) — the same bar the
+                // Log sheet shows. They led the form as a chip row from
+                // 2026-08-29 until 2026-09-16 (the user: "add the
+                // camera/describe on the Add food dialog like the
+                // camera/describe when logging food"). The describe
+                // field's own results still render HERE, at the top,
+                // AI → online — picking either applies the catch to the
+                // fields below, with the provenance in the caption row.
+                if isBlankNewFood, !describeQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                    if FoodIntelligence.isAvailable {
+                        AIEstimateSection(query: describeQuery) { product in
+                            apply(product)
+                            lookupMessage = product.aiEngine?.estimateCaption
+                            describeQuery = ""
                         }
                     }
-                } else if let lookupMessage {
-                    // Prefilled opens hide the doors (the form isn't
-                    // blank), so provenance that traveled in with the
-                    // prefill — Foods' describe door, most importantly —
-                    // needs its own row or "review before saving" is
-                    // silently lost at the sheet boundary.
+                    // Moved from the retired bottom search field
+                    // (2026-08-29) — same section, same behavior,
+                    // just driven by the describe field now.
+                    if SharedStore.onlineLookups {
+                        OnlineResultsSection(query: describeQuery, search: onlineSearch, onPick: { product in
+                            apply(product)
+                            describeQuery = ""
+                            onlineSearch.clear()
+                        }, onAddManually: { pickedName in
+                            name = pickedName
+                            describeQuery = ""
+                            onlineSearch.clear()
+                        })
+                    }
+                }
+                // Lookup provenance ("review before saving") as its own
+                // row, blank form or not: the bar has no caption slot
+                // the way the old chip row did, and a prefilled open —
+                // Foods' describe door, most importantly — has no doors
+                // at all, so provenance that traveled in with the
+                // prefill would otherwise be silently lost at the sheet
+                // boundary.
+                if let lookupMessage {
                     Section {
                         Text(lookupMessage)
                             .font(.footnote)
@@ -483,7 +473,7 @@ struct FoodFormView: View {
                 // 2026-08-29 along with it).
                 guard activeSheet == nil,
                       let field = note.object as? UITextField,
-                      field.accessibilityIdentifier != EntryDoorsSection.describeFieldAccessibilityID
+                      field.accessibilityIdentifier != EntryDoorDescribeField.accessibilityID
                 else { return }
                 DispatchQueue.main.async { field.selectAll(nil) }
             }
@@ -516,6 +506,22 @@ struct FoodFormView: View {
                 Button("Keep Editing", role: .cancel) {}
             }
             .interactiveDismissDisabled(isDirty)
+            // The scanner and describe doors, PINNED under the form for a
+            // blank new food only (`isBlankNewFood` — a form opened from
+            // a search result, or editing a saved food, offering another
+            // search was a loop). Emptied rather than dropped, same as
+            // the Log sheet's. It rides above the keyboard while a field
+            // is being typed into, which the 2026-09-15 plan counted
+            // against a bar under a form; the user weighed that against
+            // having one door bar everywhere and chose the bar.
+            .entryDoorBar(isHidden: !isBlankNewFood) {
+                EntryDoorBar(
+                    scanBusy: isLookingUp,
+                    describeQuery: $describeQuery,
+                    onScan: { activeSheet = .scanner(notice: nil) },
+                    onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } }
+                )
+            }
             .recedesBehindSheet(activeSheet != nil)
             .sheet(item: $activeSheet, onDismiss: sheetDidDismiss) { sheet in
                 switch sheet {

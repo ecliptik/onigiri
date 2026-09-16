@@ -35,9 +35,9 @@ struct QuickLogSheet: View {
     private var librarySort: LibrarySort { LibrarySort(rawValue: sortRaw) ?? .recent }
     @State private var searchText = ""
     /// What's typed into the entry door's "Describe food or meal" field
-    /// — independent of `searchText`, which is library/online search
-    /// only now that the describe field has its own home
-    /// (`EntryDoorsSection`, 2026-08-29).
+    /// — independent of `searchText`, which is library search only now
+    /// that the describe field has its own home (`EntryDoorBar`, since
+    /// 2026-08-29).
     @State private var describeQuery = ""
     @State private var isLogging = false
     @State private var onlineSearch = OnlineFoodSearch()
@@ -477,7 +477,7 @@ struct QuickLogSheet: View {
             // `searching` predicate that hides the scope row, rather
             // than dropping the modifier.
             .entryDoorBar(isHidden: searching) {
-                LogSheetDoorBar(
+                EntryDoorBar(
                     scanBusy: isLookingUpBarcode,
                     describeQuery: $describeQuery,
                     onScan: { activeSheet = .scanner(notice: nil) },

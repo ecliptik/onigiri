@@ -1482,8 +1482,8 @@ final class OnigiriUITests: XCTestCase {
         // (FoodsView: "this is the LIBRARY screen, and the + already
         // opens an Add Food form that carries the very same two doors"),
         // so the row it looked for had not existed for a fortnight.
-        // `EntryDoorsSection` now renders in exactly two places — the
-        // Log sheet and a blank food form — and the Add tab IS the Log
+        // The door bar (`EntryDoorBar`) renders in exactly two places —
+        // the Log sheet and a blank food form — and the Add tab IS the Log
         // sheet (`Tab("Add" …, value: .log)`), which keeps the intent
         // the original comment named: an unknown barcode goes straight
         // to the prefilled form, no trip through a chooser.
@@ -1568,12 +1568,16 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(mineralCount.exists, "3 minerals prefilled")
         attachShot(named: "label-scan-prefilled-form")
 
-        // Leg 2 — the Foods screen's own Scan Label row: same pipeline,
-        // but the handoff re-presents the single sheet slot as the
-        // prefilled form (the unknown-barcode route). Values scanned IN
-        // a blank form make it dirty, so this Cancel confirms first —
-        // and the form must be GONE before tapping, or the form's own
-        // Scan Label row shadows the Foods row.
+        // Leg 2 — the Log sheet's door (opened via the corner pill from
+        // Today): same pipeline, but the handoff re-presents the single
+        // sheet slot as the prefilled form (the unknown-barcode route),
+        // and that form carries the log date back. Values scanned IN a
+        // blank form make it dirty, so this Cancel confirms first — and
+        // the form must be GONE before the next tap, or the form's own
+        // door shadows the sheet's. (A Foods-tab leg sat between the two
+        // until 2026-09-16, hunting the scan row Foods lost on 2026-08-02
+        // — CLAUDE.md: "don't re-add a Foods-tab scan row". The doors
+        // render in exactly two places and both legs are here.)
         func closeFoodForm() {
             app.buttons["Cancel"].firstMatch.tap()
             let discard = app.buttons["Discard"]
@@ -1589,22 +1593,6 @@ final class OnigiriUITests: XCTestCase {
             )
             wait(for: [formGone], timeout: 5)
         }
-        closeFoodForm()
-        let foodsScanLabel = scanRow(in: app)
-        XCTAssertTrue(foodsScanLabel.waitForExistence(timeout: 5), "Scan Label row on Foods")
-        attachShot(named: "label-scan-foods-rows")
-        foodsScanLabel.tap()
-        XCTAssertTrue(sample.waitForExistence(timeout: 5), "Sample row from the Foods surface")
-        sample.tap()
-        XCTAssertTrue(
-            fieldWithValue("280").waitForExistence(timeout: 20),
-            "Foods scan handed off to the prefilled form")
-        attachShot(named: "label-scan-foods-handoff")
-
-        // Leg 3 — the Log sheet's row (opened via the corner pill from
-        // Today); its form carries the log date back. This form arrived
-        // prefilled (untouched), so its Cancel dismisses without the
-        // confirm — closeFoodForm handles either way.
         closeFoodForm()
         switchTab(in: app, to: "Today")
         switchTab(in: app, to: "Add")

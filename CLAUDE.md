@@ -486,6 +486,23 @@ Each cost a debugging session.
   - The iOS 27 merged "+" (search-role tab drawn in the row, not the
     26 detached circle) is Apple's platform change, not ours; accepted
     2026-09-15.
+  - **It came back on 2026-09-16, and the SECOND cause was the Today-tap
+    stamp** (`plans/PLAN-tab-bar-jank.md`, "Second cause"). The blur fix
+    had been verified on the phone with that stamp DISABLED (the plan's
+    Phase 1 diagnostic) and shipped with it restored. The TabView
+    selection setter wrote the observed `quickActions.dayRequest` on
+    every user tap of Today, switches included, which re-ran
+    ContentView's body — the whole TabView — as the slide began, then
+    again when Today consumed it to nil. This cause the SIMULATOR does
+    show: the probe measured ~300 ms / 6–10 Foods frames with the stamp
+    and ~140 ms / 2–3 without, on the 27.0 sim, at the branch point and
+    at HEAD alike — so the "sim cannot reproduce it" rule above is about
+    the first cause only; run the probe before assuming. Fix: a switch
+    to Today sets `QuickActions.todayTabTapped`, `@ObservationIgnored`,
+    which Today consumes on appear; only a RE-TAP (no slide) still
+    writes `dayRequest`. Rules: nothing ContentView's body observes may
+    be written from the selection setter, and a fix is verified on a
+    build with every diagnostic toggle at its shipping value.
 
 - **Every screen's header is a NATIVE `.inlineLarge` title
   (`inlineLargeTitle`, Style.swift) and nothing draws its own** — a day
@@ -895,19 +912,20 @@ Each cost a debugging session.
   fields are the STANDARD system `.searchable`, pinned in the top drawer
   everywhere (`librarySearch`, Style.swift — the bottom pill was the Log
   sheet's until 2026-09-15) — the user vetoed custom bars and auto-focus;
-  the scanner is icon-only or a
-  labeled list row (`ScanRowLabel`) depending on AI availability (below),
-  never a toolbar icon.
-- **`EntryDoorsSection` splits into two doors when AI is on, one when it's
-  off** (2026-08-29, undoing part of the 2026-07 merge below on purpose —
-  the user: "make the camera button separate and [add] the text field... if
-  AI features are enabled"). AI ON: a compact icon-only camera button
-  (`DoorCircleGlyph`, the same measured circle `DoorRowLabel` draws) beside a
-  "Describe food or meal" `TextField`, one row. AI OFF: the field is hidden
-  entirely (nothing behind it works without AI) and the camera button falls
-  back to the full `ScanRowLabel` row, "Scan Barcode, Label, or Menu" — that
-  string no longer branches on `FoodIntelligence.isAvailable` itself, since
-  its one remaining caller only reaches it when that's already false.
+  the scanner is the camera button in the pinned door bar (`EntryDoorBar`,
+  below), never a toolbar icon.
+- **The doors are ONE pinned bar, `EntryDoorBar`, under both hosts — two
+  doors when AI or online lookups are on, one full-width labeled door when
+  neither is** (2026-09-16, the user: "add the camera/describe on the Add
+  food dialog like the camera/describe when logging food"; the form had
+  kept an in-form chip row, `EntryDoorsSection`, since 2026-08-29 — the
+  2026-09-15 plan's reason for that, a bar competing with the keyboard
+  under a form, was weighed and overruled). The two-door split itself
+  dates from 2026-08-29 (the user: "make the camera button separate and
+  [add] the text field... if AI features are enabled"): an icon-only
+  camera button beside a "Describe food or meal" field. Neither on: the
+  field is hidden entirely (nothing behind it works) and the camera
+  becomes the labeled door, "Scan Barcode, Label, or Menu".
   - **The describe field owns its OWN query, separate from the bottom
     `.searchable` field.** A describe field lived here once and was merged
     into the bottom field so the screen carried one text field instead of
@@ -932,28 +950,22 @@ Each cost a debugging session.
     field is already exempt — an in-progress description must not be
     select-all'd out from under a refocus. It has no `dbSearchActive`-style
     flag of its own to gate on, so the exemption matches by
-    `field.accessibilityIdentifier == EntryDoorsSection
-    .describeFieldAccessibilityID` instead, since that's the only handle
-    the notification's raw `UITextField` hands back.
-  - `testLabelScanPrefillsForm`'s SECOND leg ("Scan Label row on Foods",
-    `LABEL_SCAN=1`-gated) has the SAME stale Foods-tab expectation
-    `testBarcodeLookupPrefillsForm` was fixed for below — found 2026-08-29
-    running it for the first time in this exercise, still unfixed because
-    it never runs in a normal pass. Foods still has no scan row; fix the
-    test, not the product.
-  - **The button and the field must draw their OWN chip each, and be sized
-    the SAME `44pt`/`.body.weight(.bold)` pairing `LogButton` uses** — both
-    corrections, same day. A plain `TextField` has no visible bound of its
-    own, so a shared row card read as one blob with the circle floating
-    inside it (the user: "doesn't look separate from the camera") — the
-    field now gets the SAME `.quaternary` fill the circle already used, so
-    each draws its own chip. That freed the button to grow past 44pt, which
-    then broke height parity with the Water row sitting right below it in
-    the same list (Log sheet, Favorites) — checkable at a glance since both
-    are on screen together, and the user caught it. `LogButton`'s frame is
-    what sets Water's row height, so matching it exactly is what makes the
-    two pills agree; don't grow the button past it again without also
-    checking that row.
+    `field.accessibilityIdentifier == EntryDoorDescribeField
+    .accessibilityID` instead, since that's the only handle the
+    notification's raw `UITextField` hands back.
+  - `testLabelScanPrefillsForm` (`LABEL_SCAN=1`-gated) covers both hosts:
+    the blank Add Food form, then the Log sheet. Its old middle leg hunted
+    a Foods-tab scan row that left on 2026-08-02 — found stale 2026-08-29,
+    removed 2026-09-16. Foods has no scan row; fix tests, not the product.
+  - **The button and the field draw their OWN chip each** (2026-08-29, the
+    user: "doesn't look separate from the camera" when they shared one
+    card) — in the bar that is a tinted glass circle and a plain glass
+    capsule on iOS 26+, and below the floor two
+    `.tertiarySystemGroupedBackground` chips: that flat system color, NOT
+    `.quaternary`, whose vibrancy washed out light on a real device in
+    dark mode (the user, 2026-08-30, from-device screenshot). Both
+    controls are 50pt tall — the list rows they sit under read taller
+    than the 44pt minimum (the user, 2026-09-16).
   - **The Log sheet's entry door now renders on ALL THREE scopes,
     including Meals** (2026-08-29, reversing "on the Meals scope —
     scanning adds a FOOD; meals are built from foods already added",
@@ -974,11 +986,11 @@ Each cost a debugging session.
     surfaces `AIEstimateSection` AND `OnlineResultsSection` together,
     AI → online order, both still tap-to-run (never per-keystroke) so
     combining them costs nothing.
-    - **`EntryDoorsSection.describeFieldAvailable` is `isAvailable ||
+    - **`EntryDoorBar.describeFieldAvailable` is `isAvailable ||
       onlineLookups`, not `isAvailable` alone.** Online lookups don't
       need AI; gating the field on AI alone would strand them with
       no way to search whenever AI is off. Only "neither is on" falls
-      back to the full labeled row.
+      back to the full labeled door.
     - **The bottom `.searchable` field is LOCAL LIBRARY SEARCH ONLY
       now, everywhere** — QuickLogSheet's prompt dropped "and More"
       (now "Foods and Meals"); FoodFormView's bottom field is RETIRED
@@ -990,7 +1002,7 @@ Each cost a debugging session.
       (2026-08-30, the user: "Update the Foods tab search field so it
       only searches added/saved foods and meals"). It carried the SAME
       merged AI+online+local pattern the other two hosts had before
-      this whole redesign, independently — it isn't `EntryDoorsSection`
+      this whole redesign, independently — it isn't the door bar
       and never routed through it, so the 2026-08-29 changes above
       genuinely didn't reach it and it briefly WAS the one host still
       un-migrated (documented as deliberate the same day; that note
@@ -1019,7 +1031,7 @@ Each cost a debugging session.
       since the test is opt-in (`ADD_FROM_SEARCH=1`) and never ran in
       a normal pass.
     - **A keyboard-submit convenience survives the move**:
-      `EntryDoorsSection.onDescribeSubmit` fires only the ONLINE leg
+      `EntryDoorBar.onDescribeSubmit` fires only the ONLINE leg
       (`onlineSearch.search(describeQuery)`) on Return, matching what
       the retired bottom field's `.onSubmit(of: .search)` did. AI
       stays tap-only, unchanged — its own button in `TapToEstimateRow`,
@@ -1057,7 +1069,8 @@ Each cost a debugging session.
   table branch runs first; real photos produce tables, rendered label graphics
   don't, so the geometry parser is a load-bearing fallback, not legacy.
 - **The entry doors render in exactly TWO places: the Log sheet and a BLANK
-  food form** (`EntryDoorsSection`, gated on `isBlankNewFood` in the form).
+  food form** (`EntryDoorBar` via `entryDoorBar`, gated on `isBlankNewFood`
+  in the form).
   They led the Foods tab until 2026-08-02 and were removed (the user): Foods
   is the LIBRARY screen, the + already opens an Add Food form carrying the
   same doors, so the screen shipped two add paths competing for one job with

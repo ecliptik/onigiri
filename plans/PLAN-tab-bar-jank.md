@@ -149,3 +149,53 @@ for next time. CLAUDE.md carries the landmine.
 Not answered, and not needed to ship: why the simulator's compositor
 hides it, and whether the phone's ProMotion-less 60 Hz panel matters.
 If it returns, the probe + analyzer give a number in one run.
+
+## Second cause (2026-09-16): the Today-tap stamp
+
+It came back. The user, the evening after the blur fix shipped: "the
+stuttering of the liquid glass selector when moving to Today is back."
+
+Measured, not guessed, with the probe and analyzer this plan left
+behind, on the 27.0 simulator (iPhone 18 Pro), `--tab-probe-no-health`,
+Calendar→Today ×3 (the analyzer labels the origin by the first settled
+icon it sees, hence "Goal→Today" in its own output):
+
+| Build | tap-to-settle | frames | Foods-band dwell |
+|---|---|---|---|
+| HEAD of `log-sheet-layout` (native headers) | ~283 ms | 20 | 10 |
+| same, `.inlineLarge` off everywhere | 267–287 ms | 17–25 | 7 / 8 / 10 |
+| **branch point `f06e555`** (the blur fix, as shipped) | 263–303 ms | 20–23 | 6 / 7 / 2 |
+| HEAD, Today-tap stamp disabled (this plan's Phase 1) | 135–152 ms | 10–11 | 2 / 3 / 3 |
+| HEAD, the fix below (`todayTabTapped`) | 133–148 ms | 11–12 | 3 / 3 / 4 |
+
+So the header rework was innocent, and so was the simulator's
+reputation: the sim never showed the FIRST cause (a GPU filter), but it
+shows this one plainly. Which also explains the table above: this plan's
+clean "real app on the 27.0 sim" row was measured on the Phase 1
+diagnostic build — stamp disabled — and the blur fix was then verified
+on the phone in that same state ("Much better now") and shipped with the
+stamp restored. Two causes, one symptom; removing either one alone
+helps, removing both is smooth.
+
+The mechanism: `ContentView.tabSelection`'s setter wrote the OBSERVED
+`quickActions.dayRequest` on every user tap of Today, switches included,
+synchronously before `selectedTab`. ContentView's body observes that
+property (its `onChange` for Calendar's "View day"), so the write re-ran
+the body — the whole `TabView` — as the slide began; `TodayView`'s
+consumer then wrote it back to `nil`, re-running it again. Two TabView
+re-evaluations inside a ~140 ms animation. The five gates of 2026-09-15
+made Today's REACTION a no-op and left the writes in place, which is
+why they changed nothing.
+
+Fix: a SWITCH to Today sets `QuickActions.todayTabTapped`, an
+`@ObservationIgnored` Bool no view observes; `TodayView` consumes it on
+appear (a tab switch always fires it) and browses home — a no-op when
+already on today with nothing pushed. A RE-TAP, with no slide to
+disturb, still raises `dayRequest` and shares the "View day" consumer.
+Deferring the observed write a runloop turn (tried 2026-09-15) is not an
+alternative: the double commit it caused is the "flashes twice" above.
+
+Two rules come out of it. Nothing ContentView's body observes may be
+written from the TabView selection setter. And verify a fix on a build
+with every diagnostic toggle at its SHIPPING value — a diagnostic left
+flipped through verification can be the fix without anyone noticing.

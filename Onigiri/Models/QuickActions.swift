@@ -39,6 +39,21 @@ final class QuickActions {
     /// (Calendar's "View day"), same consumable-Optional pattern.
     var dayRequest: Date?
 
+    /// The Today TAB was tapped while another tab was showing: land on
+    /// today's date (the same landing `dayRequest` gives, minus the
+    /// request). NOT observed, on purpose — `@ObservationIgnored`, a plain
+    /// flag, no `onChange` anywhere. It is written inside the TabView's
+    /// selection setter, i.e. the very moment the tab bar starts its
+    /// slide, and an OBSERVED write there re-runs ContentView's body (the
+    /// whole TabView) mid-animation, then again when Today consumes it.
+    /// That was the second cause of the glass highlight parking on Foods
+    /// on the way to Today (plans/PLAN-tab-bar-jank.md, 2026-09-16; the
+    /// first was Style.swift's idle blur). TodayView reads and clears it
+    /// on appear, which a tab switch always fires; the re-tap case (no
+    /// slide) still goes through `dayRequest`. A Bool is fine here where
+    /// the others need Optionals: nothing waits on it changing.
+    @ObservationIgnored var todayTabTapped = false
+
     /// One-shot request for FoodsView to open the add-to-library form:
     /// `.food` → new food, `.meal` → new meal. The chooser that sets this
     /// lives in ContentView (presented synchronously as the + is tapped, so

@@ -368,6 +368,7 @@ struct TodayView: View {
         // (and itself ends in a refresh), and the foreground gate covers
         // re-activations — the onAppear refresh just doubled both.
         .onAppear {
+            consumeTodayTabTap()
             consumeQuickLogRequest()
         }
         .onChange(of: scenePhase) { _, phase in
@@ -385,6 +386,24 @@ struct TodayView: View {
         // Blurring the whole stack's rendered output instead covers root
         // AND any push depth.
         .recedesBehindSheet(activeSheet != nil)
+    }
+
+    /// The Today TAB was tapped while another tab was showing
+    /// (`QuickActions.todayTabTapped`, set in ContentView's tab binding):
+    /// browse home to today and pop any pushed detail — the landing a
+    /// re-tap or a Calendar "View day" gets through `dayRequest`, without
+    /// the observed write that re-ran the TabView mid-slide (see the
+    /// flag's own doc comment). On appear only: a tab switch always fires
+    /// it, and by then the slide is the tab bar's business. Nothing here
+    /// touches state when already on today with no push: the common
+    /// case must stay a genuine no-op.
+    private func consumeTodayTabTap() {
+        guard quickActions.todayTabTapped else { return }
+        quickActions.todayTabTapped = false
+        let today = Calendar.current.startOfDay(for: .now)
+        guard today != model.selectedDate || !navPath.isEmpty else { return }
+        navPath.removeAll()
+        Task { await model.select(day: today) }
     }
 
     /// Present the quick-log sheet if an app-icon shortcut asked for it,

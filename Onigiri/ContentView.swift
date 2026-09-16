@@ -333,19 +333,38 @@ struct ContentView: View {
             get: { selectedTab },
             set: { tapped in
                 if tapped == .today {
-                    // The same request Calendar's "View day" raises, so
-                    // this shares its consumer: it pops any pushed detail
-                    // and browses, rather than reaching into TodayModel.
+                    // The tab is called Today, so it goes to today. HOW it
+                    // says so depends on whether a slide is under way.
                     //
-                    // Synchronous and BEFORE the selection write, as it
-                    // always was. Deferring it a runloop turn was tried
-                    // on 2026-09-15 to get the tab bar's animation out
-                    // from under it and produced a real regression — a
-                    // second commit of the same selection one tick
-                    // later, seen as Today "flashing twice" — while the
-                    // stall it was meant to fix turned out to live in
-                    // Style.swift's recede blur (plans/PLAN-tab-bar-jank.md).
-                    quickActions.dayRequest = Calendar.current.startOfDay(for: .now)
+                    // A RE-TAP (already on Today) raises the same observed
+                    // `dayRequest` Calendar's "View day" raises, so it
+                    // shares that consumer — pops any pushed detail and
+                    // browses. Nothing is animating, so the body re-runs
+                    // the write costs are free.
+                    //
+                    // A SWITCH from another tab leaves an UNOBSERVED note
+                    // instead (`todayTabTapped`), read by Today on appear
+                    // — which a tab switch always fires. Writing the
+                    // observed request here re-ran ContentView's body, the
+                    // whole TabView, during the tab bar's own slide, and
+                    // Today's consumer writing it back to nil re-ran it
+                    // again. Measured on the 27.0 sim (`testTabBarAnimationProbe`
+                    // + `scripts/analyze-tab-probe.py`): the glass
+                    // highlight parked on Foods for 6–10 frames on the way
+                    // to Today, ~300 ms tap-to-settle, against 2–3 frames
+                    // and ~140 ms with this stamp off — the stall the user
+                    // saw on the phone, back after the 2026-09-15 blur fix
+                    // because that fix was verified with this stamp
+                    // DISABLED and shipped with it restored
+                    // (plans/PLAN-tab-bar-jank.md, second cause,
+                    // 2026-09-16). Deferring the observed write a runloop
+                    // turn is NOT the answer either: tried 2026-09-15, it
+                    // produced a second selection commit ("flashes twice").
+                    if selectedTab == .today {
+                        quickActions.dayRequest = Calendar.current.startOfDay(for: .now)
+                    } else {
+                        quickActions.todayTabTapped = true
+                    }
                 }
                 selectedTab = tapped
             }

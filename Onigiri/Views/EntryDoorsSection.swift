@@ -1,147 +1,35 @@
 import SwiftUI
 import OnigiriKit
 
-/// The shared entry door: ONE row, identical on the Log sheet and the
-/// Add Food form.
-///
-/// **AI on**: a compact icon-only camera button beside a "Describe food
-/// or meal" text field — two doors in one row (the user, 2026-08-29).
-/// The field drives the host's `AIEstimateSection` the same way it
-/// always has; only where its query comes from moved. This UNDOES part
-/// of an earlier merge (below) on purpose: a describe field lived here
-/// once, moved into the bottom `.searchable` field so the screen carried
-/// only one text field, and now splits back out — but the bottom field
-/// stays search-only this time, so there is still exactly one field per
-/// job, just two jobs instead of one.
-///
-/// **The button and the field draw their OWN chip each**, not one
-/// shared row card — a plain `TextField` has no visible bound of its
-/// own, so the row's single grouped-list background read as ONE object
-/// with a circle floating inside it, button and field blurred together
-/// (the user, 2026-08-29: "doesn't look separate from the camera").
-/// Giving the field the SAME `.quaternary` chip treatment the button's
-/// circle already used makes them read as two controls with a gap
-/// between them, not one — and freed from matching the field's own
-/// (borderless, row-height) size, the button is free to be as large as
-/// the row allows, so it no longer needs to punch above its actual
-/// weight to be seen inside a shared card that outsized it either way.
-///
-/// **The field also drives online lookups now** (2026-08-29): typing
-/// shows the AI estimate row AND `OnlineResultsSection` (OpenFoodFacts /
-/// USDA) together, in the AI → online order the rest of the app already
-/// uses. Both are tap-to-run, never per-keystroke — `TapToEstimateRow`
-/// and `OnlineResultsSection`'s own "Search…" button — so combining them
-/// under one field costs nothing extra. This is what makes the field's
-/// gating below `isAvailable || onlineLookups` rather than `isAvailable`
-/// alone: online lookups don't need AI, and hiding the field whenever AI
-/// is off would strand them with no way to search.
-///
-/// **Neither on**: the camera button falls back to the full labeled row
-/// (`ScanRowLabel`, "Scan Barcode, Label, or Menu") and the describe
-/// field is hidden entirely — nothing behind it works, and a field with
-/// nowhere to send its text is a dead end, not a door.
-///
-/// The camera button carries the SAME accessibility label the row used
-/// to show as its visible title ("Scan Barcode, Label, Menu, or Food"),
-/// icon-only or not — VoiceOver and `OnigiriUITests.scanRow(in:)` both
-/// find it by that label, and it is still one tap to the same scanner.
-struct EntryDoorsSection: View {
-    /// Scan-door state owned by the host (barcode lookups etc.).
-    var scanBusy = false
-    /// Host-provided caption under the scan door (barcode/label/photo
-    /// provenance) — nil when there's nothing to say.
-    var scanCaption: String?
-    /// What's typed to describe a food or meal in prose. Owned by the
-    /// host so it survives this view's own remounts and so the host can
-    /// drive its `AIEstimateSection` from it and clear it after a pick.
-    @Binding var describeQuery: String
-    let onScan: () -> Void
-    /// Keyboard-submit convenience for the online leg only — matches
-    /// what the retired bottom `.searchable` field did on
-    /// `.onSubmit(of: .search)`. AI stays tap-only (its own button in
-    /// `TapToEstimateRow`'s idle phase, one inference per tap on
-    /// purpose); typing a description and hitting Return has never
-    /// needed to also run inference to feel complete, but online search
-    /// did offer a "just search" fast path before. `nil` = no
-    /// submit-triggered search — hosts with online lookups off can skip
-    /// wiring it.
-    var onDescribeSubmit: (() -> Void)?
-
-    /// Matched by the "select all on focus" notification handler in
-    /// `FoodFormView` — an in-progress description must not be
-    /// select-all'd out from under someone refocusing it, the same
-    /// exemption the bottom search field already gets. A SwiftUI
-    /// `TextField`'s accessibility identifier rides its bridged
-    /// `UITextField`, which is the only handle that notification hands
-    /// back.
-    static let describeFieldAccessibilityID = "entryDoorsDescribeField"
-
-    /// Whether the describe field has anything to drive — AI, online
-    /// lookups, or both. `false` only when neither is on, which is the
-    /// one case the field would be a dead end.
-    private var describeFieldAvailable: Bool {
-        FoodIntelligence.isAvailable || SharedStore.onlineLookups
-    }
-
-    var body: some View {
-        Section {
-            if describeFieldAvailable {
-                HStack(spacing: 14) {
-                    // 44pt — LogButton's own frame, exactly, so this
-                    // row's content height caps at the same place
-                    // Water's does and the two pills match (the
-                    // user, 2026-08-29). Larger read as its own
-                    // control once the field stopped sharing its
-                    // card (previous round); this is the same idea
-                    // bounded by a second row it now has to agree
-                    // with.
-                    EntryDoorScanButton(scanBusy: scanBusy, onScan: onScan) {
-                        DoorCircleGlyph(systemImage: "camera", diameter: 44, font: .body.weight(.bold))
-                    }
-                    EntryDoorDescribeField(describeQuery: $describeQuery, onDescribeSubmit: onDescribeSubmit)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        // The SAME fill `DoorCircleGlyph`'s circle uses —
-                        // one "control chip" language for both, so they
-                        // read as siblings rather than a button floating
-                        // inside a field's own row. `.tertiarySystemGroupedBackground`,
-                        // not `.quaternary` — the hierarchical material
-                        // washed out light on a real device in dark mode
-                        // (the user, 2026-08-30, from-device screenshot:
-                        // "light mode button leak"); this is a flat,
-                        // deterministic system color instead, matching
-                        // `DoorCircleGlyph`'s own fix.
-                        .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                }
-            } else {
-                Button(action: onScan) {
-                    ScanRowLabel()
-                }
-                .disabled(scanBusy)
-            }
-
-            if scanBusy {
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text("Looking up product…")
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if let scanCaption {
-                Text(scanCaption)
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-            }
-        }
-    }
-}
+// The entry doors — the camera and the "Describe food or meal" field —
+// as ONE pinned bar (`EntryDoorBar`, hosted through `entryDoorBar` in
+// Style.swift) under both places that create foods: the Log sheet and
+// a BLANK Add Food form. History, since each turn was the user's call:
+// a labeled scan row and a describe field lived in the list (2026-07);
+// the describe field merged into the bottom search field, then split
+// back out beside a compact camera button as an in-form chip row
+// (`EntryDoorsSection`, 2026-08-29); the Log sheet's pair moved into a
+// floating glass bar (2026-09-15) while the form kept its chip row; and
+// on 2026-09-16 the form got the same bar ("add the camera/describe on
+// the Add food dialog like the camera/describe when logging food") and
+// the chip row was retired. One set of doors, one chrome, two hosts.
+//
+// The field drives BOTH the host's `AIEstimateSection` and its
+// `OnlineResultsSection` (2026-08-29), AI → online, each tap-to-run —
+// never per-keystroke — so combining them under one field costs nothing.
+// That is why the field is gated on `isAvailable || onlineLookups`, not
+// `isAvailable` alone: online lookups don't need AI, and hiding the
+// field whenever AI is off would strand them with no way to search. When
+// NEITHER is on the bar collapses to one full-width labeled camera door
+// ("Scan Barcode, Label, or Menu") — a field with nowhere to send its
+// text is a dead end, not a door.
 
 /// The camera door's button: glyph + accessibility label + the
-/// disabled/action wiring, extracted so the Add Food form's in-list row
-/// and the Log sheet's floating bar (`LogSheetDoorBar`,
-/// `plans/PLAN-log-sheet-layout.md`, 2026-09-15) can't say something
-/// different about what a tap does. Each caller supplies its own
-/// rendering of the glyph — the chip circle here, glass there.
+/// disabled/action wiring, extracted so no host can say something
+/// different about what a tap does. The label is the row's OLD visible
+/// title, "Scan Barcode, Label, Menu, or Food", icon-only or not —
+/// VoiceOver and `OnigiriUITests.scanRow(in:)` both find it by that
+/// label (`label BEGINSWITH 'Scan Barcode'`).
 struct EntryDoorScanButton<Content: View>: View {
     var scanBusy = false
     let onScan: () -> Void
@@ -157,14 +45,30 @@ struct EntryDoorScanButton<Content: View>: View {
 
 /// The describe field itself: sparkle + `TextField` + its accessibility
 /// identifier/label + submit wiring, extracted for the same reason as
-/// `EntryDoorScanButton` above — `describeFieldAccessibilityID` is what
+/// `EntryDoorScanButton` above — `accessibilityID` is what
 /// `FoodFormView`'s select-all-on-focus handler matches against, and a
 /// second hand-copied field could silently stop matching it. Callers
 /// wrap this in their own padding/background; it draws no chrome of its
-/// own.
+/// own. The query is OWNED BY THE HOST (`QuickLogSheet.describeQuery`,
+/// `FoodFormView.describeQuery`), separate from any search field, and
+/// the host clears it on a successful pick or the estimate row lingers
+/// after its job is done.
 struct EntryDoorDescribeField: View {
     @Binding var describeQuery: String
+    /// Keyboard-submit convenience for the ONLINE leg only — what the
+    /// retired bottom `.searchable` field did on `.onSubmit(of:
+    /// .search)`. AI stays tap-only (its own button in
+    /// `TapToEstimateRow`'s idle phase, one inference per tap on
+    /// purpose). `nil` = no submit-triggered search.
     var onDescribeSubmit: (() -> Void)?
+
+    /// Matched by the "select all on focus" notification handler in
+    /// `FoodFormView` — an in-progress description must not be
+    /// select-all'd out from under someone refocusing it. A SwiftUI
+    /// `TextField`'s accessibility identifier rides its bridged
+    /// `UITextField`, which is the only handle that notification hands
+    /// back. The string predates the bar; don't rename it.
+    static let accessibilityID = "entryDoorsDescribeField"
 
     var body: some View {
         HStack(spacing: 6) {
@@ -179,35 +83,35 @@ struct EntryDoorDescribeField: View {
             }
             TextField("Describe food or meal", text: $describeQuery)
                 .accessibilityLabel("Describe food or meal")
-                .accessibilityIdentifier(EntryDoorsSection.describeFieldAccessibilityID)
+                .accessibilityIdentifier(Self.accessibilityID)
                 .onSubmit { onDescribeSubmit?() }
         }
     }
 }
 
-/// The Log sheet's camera + describe door (`plans/PLAN-log-sheet-layout.md`,
-/// 2026-09-15): pulled OFF the list-row chip `EntryDoorsSection` still
-/// uses in the Add Food form, into its own glass-chrome pill — Liquid
-/// Glass on iOS 26+, camera tinted (the app's one primary action per
-/// the HIG's "tint one, not everything" rule), describe plain. Shares
-/// `EntryDoorScanButton`/`EntryDoorDescribeField` with `EntryDoorsSection`
-/// so the glyph, the label, and the accessibility contract can't drift
-/// between the two homes — only the surrounding chrome differs.
+/// The camera + describe door bar (`plans/PLAN-log-sheet-layout.md`,
+/// 2026-09-15): a glass-chrome pill — Liquid Glass on iOS 26+, camera
+/// tinted (the app's one primary action per the HIG's "tint one, not
+/// everything" rule), describe plain; the flat chip fallback below the
+/// floor. PINNED via `entryDoorBar` (Style.swift) under the Log sheet's
+/// List (hidden while searching) and under a blank Add Food form (hidden
+/// once the form is no longer blank — a form opened from a search result
+/// or editing a saved food offering another search was a loop).
 ///
-/// PINNED below QuickLogSheet's List via `entryDoorBar` (Style.swift),
-/// hidden while searching. It spent part of 2026-09-16 as the list's
-/// trailing row instead, to close the empty canvas a short Favorites
-/// list leaves above a pinned bar — and was then unreachable on any
-/// real library without scrolling to the very end. The user chose
-/// pinned with both in hand; `entryDoorBar`'s doc comment has the rest.
-struct LogSheetDoorBar: View {
+/// In the Log sheet it spent part of 2026-09-16 as the list's trailing
+/// row instead, to close the empty canvas a short Favorites list leaves
+/// above a pinned bar — and was then unreachable on any real library
+/// without scrolling to the very end. The user chose pinned with both
+/// in hand; `entryDoorBar`'s doc comment has the rest.
+struct EntryDoorBar: View {
     var scanBusy = false
     @Binding var describeQuery: String
     let onScan: () -> Void
     var onDescribeSubmit: (() -> Void)?
 
-    /// Same rule as the form's chip: a field with nowhere to send its
-    /// text is a dead end, not a door.
+    /// `isAvailable || onlineLookups`, never `isAvailable` alone (see the
+    /// file header): a field with nowhere to send its text is a dead
+    /// end, not a door.
     private var describeFieldAvailable: Bool {
         FoodIntelligence.isAvailable || SharedStore.onlineLookups
     }
@@ -251,9 +155,12 @@ struct LogSheetDoorBar: View {
                     }
                 }
             } else {
-                // Neither AI nor online: one full-width labeled door,
-                // matching `ScanRowLabel`'s copy — the field would be a
-                // dead end with nothing behind it.
+                // Neither AI nor online: one full-width labeled door —
+                // the field would be a dead end with nothing behind it.
+                // "Menu" but not "Food": a menu document is read by the
+                // deterministic table parser, open with AI off; the
+                // identify cascade is not, so the label only promises
+                // what it can keep.
                 EntryDoorScanButton(scanBusy: scanBusy, onScan: onScan) {
                     fallbackLabel
                 }
@@ -295,8 +202,8 @@ struct LogSheetDoorBar: View {
                     // No explicit foreground override on 26+: glass
                     // supplies vibrant, legible content automatically
                     // (Liquid Glass guidance) — riceToast here is only
-                    // for the pre-26 chip fallback, matching
-                    // `DoorCircleGlyph`'s own treatment.
+                    // for the pre-26 chip fallback, matching LogButton's
+                    // circle.
                     Image(systemName: "camera")
                         .font(.title3.weight(.bold))
                         .foregroundStyle(preGlassForeground)
@@ -322,12 +229,15 @@ struct LogSheetDoorBar: View {
     }
 }
 
-/// The floating bar's per-control chrome: Liquid Glass on iOS 26+
-/// (tinted riceToast for the camera, plain regular for the describe
-/// capsule — one tint, not two, per the HIG's "when everything is
-/// tinted, nothing stands out" rule); the existing
-/// `.tertiarySystemGroupedBackground` chip below the floor, matching
-/// `EntryDoorsSection`'s own fallback exactly.
+/// The bar's per-control chrome: Liquid Glass on iOS 26+ (tinted
+/// riceToast for the camera, plain regular for the describe capsule —
+/// one tint, not two, per the HIG's "when everything is tinted, nothing
+/// stands out" rule); a `.tertiarySystemGroupedBackground` chip below
+/// the floor — that flat system color, NOT `.quaternary`, because the
+/// hierarchical material is a vibrancy style that washed out light on a
+/// real device in dark mode (the user, 2026-08-30, from-device
+/// screenshot: "light mode button leak"). `LogButton`'s circle has the
+/// same rule for the same reason.
 private struct DoorBarChrome: ViewModifier {
     var tinted: Bool
     var shape: AnyShape

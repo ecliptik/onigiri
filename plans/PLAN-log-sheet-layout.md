@@ -413,6 +413,15 @@ side. The pinned door bar rides above the keyboard.
 - Calendar: "Sep 2026", not "September 2026" — the wide month truncated
   beside the chevron pill ("September 20…"). The pushed month detail
   keeps the wide form; its title is inline and has the whole bar.
+- The blank Add Food form gets the SAME pinned bar (same evening, the
+  user: "add the camera/describe on the Add food dialog like the
+  camera/describe when logging food"), reversing Part 2's "keeps its
+  in-form doors SECTION" — the keyboard-competition cost was weighed
+  against having one door bar everywhere. `EntryDoorsSection` and the
+  chip helpers (`ScanRowLabel`, `DoorRowLabel`, `DoorCircleGlyph`) are
+  gone; `LogSheetDoorBar` is `EntryDoorBar`. The form's lookup caption
+  is its own row now, blank or prefilled, since the bar has no caption
+  slot.
 - Log sheet: large "Log" at the left, a Cancel pill and a Sort + Done
   pill at the right, search beneath — Foods' header, natively.
 - Foods: Filter and Sort stay two separate circles (the user's Apple

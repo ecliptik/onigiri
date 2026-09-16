@@ -894,98 +894,15 @@ struct PortionTarget: Identifiable {
     }
 }
 
-/// The scan door's row when Apple Intelligence is OFF — "Food" (the
-/// identify cascade) only ever promised when it can be kept, so this
-/// title drops it, unlike "Menu": a menu document is read by the
-/// deterministic table parser, open with AI switched off either way.
-/// With AI ON, `EntryDoorsSection` renders the compact camera button +
-/// describe field instead (2026-08-29) — this row is what's left for
-/// the AI-off case, so it no longer branches on
-/// `FoodIntelligence.isAvailable` itself; its one caller only reaches
-/// for it when that's already false.
-///
-/// Leading icon drawn with LogButton's exact circle treatment (same
-/// font, padding, fill, rim) so the row carries the same visual weight
-/// as the + capsules beside it (the user). Shared by the Foods tab and
-/// the Log sheet.
-struct ScanRowLabel: View {
-    var body: some View {
-        DoorRowLabel(
-            title: "Scan Barcode, Label, or Menu",
-            // A CAMERA, not a barcode (the user, 2026-08-02): the row
-            // has read labels and identified food for two releases, and
-            // the barcode glyph kept promising only the first of the
-            // three. PLAIN camera, not camera.viewfinder (the user,
-            // 2026-08-03): the viewfinder's brackets read as crowded
-            // inside the circle this row draws — the circle is already
-            // the frame, so a second one around the glyph is noise.
-            systemImage: "camera")
-    }
-}
-
-/// One entry door's row: title plus the circled leading glyph. Extracted
-/// from ScanRowLabel when the paste and photo doors joined it
-/// (PLAN-screenshot-nutrition) — the doors must read as siblings, and
-/// three copies of the measured circle treatment would drift.
-struct DoorRowLabel: View {
-    let title: String
-    let systemImage: String
-
-    var body: some View {
-        Label {
-            Text(title)
-        } icon: {
-            DoorCircleGlyph(systemImage: systemImage)
-        }
-    }
-}
-
-/// The circled glyph itself, split out of `DoorRowLabel` so the
-/// icon-only camera button beside the describe field
-/// (`EntryDoorsSection`, 2026-08-29) draws the SAME measured circle a
-/// labeled door row does — one treatment, two callers, never two copies
-/// to drift apart.
-///
-/// `diameter`/`font` default to the row's own 35pt/subheadline pairing;
-/// `EntryDoorsSection`'s STANDALONE camera button — the only thing on
-/// its side of the row, with no label beside it to lean on for weight —
-/// passes the larger pairing instead (the user, 2026-08-29: "make the
-/// camera button larger"). 44pt is Apple's own minimum tap target;
-/// `.body.weight(.bold)` is LogButton's own glyph treatment at its
-/// ~39pt circle, so scaling both up keeps the SAME proportions this
-/// treatment was measured at rather than stretching a small glyph inside
-/// a bigger ring.
-struct DoorCircleGlyph: View {
-    let systemImage: String
-    var diameter: CGFloat = 35
-    var font: Font = .subheadline.weight(.bold)
-
-    var body: some View {
-        Image(systemName: systemImage)
-            .font(font)
-            .foregroundStyle(Color.riceToast)
-            // FIXED frame, not padding: a viewfinder glyph is wider
-            // than the plus, so equal padding drew a bigger circle.
-            // 35pt matches LogButton's RENDERED circle (the plus
-            // glyph is narrower than its font's full height, so its
-            // glyph+9pt padding lands at ~35, not 39 — measured).
-            .frame(width: diameter, height: diameter)
-            // `.tertiarySystemGroupedBackground`, not `.quaternary`: the
-            // hierarchical material is a VIBRANCY style, not a flat
-            // color, and TodayView's own card background carries the
-            // scar from finding this out ("quaternary-over-background
-            // diverged in dark") — it renders fine in Simulator but
-            // washes out light on a real device in dark mode (the
-            // user, 2026-08-30, screenshot from-device: "light mode
-            // button leak"). This is the one-nesting-level-in system
-            // color for exactly this "chip inside a card" shape,
-            // deterministic in both modes.
-            .background(Color(.tertiarySystemGroupedBackground), in: .circle)
-            .overlay(
-                Circle().strokeBorder(Color.riceToast.opacity(0.5), lineWidth: 1)
-            )
-    }
-}
+// The labeled scan row (`ScanRowLabel`), its `DoorRowLabel` and the
+// measured `DoorCircleGlyph` lived here from 2026-07 until 2026-09-16,
+// when the Add Food form joined the Log sheet on the pinned
+// `EntryDoorBar` (EntryDoorsSection.swift) and the in-form chip row
+// that was their last caller went with it. Two of their rules moved
+// into that file with the bar: a PLAIN camera glyph, never a barcode
+// or `camera.viewfinder` (the user, 2026-08-02/03), and the AI-off copy
+// "Scan Barcode, Label, or Menu" — "Menu" because the table parser
+// works with AI off, no "Food" because the identify cascade doesn't.
 
 /// The deliberate tap target for logging — a small rice-paper capsule so a
 /// stray row tap can't log by accident. Shared by the Foods list and the
@@ -1014,10 +931,13 @@ struct LogButton: View {
             .foregroundStyle(Color.riceToast)
             .padding(9)
             // A static fill, NOT glassEffect: a live glass layer on
-            // every list row made Foods stutter on scroll. See
-            // `DoorCircleGlyph` for why this is
-            // `.tertiarySystemGroupedBackground` and not `.quaternary`
-            // — the two are meant to render identically.
+            // every list row made Foods stutter on scroll.
+            // `.tertiarySystemGroupedBackground`, not `.quaternary`: the
+            // hierarchical material is a VIBRANCY style, not a flat
+            // color — it renders fine in Simulator but washes out light
+            // on a real device in dark mode (the user, 2026-08-30,
+            // from-device screenshot: "light mode button leak").
+            // `EntryDoorBar`'s pre-26 chip has the same rule.
             .background(Color(.tertiarySystemGroupedBackground), in: .circle)
             .overlay(
                 Circle().strokeBorder(Color.riceToast.opacity(0.5), lineWidth: 1)

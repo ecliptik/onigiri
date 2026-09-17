@@ -8,6 +8,105 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.28.0 — at home on iOS 27
+
+_2026-09-17_ · [changes since v2.27.5](https://github.com/ecliptik/onigiri/compare/v2.27.5...v2.28.0)
+
+A month of work, and most of it is about how the app *feels*: what is on screen
+in the first half second, how quickly a button answers, where a title sits.
+iOS 27 moved several of those things, and this release moves with it.
+
+**Today opens on real numbers.** A cold launch used to paint "0 kcal balance",
+three zero meters and "Nothing logged yet." as though they were facts, then
+jump to the day's figures when Health woke up about half a second later. Today
+now opens on a picture of its last refresh and replaces every field when Health
+answers; with no picture to show, the summary is greyed placeholders rather
+than confident zeros. Health is still the only store — the picture is never
+written by a log and never read after the first frame.
+
+**Cancel and Done answer when you tap them.** In the Log sheet and the Add Food
+form they "didn't register, then did". Neither button does anything slow. The
+screen *behind* the sheet was being torn down and rebuilt at the moment of
+dismissal — a side effect of how it blurred itself out of the way. It recedes
+with a plain dim now and no blur, which is what Apple's own apps do, made just
+dark enough in dark mode that the card in front reads as the one live surface.
+
+**The tab bar slides without sticking.** On iOS 27 a jump from Calendar to
+Today parked the glass highlight on Foods for a fifth of a second. Two causes,
+found a day apart: an idle blur filter that the Liquid Glass bar sampled on
+every frame of the slide, and a tab-tap handler that redrew the whole tab view
+just as the slide began. Both are gone.
+
+**One header shape everywhere.** Every tab's title shares a row with its
+controls, and all four titles sit on the same top-left corner, which a test
+now measures rather than trusts. The Log sheet is a
+standard sheet again: Cancel on the left, "Log" centered, Sort and Done on the
+right, search pinned at the top.
+
+**Two doors at the bottom of the Log sheet, and the same two in Add Food.** A
+camera button — barcode, label, menu, or the food itself — beside a "Describe
+food or meal" field. Type into it and you are offered an AI estimate and the
+online database together, each one tap away and never run per keystroke. The
+doors appear on Favorites, Foods and Meals alike. With AI and online lookups
+both off, the field disappears and the camera becomes one full-width labeled
+button. The search field at the top now searches only what you have saved, on
+the Foods tab too; the clipboard paste row is retired, since the share sheet
+covers it end to end.
+
+**New for iOS 27: an extra-large widget, and Visual Intelligence.** The
+extra-large widget — now placeable on iPhone, with a portrait shape on iOS 27 —
+spends its room on the Active and Resting split behind the day's budget and on
+what you have logged today. And pointing Camera Control or a screenshot at a
+food offers *Identify from Photo*, which hands the picture to the same reader
+the camera button uses. Matching Visual Intelligence's own labels against your
+library was the first design, abandoned on a real device: a branded can came
+back labelled "food".
+
+---
+
+**An estimate can be corrected in your own words.** The on-device model never
+sees your photo — Vision names the dish and the text model assumes a typical
+serving, so the salad comes back dressed, whole and average. Anything
+*estimated* now stops on a step that shows what was found and takes a note:
+"no dressing", "I only ate half", "it's tofu, not chicken". A refine that
+fails keeps the first estimate on screen and says so. Printed nutrition panels
+are never refined; those are measurements.
+
+**A menu is read once and ordered from several times.** Picking a second dish
+used to cost a second photograph, a second OCR pass and a second run at the
+model, because every door closed itself after the first pick. Every list now
+loops — pick, confirm, back to the same list, with a mark on the rows already
+taken. The confirm has two buttons, **Save** and **Log**, because not
+everything on a menu is being eaten now. Menus themselves read better:
+nutrition tables that are really pictures, column names printed sideways or
+diagonally, and headers that arrive as one run of text.
+
+**Goal shows one budget.** It carried two for three weeks, 726 kcal apart at
+lunchtime, and three rounds of relabelling never stopped that reading as a
+contradiction. Goal now shows what an average day allows and nothing that moves
+during a day; "How your budget is calculated" is the recipe and only the recipe
+— to lose ÷ days left = deficit, average burn − deficit = budget — with the
+days left finally on screen so the figure can be checked. On Today, the Active
+and Resting rows now add up to the burn above them, to the digit.
+
+**Log it Friday, save it Sunday.** Edit any logged food that isn't in your
+library and the sheet offers *Save to Library* and *Save to Library & Log
+Today*. The original entry is never moved.
+
+**Smaller things**
+
+- A delete on the watch can be undone — tap the flash. A swipe on a 41 mm
+  screen used to remove a Health sample for good.
+- A library store that will not open is set aside and replaced with an empty
+  one, with a pointer to Import, instead of crashing on every launch.
+- Two menus shared before the app is opened both survive, and an app killed
+  mid-import offers the share again instead of losing it.
+- The Calendar's month card is tappable again.
+- Settings → Appearance is regrouped, gains a switch to hide Today's Daily
+  Goal card, takes in the water icon picker, and changes theme live.
+- A link that never finishes loading can no longer hang a menu import, and
+  reading a menu document no longer blocks the screen while it works.
+
 ## v2.27.5 — when a key stops working, you'll hear about it
 
 _2026-08-17_ · [changes since v2.27.4](https://github.com/ecliptik/onigiri/compare/v2.27.4...v2.27.5)

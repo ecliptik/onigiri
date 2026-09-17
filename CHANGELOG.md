@@ -8,6 +8,54 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.28.1 — the first half second of Goal and Calendar
+
+_2026-09-17_ · [changes since v2.28.0](https://github.com/ecliptik/onigiri/compare/v2.28.0...v2.28.1)
+
+Open the app, tap over to Goal, and for an instant a **Cancel** button stood
+beside Save — then vanished. Nothing had been edited, and no sequence of taps
+would bring it back, because it needed no sequence: it needed a *first visit*.
+
+Goal filled its form from your saved goal only after its Health load came
+back. Until then the form held its built-in defaults — no target, a date 90
+days out — beside a saved goal it didn't match, so it counted as edited and
+offered to cancel. When Health answered, the saved goal went in and the button
+left. Once per launch, first visit only, for as long as HealthKit's first read
+takes: about half a second on a phone, six frames on a simulator, which is
+where a screen recording finally caught it. The form now takes the saved goal
+before its first frame; nothing it copies needs Health at all.
+
+**The same half second was making false claims.** Before Health had answered,
+Goal printed *"No weight in Apple Health yet — enter it here."* over a field to
+type one into, and the Calendar opened on a month with no badges, "🍙 0" and a
+"0 days" streak — then both filled in at once. Not asked yet is not the same as
+none.
+
+**So Goal and Calendar now open the way Today does.** Each keeps a picture of
+its last Health read and paints it on a cold open: your chart, progress and
+weight on Goal; the month's badges, streak and day totals on Calendar. When
+Health answers, the picture is replaced — usually by the same numbers. With no
+picture to show (a first launch, or the system cleared the cache), the rows
+hold quiet placeholders instead of claims.
+
+The rules that keep a picture from becoming a second source of truth:
+
+- It is written only from a Health answer, and an empty answer — what a locked
+  phone returns — is never kept.
+- Only raw readings are stored. Badges and the streak are *verdicts*, so they
+  are re-judged on open, against today — a picture saved yesterday cannot claim
+  a streak that ended overnight.
+- Nothing saves from one. Goal's Save stays shut until Health has answered.
+
+Foods needed none of this: its list comes from the library on the phone and is
+complete on its first frame.
+
+**Tests that can see half a second.** A 100 ms flash sits far inside a UI
+test's own reaction time, so a test of it would pass on any build. The new
+ones hold each screen's load open for four seconds with debug-only launch
+flags, and each was run against the old behaviour first to prove it fails
+there.
+
 ## v2.28.0 — at home on iOS 27
 
 _2026-09-17_ · [changes since v2.27.5](https://github.com/ecliptik/onigiri/compare/v2.27.5...v2.28.0)

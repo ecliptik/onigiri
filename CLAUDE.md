@@ -477,10 +477,15 @@ Each cost a debugging session.
   jump parked the glass highlight on Foods for ~200 ms — 12 static
   frames, then the last hop — and double-flashed on arrival. Today and
   Foods carried the modifier and stuck; Goal and Calendar carried it not
-  and never did. It is an OVERLAY now — a plain scrim, inserted only
-  while presenting, so nothing touches the content while idle; the
-  user chose the dim over three materials on-device, "whatever is most
-  like other Apple apps". (The
+  and never did. It is an OVERLAY now — ultra-thin material under a
+  dim, inserted only while presenting, so nothing touches the content
+  while idle. **The frost is not optional**: a bare dim shipped for one
+  day (2026-09-16 → 17) after an on-device A/B ended with "can't tell
+  the difference between regular, thin and ultra thin material… whatever
+  is most like other Apple apps", which was misread as "drop the frost".
+  On the phone the host's rows stayed crisp under the card and the user
+  asked where the blur had gone — three materials looking alike says
+  nothing about material versus none. (The
   branch form that first fixed it re-created the host on every sheet;
   see the identity landmine above.) Rules learned:
   - **The simulator cannot reproduce it, on 26.5 or 27.0** — the real

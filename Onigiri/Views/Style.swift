@@ -309,14 +309,15 @@ extension View {
     /// Log sheet, the food form) — there the system's default dimming
     /// barely registers against that near-black dark-mode surface, so a
     /// frosted card on top of it read as one continuous surface with only
-    /// the grabber between them (the user, 2026-09-13 screenshot). A plain
-    /// dim — the system's own idiom (the 2026-09-16 A/B against three
-    /// materials, below) — drawn as an overlay, so on a NavigationStack
+    /// the grabber between them (the user, 2026-09-13 screenshot). A
+    /// FROST plus a dim — the dim alone shipped for a day and left the
+    /// host's rows crisp under the card, which is the problem this exists
+    /// to solve (below) — drawn as an overlay, so on a NavigationStack
     /// host it covers the bar too; `recedesWithSheet()` on each toolbar
     /// control is still the other half, since a dimmed Cancel/Done is
-    /// otherwise a live trap for a stray tap. Reduce Transparency gets a
-    /// stronger dim rather than nothing — the host is still visibly not
-    /// the active surface either way.
+    /// otherwise a live trap for a stray tap. Reduce Transparency swaps
+    /// the frost for a stronger dim rather than nothing — the host is
+    /// still visibly not the active surface either way.
     @ViewBuilder
     func recedesBehindSheet(_ isPresenting: Bool) -> some View {
         modifier(RecedesBehindSheet(isPresenting: isPresenting))
@@ -362,19 +363,32 @@ private struct RecedesBehindSheet: ViewModifier {
         //   after an interactively dismissed child had already left
         //   (plans/PLAN-sheet-dismiss-latency.md;
         //   testSheetRoundTripKeepsFoodsScroll bites on the branch).
-        // The `if` lives INSIDE the overlay, where insertion and
-        // removal cost one rectangle. A plain dim, not a material: the
-        // same day's on-device A/B put regular, thin and ultra-thin
-        // materials beside this scrim and the user could not tell the
-        // three apart — "go with whatever is most like other Apple
-        // apps", which dim the view behind a sheet and never frost it.
+        // The material frosts what sits behind it without entering the
+        // content's modifier chain, and the `if` lives INSIDE the
+        // overlay, where insertion and removal cost one rectangle.
+        // Frost AND dim, decided twice: the 2026-09-16 on-device A/B
+        // (regular / thin / ultra-thin / bare scrim) ended with "can't
+        // tell the difference between regular, thin and ultra thin…
+        // whatever is most like other Apple apps", which was read as
+        // "drop the frost" and shipped the bare scrim. On the phone the
+        // next day the host's rows sat crisp under the card (the user:
+        // "I thought we were blurring the background… to give more
+        // contrast") — the three materials being alike never meant the
+        // frost was optional. Ultra-thin: the closest system material
+        // to the 12pt blur this replaced; regular hides a dark-mode
+        // list outright.
         content
             .overlay {
                 if isPresenting {
-                    Color.black.opacity(reduceTransparency ? 0.55 : 0.32)
-                        .ignoresSafeArea()
-                        .allowsHitTesting(false)
-                        .transition(.opacity)
+                    ZStack {
+                        if !reduceTransparency {
+                            Rectangle().fill(.ultraThinMaterial)
+                        }
+                        Color.black.opacity(reduceTransparency ? 0.55 : 0.32)
+                    }
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
                 }
             }
             .animation(.easeOut(duration: 0.2), value: isPresenting)

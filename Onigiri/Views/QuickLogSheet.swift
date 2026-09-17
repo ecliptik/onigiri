@@ -453,7 +453,7 @@ struct QuickLogSheet: View {
             // under the search field against Foods' ~27pt. A native
             // title can't be reached by `recedesWithSheet()`, so it stays
             // crisp while a child sheet is up; the dimmed buttons plus
-            // `recedesBehindSheet()`'s scrim on the list still say
+            // `recedesBehindSheet()`'s frost on the list still say
             // "something else is active" (accepted 2026-09-16, and it
             // stands).
             .navigationTitle("Log")

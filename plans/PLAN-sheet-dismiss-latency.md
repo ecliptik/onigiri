@@ -123,6 +123,16 @@ branch form to prove it bites before the fix landed.
   go with whatever is most like other Apple apps" — which dim the view
   behind a sheet and never frost it. SCRIM ONLY shipped; the picker and
   the material paths are deleted.
+- **Reversed 2026-09-17: that was a misreading.** On the phone the bare
+  scrim left the Log sheet's rows and the food form's fields crisp under
+  the portion card — the very "one continuous surface" look the recede
+  exists to break — and the user asked where the blur had gone ("I
+  thought we were bluring the background window… to give more
+  contrast"). The quote compared the three MATERIALS with each other; it
+  never weighed frost against none. Ultra-thin material under the same
+  0.32 dim is back (the look `ae694af` shipped), still an overlay,
+  still nothing on the content while idle; Reduce Transparency keeps the
+  flat 0.55 dim. No picker this time.
 - The food form's Log route: `log()` now calls `dismiss()` in the same
   turn as the portion sheet's own, so form and portion sheet leave in
   ONE cascade. `testLogWithoutSaving` (`LOG_WITHOUT_SAVING=1`, opt-in,

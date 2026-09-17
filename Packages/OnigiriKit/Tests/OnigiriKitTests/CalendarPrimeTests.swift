@@ -1,0 +1,60 @@
+import Foundation
+import Testing
+@testable import OnigiriKit
+
+struct CalendarPrimeTests {
+    private let noon = Date(timeIntervalSince1970: 1_700_000_000)
+
+    private func prime(
+        savedAt: Date, schema: Int = CalendarPrime.currentSchema,
+        totals: [DayEnergyTotals]? = nil
+    ) -> CalendarPrime {
+        CalendarPrime(
+            schema: schema, savedAt: savedAt,
+            totals: totals ?? [
+                DayEnergyTotals(day: savedAt.addingTimeInterval(-86_400), intakeKcal: 1480, burnKcal: 2210),
+                DayEnergyTotals(day: savedAt, intakeKcal: 1510, burnKcal: 2128),
+            ],
+            targetDeficitKcal: 300, isMaintenance: false,
+            weightHistory: [WeightTrend.Point(date: savedAt, weightLb: 200.2)]
+        )
+    }
+
+    @Test func roundTripsThroughJSON() throws {
+        let original = prime(savedAt: noon)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(CalendarPrime.self, from: data)
+        #expect(decoded == original)
+        #expect(decoded.totals.count == 2)
+        #expect(decoded.targetDeficitKcal == 300)
+    }
+
+    @Test func validForAWeekAndNeverFromTheFuture() {
+        let p = prime(savedAt: noon)
+        #expect(p.isValid(now: noon))
+        #expect(p.isValid(now: noon.addingTimeInterval(CalendarPrime.maxAge)))
+        #expect(!p.isValid(now: noon.addingTimeInterval(CalendarPrime.maxAge + 1)))
+        #expect(!p.isValid(now: noon.addingTimeInterval(-60)))
+        #expect(!prime(savedAt: noon, schema: CalendarPrime.currentSchema + 1).isValid(now: noon))
+    }
+
+    @Test func aWindowWithNoEnergyIsASealedStore() {
+        #expect(!prime(savedAt: noon, totals: []).isTrustworthy)
+        #expect(!prime(savedAt: noon, totals: [
+            DayEnergyTotals(day: noon, intakeKcal: 0, burnKcal: 0),
+        ]).isTrustworthy)
+        #expect(prime(savedAt: noon, totals: [
+            DayEnergyTotals(day: noon, intakeKcal: 0, burnKcal: 3),
+        ]).isTrustworthy, "resting burn alone says the store answered")
+    }
+
+    /// The contract in one test: the prime holds no verdicts, so a streak
+    /// is whatever the raw days say on the day they are READ.
+    @Test func carriesNoVerdicts() throws {
+        let data = try JSONEncoder().encode(prime(savedAt: noon))
+        let keys = try #require(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        ).keys
+        #expect(!keys.contains { $0.lowercased().contains("streak") || $0.lowercased().contains("earned") })
+    }
+}

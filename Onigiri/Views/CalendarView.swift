@@ -148,7 +148,11 @@ struct CalendarView: View {
         .onChange(of: quickActions.calendarRootRequest) { _, request in
             consumeRootRequest(request)
         }
-        .onAppear { consumeRootRequest(quickActions.calendarRootRequest) }
+        .onAppear {
+            // Last refresh's days, re-judged now — before the first frame.
+            model.applyLaunchPrimeIfNeeded()
+            consumeRootRequest(quickActions.calendarRootRequest)
+        }
         .refreshable { await refresh(forceWeights: true) }
         // Months beyond the preloaded window load on demand — otherwise
         // they render every day as "goal not met" with a "—" day card.
@@ -547,6 +551,9 @@ struct CalendarView: View {
             }
             .padding(.vertical, 12)
             .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 14))
+            // Neither a prime nor a Health answer yet: "🍙 0" and "0
+            // days" would be claims, not counts (`CalendarPrime`).
+            .redacted(reason: model.hasContent ? [] : .placeholder)
         }
         .buttonStyle(.plain)
         .accessibilityHint("Shows the month's deficit, weight change, and records")

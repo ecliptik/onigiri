@@ -25,8 +25,40 @@ final class CalendarModel {
     private(set) var monthWaterOz: Double?
     private(set) var monthFoodEntries: Int?
 
+    /// Health has answered at least once this launch.
+    private(set) var hasLoaded = false
+    /// The first frame came from `CalendarPrimeStore` — the last
+    /// refresh's raw days, re-judged now. The view draws primed and
+    /// loaded alike (`hasContent`); with NEITHER, the month's counts are
+    /// placeholders rather than a confident "0 days".
+    private(set) var isPrimed = false
+    var hasContent: Bool { hasLoaded || isPrimed }
+
     private let health = HealthKitService()
     private var summaryGeneration = 0
+
+    @ObservationIgnored private var primeChecked = false
+
+    /// Called from the view's `.onAppear` — before the first frame, once.
+    /// NOT from `init`: `CalendarModel()` is a `@State`'s default value,
+    /// re-evaluated and discarded on every rebuild of the view struct
+    /// (see `GoalModel.applyLaunchPrimeIfNeeded`). RAW days only — every
+    /// badge and the streak are re-derived here, against today, by the
+    /// same `recomputeBadges()` a live refresh runs (`CalendarPrime`).
+    func applyLaunchPrimeIfNeeded() {
+        guard !primeChecked else { return }
+        primeChecked = true
+        guard !hasLoaded, let prime = CalendarPrimeStore.launchPrime else { return }
+        let calendar = Calendar.current
+        for total in prime.totals {
+            totalsByDay[calendar.startOfDay(for: total.day)] = total
+        }
+        targetDeficitKcal = prime.targetDeficitKcal
+        isMaintenance = prime.isMaintenance
+        weightHistory = prime.weightHistory
+        recomputeBadges()
+        isPrimed = true
+    }
     /// Foreground-gate stamp: once the tab has been visited it stays in
     /// the TabView hierarchy, so its scenePhase handler fired the full
     /// refresh (incl. a year of weigh-ins) on every app activation.
@@ -48,6 +80,14 @@ final class CalendarModel {
     }
 
     func refresh(goal: SyncedGoal?, forceWeights: Bool = false) async {
+        #if DEBUG
+        // UI-test hook (`testColdOpenPaintsTheLastLoad`), the twin of
+        // GoalModel's `--slow-goal-load`: holds the first refresh open so
+        // what the tab draws BEFORE Health answers can be looked at.
+        if !hasLoaded, ProcessInfo.processInfo.arguments.contains("--slow-calendar-load") {
+            try? await Task.sleep(for: .seconds(4))
+        }
+        #endif
         // Today's plan supplies the rule the calendar judges against.
         let plan = await DailyPlanLoader.load(goal: goal)
         targetDeficitKcal = plan.deficitTargetKcal
@@ -70,6 +110,19 @@ final class CalendarModel {
             lastWeightLoad = .now
         }
         refreshGate.markRefreshed()
+        // Guarded: `@Observable` never skips an equal write.
+        if !hasLoaded { hasLoaded = true }
+        // The next cold launch's first frame — the window THIS refresh
+        // fetched, never the merged dictionary (on-demand months are a
+        // session's browsing, not the month the tab opens on). The store
+        // refuses the energy-less window a sealed device returns.
+        CalendarPrimeStore.store(CalendarPrime(
+            savedAt: .now,
+            totals: totals,
+            targetDeficitKcal: targetDeficitKcal,
+            isMaintenance: isMaintenance,
+            weightHistory: weightHistory
+        ))
     }
 
     /// Load a browsed month that predates the trailing window, once —

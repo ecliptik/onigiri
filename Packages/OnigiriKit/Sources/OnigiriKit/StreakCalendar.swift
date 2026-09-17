@@ -1,7 +1,7 @@
 import Foundation
 
 /// One calendar day's energy totals from HealthKit.
-public struct DayEnergyTotals: Sendable, Equatable {
+public struct DayEnergyTotals: Sendable, Equatable, Codable {
     public let day: Date
     public let intakeKcal: Double
     public let burnKcal: Double

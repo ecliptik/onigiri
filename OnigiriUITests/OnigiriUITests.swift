@@ -1121,6 +1121,55 @@ final class OnigiriUITests: XCTestCase {
         }
     }
 
+    /// A cold open paints the LAST load, not a blank that fills in a beat
+    /// later (`GoalPrime`, `CalendarPrime` — `TodayPrime`'s siblings; the
+    /// user, 2026-09-17: Goal "populating is abrupt"). Two launches,
+    /// because a prime is only ever written from a Health answer: the
+    /// first visits both tabs and lets them load, the second holds both
+    /// loads open 4 s and looks at what is drawn INSIDE that window.
+    /// Without a prime, Goal is a placeholder row there (no "From Apple
+    /// Health") and every past day on the Calendar reads "not tracked" —
+    /// so both checks fail on a build that primes nothing.
+    @MainActor
+    func testColdOpenPaintsTheLastLoad() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--seed-sample-data"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+        let judgedDay = app.descendants(matching: .any).matching(NSPredicate(
+            format: "label ENDSWITH 'goal met' OR label ENDSWITH 'goal not met'"
+        )).firstMatch
+
+        switchTab(in: app, to: "Goal")
+        XCTAssertTrue(app.staticTexts["From Apple Health"].waitForExistence(timeout: 15),
+                      "First launch: Goal loads the seeded weigh-in")
+        switchTab(in: app, to: "Calendar")
+        XCTAssertTrue(judgedDay.waitForExistence(timeout: 15),
+                      "First launch: the Calendar judges at least one seeded day")
+        // The primes are written off the main actor after each load.
+        Thread.sleep(forTimeInterval: 1.5)
+        app.terminate()
+
+        app.launchArguments = ["--seed-sample-data", "--slow-goal-load", "--slow-calendar-load"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 10)
+
+        switchTab(in: app, to: "Goal")
+        XCTAssertTrue(app.buttons["Save"].waitForExistence(timeout: 3), "Goal's toolbar should be up")
+        XCTAssertTrue(app.staticTexts["From Apple Health"].exists,
+                      "Goal draws the last load's weight while this launch's load is still held open")
+        XCTAssertFalse(app.buttons["Save"].isEnabled,
+                       "Nothing saves against a prime — Save waits for Health")
+        attachShot(named: "goal-cold-open-primed", settle: 0)
+
+        switchTab(in: app, to: "Calendar")
+        XCTAssertTrue(app.buttons["Previous month"].waitForExistence(timeout: 3), "Calendar should be up")
+        XCTAssertTrue(judgedDay.exists,
+                      "The Calendar re-judges the last refresh's days while this launch's refresh is held open")
+        attachShot(named: "calendar-cold-open-primed", settle: 0)
+    }
+
     /// The first visit to Goal in a process must not flash a Cancel
     /// button. The stored goal used to reach the form only AFTER the
     /// awaited Health load, so until it landed the form held its

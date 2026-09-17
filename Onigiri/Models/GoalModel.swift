@@ -48,10 +48,55 @@ final class GoalModel {
     /// replaced a beat later with a layout jump (2026-09-17; Today's
     /// zeros-as-facts, on the next tab over).
     private(set) var hasLoaded = false
+    /// The first frame's numbers came from `GoalPrimeStore` — what Health
+    /// said last time, not yet confirmed this launch. The view draws
+    /// primed and loaded alike (`hasContent`); only a screen with NEITHER
+    /// shows placeholders. Save waits for `hasLoaded` regardless: a prime
+    /// is a picture, and nothing is written from a picture.
+    private(set) var isPrimed = false
+    /// Something real to draw: a prime, or Health's own answer.
+    var hasContent: Bool { hasLoaded || isPrimed }
     /// Staleness gate for the loads (see loadIfStale).
     private var refreshGate = RefreshGate()
 
     private let health = HealthKitService()
+
+    @ObservationIgnored private var primeChecked = false
+
+    /// Called from the view's `.onAppear` — before the first frame, once.
+    /// NOT from `init`: `GoalModel()` is a `@State`'s default value, which
+    /// SwiftUI re-evaluates every time the view struct is rebuilt and
+    /// then throws away, so work here would ride every `ContentView` body
+    /// pass (the tab-bar lessons, `plans/PLAN-tab-bar-jank.md`). Nothing
+    /// applied here is a fact until `loadIfStale()` says so.
+    func applyLaunchPrimeIfNeeded() {
+        guard !primeChecked else { return }
+        primeChecked = true
+        guard !hasLoaded, let prime = GoalPrimeStore.launchPrime else { return }
+        healthWeightLb = prime.healthWeightLb
+        averageBurnKcal = prime.averageBurnKcal
+        estimatedRestingKcal = prime.estimatedRestingKcal
+        weightHistory = prime.weightHistory
+        dailyTotals = prime.dailyTotals
+        deriveWeightSeries()
+        isPrimed = true
+    }
+
+    /// Everything computed FROM the raw reads — one function, so a primed
+    /// first frame and a live load cannot derive differently, and a prime
+    /// is re-read under the settings in force now (`weightBasis`) rather
+    /// than the ones it was saved under.
+    private func deriveWeightSeries() {
+        let lows = WeightTrend.dailyLows(weightHistory)
+        dailyLowDates = Set(lows.map(\.date))
+        smoothedHistory = WeightTrend.movingAverage(lows, windowDays: 7)
+        // The weight the DEFICIT TARGET rides — free here, since the
+        // history is already loaded. Kept SEPARATE from healthWeightLb:
+        // the Weight field, validation and "use current as target" must
+        // keep showing what the scale actually said.
+        basisWeightLb = WeightTrend.basisLb(
+            SharedStore.weightBasis, history: weightHistory, latestLb: healthWeightLb)
+    }
 
     /// TabView re-runs the view's .task on every visit; a quick tab
     /// bounce shouldn't replay four HealthKit reads over 90-day windows
@@ -93,15 +138,7 @@ final class GoalModel {
         averageBurnKcal = (try? await burnRead) ?? nil
         weightHistory = (try? await historyRead) ?? []
         dailyTotals = (try? await totalsRead) ?? []
-        let lows = WeightTrend.dailyLows(weightHistory)
-        dailyLowDates = Set(lows.map(\.date))
-        smoothedHistory = WeightTrend.movingAverage(lows, windowDays: 7)
-        // The weight the DEFICIT TARGET rides — free here, since the
-        // history is already loaded. Kept SEPARATE from healthWeightLb:
-        // the Weight field, validation and "use current as target" must
-        // keep showing what the scale actually said.
-        basisWeightLb = WeightTrend.basisLb(
-            SharedStore.weightBasis, history: weightHistory, latestLb: healthWeightLb)
+        deriveWeightSeries()
         let body = await health.bodyProfile()
         // `basisWeightLb`, not `healthWeightLb`. This estimate is what
         // `Resting budget` is cut from and what floors every day's
@@ -130,6 +167,17 @@ final class GoalModel {
         refreshGate.markRefreshed()
         // Guarded: `@Observable` never skips an equal write.
         if !hasLoaded { hasLoaded = true }
+        // The next cold launch's first frame. Only ever from a Health
+        // answer, and the store refuses the empty one a sealed device
+        // returns (`GoalPrime.isTrustworthy`).
+        GoalPrimeStore.store(GoalPrime(
+            savedAt: .now,
+            healthWeightLb: healthWeightLb,
+            averageBurnKcal: averageBurnKcal,
+            estimatedRestingKcal: estimatedRestingKcal,
+            weightHistory: weightHistory,
+            dailyTotals: dailyTotals
+        ))
         return true
     }
 

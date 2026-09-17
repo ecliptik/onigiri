@@ -640,10 +640,10 @@ struct GoalView: View {
                 trendSection
 
                 Section("Current weight") {
-                    if !model.hasLoaded {
-                        // Health hasn't answered yet — hold the row's
-                        // shape rather than claim there is no weight and
-                        // offer a field to type one into.
+                    if !model.hasContent {
+                        // Health hasn't answered and no prime stands
+                        // in — hold the row's shape rather than claim
+                        // there is no weight and offer a field for one.
                         LabeledContent("From Apple Health") {
                             Text(verbatim: "000.0 \(unit.symbol)")
                         }
@@ -741,9 +741,13 @@ struct GoalView: View {
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
+                    // `hasLoaded`, not `hasContent`: a primed first
+                    // frame is a picture of the last load, and a goal is
+                    // never saved against a picture (`GoalPrime`). The
+                    // window is one Health read wide.
                     Button("Save") { save() }
                         .keyboardShortcut("s", modifiers: .command)
-                        .disabled(!isDirty)
+                        .disabled(!isDirty || !model.hasLoaded)
                 }
             }
         }
@@ -760,7 +764,15 @@ struct GoalView: View {
         // launch on the phone (the user, 2026-09-17). Nothing the sync
         // copies needs Health: an automatic start reads the history
         // live through `startDateBinding`, not from `startDate`.
-        .onAppear { syncStoredGoalIfNeeded() }
+        .onAppear {
+            model.applyLaunchPrimeIfNeeded()
+            // A primed model has a history to derive the trend from
+            // before Health answers; with no stored goal the sync
+            // declines and would otherwise leave that to the load.
+            if !syncStoredGoalIfNeeded(), model.isPrimed, !model.hasLoaded {
+                deriveTrendStats()
+            }
+        }
         .task {
             let refreshed = await model.loadIfStale()
             // Still here for a goal that arrived while the load ran.
@@ -1093,7 +1105,7 @@ struct GoalView: View {
         // No header: it leads the screen now, and the chart speaks for
         // itself.
         Section {
-            if !model.hasLoaded {
+            if !model.hasContent {
                 // Not asked yet is not "no weigh-ins": hold the chart's
                 // height so the form below doesn't jump when it lands.
                 Color.clear
@@ -1345,7 +1357,10 @@ struct GoalView: View {
     /// to Maintain): both conclude the goal-reached card for the target
     /// that was hit, so no re-arm is left loaded behind them.
     private func save(continuing: Bool = false, decidedFromReached: Bool = false) {
-        guard validation == .valid else { return }
+        // `hasLoaded`: the celebration card's Continue reaches here too,
+        // and it can be raised by a PRIMED history. Nothing is written
+        // from a picture of the last load (`GoalPrime`).
+        guard validation == .valid, model.hasLoaded else { return }
         if continuing || decidedFromReached, let reached = goals.first?.targetWeightLb {
             SharedStore.acknowledgeGoalReached(targetLb: reached, decided: true)
         }

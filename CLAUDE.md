@@ -597,8 +597,8 @@ Each cost a debugging session.
   visit, same cause, second symptom: a nil weight and an empty history
   before the first load mean NOT ASKED YET, and Goal printed them as "No
   weight in Apple Health yet — enter it here." over a manual field —
-  `GoalModel.hasLoaded` holds placeholders until Health answers (Today's
-  zeros-as-facts, one tab over). `testGoalFirstVisitShowsNoCancel` holds
+  placeholders hold those rows until there is a prime or a Health answer
+  (`GoalModel.hasContent`; Today's zeros-as-facts, one tab over). `testGoalFirstVisitShowsNoCancel` holds
   the load open 4 s with `--slow-goal-load`, because a ~100 ms flash sits
   far inside XCUITest's query latency and a test of it would otherwise
   pass on any build; it was run against the old ordering and fails there
@@ -735,6 +735,37 @@ Each cost a debugging session.
   replaces every field. `start()` also runs the static and day reads side
   by side now; the day used to queue behind weight history it didn't
   need, and the resting estimate landed alone a beat before the rest.
+- **`GoalPrime` and `CalendarPrime` are the same thing for the next two
+  tabs** (2026-09-17, v2.28.1; the user, an hour after Goal's
+  placeholders went in: "goal populating is abrupt, can we have it do a
+  similar thing like the Today screen"). Same contract — written only
+  from a Health answer, refused when it looks like a sealed store, a
+  picture and never a store — plus three rules Today didn't need:
+  - **Only RAW reads are cached; every verdict is re-derived on apply**,
+    by the code a live load runs (`deriveWeightSeries`,
+    `recomputeBadges`). Badges and the streak are verdicts: re-judged
+    against TODAY, a prime saved yesterday cannot claim a streak that
+    ended overnight, and `CalendarPrimeTests.carriesNoVerdicts` pins that
+    the file holds none. It is also why these last a WEEK where Today's
+    lasts a day — a weight history belongs to no calendar day.
+  - **Nothing SAVES from a prime.** Goal's Save (and `save()` itself,
+    which the celebration's Continue also reaches) waits for
+    `hasLoaded`; the view draws on `hasContent` (primed OR loaded).
+  - **The prime is applied from the view's `.onAppear`, never the
+    model's `init`.** `GoalModel()` is a `@State` default, which SwiftUI
+    re-evaluates on every rebuild of the view struct and throws away —
+    work there rides every `ContentView` body pass. `.onAppear` still
+    lands before the first frame (frame-counted for the Cancel flash the
+    same day). `launchPrime` reads the disk once per process.
+    `TodayModel.init` still reads its file per init; it is a few KB and
+    was left alone, but it is the same shape.
+  Foods needs none of this: its list is SwiftData and complete on its
+  first frame. `testColdOpenPaintsTheLastLoad` launches TWICE (a prime
+  only exists after a load) and holds both loads open with
+  `--slow-goal-load` / `--slow-calendar-load`; run with the two
+  `applyLaunchPrimeIfNeeded()` calls removed it fails on both tabs. Not
+  covered: the Calendar day card's sodium/water slots still fill a beat
+  late (`selectedDaySummary` is its own read).
 - Three correlation-metadata keys, and any new log/re-log path must carry them
   ALL through or edits regress and history silently loses detail:
   - `OnigiriMealCategory` — the meal slot. Absent ⇒ inferred from time of day

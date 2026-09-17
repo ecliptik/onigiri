@@ -34,6 +34,48 @@ public struct CalendarPrime: Codable, Sendable, Equatable {
     public var targetDeficitKcal: Double?
     public var isMaintenance: Bool
     public var weightHistory: [WeightTrend.Point]
+    /// The day card's tracked-metric slots for the day the tab opens on.
+    /// Optional, so a v2.28.1 file (which has none) still decodes — an
+    /// addition, not a change of meaning, hence no schema bump.
+    public var dayCard: DayCard?
+
+    /// The one part of this prime that belongs to a CALENDAR DAY. The
+    /// month lasts a week; this lasts until midnight (`TodayPrime`'s
+    /// rule), because the tab opens on today and yesterday's sodium under
+    /// today's heading is a wrong number, not a stale one. Sodium and
+    /// water ride `summary`; the other tracked nutrients are read per
+    /// SLOT, and a slot total means nothing once the slot's setting has
+    /// changed — `slotKeys` records what each was read as.
+    public struct DayCard: Codable, Sendable, Equatable {
+        public var day: Date
+        public var summary: DailyEnergySummary
+        public var slotKeys: [String]
+        public var slotTotals: [Double?]
+
+        public init(day: Date, summary: DailyEnergySummary,
+                    slotKeys: [String], slotTotals: [Double?]) {
+            self.day = day
+            self.summary = summary
+            self.slotKeys = slotKeys
+            self.slotTotals = slotTotals
+        }
+
+        public func isValid(now: Date = .now, calendar: Calendar = .current) -> Bool {
+            calendar.isDate(day, inSameDayAs: now)
+        }
+
+        /// An all-zero summary is what a sealed store returns, never a
+        /// fact about a day (`TodayPrime.isTrustworthy`): resting burn
+        /// is positive within a minute of midnight.
+        public var isTrustworthy: Bool {
+            summary.intakeKcal > 0 || summary.activeBurnKcal > 0 || summary.restingBurnKcal > 0
+        }
+
+        /// The slot totals, if they were read under `keys`; else none.
+        public func slotTotals(ifReadAs keys: [String]) -> [Double?]? {
+            slotKeys == keys ? slotTotals : nil
+        }
+    }
 
     public init(
         schema: Int = CalendarPrime.currentSchema,
@@ -41,7 +83,8 @@ public struct CalendarPrime: Codable, Sendable, Equatable {
         totals: [DayEnergyTotals],
         targetDeficitKcal: Double?,
         isMaintenance: Bool,
-        weightHistory: [WeightTrend.Point]
+        weightHistory: [WeightTrend.Point],
+        dayCard: DayCard? = nil
     ) {
         self.schema = schema
         self.savedAt = savedAt
@@ -49,6 +92,7 @@ public struct CalendarPrime: Codable, Sendable, Equatable {
         self.targetDeficitKcal = targetDeficitKcal
         self.isMaintenance = isMaintenance
         self.weightHistory = weightHistory
+        self.dayCard = dayCard
     }
 
     /// Same schema, written in the past, within `maxAge`. A prime from

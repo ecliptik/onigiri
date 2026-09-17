@@ -202,8 +202,15 @@ struct CalendarView: View {
                 mode: $0.mode
             )
         }
-        await model.refresh(goal: goal, forceWeights: forceWeights)
-        await model.loadDaySummary(for: selectedDay)
+        // Side by side. The day card's read used to queue behind the
+        // whole refresh — the plan, 92 days of totals and a year of
+        // weigh-ins, none of which it needs — so its sodium/water slots
+        // sat on "—" for a beat after everything else had filled (the
+        // user, 2026-09-17; the shape `TodayModel.start()` had until the
+        // day before).
+        async let window: Void = model.refresh(goal: goal, forceWeights: forceWeights)
+        async let card: Void = model.loadDaySummary(for: selectedDay)
+        _ = await (window, card)
     }
 
     // MARK: - Pieces

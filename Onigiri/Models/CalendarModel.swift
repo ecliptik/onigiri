@@ -57,7 +57,54 @@ final class CalendarModel {
         isMaintenance = prime.isMaintenance
         weightHistory = prime.weightHistory
         recomputeBadges()
+        // The day card opens on TODAY, so its slots are primed only by a
+        // card saved today — and the per-slot totals only if the slots
+        // still track what they tracked then (`CalendarPrime.DayCard`).
+        if let card = prime.dayCard, card.isValid() {
+            selectedDaySummary = card.summary
+            if let slots = card.slotTotals(ifReadAs: Self.slotKeys) {
+                selectedDaySlotTotals = slots
+            }
+        }
         isPrimed = true
+    }
+
+    /// What each tracked slot is set to right now — the key a primed slot
+    /// total must have been read under to mean anything.
+    private static var slotKeys: [String] {
+        [1, 2].map { SharedStore.trackedNutrient(slot: $0)?.key ?? SharedStore.trackedMetricNone }
+    }
+
+    /// The trailing window the last `refresh()` fetched, and the day the
+    /// published summary belongs to — what `storePrime()` writes from.
+    @ObservationIgnored private var windowTotals: [DayEnergyTotals] = []
+    @ObservationIgnored private var summaryDay: Date?
+    @ObservationIgnored private var summarySlotKeys: [String] = []
+
+    /// The next cold launch's first frame. Called when EITHER half lands
+    /// — the refresh or the day card's read, which run side by side — so
+    /// whichever finishes last writes the complete picture. Only once
+    /// Health has answered for the window; the store refuses the
+    /// energy-less one a sealed device returns, and the day card rides
+    /// along only for today, and only if it isn't a sealed zero.
+    private func storePrime() {
+        guard hasLoaded else { return }
+        var card: CalendarPrime.DayCard?
+        if let summaryDay, let summary = selectedDaySummary,
+           Calendar.current.isDateInToday(summaryDay) {
+            let candidate = CalendarPrime.DayCard(
+                day: summaryDay, summary: summary,
+                slotKeys: summarySlotKeys, slotTotals: selectedDaySlotTotals)
+            if candidate.isTrustworthy { card = candidate }
+        }
+        CalendarPrimeStore.store(CalendarPrime(
+            savedAt: .now,
+            totals: windowTotals,
+            targetDeficitKcal: targetDeficitKcal,
+            isMaintenance: isMaintenance,
+            weightHistory: weightHistory,
+            dayCard: card
+        ))
     }
     /// Foreground-gate stamp: once the tab has been visited it stays in
     /// the TabView hierarchy, so its scenePhase handler fired the full
@@ -112,17 +159,11 @@ final class CalendarModel {
         refreshGate.markRefreshed()
         // Guarded: `@Observable` never skips an equal write.
         if !hasLoaded { hasLoaded = true }
-        // The next cold launch's first frame — the window THIS refresh
-        // fetched, never the merged dictionary (on-demand months are a
-        // session's browsing, not the month the tab opens on). The store
-        // refuses the energy-less window a sealed device returns.
-        CalendarPrimeStore.store(CalendarPrime(
-            savedAt: .now,
-            totals: totals,
-            targetDeficitKcal: targetDeficitKcal,
-            isMaintenance: isMaintenance,
-            weightHistory: weightHistory
-        ))
+        // The window THIS refresh fetched, never the merged dictionary
+        // (on-demand months are a session's browsing, not the month the
+        // tab opens on).
+        windowTotals = totals
+        storePrime()
     }
 
     /// Load a browsed month that predates the trailing window, once —
@@ -251,6 +292,17 @@ final class CalendarModel {
     func loadDaySummary(for day: Date) async {
         summaryGeneration += 1
         let generation = summaryGeneration
+        #if DEBUG
+        // `--slow-calendar-load` holds this read open too: it runs beside
+        // the refresh now, and would otherwise land inside the window the
+        // cold-open test looks at and hide a missing prime.
+        if !hasLoaded, ProcessInfo.processInfo.arguments.contains("--slow-calendar-load") {
+            try? await Task.sleep(for: .seconds(4))
+        }
+        #endif
+        // Read BEFORE the awaits: a Settings change mid-read must not
+        // stamp the new key onto a total read under the old one.
+        let keys = Self.slotKeys
         async let summaryRead = health.daySummary(for: day)
         // Non-sodium/water slots need their own day query; nil (slot off,
         // sodium/water, or a failed read) renders as "—", never a fake 0.
@@ -262,6 +314,9 @@ final class CalendarModel {
         guard generation == summaryGeneration else { return }
         selectedDaySummary = summary
         selectedDaySlotTotals = slots
+        summaryDay = day
+        summarySlotKeys = keys
+        storePrime()
     }
 
     private func slotDayTotal(slot: Int, day: Date) async -> Double? {

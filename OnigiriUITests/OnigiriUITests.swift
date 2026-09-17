@@ -1147,6 +1147,13 @@ final class OnigiriUITests: XCTestCase {
         switchTab(in: app, to: "Calendar")
         XCTAssertTrue(judgedDay.waitForExistence(timeout: 15),
                       "First launch: the Calendar judges at least one seeded day")
+        // The day card's sodium slot — a combined element reading
+        // "1,550 mg", or "—" while it has nothing.
+        let sodiumSlot = app.descendants(matching: .any).matching(NSPredicate(
+            format: "label ENDSWITH ' mg'"
+        )).firstMatch
+        XCTAssertTrue(sodiumSlot.waitForExistence(timeout: 15),
+                      "First launch: the day card reads the seeded sodium")
         // The primes are written off the main actor after each load.
         Thread.sleep(forTimeInterval: 1.5)
         app.terminate()
@@ -1167,6 +1174,8 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Previous month"].waitForExistence(timeout: 3), "Calendar should be up")
         XCTAssertTrue(judgedDay.exists,
                       "The Calendar re-judges the last refresh's days while this launch's refresh is held open")
+        XCTAssertTrue(sodiumSlot.exists,
+                      "Today's day card shows its tracked slots too, not a dash, while its read is held open")
         attachShot(named: "calendar-cold-open-primed", settle: 0)
     }
 

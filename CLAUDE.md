@@ -768,9 +768,16 @@ Each cost a debugging session.
   first frame. `testColdOpenPaintsTheLastLoad` launches TWICE (a prime
   only exists after a load) and holds both loads open with
   `--slow-goal-load` / `--slow-calendar-load`; run with the two
-  `applyLaunchPrimeIfNeeded()` calls removed it fails on both tabs. Not
-  covered: the Calendar day card's sodium/water slots still fill a beat
-  late (`selectedDaySummary` is its own read).
+  `applyLaunchPrimeIfNeeded()` calls removed it fails on both tabs.
+  The Calendar's DAY CARD rides the same file but lasts only until
+  midnight (`CalendarPrime.DayCard`): the tab opens on today, and
+  yesterday's sodium under today's heading is a wrong number, not a
+  stale one. Its per-slot totals apply only under the tracked-metric
+  settings they were read as (`slotKeys`). The card's read also runs
+  BESIDE `refresh()` now — it used to queue behind the plan, 92 days of
+  totals and a year of weigh-ins it never needed — and either half
+  landing rewrites the prime, so the last to finish writes the whole
+  picture.
 - Three correlation-metadata keys, and any new log/re-log path must carry them
   ALL through or edits regress and history silently loses detail:
   - `OnigiriMealCategory` — the meal slot. Absent ⇒ inferred from time of day

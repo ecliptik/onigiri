@@ -48,18 +48,34 @@ enum DebugSeeder {
         // `testFoodsSearchSurvivesScroll`, went GREEN against a
         // four-row list that never scrolled). Still idempotent: a
         // second run finds the fillers and adds none.
-        let fillerCount = (try? context.fetchCount(FetchDescriptor<Food>(
+        //
+        // And the flag's ABSENCE takes them away again, the same day's
+        // second lesson: once the fillers really landed they outlived
+        // the test that asked for them, led every later test's Foods
+        // list (they sort ahead, created last), and pushed "Protein
+        // shake" 30 rows down and out of the tree —
+        // `testSeedGrantAndLogFlow` went red in the v2.28.1 gate on
+        // "Seeded library should list foods". A seed says what the
+        // library IS, the rule the Health seed already follows.
+        // Simulator only, like that reset: a DEBUG build lands on the
+        // real phone every week, and nothing there is deleted by name.
+        let fillers = (try? context.fetch(FetchDescriptor<Food>(
             predicate: #Predicate { $0.name.starts(with: "Filler food") }
-        ))) ?? 0
-        if fillerCount == 0,
-           ProcessInfo.processInfo.arguments.contains("--seed-big-library") {
-            for index in 1...30 {
-                context.insert(Food(
-                    name: "Filler food \(index)", kcal: Double(100 + index),
-                    sodiumMg: Double(10 * index), servingDescription: "1 serving",
-                    category: "Snack"
-                ))
+        ))) ?? []
+        if ProcessInfo.processInfo.arguments.contains("--seed-big-library") {
+            if fillers.isEmpty {
+                for index in 1...30 {
+                    context.insert(Food(
+                        name: "Filler food \(index)", kcal: Double(100 + index),
+                        sodiumMg: Double(10 * index), servingDescription: "1 serving",
+                        category: "Snack"
+                    ))
+                }
             }
+        } else {
+            #if targetEnvironment(simulator)
+            fillers.forEach(context.delete)
+            #endif
         }
 
         // A STATE flag replaces whatever goal is already there; a plain

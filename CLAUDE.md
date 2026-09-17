@@ -231,7 +231,12 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   `testFoodsSearchSurvivesScroll` went GREEN against a four-row list that
   never scrolled. The flag now guards on its OWN rows, and both tests
   assert "Big library seeded" before anything else. A seed flag's guard
-  is the thing it seeds, never the emptiness of the store.
+  is the thing it seeds, never the emptiness of the store. **And its
+  absence must UNDO it**: once the fillers really landed they outlived
+  their test, led every later Foods list, and pushed "Protein shake" out
+  of the tree — `testSeedGrantAndLogFlow` went red in the v2.28.1 gate
+  the same afternoon. A seeded run without the flag deletes them
+  (simulator only, like the Health reset).
 - **The DEFAULT seeded target is +120 days, and the 60 it replaced was not
   neutral** (2026-08-23). 12.2 lb over 60 days asks 650 kcal/day, leaving an
   average-day budget of ~1,650 against the ~1,743 resting estimate — under

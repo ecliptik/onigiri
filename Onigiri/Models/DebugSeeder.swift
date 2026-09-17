@@ -38,11 +38,20 @@ enum DebugSeeder {
 
         // A page-plus of filler so scroll-dependent behavior (search
         // drawer collapse, tab-bar minimize) is reproducible in tests —
-        // the four-item library above never scrolls. Opt-in, and only on
-        // a fresh install: the library seed is guarded by count (this
-        // file has always been idempotent), while the HEALTH seed resets
-        // instead — see HealthKitService.clearSeededSamples.
-        if foodCount == 0,
+        // the four-item library above never scrolls. Opt-in, and guarded
+        // by its OWN rows rather than an empty store: `foodCount == 0`
+        // made the flag a silent no-op on any sim that had ever been
+        // seeded, since the SwiftData store outlives the install — the
+        // goal-state flags' 2026-08-23 lesson, relearned 2026-09-17 when
+        // `testSheetRoundTripKeepsFoodsScroll` went red in the release
+        // gate on "Big library seeded" (and its sibling,
+        // `testFoodsSearchSurvivesScroll`, went GREEN against a
+        // four-row list that never scrolled). Still idempotent: a
+        // second run finds the fillers and adds none.
+        let fillerCount = (try? context.fetchCount(FetchDescriptor<Food>(
+            predicate: #Predicate { $0.name.starts(with: "Filler food") }
+        ))) ?? 0
+        if fillerCount == 0,
            ProcessInfo.processInfo.arguments.contains("--seed-big-library") {
             for index in 1...30 {
                 context.insert(Food(

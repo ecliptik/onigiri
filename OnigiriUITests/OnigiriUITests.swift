@@ -1419,6 +1419,17 @@ final class OnigiriUITests: XCTestCase {
         grantHealthAccess(in: app, timeout: 10)
 
         switchTab(in: app, to: "Foods")
+        // The precondition, asserted: without the fillers the list never
+        // scrolls, the drawer never has a reason to collapse, and every
+        // check below passes while guarding nothing — which is what this
+        // test did on any previously-seeded sim until 2026-09-17, when
+        // `--seed-big-library` only filled an EMPTY store.
+        XCTAssertTrue(
+            app.descendants(matching: .any).matching(NSPredicate(
+                format: "label CONTAINS 'Filler food'"
+            )).firstMatch.waitForExistence(timeout: 10),
+            "Big library seeded"
+        )
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 10), "Search field at rest")
         attachShot(named: "foods-scroll-rest")

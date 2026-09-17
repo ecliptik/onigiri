@@ -225,6 +225,13 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   a state the argument had quietly declined to set up. A state flag also
   clears `goalReachedAck*` in defaults, which outlive the store too and
   otherwise leave the celebration permanently dismissed after one run.
+  `--seed-big-library` had the same fault until 2026-09-17 (`foodCount
+  == 0`): on any sim seeded before, the 30 fillers never landed, so
+  `testSheetRoundTripKeepsFoodsScroll` went red in the v2.28.0 gate while
+  `testFoodsSearchSurvivesScroll` went GREEN against a four-row list that
+  never scrolled. The flag now guards on its OWN rows, and both tests
+  assert "Big library seeded" before anything else. A seed flag's guard
+  is the thing it seeds, never the emptiness of the store.
 - **The DEFAULT seeded target is +120 days, and the 60 it replaced was not
   neutral** (2026-08-23). 12.2 lb over 60 days asks 650 kcal/day, leaving an
   average-day budget of ~1,650 against the ~1,743 resting estimate — under

@@ -5,7 +5,7 @@ permalink: /privacy/
 
 # Onigiri Privacy Policy
 
-_Last updated: August 24, 2026_
+_Last updated: September 17, 2026_
 
 Onigiri is a calorie, nutrition, and water tracker for iPhone, iPad,
 and Apple Watch. It is built so that your data stays yours.
@@ -70,6 +70,12 @@ or image shared directly is read on your device without any request.
 Shared documents are read into a scratch copy that is deleted when the
 read finishes. Nothing is kept but a food you actually save or log.
 
+**Visual Intelligence** works the same way. When you point the camera
+at something, or take a screenshot, and choose Onigiri's *Identify from
+Photo*, iOS hands Onigiri that one picture. It is read exactly as a
+photo from Onigiri's own camera is, under the AI settings below, and is
+not kept.
+
 ## AI features (optional)
 
 Onigiri's AI features — food estimates, meal-name suggestions,
@@ -123,6 +129,14 @@ Your food and meal library, goals, and preferences are stored locally
 (and shared with the app's own widgets and watch app). Library backups
 are saved to the app's Documents folder under your control, visible in
 the Files app. Nothing is uploaded.
+
+So that the app can open on real numbers instead of blanks, Onigiri
+also keeps a small picture of the last figures it read from Apple
+Health — today's summary and log, recent weigh-ins, and recent daily
+totals — in the app's cache on your device. It is replaced every time
+Health answers, iOS may clear it at any time, it is not included in
+device backups, and it never leaves your device. Apple Health remains
+the only place your logs are stored.
 
 ## Data collection
 

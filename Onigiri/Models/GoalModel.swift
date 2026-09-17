@@ -40,6 +40,14 @@ final class GoalModel {
     private(set) var dailyLowDates: Set<Date> = []
     /// The chart's derived numbers, cached for the same reason.
     private(set) var trend = GoalTrendStats.empty
+    /// False until the first load has ANSWERED. Until then a nil weight
+    /// and an empty history mean "not asked yet", not "Health has none" —
+    /// and GoalView used to print the second reading as fact for the
+    /// length of the first load: "No weight in Apple Health yet — enter
+    /// it here." over a manual field, and the no-chart text, both
+    /// replaced a beat later with a layout jump (2026-09-17; Today's
+    /// zeros-as-facts, on the next tab over).
+    private(set) var hasLoaded = false
     /// Staleness gate for the loads (see loadIfStale).
     private var refreshGate = RefreshGate()
 
@@ -66,6 +74,15 @@ final class GoalModel {
     @discardableResult
     func loadIfStale() async -> Bool {
         guard refreshGate.isStale(maxAge: 30) else { return false }
+        #if DEBUG
+        // UI-test hook (`testGoalFirstVisitShowsNoCancel`): holds this
+        // load open so anything that wrongly WAITS on it stays wrong long
+        // enough to be seen. The Cancel flash it guards lasted ~100 ms on
+        // a simulator, far inside XCUITest's query latency.
+        if ProcessInfo.processInfo.arguments.contains("--slow-goal-load") {
+            try? await Task.sleep(for: .seconds(4))
+        }
+        #endif
         // Independent reads — concurrent, not serial (the trend chart
         // used to populate a query-chain late).
         async let weightRead = health.latestBodyMassLb()
@@ -111,6 +128,8 @@ final class GoalModel {
         // `DailyPlanLoader` still drive it, and this was only ever a
         // reader.
         refreshGate.markRefreshed()
+        // Guarded: `@Observable` never skips an equal write.
+        if !hasLoaded { hasLoaded = true }
         return true
     }
 

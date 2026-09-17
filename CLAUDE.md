@@ -584,6 +584,25 @@ Each cost a debugging session.
   list leaves above a pinned bar, it was then off screen on every real
   library until the list was scrolled to its end (the user, 2026-09-16:
   "hiding it completely"). Pinned won with both versions in hand.
+- **A form's draft takes the stored model BEFORE its first frame, never
+  after an `await`** (2026-09-17). `GoalView` copied the stored goal into
+  its `@State` only once `model.loadIfStale()` had returned, so for the
+  length of that Health load the form held its built-in defaults beside a
+  stored goal it didn't match: `hasEdits` was true and a Cancel pill
+  appeared left of Save, then vanished. Once per process, first visit
+  only (TabView keeps the view, and `loaded` with it) — which is why the
+  user could see it and not reproduce it; ~6 frames on the sim,
+  frame-counted from `recordVideo`. The sync is `.onAppear` now
+  (`syncStoredGoalIfNeeded`), and nothing it copies needs Health. Same
+  visit, same cause, second symptom: a nil weight and an empty history
+  before the first load mean NOT ASKED YET, and Goal printed them as "No
+  weight in Apple Health yet — enter it here." over a manual field —
+  `GoalModel.hasLoaded` holds placeholders until Health answers (Today's
+  zeros-as-facts, one tab over). `testGoalFirstVisitShowsNoCancel` holds
+  the load open 4 s with `--slow-goal-load`, because a ~100 ms flash sits
+  far inside XCUITest's query latency and a test of it would otherwise
+  pass on any build; it was run against the old ordering and fails there
+  on both counts.
 
 ## App-launch landmines
 

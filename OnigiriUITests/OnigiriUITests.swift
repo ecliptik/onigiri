@@ -1121,6 +1121,55 @@ final class OnigiriUITests: XCTestCase {
         }
     }
 
+    /// The first visit to Goal in a process must not flash a Cancel
+    /// button. The stored goal used to reach the form only AFTER the
+    /// awaited Health load, so until it landed the form held its
+    /// built-in defaults beside a stored goal it didn't match — it read
+    /// as edited, and a Cancel pill appeared left of Save and vanished
+    /// (the user, 2026-09-17; ~6 frames on the sim, frame-counted).
+    /// `--slow-goal-load` holds that load open for 4 s, so the window is
+    /// wide enough to query inside: against the old ordering Cancel is
+    /// up for all of it and the field is still empty, and both checks
+    /// below fail. Asserts the FIELD too — "no Cancel" alone would pass
+    /// on a build that merely hid the button.
+    @MainActor
+    func testGoalFirstVisitShowsNoCancel() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--seed-sample-data", "--slow-goal-load"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        switchTab(in: app, to: "Goal")
+        let save = app.buttons["Save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 3), "Goal's toolbar should be up")
+        // Inside the held-open load: the form already IS the stored goal.
+        XCTAssertFalse(app.buttons["Cancel"].exists,
+                       "No Cancel on an untouched Goal, even before Health answers")
+        // A field that HOLDS something — an empty one reports its "0"
+        // placeholder as its value. Not `textFields.firstMatch`: that was
+        // the manual current-weight field the first time this ran, shown
+        // because Health hadn't answered — a second first-visit flash,
+        // asserted gone below.
+        let filled = app.textFields.matching(
+            NSPredicate(format: "value != '0' AND value != ''")
+        ).firstMatch
+        XCTAssertTrue(filled.exists,
+                      "The stored target fills its field before the load lands")
+        XCTAssertFalse(save.isEnabled, "Nothing to save on an untouched Goal")
+        XCTAssertFalse(
+            app.staticTexts["No weight in Apple Health yet — enter it here."].exists,
+            "Not asked yet is not \"no weight\" — no manual field before Health answers"
+        )
+        attachShot(named: "goal-first-visit-loading", settle: 0)
+        // And once the held load lands, still no Cancel: nothing about
+        // Health answering is an edit.
+        XCTAssertTrue(app.staticTexts["From Apple Health"].waitForExistence(timeout: 10),
+                      "The seeded weigh-in arrives once the load lands")
+        XCTAssertFalse(app.buttons["Cancel"].exists, "No Cancel after the load lands either")
+        attachShot(named: "goal-first-visit-loaded", settle: 0.5)
+    }
+
     /// The decimal pad has no return key, so the weight fields need a way
     /// out that isn't the return key. Goal's toolbar is Cancel ↔ Save —
     /// the styled principal "Done" was removed because it read as

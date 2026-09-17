@@ -640,7 +640,16 @@ struct GoalView: View {
                 trendSection
 
                 Section("Current weight") {
-                    if let healthWeightLb = model.healthWeightLb {
+                    if !model.hasLoaded {
+                        // Health hasn't answered yet — hold the row's
+                        // shape rather than claim there is no weight and
+                        // offer a field to type one into.
+                        LabeledContent("From Apple Health") {
+                            Text(verbatim: "000.0 \(unit.symbol)")
+                        }
+                        .redacted(reason: .placeholder)
+                        .accessibilityHidden(true)
+                    } else if let healthWeightLb = model.healthWeightLb {
                         LabeledContent("From Apple Health") {
                             Text("\(unit.fromLb(healthWeightLb), format: .number.precision(.fractionLength(1))) \(unit.symbol)")
                         }
@@ -738,14 +747,25 @@ struct GoalView: View {
                 }
             }
         }
+        // The stored goal reaches the form BEFORE the first frame, never
+        // after the Health load. It used to be copied in only once
+        // `loadIfStale()` had returned, so for that whole await the form
+        // sat on its built-in defaults (no target, a date 90 days out)
+        // beside a stored goal it didn't match — `hasEdits` was true and
+        // the toolbar grew a Cancel pill that vanished again when the
+        // load landed. Once per process (TabView keeps this view, and
+        // `loaded` with it), on the first visit only, which is why it
+        // could not be reproduced by hand: ~6 frames on the 26.5 sim,
+        // frame-counted, and as long as HealthKit's first read of a
+        // launch on the phone (the user, 2026-09-17). Nothing the sync
+        // copies needs Health: an automatic start reads the history
+        // live through `startDateBinding`, not from `startDate`.
+        .onAppear { syncStoredGoalIfNeeded() }
         .task {
             let refreshed = await model.loadIfStale()
-            let needsDerive = refreshed || !loaded
-            if !loaded, goals.first != nil {
-                applyStoredGoal()
-                loaded = true
-            }
-            if needsDerive {
+            // Still here for a goal that arrived while the load ran.
+            let synced = syncStoredGoalIfNeeded()
+            if refreshed, !synced {
                 deriveTrendStats()
             }
         }
@@ -1073,7 +1093,14 @@ struct GoalView: View {
         // No header: it leads the screen now, and the chart speaks for
         // itself.
         Section {
-            if hasChart {
+            if !model.hasLoaded {
+                // Not asked yet is not "no weigh-ins": hold the chart's
+                // height so the form below doesn't jump when it lands.
+                Color.clear
+                    .frame(height: chartHeight)
+                    .padding(.vertical, 4)
+                    .accessibilityHidden(true)
+            } else if hasChart {
                 // Plotted in the display unit (not just relabeled) so
                 // the y-axis ticks read as real kg/lb values.
                 Chart {
@@ -1269,6 +1296,17 @@ struct GoalView: View {
             startIsAutomatic = true
             startDate = automaticStart?.date ?? .now
         }
+    }
+
+    /// First sight of a stored goal: copy it into the form, once. Returns
+    /// whether it did, so a caller doesn't derive the trend stats twice.
+    @discardableResult
+    private func syncStoredGoalIfNeeded() -> Bool {
+        guard !loaded, goals.first != nil else { return false }
+        applyStoredGoal()
+        loaded = true
+        deriveTrendStats()
+        return true
     }
 
     /// The Cancel action: back out of un-saved edits and drop the

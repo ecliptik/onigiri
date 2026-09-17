@@ -8,6 +8,34 @@ also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) pu
 v2.16.0 were not all tagged with notes; those show the version and its
 comparison link alone.
 
+## v2.28.2 — the day card opens filled
+
+_2026-09-17_ · [changes since v2.28.1](https://github.com/ecliptik/onigiri/compare/v2.28.1...v2.28.2)
+
+v2.28.1 taught the Calendar to open on its last month instead of an empty one.
+One corner was left out, and said so: the day card's tracked slots — sodium and
+water, or whatever you track — still sat on "—" for a beat after everything
+else had filled. Two causes, one symptom.
+
+**The card's read was waiting in the wrong queue.** The Calendar's refresh
+fetches today's plan, 92 days of totals and a year of weigh-ins. The day card
+needs none of that, but its own read only *started* once all of it had come
+back. The two run side by side now.
+
+**And the cold-open picture had no day card in it.** It does now: today's
+sodium, water and tracked-slot totals ride the same saved picture as the month,
+under stricter rules, because the card belongs to a day and the month doesn't.
+
+- It lasts until midnight, where the month lasts a week. The tab opens on
+  today, and yesterday's sodium under today's heading is a wrong number, not a
+  stale one.
+- A slot's total applies only if the slot still tracks what it tracked when it
+  was saved — 82 g of protein is not 82 g of fiber.
+- An all-zero day, which is what a locked phone returns, is never kept.
+
+The test that guards the cold open now holds the card's read open as well, and
+fails on exactly this when the card's picture is switched off.
+
 ## v2.28.1 — the first half second of Goal and Calendar
 
 _2026-09-17_ · [changes since v2.28.0](https://github.com/ecliptik/onigiri/compare/v2.28.0...v2.28.1)

@@ -310,14 +310,12 @@ extension View {
     /// barely registers against that near-black dark-mode surface, so a
     /// frosted card on top of it read as one continuous surface with only
     /// the grabber between them (the user, 2026-09-13 screenshot). A
-    /// FROST plus a dim — the dim alone shipped for a day and left the
-    /// host's rows crisp under the card, which is the problem this exists
-    /// to solve (below) — drawn as an overlay, so on a NavigationStack
-    /// host it covers the bar too; `recedesWithSheet()` on each toolbar
-    /// control is still the other half, since a dimmed Cancel/Done is
-    /// otherwise a live trap for a stray tap. Reduce Transparency swaps
-    /// the frost for a stronger dim rather than nothing — the host is
-    /// still visibly not the active surface either way.
+    /// plain DIM and no blur — Apple's own idiom, only darker than the
+    /// system's (the three rounds that settled it are below) — drawn as
+    /// an overlay, so on a NavigationStack host it covers the bar too;
+    /// `recedesWithSheet()` on each toolbar control is still the other
+    /// half, since a dimmed Cancel/Done is otherwise a live trap for a
+    /// stray tap.
     @ViewBuilder
     func recedesBehindSheet(_ isPresenting: Bool) -> some View {
         modifier(RecedesBehindSheet(isPresenting: isPresenting))
@@ -338,7 +336,17 @@ extension View {
 
 private struct RecedesBehindSheet: ViewModifier {
     let isPresenting: Bool
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// Darker in DARK mode only, where the complaint lives: black over
+    /// the near-black `riceCanvas` has almost nothing to take away, so
+    /// 0.32 barely registered there (the user, 2026-09-17). Light mode
+    /// keeps the 0.32 it shipped with — half black over a light list is
+    /// far heavier than the system's own dim, and nobody asked. No
+    /// Reduce Transparency case: a flat colour has no transparency
+    /// effect to soften, and the 0.55 that setting used to get stood in
+    /// for a frost that is gone.
+    private var dimOpacity: Double { colorScheme == .dark ? 0.5 : 0.32 }
 
     func body(content: Content) -> some View {
         // An OVERLAY — never a modifier on `content`, and never an `if`
@@ -363,32 +371,32 @@ private struct RecedesBehindSheet: ViewModifier {
         //   after an interactively dismissed child had already left
         //   (plans/PLAN-sheet-dismiss-latency.md;
         //   testSheetRoundTripKeepsFoodsScroll bites on the branch).
-        // The material frosts what sits behind it without entering the
-        // content's modifier chain, and the `if` lives INSIDE the
-        // overlay, where insertion and removal cost one rectangle.
-        // Frost AND dim, decided twice: the 2026-09-16 on-device A/B
-        // (regular / thin / ultra-thin / bare scrim) ended with "can't
-        // tell the difference between regular, thin and ultra thin…
-        // whatever is most like other Apple apps", which was read as
-        // "drop the frost" and shipped the bare scrim. On the phone the
-        // next day the host's rows sat crisp under the card (the user:
-        // "I thought we were blurring the background… to give more
-        // contrast") — the three materials being alike never meant the
-        // frost was optional. Ultra-thin: the closest system material
-        // to the 12pt blur this replaced; regular hides a dark-mode
-        // list outright.
+        // The `if` lives INSIDE the overlay, where insertion and
+        // removal cost one rectangle. A plain dim at `dimOpacity`, and
+        // it took three rounds on the phone to land there:
+        // - 2026-09-16: regular / thin / ultra-thin material and a 32%
+        //   scrim, A/B'd — "can't tell the difference between regular,
+        //   thin and ultra thin… whatever is most like other Apple
+        //   apps". The 32% scrim shipped.
+        // - 2026-09-17 a.m.: that left the host's rows crisp and barely
+        //   darker under the card — "I thought we were blurring the
+        //   background… to give more contrast" — so ultra-thin material
+        //   went back under the dim.
+        // - 2026-09-17, an hour later: "seems really blurred, can we
+        //   have it match what Apple does". A system material's blur
+        //   strength is fixed and over a dark list it erases the rows
+        //   outright. Apple's apps never blur behind a sheet; they dim.
+        //   The complaint about the first scrim was CONTRAST, not the
+        //   missing blur, so the answer is the same idiom, darker.
+        // Don't reach for a material here again; if the card still
+        // reads weakly, move `dimOpacity`.
         content
             .overlay {
                 if isPresenting {
-                    ZStack {
-                        if !reduceTransparency {
-                            Rectangle().fill(.ultraThinMaterial)
-                        }
-                        Color.black.opacity(reduceTransparency ? 0.55 : 0.32)
-                    }
-                    .ignoresSafeArea()
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
+                    Color.black.opacity(dimOpacity)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
                 }
             }
             .animation(.easeOut(duration: 0.2), value: isPresenting)

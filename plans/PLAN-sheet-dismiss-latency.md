@@ -133,6 +133,20 @@ branch form to prove it bites before the fix landed.
   0.32 dim is back (the look `ae694af` shipped), still an overlay,
   still nothing on the content while idle; Reduce Transparency keeps the
   flat 0.55 dim. No picker this time.
+- **Settled the same morning: no blur, a darker dim.** With the frost
+  back on the phone — "Background is blurred now, but seems really
+  blurred, can we have it match what Apple does with apps? Or is this
+  blur we have now the default?" It is not: the system never blurs
+  behind a sheet, it dims, and a material's blur strength is fixed —
+  ultra-thin, the lightest, erased the Log sheet's rows outright over
+  the dark canvas. Offered a half-strength frost, a darker Apple-style
+  dim, or the frost as deployed, the user chose the dim. So the first
+  complaint was about CONTRAST, not the missing blur: the scrim is back
+  at 0.5 in DARK mode (was 0.32; light mode keeps 0.32, which nobody
+  faulted and where half black would far outweigh the system's dim) —
+  Reduce Transparency's own 0.55 existed to stand in for the frost and
+  has nothing left to replace. If the card reads weakly again, move
+  `RecedesBehindSheet.dimOpacity`; don't reach for a material.
 - The food form's Log route: `log()` now calls `dismiss()` in the same
   turn as the portion sheet's own, so form and portion sheet leave in
   ONE cascade. `testLogWithoutSaving` (`LOG_WITHOUT_SAVING=1`, opt-in,

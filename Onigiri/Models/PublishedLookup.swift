@@ -37,17 +37,22 @@ enum PublishedLookup {
         // FDC first when it is configured: its rows carry the nutrient
         // table inline, so a match costs ONE request where OpenFoodFacts
         // costs two — and OFF's search rate limit is shared with the
-        // searches the user actually typed.
-        if mode != .openFoodFacts,
-           let client = try? FoodDataCentralClient(apiKey: SharedStore.fdcAPIKey),
-           let foods = try? await client.search(query: estimate, limit: 10),
-           let product = PublishedNameMatch.best(
-            for: estimate,
-            among: foods.compactMap { food in
-                food.kcalPer100g == nil ? nil : (food.description, food.per100gProduct)
-            }) {
-            offerLog.notice("published match from FDC for an estimate")
-            return product
+        // searches the user actually typed. The client's own init
+        // doesn't throw (it just stores the key), so it's a plain `let`
+        // now, not folded into the `guard`/`if let` chain below —
+        // wrapping a non-throwing call in `try?` warned ("No calls to
+        // throwing functions occur within 'try' expression").
+        if mode != .openFoodFacts {
+            let client = FoodDataCentralClient(apiKey: SharedStore.fdcAPIKey)
+            if let foods = try? await client.search(query: estimate, limit: 10),
+               let product = PublishedNameMatch.best(
+                for: estimate,
+                among: foods.compactMap { food in
+                    food.kcalPer100g == nil ? nil : (food.description, food.per100gProduct)
+                }) {
+                offerLog.notice("published match from FDC for an estimate")
+                return product
+            }
         }
         guard mode != .fdc else { return nil }
 

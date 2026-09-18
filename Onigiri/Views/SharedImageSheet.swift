@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import SwiftData
 import OnigiriKit
 
 /// A photo shared into Onigiri from anywhere — Photos, Safari, Messages

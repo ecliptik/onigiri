@@ -226,17 +226,12 @@ public extension HealthPlanReading {
     }
 }
 
-extension HealthKitService: HealthPlanReading {
-    // Defaulted-parameter methods can't witness protocol requirements;
-    // this forwards to the real implementation.
-    public func todaySummary() async throws -> DailyEnergySummary {
-        try await todaySummary(now: .now)
-    }
-
-    public func targetBasisWeightLb() async -> Double? {
-        await targetBasisWeightLb(now: .now)
-    }
-}
+// `HealthKitService: HealthPlanReading` conformance lives in
+// HealthKitService.swift, not here — Swift requires a Sendable-inheriting
+// conformance (`HealthPlanReading: Sendable`) to be declared in the SAME
+// FILE as the class it applies to, and warned here until moved
+// (2026-09-17, an Xcode warning sweep: "Conformance to 'Sendable' must
+// occur in the same source file as class 'HealthKitService'").
 
 public extension DailyPlanLoader {
     static func load(
@@ -278,7 +273,7 @@ public extension DailyPlanLoader {
     /// hundreds of kcal/day, and `TodayBurnFloor` keeps `dayBurn` pinned
     /// at its high-water mark so the budget shrinks instead of standing
     /// down, which makes the swap invisible. Print it rather than infer it.
-    public static func diagnose(
+    static func diagnose(
         goal: SyncedGoal?,
         health: any HealthPlanReading = HealthKitService(),
         now: Date = .now

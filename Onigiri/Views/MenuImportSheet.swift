@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import OnigiriKit
 
 /// Something handed to the app from outside, waiting to be read.

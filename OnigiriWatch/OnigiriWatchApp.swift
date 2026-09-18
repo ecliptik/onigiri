@@ -136,6 +136,28 @@ struct OnigiriWatchApp: App {
         // The scheduled burn wake (Phase 2b). On watchOS the bare
         // `.appRefresh` hands the closure the scheduled userInfo as a
         // String? — it is not the identifier form iOS uses.
+        //
+        // Xcode flags this bare form as deprecated (Xcode 27.0 GA,
+        // 27A266a: "Use appRefresh(_ identifier: String)") — LEFT AS
+        // A WARNING ON PURPOSE (2026-09-17, an Xcode warning sweep).
+        // The identifier form exists in this SDK's SwiftUI interface,
+        // but what it dispatches FROM is unverified: `BGTaskScheduler`
+        // — the only API with a concept of a matching identifier — is
+        // confirmed `API_UNAVAILABLE(watchos)` in this exact GA SDK's
+        // own header (`BGTaskScheduler.h`, checked directly), the same
+        // finding `WatchBackgroundRefresh.swift`'s comment already
+        // recorded after an actual failed build. Whether
+        // `.appRefresh("id")` still answers a wake from the legacy
+        // `WKApplication.scheduleBackgroundRefresh` call this app
+        // actually uses, or only from a `BGAppRefreshTaskRequest` this
+        // SDK can't submit, isn't something a build error or a quick
+        // check can settle — only a real device left for hours would.
+        // A silently-broken wake is undetectable until the
+        // complications go stale; a lingering deprecation warning
+        // costs nothing (works today; per Apple's own migration notes,
+        // deprecated watch background APIs "keep working for existing
+        // apps"). Don't rename this to `.appRefresh("burn-refresh")`
+        // without that on-device confirmation first.
         .backgroundTask(.appRefresh) { _ in
             await WatchBackgroundRefresh.handleWake()
         }

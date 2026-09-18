@@ -31,9 +31,14 @@ struct DescribeFoodIntent: AppIntent {
         let kcal = food.kcal.formatted(.number.precision(.fractionLength(0)))
         let sodium = food.sodiumMg.formatted(.number.precision(.fractionLength(0)))
         // The confirmation IS the review step the in-app form provides
-        // visually; declining throws and nothing is written.
-        try await requestConfirmation(result: .result(dialog: IntentDialog(stringLiteral:
-            "About \(kcal) calories and \(sodium) milligrams of sodium for \(food.name), \(food.serving). Log it?")))
+        // visually; declining throws and nothing is written. Plain
+        // dialog-only overload (iOS 18+), not the deprecated
+        // result-carrying one — this intent's result is what `perform()`
+        // returns AFTER logging, so nothing here needed the old
+        // `result:` parameter; default `conditions: []` always shows
+        // the prompt, matching the old call's `showPrompt: true`.
+        try await requestConfirmation(dialog: IntentDialog(stringLiteral:
+            "About \(kcal) calories and \(sodium) milligrams of sodium for \(food.name), \(food.serving). Log it?"))
         // nil category: the meal slot infers from time of day downstream,
         // same as any entry without explicit slot metadata.
         try await HealthKitService().logFood(

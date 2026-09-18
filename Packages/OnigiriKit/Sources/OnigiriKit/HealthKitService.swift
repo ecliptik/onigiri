@@ -1586,4 +1586,21 @@ private extension HKCorrelation {
         return values
     }
 }
+
+// Kept HERE, not beside the `HealthPlanReading` protocol in
+// DailyPlanLoader.swift: the protocol inherits `Sendable`, and Swift
+// requires that conformance to be declared in the same file as the
+// class it applies to (2026-09-17, an Xcode warning sweep — moved out
+// of DailyPlanLoader.swift, where it warned).
+extension HealthKitService: HealthPlanReading {
+    // Defaulted-parameter methods can't witness protocol requirements;
+    // this forwards to the real implementation.
+    public func todaySummary() async throws -> DailyEnergySummary {
+        try await todaySummary(now: .now)
+    }
+
+    public func targetBasisWeightLb() async -> Double? {
+        await targetBasisWeightLb(now: .now)
+    }
+}
 #endif

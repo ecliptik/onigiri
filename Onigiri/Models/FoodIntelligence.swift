@@ -1650,7 +1650,7 @@ enum FoodIntelligence {
             let estimate = try await session.respond(
                 to: Prompts.describeUser(trimmed),
                 generating: FoodEstimate.self,
-                options: GenerationOptions(sampling: .greedy)
+                options: GenerationOptions(samplingMode: .greedy)
             ).content
             let name = estimate.name.trimmingCharacters(in: .whitespacesAndNewlines)
             let nutrients = estimateMacros(
@@ -1726,7 +1726,7 @@ enum FoodIntelligence {
             let estimate = try await session.respond(
                 to: Prompts.describeMealUser(trimmed),
                 generating: MealEstimate.self,
-                options: GenerationOptions(sampling: .greedy)
+                options: GenerationOptions(samplingMode: .greedy)
             ).content
             let name = estimate.name.trimmingCharacters(in: .whitespacesAndNewlines)
             let components = plausibleMealComponents(estimate.components.map {
@@ -1839,7 +1839,7 @@ enum FoodIntelligence {
             let answer = try await session.respond(
                 to: Prompts.refineEstimateUser(prior: prior, grounding: grounding, note: note),
                 generating: RefinedAnswer.self,
-                options: GenerationOptions(sampling: .greedy)
+                options: GenerationOptions(samplingMode: .greedy)
             ).content
             return refinedFood(
                 name: answer.name, serving: answer.serving,
@@ -1877,7 +1877,7 @@ enum FoodIntelligence {
             let food = try await session.respond(
                 to: Prompts.identifyUser(labels),
                 generating: PhotoFood.self,
-                options: GenerationOptions(sampling: .greedy)
+                options: GenerationOptions(samplingMode: .greedy)
             ).content
             let name = food.name.trimmingCharacters(in: .whitespacesAndNewlines)
             let components = food.components
@@ -1948,7 +1948,7 @@ enum FoodIntelligence {
             let reading = try await session.respond(
                 to: Prompts.signUser(text),
                 generating: SignReading.self,
-                options: GenerationOptions(sampling: .greedy)
+                options: GenerationOptions(samplingMode: .greedy)
             ).content
             return plausibleSignFoods(reading.foods.map {
                 SignFood(
@@ -2068,7 +2068,7 @@ enum FoodIntelligence {
             let reading = try await session.respond(
                 to: Prompts.menuSourceUser(text),
                 generating: MenuSourceReading.self,
-                options: GenerationOptions(sampling: .greedy)
+                options: GenerationOptions(samplingMode: .greedy)
             ).content
             return plausibleRestaurant(reading.restaurant)
         } catch {
@@ -2092,7 +2092,7 @@ enum FoodIntelligence {
                 // the answer by a factor of six with nothing to tell
                 // you which reading you got. An estimate may be
                 // approximate; it must not be a dice roll.
-                options: GenerationOptions(sampling: .greedy)
+                options: GenerationOptions(samplingMode: .greedy)
             ).content
             return MenuReading(
                 dishes: plausibleMenuDishes(reading.dishes.map {

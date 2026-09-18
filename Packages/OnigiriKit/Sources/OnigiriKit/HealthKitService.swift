@@ -1418,20 +1418,35 @@ public final class HealthKitService {
                 start: morning, end: morning
             ))
         }
-        // three full days of history so the 14-day average has data and the
-        // streak calendar has earned days (2300 burn − 1550 eaten = 750 deficit)
-        for day in 1...3 {
-            guard let dayStart = calendar.date(byAdding: .day, value: -day, to: todayStart) else { continue }
+        // Three full days of history so the 14-day average has data and
+        // the streak calendar has earned days.
+        //
+        // Each day is DIFFERENT on purpose. They were identical until
+        // 2026-09-18 — same burn, same two meals, same totals — so the
+        // site's day-swipe clip paged between them and only the DATE
+        // changed, which is not a demo of anything (the user). Every day
+        // still has to stay TRACKED (intake ≥ `untrackedBelowKcal`) and
+        // comfortably in deficit, or the calendar loses the earned
+        // badges this history exists to produce; the leanest here is
+        // day 3 at 1,150 eaten against 2,050 burned.
+        for (index, day) in Self.seededHistory.enumerated() {
+            guard let dayStart = calendar.date(
+                byAdding: .day, value: -(index + 1), to: todayStart
+            ) else { continue }
             samples.append(sample(
-                .activeEnergyBurned, .kilocalorie(), 500,
+                .activeEnergyBurned, .kilocalorie(), day.activeKcal,
                 start: dayStart.addingTimeInterval(9 * 3600),
                 end: dayStart.addingTimeInterval(19 * 3600)
             ))
             samples.append(sample(
-                .basalEnergyBurned, .kilocalorie(), 1800,
+                .basalEnergyBurned, .kilocalorie(), day.basalKcal,
                 start: dayStart.addingTimeInterval(1 * 3600),
                 end: dayStart.addingTimeInterval(22 * 3600)
             ))
+            for (offset, oz) in day.waterOz.enumerated() {
+                let at = dayStart.addingTimeInterval((10 + Double(offset) * 4) * 3600)
+                samples.append(sample(.dietaryWater, .fluidOunceUS(), oz, start: at, end: at))
+            }
         }
         try await store.save(samples)
 
@@ -1463,15 +1478,51 @@ public final class HealthKitService {
                           nutrients: eggs, date: todayAt(0.25))
         try await logFood(name: "Chicken burrito", kcal: 680, sodiumMg: 940,
                           nutrients: burrito, date: todayAt(0.75))
-        // past days' intake as named logs so day browsing has entries
-        for day in 1...3 {
-            guard let dayStart = calendar.date(byAdding: .day, value: -day, to: todayStart) else { continue }
-            try await logFood(name: "Two eggs & toast", kcal: 650, sodiumMg: 800,
-                              date: dayStart.addingTimeInterval(8 * 3600))
-            try await logFood(name: "Chicken & rice", kcal: 900, sodiumMg: 1000,
-                              date: dayStart.addingTimeInterval(18 * 3600))
+        // past days' intake as named logs so day browsing has entries —
+        // a different menu, a different count and a different total each
+        // day (see `seededHistory`).
+        for (index, day) in Self.seededHistory.enumerated() {
+            guard let dayStart = calendar.date(
+                byAdding: .day, value: -(index + 1), to: todayStart
+            ) else { continue }
+            for meal in day.meals {
+                try await logFood(name: meal.name, kcal: meal.kcal, sodiumMg: meal.sodiumMg,
+                                  date: dayStart.addingTimeInterval(meal.hour * 3600))
+            }
         }
     }
+
+    /// What the three seeded past days hold, newest first. Kept as data
+    /// rather than inline loops so the burn pass and the intake pass
+    /// cannot drift apart, and so the totals are readable: a day's
+    /// deficit is `active + basal − Σ kcal`, and all three clear the
+    /// seeded goal's ~298 kcal requirement by a wide margin.
+    struct SeededDay {
+        let activeKcal: Double
+        let basalKcal: Double
+        let waterOz: [Double]
+        let meals: [(name: String, kcal: Double, sodiumMg: Double, hour: Double)]
+    }
+
+    static let seededHistory: [SeededDay] = [
+        // yesterday — an ordinary day: 2,300 burned, 1,550 eaten
+        SeededDay(activeKcal: 500, basalKcal: 1800, waterOz: [12, 12], meals: [
+            ("Two eggs & toast", 650, 800, 8),
+            ("Chicken & rice", 900, 1000, 18),
+        ]),
+        // a busy day — more movement, three meals: 2,590 burned, 1,510 eaten
+        SeededDay(activeKcal: 780, basalKcal: 1810, waterOz: [12, 12, 12], meals: [
+            ("Oatmeal & berries", 380, 150, 7.5),
+            ("Turkey sandwich", 520, 980, 12.5),
+            ("Salmon & greens", 610, 420, 19),
+        ]),
+        // a quiet day — little movement, lighter food: 2,050 burned, 1,150 eaten
+        SeededDay(activeKcal: 260, basalKcal: 1790, waterOz: [8, 8], meals: [
+            ("Greek yogurt & granola", 320, 95, 8.5),
+            ("Chicken burrito", 680, 940, 13),
+            ("Popcorn", 150, 240, 20),
+        ]),
+    ]
     #endif
 }
 

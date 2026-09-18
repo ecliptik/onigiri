@@ -190,10 +190,19 @@ extension View {
     /// scrolls until the field is hittable now, so don't read an old
     /// note about "contentMargins broke the walkthrough" as a reason to
     /// drop this.
+    ///
+    /// `top` is the margin it SETS, not an offset it adds — the default
+    /// 0 is the flush case above. The Log sheet passes a real value
+    /// while searching: its first row is then the AI estimate row, not
+    /// the scope bar, and flush against the nav bar meant flush
+    /// literally — `gapAboveRow=0.0`, measured, after a first attempt
+    /// (wrapping that row in a `Section`) bought only the 10pt
+    /// `compactSections` spacing BELOW it and nothing above
+    /// (2026-09-17, the user from device: "Still no padding").
     @ViewBuilder
-    func flushTopContent() -> some View {
+    func flushTopContent(_ top: CGFloat = 0) -> some View {
         if #available(iOS 26.0, *) {
-            self.contentMargins(.top, 0, for: .scrollContent)
+            self.contentMargins(.top, top, for: .scrollContent)
         } else {
             self
         }

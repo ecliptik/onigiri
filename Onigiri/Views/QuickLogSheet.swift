@@ -462,7 +462,17 @@ struct QuickLogSheet: View {
             // stands).
             .navigationTitle("Log")
             .navigationBarTitleDisplayMode(.inline)
-            .flushTopContent()
+            // Flush while BROWSING — that's what keeps the scope row
+            // level with Foods'. While SEARCHING the first row is the
+            // AI estimate row instead, and flush against the nav bar
+            // measured `gapAboveRow=0.0`: the row's top edge exactly on
+            // the bar's bottom edge (the user, from device, twice —
+            // "too close to the header", then "Still no padding" after
+            // a Section wrap that only spaced it BELOW). A VALUE that
+            // varies by state, never a modifier that appears and
+            // disappears — the identity rule in CLAUDE.md's
+            // SwiftData/SwiftUI landmines.
+            .flushTopContent(searching ? Layout.screenSpacing : 0)
             // NO `.searchable` drawer on this sheet — the ONE text field
             // is in the door bar below (the user, 2026-09-17: "Unify the
             // Search dialog on Log into the Describe Food or Meal …

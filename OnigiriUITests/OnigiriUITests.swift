@@ -3026,11 +3026,19 @@ final class OnigiriUITests: XCTestCase {
 
     /// The Log sheet's ONE field (opt-in via LOG_FIELD=1, seeded sims):
     /// it carries the merged prompt, there is no `.searchable` drawer
-    /// above the list any more, and the Water row — not a library row —
-    /// leaves while a query is typed unless the query names water (the
+    /// above the list any more, the first row while searching is not
+    /// FLUSH against the nav bar, and the Water row — not a library row
+    /// — leaves while a query is typed unless the query names water (the
     /// user, 2026-09-17). Each assertion is something only the new
-    /// behavior makes true: the prompt string, the drawer's ABSENCE,
-    /// and Water gone for "rice" but back for "wat".
+    /// behavior makes true: the prompt string, the drawer's ABSENCE, a
+    /// measured gap that was exactly 0.0 before the fix, and Water gone
+    /// for "rice" but back for "wat".
+    ///
+    /// `--seed-ai-on` so the estimate row is the first thing under the
+    /// bar: that row is what measured `gapAboveRow=0.0`, and a FRAME
+    /// comparison is the only thing that catches this class of bug —
+    /// eyeballing a screenshot passed it twice (the chip's own internal
+    /// padding reads as a gap that isn't there).
     @MainActor
     func testLogSheetOneFieldAndWater() throws {
         guard ProcessInfo.processInfo.environment["LOG_FIELD"] == "1" else {
@@ -3038,7 +3046,7 @@ final class OnigiriUITests: XCTestCase {
         }
         let app = XCUIApplication()
         XCUIDevice.shared.orientation = .portrait
-        app.launchArguments = ["--seed-sample-data"]
+        app.launchArguments = ["--seed-sample-data", "--seed-ai-on"]
         app.launch()
         grantHealthAccess(in: app, timeout: 30)
         grantHealthAccess(in: app, timeout: 10)
@@ -3064,6 +3072,21 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(water.waitForNonExistence(timeout: 5),
                       "Water leaves for a query that doesn't name it")
         XCTAssertFalse(app.segmentedControls.firstMatch.exists, "Scope bar hides while searching")
+
+        // The gap the search state has to keep. Measured, not eyeballed:
+        // flush meant `rowMinY == navBarMaxY` to the point, and the
+        // `flushTopContent(searching ? Layout.screenSpacing : 0)` value
+        // is what stands between that and this. 12 rather than 16 so a
+        // rounding or a Dynamic Type nudge can't fail it, and still far
+        // enough from 0 that the flush state cannot pass.
+        let estimateRow = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH 'Estimate with'")).firstMatch
+        XCTAssertTrue(estimateRow.waitForExistence(timeout: 10),
+                      "The estimate row leads the results with AI on")
+        let gapAboveRow = estimateRow.frame.minY - app.navigationBars["Log"].frame.maxY
+        XCTAssertGreaterThan(gapAboveRow, 12,
+                             "The first search row must not sit flush against the nav bar "
+                             + "(measured \(gapAboveRow)pt; it was 0.0 when this shipped wrong)")
         attachShot(named: "logsheet-field-rice")
 
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4))

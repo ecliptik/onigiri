@@ -111,6 +111,24 @@ struct LibrarySearchTests {
         #expect(LibrarySearch.groups(rows, query: "zzqxvbn").isEmpty)
     }
 
+    // MARK: - Water
+
+    @Test func waterIsNamedByItsPrefixItsWholeNameOrAPhraseAroundIt() {
+        #expect(LibrarySearch.namesWater("wat"))
+        #expect(LibrarySearch.namesWater("Water"))
+        #expect(LibrarySearch.namesWater("  water  "))
+        #expect(LibrarySearch.namesWater("sparkling water"))
+    }
+
+    @Test func waterIsNotNamedByAnEmptyOrUnrelatedQuery() {
+        // Empty is browsing, not a search for water: the caller shows
+        // the row on its own terms then, never through this rule.
+        #expect(!LibrarySearch.namesWater(""))
+        #expect(!LibrarySearch.namesWater("   "))
+        #expect(!LibrarySearch.namesWater("chicken"))
+        #expect(!LibrarySearch.namesWater("watermelon"))
+    }
+
     // MARK: - Ordering
 
     @Test func emptyGroupsAreDroppedAndOrderIsFixed() {

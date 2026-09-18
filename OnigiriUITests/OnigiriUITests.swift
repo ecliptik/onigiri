@@ -108,6 +108,15 @@ func scanRow(in app: XCUIApplication) -> XCUIElement {
     ).firstMatch
 }
 
+/// The Log sheet's ONE text field — "Search, or Describe Food or Meal",
+/// in the pinned door bar. It searches the library, so every test that
+/// used to type into the sheet's `.searchable` drawer types here now
+/// (the drawer left on 2026-09-17). By identifier, not label: the label
+/// is the prompt, and the prompt is copy.
+func logSheetField(in app: XCUIApplication) -> XCUIElement {
+    app.textFields["entryDoorsDescribeField"].firstMatch
+}
+
 /// Tap a scope segment, scrolling it back into reach first. The Foods
 /// tab renders its scope bar as a LIST ROW, so anything that scrolls the
 /// list can leave the segment present-but-unhittable — a state
@@ -994,9 +1003,8 @@ final class OnigiriUITests: XCTestCase {
             app.buttons.matching(identifier: "Cancel").allElementsBoundByIndex
                 .first(where: \.isEnabled)?.tap()
         }
-        // Search state last: focusing the field replaces toolbar buttons,
-        // so the sheet gets torn down by relaunching instead.
-        let searchField = app.searchFields.firstMatch
+        // Search state last; the sheet gets torn down by relaunching.
+        let searchField = logSheetField(in: app)
         if searchField.waitForExistence(timeout: 5) {
             searchField.tap()
             searchField.typeText("zzzz")
@@ -2994,7 +3002,7 @@ final class OnigiriUITests: XCTestCase {
         // the seeded meal ("Chicken & rice") does not contain the query.
         scopeBar.buttons["Meals"].tap()
 
-        let searchField = app.searchFields.firstMatch
+        let searchField = logSheetField(in: app)
         XCTAssertTrue(searchField.waitForExistence(timeout: 10), "Log sheet search field")
         searchField.tap()
         searchField.typeText("Rice bowl")
@@ -3014,6 +3022,55 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertFalse(app.segmentedControls.firstMatch.exists,
                        "Scope bar should hide while searching")
         attachShot(named: "logsheet-cross-scope-search")
+    }
+
+    /// The Log sheet's ONE field (opt-in via LOG_FIELD=1, seeded sims):
+    /// it carries the merged prompt, there is no `.searchable` drawer
+    /// above the list any more, and the Water row — not a library row —
+    /// leaves while a query is typed unless the query names water (the
+    /// user, 2026-09-17). Each assertion is something only the new
+    /// behavior makes true: the prompt string, the drawer's ABSENCE,
+    /// and Water gone for "rice" but back for "wat".
+    @MainActor
+    func testLogSheetOneFieldAndWater() throws {
+        guard ProcessInfo.processInfo.environment["LOG_FIELD"] == "1" else {
+            throw XCTSkip("Set LOG_FIELD=1 to run the Log-sheet field test")
+        }
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--seed-sample-data"]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        switchTab(in: app, to: "Add")
+        XCTAssertTrue(app.navigationBars["Log"].waitForExistence(timeout: 10), "Log sheet should be up")
+        let field = logSheetField(in: app)
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "The door bar's field")
+        // The seeder leaves online lookups ON, so the field has something
+        // to describe to and wears the full prompt.
+        XCTAssertEqual(field.placeholderValue, "Search or Describe Food",
+                       "The one field says it searches AND describes")
+        XCTAssertFalse(app.searchFields.firstMatch.exists,
+                       "No .searchable drawer on the Log sheet")
+        let water = app.buttons["Log Water"].firstMatch
+        XCTAssertTrue(water.waitForExistence(timeout: 5), "Water leads the sheet at rest")
+        attachShot(named: "logsheet-field-rest")
+
+        field.tap()
+        field.typeText("rice")
+        XCTAssertTrue(app.buttons["Log Rice bowl"].waitForExistence(timeout: 10),
+                      "The library match for the query")
+        XCTAssertTrue(water.waitForNonExistence(timeout: 5),
+                      "Water leaves for a query that doesn't name it")
+        XCTAssertFalse(app.segmentedControls.firstMatch.exists, "Scope bar hides while searching")
+        attachShot(named: "logsheet-field-rice")
+
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4))
+        field.typeText("wat")
+        XCTAssertTrue(water.waitForExistence(timeout: 5), "Water is back for a query on the way to it")
+        XCTAssertFalse(app.buttons["Log Rice bowl"].exists, "…and the library rows are still filtered")
+        attachShot(named: "logsheet-field-wat")
     }
 
     /// Log without saving (opt-in via LOG_WITHOUT_SAVING=1, seeded sims):
@@ -3090,7 +3147,7 @@ final class OnigiriUITests: XCTestCase {
         }
         XCTAssertTrue(logTitle.waitForExistence(timeout: 10), "Log sheet should be up")
 
-        let searchField = app.searchFields.firstMatch
+        let searchField = logSheetField(in: app)
         XCTAssertTrue(searchField.waitForExistence(timeout: 10), "Log sheet search field")
         searchField.tap()
         searchField.typeText(oneOff)
@@ -3141,24 +3198,20 @@ final class OnigiriUITests: XCTestCase {
         // scroll — the slot may sit below the fold.
         //
         // The form and the portion sheet leave in ONE cascade after Log
-        // (2026-09-16), and the Log sheet comes back still SEARCHING the
-        // dead-end query — where the top drawer's search controller has
-        // swapped Cancel/Sort/Done for its own "Close" (the iOS 26
-        // landmine measured here on 2026-09-15). Wait for the sheet to
-        // be back, end the search, then Done. Tapping Done straight
-        // after Log found no Done at all: two failures, 2026-09-16, one
-        // per reason.
-        let closeSearch = app.buttons["Close"].firstMatch
-        for _ in 0..<40 where !(closeSearch.exists && closeSearch.isHittable) {
-            Thread.sleep(forTimeInterval: 0.25)
-        }
-        XCTAssertTrue(closeSearch.isHittable, "Log sheet back (still searching) after the form left")
-        closeSearch.tap()
+        // (2026-09-16), and the Log sheet comes back with the dead-end
+        // query still in its field — a plain TextField in the door bar
+        // since 2026-09-17, so Cancel/Sort/Done are all still there.
+        // (Until then the query lived in a top `.searchable` drawer,
+        // whose search controller swapped the toolbar for its own
+        // "Close" for the rest of the sheet's life, and this step had
+        // to tap that first — the iOS 26 landmine measured 2026-09-15.)
+        // Wait for the sheet to be back, then Done: tapping it straight
+        // after Log found no Done at all (2026-09-16).
         let done = app.buttons["Done"].firstMatch
-        for _ in 0..<20 where !(done.exists && done.isHittable) {
+        for _ in 0..<40 where !(done.exists && done.isHittable) {
             Thread.sleep(forTimeInterval: 0.25)
         }
-        XCTAssertTrue(done.isHittable, "Log sheet's Done back once the search is closed")
+        XCTAssertTrue(done.isHittable, "Log sheet's Done back after the form left")
         done.tap()
         switchTab(in: app, to: "Today")
         let entry = app.staticTexts[oneOff]

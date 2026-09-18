@@ -13,30 +13,43 @@ struct AIEstimateSection: View {
     let query: String
     let onPick: (ScannedProduct) -> Void
 
+    // A real Section, like OnlineResultsSection's own (no header, same
+    // reason: "just the two choices to describe with AI or search"
+    // reads as one flow, not two groups). Without one, `TapToEstimateRow`
+    // is a bare row — fine mid-list, but this row now LEADS the Log
+    // sheet's and the Add Food form's search results (2026-09-17, both
+    // hosts' `.searchable` drawer having moved into the door bar), and a
+    // bare row sitting first gets none of a Section's own top spacing —
+    // it sat flush against the nav bar (the user, from device, dark
+    // mode: "too close to the header"). The Section boundary is what
+    // supplies the standard gap; a hardcoded `.padding(.top)` would only
+    // approximate it and drift the moment List's own spacing changes.
     var body: some View {
-        TapToEstimateRow(
-            query: query,
-            title: "Estimate with \(AIProviderSettings.selected.displayName)",
-            estimate: { await FoodIntelligence.describeFood($0) },
-            // The typed description is the grounding, so a note corrects
-            // the answer instead of restarting from a longer sentence
-            // (`plans/PLAN-refine-with-context.md`). describe-it never
-            // had a containment guard — the person typed the food — so
-            // nothing is relaxed here.
-            refine: { food, note in
-                await FoodIntelligence.refineEstimate(
-                    prior: FoodIntelligence.RefinedFood(food),
-                    grounding: .description(query),
-                    note: note
-                )?.describedFood
+        Section {
+            TapToEstimateRow(
+                query: query,
+                title: "Estimate with \(AIProviderSettings.selected.displayName)",
+                estimate: { await FoodIntelligence.describeFood($0) },
+                // The typed description is the grounding, so a note
+                // corrects the answer instead of restarting from a
+                // longer sentence (`plans/PLAN-refine-with-context.md`).
+                // describe-it never had a containment guard — the
+                // person typed the food — so nothing is relaxed here.
+                refine: { food, note in
+                    await FoodIntelligence.refineEstimate(
+                        prior: FoodIntelligence.RefinedFood(food),
+                        grounding: .description(query),
+                        note: note
+                    )?.describedFood
+                }
+            ) { food in
+                Button {
+                    onPick(product(from: food))
+                } label: {
+                    resultRow(food)
+                }
+                .buttonStyle(.plain)
             }
-        ) { food in
-            Button {
-                onPick(product(from: food))
-            } label: {
-                resultRow(food)
-            }
-            .buttonStyle(.plain)
         }
     }
 

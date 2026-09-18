@@ -444,3 +444,47 @@ side. The pinned door bar rides above the keyboard.
 
 `testHeaderShots` now asserts that the four tab titles share a top-left
 corner, so the next misalignment is red instead of a screenshot.
+
+## Addendum — one field, in the bar (2026-09-17)
+
+Part 1's top drawer lasted two days on the Log sheet. The user: "Unify
+the Search dialog on Log into the Describe Food or Meal, update it to
+say 'Search, or Describe Food or Meal'. It should behave exactly how it
+does now but also search our food library. Remove the old Search at the
+top of the Log dialog since the feature now there. Remove Log Water from
+the search results unless water is searched for."
+
+The copy shipped is shorter than that first draft — "Search or Describe
+Food" (the user, same sitting, a follow-up message) — dropping the
+comma and "or Meal"; the field still finds meals same as before, the
+prompt just doesn't spell out both nouns.
+
+So the sheet has ONE text field again, and it is the door bar's
+(`EntryDoorBar`, `describePrompt`). `QuickLogSheet.describeQuery` is the
+only query: it drives the library groups, the AI estimate row and the
+online search together, in the order PLAN-unified-search fixed on
+2026-07-19 — AI row → library → online. The `.searchable` drawer is gone
+from this sheet (Foods keeps its own, being the library screen with no
+describe field to fold into), and with it the "Close"-replaces-the-
+toolbar state Part 1 measured: `testLogWithoutSaving` no longer has to
+tap Close before Done. The bar is never hidden now — the field that IS
+the search lives in it. The Water row, not a library row, stays only
+while the query names water (`LibrarySearch.namesWater`, a word-prefix
+rule so "watermelon" doesn't count). The dead-end state says which
+search came up empty ("No matches in your library") and hides its Add
+Food while the online section is offering one for the same words.
+
+The Part 1 argument for a drawer — the standard field, in the standard
+place, matching Foods — was weighed against a screen carrying two
+fields that both search, and the user chose one field. The form host is
+untouched: its field keeps "Describe food or meal" and searches AI +
+online only, having no library behind it.
+
+One rule the first test run added the same hour: the field is NEVER
+collapsed on this sheet. `EntryDoorBar` folds to the labeled camera door
+when AI and online lookups are both off (a field with nowhere to send
+its text is a dead end); with the library behind it the text always has
+somewhere to go, so the Log sheet passes `searchesLibrary: true` and the
+prompt narrows to "Search Foods and Meals" in that state.
+`testLogWithoutSaving` — which switches online off on a sim where AI is
+off — is what found the sheet with no field at all.

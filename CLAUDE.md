@@ -1035,12 +1035,45 @@ Each cost a debugging session.
 - ALL online-search surfaces (Foods, Log sheet, and the food form's inline
   database search) render the shared `OnlineResultsSection` — a separate
   `FoodSearchSheet` with its own drifting list existed until 2026-07-13. Keep
-  it that way: search behavior changes go in the shared section only. Search
-  fields are the STANDARD system `.searchable`, pinned in the top drawer
-  everywhere (`librarySearch`, Style.swift — the bottom pill was the Log
-  sheet's until 2026-09-15) — the user vetoed custom bars and auto-focus;
-  the scanner is the camera button in the pinned door bar (`EntryDoorBar`,
-  below), never a toolbar icon.
+  it that way: search behavior changes go in the shared section only. The
+  FOODS TAB's search field is the STANDARD system `.searchable`, pinned in
+  the top drawer (`librarySearch`, Style.swift) — the user vetoed custom
+  bars and auto-focus; the scanner is the camera button in the pinned door
+  bar (`EntryDoorBar`, below), never a toolbar icon.
+- **The LOG SHEET has ONE text field, and it is the door bar's: "Search
+  or Describe Food"** (2026-09-17, the user: "Unify the Search dialog on
+  Log into the Describe Food or Meal … It should behave exactly how it
+  does now but also search our food library. Remove the old Search at
+  the top" — the copy itself was shortened in the same sitting, from a
+  first draft, "Search, or Describe Food or Meal", the user typed
+  verbatim for the FEATURE ask, not the final wording).
+  `QuickLogSheet.describeQuery` drives the library groups,
+  the AI estimate row and the online search together, in the order
+  `PLAN-unified-search` fixed on 2026-07-19 — **AI row → library →
+  online** — and the sheet has NO `.searchable` drawer any more (the top
+  drawer it wore from 2026-09-15 to 09-17 went with the merge, and so did
+  the "Close"-replaces-the-toolbar landmine measured under it). This is
+  the THIRD turn of the same field: one merged field (07-19), split back
+  out (08-29, "one field per job"), merged again (09-17) — the bar is
+  where the field lives now, so a second field above the list was a
+  second search. Rules that ride with it: the Water row is not a library
+  row and leaves while a query is typed unless the query NAMES water
+  (`LibrarySearch.namesWater`, word-prefix, so "watermelon" doesn't; the
+  user: "Remove Log Water from the search results unless water is
+  searched for"); the dead-end state reads "No matches in your library"
+  and hides its Add Food while `OnlineResultsSection` is offering its own
+  for the same words; the bar is never hidden (`isHidden: false`) since
+  hiding it would take the keyboard's field away; **the field itself is
+  never collapsed either** — `EntryDoorBar(searchesLibrary: true)` keeps
+  it with AI and online lookups both off, where the bar otherwise folds
+  to the labeled camera door, because a library is somewhere to send the
+  text (the first `testLogWithoutSaving` run after the merge found a Log
+  sheet with no text field at all); and the prompt is a per-host
+  parameter (`describePrompt`) — "Search Foods and Meals" when nothing
+  can be described to, and the Add Food form keeps "Describe food or
+  meal", having no library behind it. UI tests reach the field through
+  `logSheetField(in:)`, by identifier. Foods was NOT merged: it has no
+  describe field to fold into (removed 2026-08-02).
 - **The doors are ONE pinned bar, `EntryDoorBar`, under both hosts — two
   doors when AI or online lookups are on, one full-width labeled door when
   neither is** (2026-09-16, the user: "add the camera/describe on the Add
@@ -1053,17 +1086,16 @@ Each cost a debugging session.
   camera button beside a "Describe food or meal" field. Neither on: the
   field is hidden entirely (nothing behind it works) and the camera
   becomes the labeled door, "Scan Barcode, Label, or Menu".
-  - **The describe field owns its OWN query, separate from the bottom
-    `.searchable` field.** A describe field lived here once and was merged
-    into the bottom field so the screen carried one text field instead of
-    two (`AIEstimateSection`/`PLAN-unified-search` — still true below); this
-    splits it back apart, but the bottom field stays search-only this time,
-    so it is still one field per job. `QuickLogSheet.describeQuery` /
-    `FoodFormView.describeQuery` drive `AIEstimateSection` directly; the
-    bottom field (`searchText`/`dbQuery`) drives only library/online
-    results. Clear the describe query on a successful pick (mirrors what
-    `endDatabaseSearch()` did for the old merged field) or the inline
-    estimate row lingers after its job is done.
+  - **The describe field owns its OWN query** (`QuickLogSheet.describeQuery`
+    / `FoodFormView.describeQuery`), driving `AIEstimateSection` directly.
+    From 2026-08-29 to 09-17 the Log sheet ALSO had a separate
+    `.searchable` field for the library ("one field per job"); it is
+    merged into this one now (the rule above), and the form never had a
+    library to search. Clear the describe query on a successful AI or
+    online pick (mirrors what `endDatabaseSearch()` did for the old merged
+    field) or the inline estimate row lingers after its job is done; a
+    LIBRARY row logged from the results keeps the query, as the drawer
+    did.
   - **The camera button keeps the row's OLD visible text as its
     accessibility label** ("Scan Barcode, Label, Menu, or Food"), icon-only
     or not. `OnigiriUITests.scanRow(in:)` (and VoiceOver) find it by
@@ -1118,13 +1150,15 @@ Each cost a debugging session.
       need AI; gating the field on AI alone would strand them with
       no way to search whenever AI is off. Only "neither is on" falls
       back to the full labeled door.
-    - **The bottom `.searchable` field is LOCAL LIBRARY SEARCH ONLY
-      now, everywhere** — QuickLogSheet's prompt dropped "and More"
-      (now "Foods and Meals"); FoodFormView's bottom field is RETIRED
+    - **The `.searchable` field became LOCAL LIBRARY SEARCH ONLY that
+      day, everywhere** — QuickLogSheet's prompt dropped "and More"
+      (now "Foods and Meals"); FoodFormView's bottom field was RETIRED
       entirely (`searchPrompt`, `dbQuery`, `dbSearchActive`,
       `endDatabaseSearch` all removed) since that form has no local
       library to search and, once online moved to the describe field,
-      nothing was left for a second field to do.
+      nothing was left for a second field to do. (QuickLogSheet's
+      followed it out on 2026-09-17 — the Log-sheet rule above; only
+      Foods still has one.)
     - **The FOODS TAB's own search field followed, one day later**
       (2026-08-30, the user: "Update the Foods tab search field so it
       only searches added/saved foods and meals"). It carried the SAME

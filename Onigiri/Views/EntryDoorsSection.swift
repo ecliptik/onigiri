@@ -22,7 +22,9 @@ import OnigiriKit
 // field whenever AI is off would strand them with no way to search. When
 // NEITHER is on the bar collapses to one full-width labeled camera door
 // ("Scan Barcode, Label, or Menu") — a field with nowhere to send its
-// text is a dead end, not a door.
+// text is a dead end, not a door. The Log sheet's field ALSO searches
+// the library (2026-09-17, `searchesLibrary`), so there it always has
+// somewhere to send its text and never collapses.
 
 /// The camera door's button: glyph + accessibility label + the
 /// disabled/action wiring, extracted so no host can say something
@@ -61,6 +63,13 @@ struct EntryDoorDescribeField: View {
     /// `TapToEstimateRow`'s idle phase, one inference per tap on
     /// purpose). `nil` = no submit-triggered search.
     var onDescribeSubmit: (() -> Void)?
+    /// The placeholder, which doubles as the accessibility label: what
+    /// the field does differs by host. The Log sheet's also searches the
+    /// library, and says so (`QuickLogSheet`, 2026-09-17); the Add Food
+    /// form's has no library behind it and keeps the default.
+    var prompt = EntryDoorDescribeField.defaultPrompt
+
+    static let defaultPrompt = "Describe food or meal"
 
     /// Matched by the "select all on focus" notification handler in
     /// `FoodFormView` — an in-progress description must not be
@@ -92,10 +101,10 @@ struct EntryDoorDescribeField: View {
             // again; a concrete Color is drawn as-is. Typed text stays
             // primary, so this still reads as a placeholder.
             TextField(
-                "Describe food or meal", text: $describeQuery,
-                prompt: Text("Describe food or meal").foregroundStyle(Color(.secondaryLabel))
+                prompt, text: $describeQuery,
+                prompt: Text(prompt).foregroundStyle(Color(.secondaryLabel))
             )
-                .accessibilityLabel("Describe food or meal")
+                .accessibilityLabel(prompt)
                 .accessibilityIdentifier(Self.accessibilityID)
                 .onSubmit { onDescribeSubmit?() }
         }
@@ -121,12 +130,23 @@ struct EntryDoorBar: View {
     @Binding var describeQuery: String
     let onScan: () -> Void
     var onDescribeSubmit: (() -> Void)?
+    /// Passed through to `EntryDoorDescribeField`; see its doc comment.
+    var describePrompt = EntryDoorDescribeField.defaultPrompt
+    /// The host searches its LIBRARY with this field too (the Log
+    /// sheet, since 2026-09-17), so the field has somewhere to send its
+    /// text even with AI and online lookups both off — and must stay.
+    /// The first run of `testLogWithoutSaving` after the merge (which
+    /// switches online off, on a sim where AI is off) found a Log sheet
+    /// with no text field at all. The form leaves this false: it has
+    /// no library, and the fallback door is right for it.
+    var searchesLibrary = false
 
-    /// `isAvailable || onlineLookups`, never `isAvailable` alone (see the
-    /// file header): a field with nowhere to send its text is a dead
-    /// end, not a door.
+    /// `searchesLibrary || isAvailable || onlineLookups`, never
+    /// `isAvailable` alone (see the file header): a field with nowhere
+    /// to send its text is a dead end, not a door — and a library is
+    /// somewhere.
     private var describeFieldAvailable: Bool {
-        FoodIntelligence.isAvailable || SharedStore.onlineLookups
+        searchesLibrary || FoodIntelligence.isAvailable || SharedStore.onlineLookups
     }
 
     var body: some View {
@@ -228,7 +248,8 @@ struct EntryDoorBar: View {
     }
 
     private var describeControl: some View {
-        EntryDoorDescribeField(describeQuery: $describeQuery, onDescribeSubmit: onDescribeSubmit)
+        EntryDoorDescribeField(
+            describeQuery: $describeQuery, onDescribeSubmit: onDescribeSubmit, prompt: describePrompt)
             .padding(.horizontal, 16)
             // minHeight, not a fixed height: large Dynamic Type sizes
             // need MORE than 50pt for the field's text to fit, and a

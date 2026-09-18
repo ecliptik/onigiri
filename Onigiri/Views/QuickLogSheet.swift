@@ -3,8 +3,10 @@ import SwiftData
 import WidgetKit
 import OnigiriKit
 
-/// One-stop logging from the Today screen: favorites up top, search below,
-/// tap a row to log it and dismiss. Long-press a row for portions.
+/// One-stop logging from the Today screen: favorites up top, one field
+/// in the door bar below that searches the library, describes a plate
+/// to AI and searches online at once; tap a row to log it. Long-press a
+/// row for portions.
 struct QuickLogSheet: View {
     var initialKind: QuickActions.QuickLogKind = .all
     /// Timestamp for the entries this sheet logs — Today passes the browsed
@@ -33,11 +35,14 @@ struct QuickLogSheet: View {
     }
 
     private var librarySort: LibrarySort { LibrarySort(rawValue: sortRaw) ?? .recent }
-    @State private var searchText = ""
-    /// What's typed into the entry door's "Describe food or meal" field
-    /// — independent of `searchText`, which is library search only now
-    /// that the describe field has its own home (`EntryDoorBar`, since
-    /// 2026-08-29).
+    /// The sheet's ONE query: what's typed into the door bar's "Search,
+    /// or Describe Food or Meal" field. It drives the library search
+    /// (`searchGroups`), the AI estimate row and the online search all
+    /// at once. There was a second field — the standard `.searchable`
+    /// drawer, library-only — until 2026-09-17, when the user folded it
+    /// into this one ("Unify the Search dialog on Log into the Describe
+    /// Food or Meal … Remove the old Search at the top"). CLAUDE.md,
+    /// "Food entry", has the rule and the history of the split.
     @State private var describeQuery = ""
     @State private var isLogging = false
     @State private var onlineSearch = OnlineFoodSearch()
@@ -220,7 +225,7 @@ struct QuickLogSheet: View {
     /// and the history rows — grouped, one home per row. The scope bar
     /// is a browsing control, not a search filter.
     private func searchGroups(_ items: [Item]) -> [(group: LibrarySearchGroup, items: [Item])] {
-        LibrarySearch.groups(items, query: searchText, sortByRecency: librarySort != .name)
+        LibrarySearch.groups(items, query: describeQuery, sortByRecency: librarySort != .name)
     }
 
     /// A history entry is "a meal" when its name still matches the meal
@@ -231,13 +236,20 @@ struct QuickLogSheet: View {
 
     var body: some View {
         let items = libraryItems + historyRows
-        // ONE search-active predicate for the whole sheet: the doors,
-        // the water row, the scope bar, and which list shape renders
-        // all have to agree, or a whitespace-only query shows half of
-        // each state.
-        let searching = !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+        // ONE search-active predicate for the whole sheet: the water
+        // row, the scope bar, and which list shape renders all have to
+        // agree, or a whitespace-only query shows half of each state.
+        let searching = !describeQuery.trimmingCharacters(in: .whitespaces).isEmpty
         let ranked = searching ? [] : pool(items)
         let groups = searching ? searchGroups(items) : []
+        // The online section offers its own Add Food once a search has
+        // come back empty for the CURRENT words; the local dead-end
+        // state below steps aside then, so a query with nothing behind
+        // it anywhere shows one Add Food, not two.
+        let onlineOffersAddFood = SharedStore.onlineLookups
+            && !onlineSearch.isSearching
+            && onlineSearch.results.isEmpty
+            && describeQuery.trimmingCharacters(in: .whitespaces) == onlineSearch.lastQuery
         NavigationStack {
             List {
                 // The scope picker rides IN the list, matching Foods
@@ -268,65 +280,42 @@ struct QuickLogSheet: View {
                         .listRowInsets(EdgeInsets())
                     }
                 }
-                // The camera/describe doors used to lead this list as a
-                // row (the user: same affordance as Foods' scan row).
-                // They now float in a bar at the bottom of the sheet
-                // instead (`LogSheetDoorBar`, wired via `.entryDoorBar`
-                // below) — search moved to the top drawer, and the
-                // doors moved to the functional layer so they read as
-                // distinct chrome rather than another row
-                // (`plans/PLAN-log-sheet-layout.md`, 2026-09-15). The
-                // bar hides on the SAME `searching` predicate this
-                // block already gates on, so nothing about WHEN it
-                // shows changed — only where it renders.
-                if !searching {
-                    // The describe field's own results, right under
-                    // where it's typed (2026-08-29) — it used to lead
-                    // the SEARCH results instead, keyed off `searchText`;
-                    // that field is local library search only now. AI →
-                    // online, the same order the field's own doc comment
-                    // and the rest of the app already use.
-                    if !describeQuery.trimmingCharacters(in: .whitespaces).isEmpty {
-                        // An estimate opens the FULL food form, editable
-                        // down to every value — the same route unknown
-                        // barcodes and labels take from here (the
-                        // portion shortcut made estimates the odd one
-                        // out; superseded 2026-07-20, the user). Its Log
-                        // action writes to the browsed day and returns
-                        // here.
-                        if FoodIntelligence.isAvailable {
-                            AIEstimateSection(query: describeQuery) { product in
-                                describeQuery = ""
-                                activeSheet = .form(ProductPrefill(
-                                    product: product,
-                                    provenance: product.aiEngine?.estimateCaption))
-                            }
-                        }
-                        // Moved from the bottom search field (2026-08-29)
-                        // — saved items rank in the LOCAL search above;
-                        // this is for a one-off food logged without
-                        // saving it, or a barcode-free product the
-                        // library doesn't have yet.
-                        if SharedStore.onlineLookups {
-                            OnlineResultsSection(query: describeQuery, search: onlineSearch, onPick: { product in
-                                describeQuery = ""
-                                route(product)
-                            }, onAddManually: { name in
-                                describeQuery = ""
-                                activeSheet = .form(ProductPrefill(product: ScannedProduct(
-                                    barcode: "", name: name, kcal: nil, sodiumMg: nil,
-                                    servingDescription: "", nutrients: NutrientValues()
-                                )))
-                            })
+                // A query's results: AI row → library → online, the
+                // order decided for a unified field on 2026-07-19
+                // (`plans/PLAN-unified-search.md`: saved staples one
+                // glance away, online the new-food fallback). The AI
+                // and online rows are exactly what the describe field
+                // showed before the library search joined it; each is
+                // tap-to-run, never per-keystroke, so typing costs
+                // nothing but the local filter. The AI row leads
+                // because the field's first name is Describe: a plate
+                // no library has is what it's for.
+                if searching {
+                    // An estimate opens the FULL food form, editable
+                    // down to every value — the same route unknown
+                    // barcodes and labels take from here (the portion
+                    // shortcut made estimates the odd one out;
+                    // superseded 2026-07-20, the user). Its Log action
+                    // writes to the browsed day and returns here.
+                    if FoodIntelligence.isAvailable {
+                        AIEstimateSection(query: describeQuery) { product in
+                            describeQuery = ""
+                            activeSheet = .form(ProductPrefill(
+                                product: product,
+                                provenance: product.aiEngine?.estimateCaption))
                         }
                     }
                 }
-                // Water leads the sheet, above Recent in every scope
-                // (Micheal moved it off Today's header — one + button,
-                // one place to log; widget/watch/app icon keep the
-                // 1-tap paths). Tap logs the default serving into the
-                // browsed day; long-press offers the other amounts.
-                if !searching {
+                // Water leads the library in every scope (Micheal moved
+                // it off Today's header — one + button, one place to
+                // log; widget/watch/app icon keep the 1-tap paths). Tap
+                // logs the default serving into the browsed day;
+                // long-press offers the other amounts. It is not a
+                // library row, so a query can't find it through
+                // `searchGroups`: it stays only while the query names
+                // it (the user, 2026-09-17) — `LibrarySearch.namesWater`
+                // is the rule, with its tests.
+                if !searching || LibrarySearch.namesWater(describeQuery) {
                     Section {
                         // Shaped like every other row: name, trailing
                         // serving (its "calories" column), the + to log.
@@ -397,8 +386,23 @@ struct QuickLogSheet: View {
                     }
                     if groups.isEmpty {
                         Section {
-                            emptyState(visible: 0, items: items)
+                            emptyState(visible: 0, items: items, offerAddFood: !onlineOffersAddFood)
                         }
+                    }
+                    // Last: a one-off food logged without saving it, or
+                    // a barcode-free product the library doesn't have
+                    // yet — saved items ranked above.
+                    if SharedStore.onlineLookups {
+                        OnlineResultsSection(query: describeQuery, search: onlineSearch, onPick: { product in
+                            describeQuery = ""
+                            route(product)
+                        }, onAddManually: { name in
+                            describeQuery = ""
+                            activeSheet = .form(ProductPrefill(product: ScannedProduct(
+                                barcode: "", name: name, kcal: nil, sodiumMg: nil,
+                                servingDescription: "", nutrients: NutrientValues()
+                            )))
+                        })
                     }
                 } else if kind == .favorites || librarySort != .recent {
                     // The Favorites scope and the non-Recent sort orders
@@ -459,45 +463,41 @@ struct QuickLogSheet: View {
             .navigationTitle("Log")
             .navigationBarTitleDisplayMode(.inline)
             .flushTopContent()
-            // The STANDARD system search field, pinned in the TOP
-            // drawer now — matching Foods, via the shared
-            // `librarySearch` placement (`plans/PLAN-log-sheet-layout.md`,
-            // 2026-09-15; this sheet used to take the bottom-aligned
-            // default, the one visible difference from Foods'
-            // placement argument). The barcode scanner lives in the
-            // floating door bar now, not the toolbar — the system
-            // field still can't host an accessory button, but the
-            // scanner no longer needs one. LOCAL library search only —
-            // the online database lives in the describe field above
-            // (2026-08-29), so the prompt dropped "and More" along with
-            // it; nothing here reaches OpenFoodFacts/USDA any more.
+            // NO `.searchable` drawer on this sheet — the ONE text field
+            // is in the door bar below (the user, 2026-09-17: "Unify the
+            // Search dialog on Log into the Describe Food or Meal …
+            // Remove the old Search at the top of the Log dialog since
+            // the feature now there"). Foods keeps its top drawer
+            // (`librarySearch`, Style.swift): it is the library screen,
+            // and it has no describe field to fold into. Two things the
+            // drawer took with it, both good riddance: the system search
+            // controller's "Close" that replaced Cancel/Sort/Done for
+            // the rest of the sheet's life once the field was tapped
+            // (measured 2026-09-15, `plans/PLAN-log-sheet-layout.md`),
+            // and the transient onDisappear/onAppear a List section gets
+            // under `.searchable` when the keyboard dismisses
+            // (CLAUDE.md). A plain TextField does neither.
             //
-            // NO `isPresented` binding, unlike the bottom-aligned pill
-            // this sheet used before (which needed one to hide its own
-            // full-screen search overlay). Foods' own top drawer never
-            // tracks one either. Tried and measured NOT to work under
-            // `.navigationBarDrawer(.always)`: once the field is tapped,
-            // its underlying search controller keeps replacing
-            // Cancel/Log/Sort/Done with its own "Close" control for the
-            // rest of this screen's life, and no combination of
-            // `isPresented = false`, `.searchFocused`, clearing the
-            // query, or remounting the List via `.id()` undid it
-            // (measured, `testLogWithoutSaving`,
-            // `plans/PLAN-log-sheet-layout.md`, 2026-09-15) — so this
-            // sheet stopped fighting that state entirely, matching
-            // Foods.
-            .librarySearch(text: $searchText, prompt: "Foods and Meals")
             // The camera + describe doors, PINNED below the list and
             // above the home indicator (`entryDoorBar`, Style.swift, has
-            // the twice-decided history); it empties on the same
-            // `searching` predicate that hides the scope row, rather
-            // than dropping the modifier.
-            .entryDoorBar(isHidden: searching) {
+            // the twice-decided history). Never hidden now: the field
+            // that IS the search lives in it, and hiding the bar while
+            // searching would take the keyboard's field away.
+            .entryDoorBar(isHidden: false) {
                 EntryDoorBar(
                     scanBusy: isLookingUpBarcode,
                     describeQuery: $describeQuery,
                     onScan: { activeSheet = .scanner(notice: nil) },
-                    onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } }
+                    onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } },
+                    // "Describe" only while something can be described
+                    // TO — with AI and online lookups both off the
+                    // field is library search alone, and the prompt
+                    // promises just that (the camera door's own rule:
+                    // a label only promises what it can keep).
+                    describePrompt: FoodIntelligence.isAvailable || SharedStore.onlineLookups
+                        ? "Search or Describe Food"
+                        : "Search Foods and Meals",
+                    searchesLibrary: true
                 )
             }
             .toolbar {
@@ -584,9 +584,6 @@ struct QuickLogSheet: View {
                 libraryItems = buildLibraryItems()
                 historyRows = historyItems()
             }
-            // An active search hides the toolbar (no Done); deactivate
-            // it when any sub-sheet opens so the sheet comes back to
-            // its resting state after logging.
             .onChange(of: activeSheet?.id) { _, id in
                 if id == nil {
                     // A form or portion sheet just closed — values or
@@ -599,14 +596,12 @@ struct QuickLogSheet: View {
                 ToastCenter.shared.show(LibraryTransfer.handlePickedFile(result, context: context))
             }
         }
-        // On the NavigationStack, NOT the searchable List — matching
-        // FoodsView's own fix: presenting a sheet over the search
-        // drawer's view leaves the drawer's search controller unable to
-        // take focus after the dismissal, taps land but the keyboard
-        // never rises (iOS 26). This sheet moved to the top drawer with
-        // `librarySearch` above, which is what makes this landmine
-        // reachable here now (`plans/PLAN-log-sheet-layout.md`,
-        // 2026-09-15).
+        // On the NavigationStack, NOT the List — matching FoodsView's
+        // own fix: presenting a sheet over a search drawer's view leaves
+        // the drawer's search controller unable to take focus after the
+        // dismissal, taps land but the keyboard never rises (iOS 26).
+        // This sheet has no drawer since 2026-09-17, but the placement
+        // costs nothing and stays where Foods' is.
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
             case .portion(let target):
@@ -675,7 +670,7 @@ struct QuickLogSheet: View {
     /// `visible` is the count of rows actually rendered — the ranked
     /// pool when browsing, the flattened group total when searching.
     @ViewBuilder
-    private func emptyState(visible: Int, items: [Item]) -> some View {
+    private func emptyState(visible: Int, items: [Item], offerAddFood: Bool = true) -> some View {
         if visible == 0 {
             if items.isEmpty {
                 // Accurate copy: this sheet can create foods itself via
@@ -698,23 +693,22 @@ struct QuickLogSheet: View {
                     .buttonStyle(.borderedProminent)
                     .tint(.ricePaper)
                 }
-            } else if !searchText.isEmpty {
+            } else if !describeQuery.trimmingCharacters(in: .whitespaces).isEmpty {
                 // Compact on purpose, NOT ContentUnavailableView: its
                 // full-height layout shoved the Add Food button down
-                // under the bottom search bar.
+                // under the door bar.
                 //
-                // This is LOCAL search only now — the online database
-                // moved to the describe field (2026-08-29), a different
-                // control entirely, not "below" this state any more. So
-                // "Add Food" is unconditional here (it used to hide
-                // behind the online section's own dead-end handling);
-                // the copy still varies on whether online is worth
-                // pointing at.
+                // "In your library": the online row sits right under
+                // this since the two searches share one field
+                // (2026-09-17), so the copy says which one came up
+                // empty. `offerAddFood` is false while that row is
+                // offering its own Add Food for the same words — one
+                // button for one dead end.
                 VStack(spacing: 4) {
-                    Text("No matches")
+                    Text("No matches in your library")
                         .font(.headline)
                     Text(SharedStore.onlineLookups
-                        ? "Try different words, or describe it above to search online."
+                        ? "Try different words, or search online below."
                         : "Try different words, or add it as a new food.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -722,15 +716,17 @@ struct QuickLogSheet: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
-                Button {
-                    activeSheet = .form(ProductPrefill(product: ScannedProduct(
-                        barcode: "",
-                        name: searchText.trimmingCharacters(in: .whitespaces),
-                        kcal: nil, sodiumMg: nil,
-                        servingDescription: "", nutrients: NutrientValues()
-                    )))
-                } label: {
-                    Label("Add Food", systemImage: "plus")
+                if offerAddFood {
+                    Button {
+                        activeSheet = .form(ProductPrefill(product: ScannedProduct(
+                            barcode: "",
+                            name: describeQuery.trimmingCharacters(in: .whitespaces),
+                            kcal: nil, sodiumMg: nil,
+                            servingDescription: "", nutrients: NutrientValues()
+                        )))
+                    } label: {
+                        Label("Add Food", systemImage: "plus")
+                    }
                 }
             } else if kind == .favorites {
                 Text("No favorites yet — swipe right on a food or meal to star it.")

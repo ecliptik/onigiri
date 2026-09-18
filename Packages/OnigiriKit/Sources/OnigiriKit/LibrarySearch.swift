@@ -60,6 +60,26 @@ public enum LibrarySearch {
         return item.searchCategory?.localizedStandardContains(trimmed) ?? false
     }
 
+    /// Whether a query is asking for WATER. The Log sheet's Water row
+    /// is not a library item — it has no `LibrarySearchable` twin, so it
+    /// can't ride `groups` — and it leaves the list while a query is
+    /// typed unless the query names it (the user, 2026-09-17: "Remove
+    /// Log Water from the search results unless water is searched
+    /// for"). A WORD rule, not `matches`' containment: some word of the
+    /// query is "water" or on the way to it — "wat" shows the row while
+    /// it's being typed, "sparkling water" shows it — but "watermelon"
+    /// does not, although containment would say so in both directions.
+    /// An empty query is browsing, not a search for water; the caller
+    /// shows the row for its own reasons then.
+    public static func namesWater(_ query: String) -> Bool {
+        let folding: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+        return query
+            .split(whereSeparator: { $0.isWhitespace || $0.isPunctuation })
+            .contains { word in
+                "water".range(of: word, options: [folding, .anchored]) != nil
+            }
+    }
+
     /// ONE home per row: a starred food lands in Favorites and NOT
     /// again under Foods, so the visible row count equals the match
     /// count. (Starred-and-history can't occur — history rows are built

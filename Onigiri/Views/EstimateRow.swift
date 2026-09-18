@@ -31,6 +31,18 @@ struct TapToEstimateRow<Value, ResultRow: View>: View {
     /// this one runs — two concurrent inferences serialize on-device and
     /// double-bill a BYO-AI provider.
     var isEstimating: Binding<Bool>?
+    /// Non-nil moves the TRIGGER out of this row and into the host: the
+    /// idle phase then draws nothing, and a run starts when the host
+    /// bumps this token (`plans/PLAN-log-composer.md` — the composer's
+    /// "Estimate with AI" button is the idle affordance now). nil keeps
+    /// the row's own tap-to-run, which is still how the meal builder
+    /// works.
+    ///
+    /// A consumable Optional, not a Bool: a request flag set while no
+    /// observer exists goes permanently dead, true→true never firing
+    /// again (CLAUDE.md's SwiftUI landmines). Checked on change AND on
+    /// appear, and cleared by whoever acts on it.
+    var startToken: Binding<UUID?>?
     let estimate: (String) async -> Value?
     /// Correct a result with a note, without retyping the description
     /// (`plans/PLAN-refine-with-context.md`). "And add avocado" adds
@@ -96,16 +108,21 @@ struct TapToEstimateRow<Value, ResultRow: View>: View {
             Section {
                 switch phase {
                 case .idle:
-                    Button {
-                        run(trimmed)
-                    } label: {
-                        // No quoted-query subtitle: the query is already
-                        // visible in the search field (the user, 2026-07-20).
-                        Label {
-                            Text(title)
-                        } icon: {
-                            Image(systemName: "sparkles")
-                                .foregroundStyle(Color.riceToast)
+                    // Nothing, where the host owns the trigger: the
+                    // list is results only, and an idle row here would
+                    // be a second button for the composer's own.
+                    if startToken == nil {
+                        Button {
+                            run(trimmed)
+                        } label: {
+                            // No quoted-query subtitle: the query is already
+                            // visible in the search field (the user, 2026-07-20).
+                            Label {
+                                Text(title)
+                            } icon: {
+                                Image(systemName: "sparkles")
+                                    .foregroundStyle(Color.riceToast)
+                            }
                         }
                     }
                 case .estimating:
@@ -139,7 +156,19 @@ struct TapToEstimateRow<Value, ResultRow: View>: View {
             // Behavior 3 — resume, don't restart from idle: a live
             // estimating phase with no live task can only mean a
             // teardown blip killed it.
+            .onChange(of: startToken?.wrappedValue) { _, token in
+                guard token != nil else { return }
+                consumeStartToken(trimmed)
+            }
             .onAppear {
+                // Checked here too: the token can be set while this
+                // section isn't in the tree at all — a query typed from
+                // nothing renders the section for the first time in the
+                // same breath the button sets it — and `onChange` never
+                // fires for a value that was already there.
+                if startToken?.wrappedValue != nil {
+                    consumeStartToken(trimmed)
+                }
                 if case .estimating = phase, estimateTask == nil {
                     run(phaseQuery)
                 }
@@ -151,6 +180,17 @@ struct TapToEstimateRow<Value, ResultRow: View>: View {
             }
             .onDisappear(perform: cancel)
         }
+    }
+
+    /// Take the host's request and start the run, clearing the token so
+    /// the same tap can't be replayed by a later `onAppear`.
+    private func consumeStartToken(_ trimmed: String) {
+        startToken?.wrappedValue = nil
+        guard !trimmed.isEmpty else { return }
+        // Never a second run on top of a live one — the standing rule
+        // this row's `isEstimating` exists for.
+        if case .estimating = phase, estimateTask != nil { return }
+        run(trimmed)
     }
 
     private func cancel() {

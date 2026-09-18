@@ -48,6 +48,13 @@ struct QuickLogSheet: View {
     /// it: while the keyboard is up that button puts the keyboard
     /// away instead of closing the sheet (the user, 2026-09-17).
     @FocusState private var describeFocused: Bool
+    /// Bumped by the composer's "Estimate with AI" — a consumable
+    /// token, never a Bool (CLAUDE.md's dead-request-flag landmine).
+    /// `AIEstimateSection` consumes it and clears it.
+    @State private var estimateToken: UUID?
+    /// Raised by the estimate while it runs, so the button can say
+    /// "Estimating…" and refuse a second tap.
+    @State private var isEstimating = false
     @State private var isLogging = false
     @State private var onlineSearch = OnlineFoodSearch()
     @State private var isLookingUpBarcode = false
@@ -302,7 +309,11 @@ struct QuickLogSheet: View {
                     // superseded 2026-07-20, the user). Its Log action
                     // writes to the browsed day and returns here.
                     if FoodIntelligence.isAvailable {
-                        AIEstimateSection(query: describeQuery) { product in
+                        AIEstimateSection(
+                            query: describeQuery,
+                            startToken: $estimateToken,
+                            isEstimating: $isEstimating
+                        ) { product in
                             describeQuery = ""
                             activeSheet = .form(ProductPrefill(
                                 product: product,
@@ -547,6 +558,9 @@ struct QuickLogSheet: View {
                     onScan: { activeSheet = .scanner(notice: nil) },
                     onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } },
                     describeFocused: $describeFocused,
+                    // The composer's actions. Gated on the same two
+                    // switches the list sections were: nothing offers a
+                    // door that isn't there.
                     // "Describe" only while something can be described
                     // TO — with AI and online lookups both off the
                     // field is library search alone, and the prompt
@@ -555,6 +569,11 @@ struct QuickLogSheet: View {
                     describePrompt: FoodIntelligence.isAvailable || SharedStore.onlineLookups
                         ? "Search or Describe Food"
                         : "Search Foods and Meals",
+                    onEstimate: FoodIntelligence.isAvailable ? { estimateToken = UUID() } : nil,
+                    onSearchOnline: SharedStore.onlineLookups
+                        ? { Task { await onlineSearch.search(describeQuery) } }
+                        : nil,
+                    isEstimating: isEstimating,
                     searchesLibrary: true
                 )
             }
@@ -774,8 +793,12 @@ struct QuickLogSheet: View {
                 VStack(spacing: 4) {
                     Text("No matches in your library")
                         .font(.headline)
+                    // Names the BUTTON, not a section: since 2026-09-17
+                    // the online search is a composer action, and
+                    // "search online below" pointed at a list section
+                    // that no longer exists.
                     Text(SharedStore.onlineLookups
-                        ? "Try different words, or search online below."
+                        ? "Try different words, or tap Search Online."
                         : "Try different words, or add it as a new food.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)

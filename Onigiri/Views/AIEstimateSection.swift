@@ -11,6 +11,13 @@ import OnigiriKit
 /// `TapToEstimateRow`, shared with `MealEstimateSection`.
 struct AIEstimateSection: View {
     let query: String
+    /// The composer's "Estimate with AI" button, bumped — see
+    /// `TapToEstimateRow.startToken`. Both hosts of this section have a
+    /// composer, so both pass one; the idle row is gone from the list.
+    var startToken: Binding<UUID?>?
+    /// Raised while inference runs so the composer's button can say so
+    /// and refuse a second tap.
+    var isEstimating: Binding<Bool>?
     let onPick: (ScannedProduct) -> Void
 
     // A real Section, like OnlineResultsSection's own (no header, same
@@ -40,6 +47,8 @@ struct AIEstimateSection: View {
                 // provider is the user's own setting, chosen in
                 // Settings, on a single-person app.
                 title: "Estimate with AI",
+                isEstimating: isEstimating,
+                startToken: startToken,
                 estimate: { await FoodIntelligence.describeFood($0) },
                 // The typed description is the grounding, so a note
                 // corrects the answer instead of restarting from a

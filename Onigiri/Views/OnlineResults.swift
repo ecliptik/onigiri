@@ -536,6 +536,16 @@ struct OnlineResultsSection: View {
     /// offers manual entry — the new-food form prefilled with the query.
     var onAddManually: ((String) -> Void)?
 
+    /// Do the rows on screen belong to the words in the field RIGHT
+    /// NOW? A search, then another keystroke, leaves results for a
+    /// query nobody asked about any more. The in-list search button
+    /// used to cover this by offering to re-run; with the trigger in
+    /// the composer there is nothing to offer, so stale rows are simply
+    /// not drawn.
+    private var rowsAreCurrent: Bool {
+        query.trimmingCharacters(in: .whitespaces) == search.lastQuery
+    }
+
     var body: some View {
         // No section header (the user, 2026-09-16, from-device
         // screenshot: "just the two choices to describe with AI or
@@ -552,24 +562,16 @@ struct OnlineResultsSection: View {
                     Text("Searching…")
                         .foregroundStyle(.secondary)
                 }
-            } else if search.results.isEmpty
-                        || query.trimmingCharacters(in: .whitespaces) != search.lastQuery {
-                // Also shown when the query changed after a search — the
-                // rows below are for the old words, and re-searching must
-                // not require emptying the results first.
-                Button {
-                    Task { await search.search(query) }
-                } label: {
-                    // Names the source the NEXT search will hit (the
-                    // current setting), which can differ from what the
-                    // rows below came from — that's the point: the
-                    // button re-searches under the new setting.
-                    Label(
-                        "Search \(Self.nextSearchName) for “\(query.trimmingCharacters(in: .whitespaces))”",
-                        systemImage: "magnifyingglass"
-                    )
-                }
             }
+            // No search BUTTON here any more: the composer's "Search
+            // Online" owns the trigger, so this section is results and
+            // nothing else (`plans/PLAN-log-composer.md`, 2026-09-17).
+            //
+            // What the button also did, and now has to be done by
+            // hiding rather than offering: a query changed AFTER a
+            // search leaves rows that belong to the old words. They are
+            // not shown. `rowsAreCurrent` is that check, and the
+            // composer's button is how you ask again.
             if let message = search.message {
                 Text(message)
                     .font(.footnote)
@@ -587,14 +589,16 @@ struct OnlineResultsSection: View {
                     Label("Add Food", systemImage: "plus")
                 }
             }
-            ForEach(search.results) { result in
-                OnlineResultRow(result: result, search: search) {
-                    Task { onPick(await search.product(for: result)) }
-                }
-                .onAppear {
-                    // Reaching the last row pulls the next page.
-                    if result.id == search.results.last?.id {
-                        Task { await search.loadMore() }
+            if rowsAreCurrent {
+                ForEach(search.results) { result in
+                    OnlineResultRow(result: result, search: search) {
+                        Task { onPick(await search.product(for: result)) }
+                    }
+                    .onAppear {
+                        // Reaching the last row pulls the next page.
+                        if result.id == search.results.last?.id {
+                            Task { await search.loadMore() }
+                        }
                     }
                 }
             }

@@ -3061,6 +3061,17 @@ final class OnigiriUITests: XCTestCase {
                        "The one field says it searches AND describes")
         XCTAssertFalse(app.searchFields.firstMatch.exists,
                        "No .searchable drawer on the Log sheet")
+        // THE COMPOSER'S ACTIONS, at rest: present so they are
+        // discoverable before you type, and disabled because there is
+        // nothing yet to estimate or search
+        // (`plans/PLAN-log-composer.md`, the user's call).
+        let estimateAction = app.buttons["Estimate with AI"]
+        let onlineAction = app.buttons["Search Online"]
+        XCTAssertTrue(estimateAction.waitForExistence(timeout: 5), "Estimate action in the composer")
+        XCTAssertTrue(onlineAction.exists, "Search Online action in the composer")
+        XCTAssertFalse(estimateAction.isEnabled, "…disabled on an empty query")
+        XCTAssertFalse(onlineAction.isEnabled, "…and so is Search Online")
+
         let water = app.buttons["Log Water"].firstMatch
         XCTAssertTrue(water.waitForExistence(timeout: 5), "Water leads the sheet at rest")
         // Where the list's first row sits while BROWSING — the mark the
@@ -3093,26 +3104,57 @@ final class OnigiriUITests: XCTestCase {
                       "Water leaves for a query that doesn't name it")
         XCTAssertFalse(app.segmentedControls.firstMatch.exists, "Scope bar hides while searching")
 
-        // THE FIRST ROW MUST NOT MOVE. Measured, never eyeballed — a
-        // screenshot passed this twice while it was wrong, because the
-        // estimate chip's own internal padding reads as a gap that
-        // isn't there. The two states put different rows first (scope
-        // bar while browsing, estimate row while searching) and both
-        // have to start at the same Y, or the first keystroke jolts the
-        // list (the user, 2026-09-17: "so the button doesn't 'jump'").
-        // Recorded history, for whoever loosens this: flush was 0.0
-        // against the scope bar's 142.67, and a first fix overshot to
-        // 148.0. The 1.5pt tolerance is for pixel-grid rounding at
-        // other scale factors, nothing more.
-        let estimateRow = app.buttons.matching(
-            NSPredicate(format: "label BEGINSWITH 'Estimate with'")).firstMatch
-        XCTAssertTrue(estimateRow.waitForExistence(timeout: 10),
-                      "The estimate row leads the results with AI on")
-        let searchingTop = estimateRow.frame.minY
-        XCTAssertEqual(searchingTop, browsingTop, accuracy: 1.5,
-                       "The list's first row must sit at the same height browsing and searching "
-                       + "(browsing \(browsingTop)pt, searching \(searchingTop)pt)")
+        // The jump this used to guard is GONE BY CONSTRUCTION, not
+        // relaxed: it compared the scope bar (browsing) against the
+        // estimate row (searching) because those were the two things
+        // that led the list, and a flush estimate row was the bug
+        // (0.0pt, then an overshoot to 148.0 against the bar's 142.67).
+        // The estimate row left the list entirely for the composer on
+        // 2026-09-17, so there is no second first-row to disagree with
+        // the scope bar. What still has to hold is the margin that fix
+        // installed — the list's content starts one section gap under
+        // the nav bar — and `browsingTop` is where it is measured.
+        XCTAssertEqual(browsingTop - app.navigationBars["Log"].frame.maxY, 10, accuracy: 1.5,
+                       "The list keeps its section-gap margin under the nav bar "
+                       + "(measured \(browsingTop - app.navigationBars["Log"].frame.maxY)pt)")
+
+        // With a query the actions come alive, and the LIST stays
+        // results only. The two trigger rows that used to sit among the
+        // matches are gone: the sole "Estimate with…" element anywhere
+        // is the composer's own, below every result, and the online
+        // section's "Search OpenFoodFacts…" row is nowhere.
+        XCTAssertTrue(estimateAction.isEnabled, "Estimate wakes with a query")
+        XCTAssertTrue(onlineAction.isEnabled, "…and so does Search Online")
+        let estimateLabelled = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH 'Estimate with'")).allElementsBoundByIndex
+        XCTAssertEqual(estimateLabelled.count, 1, "One estimate trigger, not two")
+        let resultCells = app.cells.allElementsBoundByIndex
+        XCTAssertFalse(resultCells.isEmpty, "The query matched something to show")
+        XCTAssertGreaterThan(estimateLabelled[0].frame.minY, resultCells[0].frame.maxY,
+                             "…and it is the composer's, below the results rather than among them")
+        XCTAssertFalse(app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH 'Search OpenFoodFacts'")).firstMatch.exists,
+                       "The online search row left the list with it")
         attachShot(named: "logsheet-field-rice")
+
+        // The button really starts a run. Asserted on EITHER outcome,
+        // never on the happy one alone: on-device inference fails in
+        // seconds on some Macs (the ModelManagerError 1001 this machine
+        // returns), and a test that waited for a RESULT would go red
+        // over the host's model rather than over this wiring. A trigger
+        // that did nothing produces neither.
+        estimateAction.tap()
+        let estimating = app.staticTexts["Estimating…"]
+        let estimateFailed = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label BEGINSWITH 'Couldn'")).firstMatch
+        let estimateResult = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS 'AI estimate'")).firstMatch
+        var ran = false
+        for _ in 0..<40 where !ran {
+            ran = estimating.exists || estimateFailed.exists || estimateResult.exists
+            if !ran { Thread.sleep(forTimeInterval: 0.25) }
+        }
+        XCTAssertTrue(ran, "Tapping Estimate starts a run — spinner, result or failure")
 
         // THE KEYBOARD HAS A WAY OUT THAT ISN'T THE SHEET'S. Before the
         // door bar's accessory the only exits were Cancel and Done,

@@ -112,6 +112,10 @@ struct FoodFormView: View {
     /// The describe field's focus, lifted here because the field is
     /// the host's to drive (`EntryDoorDescribeField.isFocused`).
     @FocusState private var describeFocused: Bool
+    /// The composer's estimate trigger and its in-flight flag — see
+    /// `QuickLogSheet`'s pair, same contract.
+    @State private var estimateToken: UUID?
+    @State private var isEstimatingDescribe = false
     @State private var onlineSearch = OnlineFoodSearch()
     @State private var isLookingUp = false
     @State private var lookupMessage: String?
@@ -232,7 +236,11 @@ struct FoodFormView: View {
                 // fields below, with the provenance in the caption row.
                 if isBlankNewFood, !describeQuery.trimmingCharacters(in: .whitespaces).isEmpty {
                     if FoodIntelligence.isAvailable {
-                        AIEstimateSection(query: describeQuery) { product in
+                        AIEstimateSection(
+                            query: describeQuery,
+                            startToken: $estimateToken,
+                            isEstimating: $isEstimatingDescribe
+                        ) { product in
                             apply(product)
                             lookupMessage = product.aiEngine?.estimateCaption
                             describeQuery = ""
@@ -523,7 +531,12 @@ struct FoodFormView: View {
                     describeQuery: $describeQuery,
                     onScan: { activeSheet = .scanner(notice: nil) },
                     onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } },
-                    describeFocused: $describeFocused
+                    describeFocused: $describeFocused,
+                    onEstimate: FoodIntelligence.isAvailable ? { estimateToken = UUID() } : nil,
+                    onSearchOnline: SharedStore.onlineLookups
+                        ? { Task { await onlineSearch.search(describeQuery) } }
+                        : nil,
+                    isEstimating: isEstimatingDescribe
                 )
             }
             .recedesBehindSheet(activeSheet != nil)

@@ -182,6 +182,15 @@ struct EntryDoorBar: View {
     @FocusState.Binding var describeFocused: Bool
     /// Passed through to `EntryDoorDescribeField`; see its doc comment.
     var describePrompt = EntryDoorDescribeField.defaultPrompt
+    /// Run the AI estimate on what's typed. nil = this host has no
+    /// estimate to offer, and the button doesn't render.
+    var onEstimate: (() -> Void)?
+    /// Search the online database for what's typed. nil, same rule.
+    var onSearchOnline: (() -> Void)?
+    /// An estimate is in flight — the button says so and won't start a
+    /// second one. One inference at a time is a standing rule: two
+    /// serialize on-device and double-bill a BYO-AI provider.
+    var isEstimating = false
     /// The host searches its LIBRARY with this field too (the Log
     /// sheet, since 2026-09-17), so the field has somewhere to send its
     /// text even with AI and online lookups both off — and must stay.
@@ -243,18 +252,27 @@ struct EntryDoorBar: View {
                 // it out of this HStack entirely (the composer's action
                 // row, `plans/PLAN-log-composer.md`, is the obvious
                 // home and sidesteps the arrangement completely).
-                if #available(iOS 26.0, *) {
-                    GlassEffectContainer(spacing: 14) {
+                // Text row, then the actions that act ON that text —
+                // the composer shape (`plans/PLAN-log-composer.md`, the
+                // user, 2026-09-17, after the Claude app's own: "See how
+                // there's typing area with actions underneath?"). One
+                // container, so every door this bar offers is in one
+                // place and the list above is left meaning results.
+                VStack(alignment: .leading, spacing: 10) {
+                    if #available(iOS 26.0, *) {
+                        GlassEffectContainer(spacing: 14) {
+                            HStack(spacing: 14) {
+                                scanControl
+                                describeControl
+                            }
+                        }
+                    } else {
                         HStack(spacing: 14) {
                             scanControl
                             describeControl
                         }
                     }
-                } else {
-                    HStack(spacing: 14) {
-                        scanControl
-                        describeControl
-                    }
+                    actionRow
                 }
             } else {
                 // Neither AI nor online: one full-width labeled door —
@@ -270,6 +288,48 @@ struct EntryDoorBar: View {
         }
         .padding(.horizontal)
         .padding(.bottom, 8)
+    }
+
+    /// What the typed text can be sent to. ALWAYS PRESENT, dimmed until
+    /// there is something to send (the user's call, 2026-09-17): the
+    /// actions stay discoverable at rest, and the bar never changes
+    /// height as you type — a bar that grew on the first keystroke
+    /// would shove the list it sits under.
+    ///
+    /// Empty when neither AI nor online lookups are on. The row draws
+    /// nothing then rather than an empty strip; the text row above it
+    /// is still a library search where the host has a library, and
+    /// where it doesn't, `describeFieldAvailable` has already collapsed
+    /// the whole bar to the labeled camera door.
+    @ViewBuilder
+    private var actionRow: some View {
+        let hasQuery = !describeQuery.trimmingCharacters(in: .whitespaces).isEmpty
+        if onEstimate != nil || onSearchOnline != nil {
+            HStack(spacing: 10) {
+                if let onEstimate {
+                    ComposerAction(
+                        title: isEstimating ? "Estimating…" : "Estimate with AI",
+                        systemImage: "sparkles",
+                        tint: Color.riceToast,
+                        // Disabled, not hidden, on an empty query: the
+                        // point of the row is that you can see what the
+                        // field is for before you type into it.
+                        isEnabled: hasQuery && !isEstimating,
+                        action: onEstimate
+                    )
+                }
+                if let onSearchOnline {
+                    ComposerAction(
+                        title: "Search Online",
+                        systemImage: "magnifyingglass",
+                        tint: nil,
+                        isEnabled: hasQuery,
+                        action: onSearchOnline
+                    )
+                }
+                Spacer(minLength: 0)
+            }
+        }
     }
 
     private var fallbackLabel: some View {
@@ -355,5 +415,58 @@ private struct DoorBarChrome: ViewModifier {
         } else {
             content.background(Color(.tertiarySystemGroupedBackground), in: shape)
         }
+    }
+}
+
+/// One action under the composer's text row. A capsule with the bar's
+/// own chrome, so the row reads as part of the bar rather than as list
+/// content that wandered down — `DoorBarChrome` is the same glass the
+/// camera and the field wear (and the same flat chip below the floor,
+/// for the 2026-08-30 vibrancy reason recorded there).
+///
+/// Disabled state is `.secondaryLabel` on the glyph and the words, a
+/// CONCRETE color for the same reason the field's placeholder is one:
+/// inside `glassEffect` a hierarchical style renders vibrant, blends
+/// with the backdrop, and a dark backdrop dims it twice over.
+private struct ComposerAction: View {
+    let title: String
+    let systemImage: String
+    /// The glyph's color when enabled — the sparkle keeps its riceToast
+    /// so ✨ still reads as the AI mark it is everywhere else. nil takes
+    /// the label color.
+    let tint: Color?
+    let isEnabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(glyphColor)
+                Text(title)
+                    .font(.subheadline)
+                    .foregroundStyle(textColor)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+            .contentShape(.capsule)
+            .modifier(DoorBarChrome(tinted: false, shape: AnyShape(Capsule())))
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        // The label already says it; without this the row reads its
+        // glyph name out loud as well.
+        .accessibilityLabel(title)
+    }
+
+    private var glyphColor: Color {
+        guard isEnabled else { return Color(.secondaryLabel) }
+        return tint ?? Color(.label)
+    }
+
+    private var textColor: Color {
+        isEnabled ? Color(.label) : Color(.secondaryLabel)
     }
 }

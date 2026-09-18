@@ -109,6 +109,9 @@ struct FoodFormView: View {
     /// has no local library to search, so once online moved here there
     /// was nothing left for a second field to do.
     @State private var describeQuery = ""
+    /// The describe field's focus, lifted here because the field is
+    /// the host's to drive (`EntryDoorDescribeField.isFocused`).
+    @FocusState private var describeFocused: Bool
     @State private var onlineSearch = OnlineFoodSearch()
     @State private var isLookingUp = false
     @State private var lookupMessage: String?
@@ -519,7 +522,8 @@ struct FoodFormView: View {
                     scanBusy: isLookingUp,
                     describeQuery: $describeQuery,
                     onScan: { activeSheet = .scanner(notice: nil) },
-                    onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } }
+                    onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } },
+                    describeFocused: $describeFocused
                 )
             }
             .recedesBehindSheet(activeSheet != nil)

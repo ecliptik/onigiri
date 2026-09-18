@@ -3114,6 +3114,46 @@ final class OnigiriUITests: XCTestCase {
                        + "(browsing \(browsingTop)pt, searching \(searchingTop)pt)")
         attachShot(named: "logsheet-field-rice")
 
+        // THE KEYBOARD HAS A WAY OUT THAT ISN'T THE SHEET'S. Before the
+        // door bar's accessory the only exits were Cancel and Done,
+        // which take the whole sheet with them, so a long description
+        // typed by mistake cost the sheet (the user, 2026-09-17: "how
+        // can I minimize it without closing out the whole dialog?").
+        // Both halves matter: the keyboard gone AND the sheet still up,
+        // with what was typed still in the field.
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5),
+                      "The keyboard is up while the field has focus")
+        // The LEADING button is the keyboard's exit while it is up, and
+        // says so — "Cancel" is gone for exactly as long as it would
+        // have closed the sheet out from under a thumb reaching for it.
+        XCTAssertFalse(app.buttons["Cancel"].exists,
+                       "No Cancel while typing — the leading slot is the keyboard's")
+        let hideKeyboard = app.buttons["Hide Keyboard"]
+        XCTAssertTrue(hideKeyboard.waitForExistence(timeout: 5), "Hide Keyboard leads the bar")
+        hideKeyboard.tap()
+        XCTAssertTrue(app.keyboards.element.waitForNonExistence(timeout: 5),
+                      "…and it puts the keyboard away")
+        XCTAssertTrue(app.navigationBars["Log"].exists,
+                      "…leaving the sheet open — it is not Cancel wearing another name")
+        XCTAssertEqual(field.value as? String, "rice", "…with the query still in the field")
+        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5),
+                      "Cancel is back once the keyboard is gone")
+        attachShot(named: "logsheet-keyboard-dismissed")
+
+        // The door bar's own accessory does the same job from the other
+        // end of the screen — both, on purpose ("Can we do both?").
+        field.tap()
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5), "Keyboard back on refocus")
+        let keyboardDone = app.buttons.matching(
+            NSPredicate(format: "label == 'Done'")).allElementsBoundByIndex
+            .first { $0.isHittable && $0.frame.minY > estimateRow.frame.maxY }
+        XCTAssertNotNil(keyboardDone, "A Done above the keyboard, below the list")
+        keyboardDone?.tap()
+        XCTAssertTrue(app.keyboards.element.waitForNonExistence(timeout: 5),
+                      "The accessory puts the keyboard away too")
+        XCTAssertTrue(app.navigationBars["Log"].exists, "…and also leaves the sheet open")
+
+        field.tap()
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4))
         field.typeText("wat")
         XCTAssertTrue(water.waitForExistence(timeout: 5), "Water is back for a query on the way to it")

@@ -79,6 +79,12 @@ struct EntryDoorDescribeField: View {
     /// back. The string predates the bar; don't rename it.
     static let accessibilityID = "entryDoorsDescribeField"
 
+    /// The HOST owns this. It started owned here — the accessory below
+    /// is all the field itself needs — but the Log sheet's leading
+    /// toolbar button changes with it too (2026-09-17), and a toolbar
+    /// lives in the host, not down here.
+    @FocusState.Binding var isFocused: Bool
+
     var body: some View {
         HStack(spacing: 6) {
             // AI ONLY, not "online lookups can search too" — the
@@ -106,7 +112,27 @@ struct EntryDoorDescribeField: View {
             )
                 .accessibilityLabel(prompt)
                 .accessibilityIdentifier(Self.accessibilityID)
+                .focused($isFocused)
                 .onSubmit { onDescribeSubmit?() }
+                // Put the keyboard away without leaving the screen (the
+                // user, 2026-09-17). Until this there was no way out of
+                // it but Cancel or Done, which take the whole sheet with
+                // them, or picking a row.
+                //
+                // A keyboard accessory, NOT a Cancel that turns into a
+                // back button while typing: a button that changes what
+                // it does under you is a mode error, it would be the one
+                // escape hatch disappearing exactly when a long
+                // description makes you want it, and this sheet's
+                // Cancel-left/Done-right shape has been settled twice
+                // (CLAUDE.md, "Food entry"). Scoped to this field's own
+                // focus, so the food form's other fields are untouched.
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Done") { isFocused = false }
+                    }
+                }
         }
     }
 }
@@ -130,6 +156,9 @@ struct EntryDoorBar: View {
     @Binding var describeQuery: String
     let onScan: () -> Void
     var onDescribeSubmit: (() -> Void)?
+    /// The describe field's focus, owned by the host — see
+    /// `EntryDoorDescribeField.isFocused`.
+    @FocusState.Binding var describeFocused: Bool
     /// Passed through to `EntryDoorDescribeField`; see its doc comment.
     var describePrompt = EntryDoorDescribeField.defaultPrompt
     /// The host searches its LIBRARY with this field too (the Log
@@ -249,7 +278,8 @@ struct EntryDoorBar: View {
 
     private var describeControl: some View {
         EntryDoorDescribeField(
-            describeQuery: $describeQuery, onDescribeSubmit: onDescribeSubmit, prompt: describePrompt)
+            describeQuery: $describeQuery, onDescribeSubmit: onDescribeSubmit,
+            prompt: describePrompt, isFocused: $describeFocused)
             .padding(.horizontal, 16)
             // minHeight, not a fixed height: large Dynamic Type sizes
             // need MORE than 50pt for the field's text to fit, and a

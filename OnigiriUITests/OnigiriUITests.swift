@@ -3068,6 +3068,21 @@ final class OnigiriUITests: XCTestCase {
         let scopeBar = app.segmentedControls.firstMatch
         XCTAssertTrue(scopeBar.waitForExistence(timeout: 5), "Scope bar leads the sheet at rest")
         let browsingTop = scopeBar.frame.minY
+
+        // THE WATER CARD SITS IN AN EVEN RHYTHM. Its neighbours are a
+        // transparent row above (the scope bar) and a card below, and
+        // for a while the row above spent ~10.5pt of list row inset as
+        // blank canvas nobody could see the reason for: 20.33pt above
+        // the card against 10pt below it (the user, 2026-09-17:
+        // "Above/below should match"). Cells, not labels — the gap is
+        // between the CARDS, and only their frames know where those
+        // are.
+        let rows = app.cells.allElementsBoundByIndex
+        XCTAssertGreaterThanOrEqual(rows.count, 3, "Scope, Water and at least one library card")
+        let aboveWater = rows[1].frame.minY - scopeBar.frame.maxY
+        let belowWater = rows[2].frame.minY - rows[1].frame.maxY
+        XCTAssertEqual(aboveWater, belowWater, accuracy: 1.5,
+                       "The Water card's gaps must match (above \(aboveWater)pt, below \(belowWater)pt)")
         attachShot(named: "logsheet-field-rest")
 
         field.tap()

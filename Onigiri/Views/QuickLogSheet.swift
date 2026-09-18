@@ -432,6 +432,26 @@ struct QuickLogSheet: View {
                 }
             }
             .compactSections()
+            // The scope bar's row asks for zero `listRowInsets` and is
+            // refused: a minimum row height holds it at 52pt around a
+            // 31pt segmented control, which CENTRES the control and
+            // leaves ~10.5pt above and below it. Behind that row's
+            // CLEAR background that isn't a card's padding, it is blank
+            // canvas — 20.33pt above the Water card against 10pt below
+            // (the user, 2026-09-17: "Above/below should match"). With
+            // the floor gone the zero insets finally apply and the row
+            // hugs its control, so every gap down the screen is the one
+            // section spacing.
+            //
+            // Measured, because "row height" is exactly the kind of
+            // thing that moves other rows by surprise: the scope row
+            // 52 → 31, every food card still 74, the estimate row still
+            // 52 (its own insets are untouched — it never asked for
+            // zero). A row whose natural height is already past the
+            // floor cannot notice this. Section-scoped was tried first
+            // and the List ignored it; so was a negative `padding`,
+            // which moved nothing.
+            .environment(\.defaultMinListRowHeight, 0)
             .riceCanvas()
             .hardTopScrollEdge()
             // A STANDARD sheet header, like every other sheet in the app
@@ -473,15 +493,21 @@ struct QuickLogSheet: View {
             // disappears — the identity rule in CLAUDE.md's
             // SwiftData/SwiftUI landmines.
             //
-            // The value is the SECTION gap, not the screen gap: the
-            // scope bar sits 10.67pt under the bar while browsing (the
-            // List's own first-section spacing, measured — `ScopeBar`
-            // has no padding of its own), so spending the same number
-            // here lands the estimate row in the scope bar's place and
-            // the first keystroke moves nothing. 16 was the first
-            // attempt and overshot it by ~5pt — a visible jump (the
-            // user: "so the button doesn't 'jump'").
-            .flushTopContent(searching ? Layout.sectionSpacing : 0)
+            // ONE margin, both states, and it is the section gap — so
+            // every gap down this screen is the same number: bar to
+            // first row, row to row, card to card. It stopped varying
+            // by state once the scope row lost its slack
+            // (`defaultMinListRowHeight` above): that slack was what
+            // used to push the scope bar 10.67pt down, and searching
+            // had to match a figure browsing produced by accident.
+            // Now both start at 142 because both are told to.
+            //
+            // Not 0: flush against the nav bar is where this started
+            // (the user, twice — "too close to the header", "Still no
+            // padding"). Not 16 either, which cleared the bar but
+            // overshot the scope row's place and jumped on the first
+            // keystroke.
+            .flushTopContent(Layout.sectionSpacing)
             // NO `.searchable` drawer on this sheet — the ONE text field
             // is in the door bar below (the user, 2026-09-17: "Unify the
             // Search dialog on Log into the Describe Food or Meal …

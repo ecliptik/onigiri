@@ -52,11 +52,12 @@ enum Layout {
 
     /// The gap between sections in every Form and sectioned List
     /// (`compactSections()`). Named because the Log sheet ALSO spends it
-    /// as a top content margin while searching, to land its first row
-    /// exactly where the scope bar sits when browsing — one number, so
-    /// the two can't drift apart and make the first row jump on the
-    /// first keystroke (the user, 2026-09-17).
+    /// as a top content margin, to land its first row — the scope bar
+    /// browsing, the estimate row searching — in the same place either
+    /// way, one number, so the two can't drift apart and make that row
+    /// jump on the first keystroke (the user, 2026-09-17).
     static let sectionSpacing: CGFloat = 10
+
 }
 
 extension View {

@@ -42,6 +42,51 @@ README screenshots come from `testHeaderShots` (OnigiriUITests, opt-in `TEST_RUN
 
 **2026-08-03 add-food re-shoot — ONE TAKE PER SEED, and the sleeps aren't the beats.** (1) The take LOGS a meal, so a second take on the same sim starts from the first take's damage: Today opened at "+170 kcal over" (orange) instead of "430 kcal left" (green). Every retry needs the whole cycle again — erase → testHeaderShots → AI defaults → record — so measure the timing on a throwaway take, then spend a fresh seed on the keeper. (2) `axe tap` returns 1–2.3 s AFTER the tap lands (`--element-type Button` is the slowest — it enumerates), and `simctl io recordVideo` starts 0.2–2.3 s after it's backgrounded; both vary run to run. So a fixed sleep is only the REMAINDER of a beat, and the trim must be measured from FRAMES, not from the script's own clock — print timestamps around each tap, then filmstrip the raw (`ffmpeg -ss N -frames:v 1`, hstack) to find the real cut. (3) The clip is now **9.5 s** (was 14.5): ~1.2 s of Today, ~3 s of the Log sheet, ~3 s of the portion sheet, then the logged toast. The old cut held the Contains rows six seconds. Sleeps that produced it: 1.4 lead / 1.4 / 1.6 / 3.4 tail. Encode + concat-remux + poster + all four probes are one script (`encode.sh raw.mov out.mp4 <ss> <dur>`), kept in this session's scratchpad.
 
+**2026-09-18 iOS 27 refresh — four traps, and the clip driver is now a
+TEST.** The whole set was retaken for iOS 27 (which draws the "+" IN the
+tab row; 26 hangs it off the side as a circle) on iPhone 17 Pro
+`89A22F2C` / iPad Pro 13-inch M5 `8F9484D9`, both 27.0. Address sims by
+**udid**: the roster holds two `iPhone 17 Pro`s and `-destination
+name=…` silently picks one. `testSiteClip`
+(`TEST_RUNNER_SITE_CLIP=day-swipe|add-food|ai-estimate`) drives all
+three clips and prints `CLIPMARK` beats; `testHeaderShots` takes the
+stills and honours `HEADER_ORIENTATION=landscape` for the iPad. Nothing
+had to be written — only run.
+
+1. **`simctl io recordVideo` is VARIABLE frame rate, and its DURATION
+   can be inflated.** Seeking by time in the raw returns frames from
+   the wrong moment, so every measurement taken off it contradicts the
+   next — an hour went into "the app launches on the wrong day" that
+   was purely this. Normalise first
+   (`-vf fps=30,scale=606:1318 -crf 18`) and cut only from that. But
+   note the padding: where the raw's duration is inflated, `fps=30`
+   **pads duplicate frames** to fill it, and then `mtime − duration`
+   arithmetic points at empty air (it put the clip beats 68 s off on
+   the AI takes, while being accurate to 0.3 s on the short ones).
+   **LOCATE the beats by scanning the CFR file** — the `CLIPMARK`
+   spacing is reliable, absolute placement is not.
+2. **A pick that clears the query flashes.** Tapping an AI result
+   clears `describeQuery`, so between the tap and the food form the Log
+   sheet is visible with its library list back — correct behaviour that
+   reads as a glitch in a loop. Both AI clips are cut in THREE segments
+   to step over it: typing → spinner, spinner → result, then the form.
+   Joins inside the spinner are invisible; the result→form join reads
+   as an ordinary cut.
+3. **`simctl erase` resets Multitasking → Full Screen Apps**, and
+   without it the iPad keeps a grey resize-handle arc in the
+   bottom-right corner forever. Re-apply after every erase
+   (`axe tap --label "Multitasking & Gestures"` then
+   `--label "Full Screen Apps"`) and CHECK it: count the colours in the
+   bottom-right 110×80 box — a clean corner has exactly one.
+4. **A repeat seed can trip the orange "Aggressive pace" warning**, which
+   makes the shot unusable (the 2026-08-23 lesson, from the other
+   direction). The goal persists in SwiftData while
+   `--seed-sample-data` resets and rewrites the Health weigh-ins, so a
+   later run can face more weight to lose against the same fixed target.
+   Erase so the goal is minted from the same run's weigh-ins — or, when
+   a good seed is already on the device, relaunch WITHOUT the seed
+   argument and screenshot that.
+
 ## The social card
 
 **2026-08-24 — the card has no generator, so here are its measurements.**

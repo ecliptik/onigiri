@@ -1,6 +1,14 @@
 # Refreshing the site and README media for iOS 27 (2026-09-18)
 
-> Status: SCOPED 2026-09-18, decisions taken. The mechanics live in
+> Status: **DONE 2026-09-18.** All 23 files replaced and through the
+> gates; the four traps the run turned up are folded into
+> `PLAN-site-and-media.md` (VFR duration inflation, the query-clear
+> flash, the erase resetting Full Screen Apps, and a repeat seed
+> tripping the aggressive-pace warning). Shipped: 7 phone stills, 2
+> iPad, 2 widget, 6 clips + 6 posters. The watch shot is untouched, as
+> scoped.
+>
+> Status when written: SCOPED 2026-09-18, decisions taken. The mechanics live in
 > `plans/PLAN-site-and-media.md` — this file is the campaign: what is
 > stale, why, in what order, and what could stop it.
 >

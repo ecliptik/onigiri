@@ -277,7 +277,19 @@ struct EntryDoorBar: View {
                             describeControl
                         }
                     }
-                    actionRow
+                    // Only while the field is ACTIVE (the user,
+                    // 2026-09-17, from device). They were always
+                    // present and dimmed at first — chosen so they'd be
+                    // discoverable at rest — and at rest is exactly
+                    // where they earn nothing: three dead controls
+                    // under a sheet you are reading, with "Estimate
+                    // with AI" truncated to "Estimate wit…" for the
+                    // privilege. The bar's height changes with the
+                    // keyboard now, which is the moment it was always
+                    // going to move anyway.
+                    if describeFocused {
+                        actionRow
+                    }
                 }
             } else {
                 // Neither AI nor online: one full-width labeled door —
@@ -342,6 +354,13 @@ struct EntryDoorBar: View {
                             .modifier(DoorBarChrome(tinted: false, shape: AnyShape(Circle())))
                     }
                     .accessibilityLabel("Add a Photo or File")
+                    // CENTRED under the camera, not merely leading: the
+                    // camera's circle is `controlHeight` across and this
+                    // one is smaller, so left-aligning them put the +
+                    // off-axis and reading as a mistake (the user: "the
+                    // + button also looks disproportionate"). Same
+                    // column width, both centred in it, one vertical.
+                    .frame(width: Self.controlHeight)
                 }
                 Spacer(minLength: 0)
                 if let onEstimate {
@@ -485,8 +504,15 @@ private struct ComposerAction: View {
                     .font(.subheadline)
                     .foregroundStyle(textColor)
                     .lineLimit(1)
+                    // "Estimate with AI" truncated to "Estimate wit…"
+                    // beside "Search Online" and the + — three controls
+                    // across 402pt, and the ellipsis landed on the one
+                    // word that says what the button does. Shrink
+                    // before clipping; at 0.8 the full label fits on
+                    // the narrowest phone this app supports.
+                    .minimumScaleFactor(0.8)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 12)
             .frame(height: 36)
             .contentShape(.capsule)
             .modifier(DoorBarChrome(tinted: false, shape: AnyShape(Capsule())))

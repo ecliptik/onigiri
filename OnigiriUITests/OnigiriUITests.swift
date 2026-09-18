@@ -3061,16 +3061,18 @@ final class OnigiriUITests: XCTestCase {
                        "The one field says it searches AND describes")
         XCTAssertFalse(app.searchFields.firstMatch.exists,
                        "No .searchable drawer on the Log sheet")
-        // THE COMPOSER'S ACTIONS, at rest: present so they are
-        // discoverable before you type, and disabled because there is
-        // nothing yet to estimate or search
-        // (`plans/PLAN-log-composer.md`, the user's call).
+        // THE COMPOSER'S ACTIONS ARE NOT THERE AT REST. They were, and
+        // dimmed, for about an hour — discoverable, in theory; three
+        // dead controls under a sheet you are reading, in practice,
+        // with the estimate's own label truncated to fit (the user,
+        // 2026-09-17, from device). They belong to the field, so they
+        // arrive with its keyboard.
         let estimateAction = app.buttons["Estimate with AI"]
         let onlineAction = app.buttons["Search Online"]
-        XCTAssertTrue(estimateAction.waitForExistence(timeout: 5), "Estimate action in the composer")
-        XCTAssertTrue(onlineAction.exists, "Search Online action in the composer")
-        XCTAssertFalse(estimateAction.isEnabled, "…disabled on an empty query")
-        XCTAssertFalse(onlineAction.isEnabled, "…and so is Search Online")
+        let addAction = app.buttons["Add a Photo or File"]
+        XCTAssertFalse(estimateAction.exists, "No Estimate action until the field is active")
+        XCTAssertFalse(onlineAction.exists, "…nor Search Online")
+        XCTAssertFalse(addAction.exists, "…nor the +")
 
         let water = app.buttons["Log Water"].firstMatch
         XCTAssertTrue(water.waitForExistence(timeout: 5), "Water leads the sheet at rest")
@@ -3097,6 +3099,20 @@ final class OnigiriUITests: XCTestCase {
         attachShot(named: "logsheet-field-rest")
 
         field.tap()
+        // …and they arrive with the keyboard, the "+" among them,
+        // still disabled until there is something to act on.
+        XCTAssertTrue(estimateAction.waitForExistence(timeout: 5), "Estimate arrives with the field")
+        XCTAssertTrue(onlineAction.exists, "…with Search Online")
+        XCTAssertTrue(addAction.exists, "…and the +")
+        XCTAssertFalse(estimateAction.isEnabled, "…and it is dead until something is typed")
+        XCTAssertFalse(onlineAction.isEnabled, "…as is Search Online")
+        // The "+" shares the camera's vertical: same column, both
+        // centred in it (the user: the + "looks disproportionate").
+        let camera = scanRow(in: app)
+        XCTAssertEqual(addAction.frame.midX, camera.frame.midX, accuracy: 1.5,
+                       "The + is centred under the camera "
+                       + "(+ \(addAction.frame.midX), camera \(camera.frame.midX))")
+
         field.typeText("rice")
         XCTAssertTrue(app.buttons["Log Rice bowl"].waitForExistence(timeout: 10),
                       "The library match for the query")

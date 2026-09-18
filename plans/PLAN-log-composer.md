@@ -50,9 +50,19 @@ One container, pinned where `entryDoorBar` pins it now. Decisions:
     first and putting it there is the route that doesn't fight the bug.
   - Re-run `testBarcodeLookupPrefillsForm` after ANY change to this
     row's composition, including building the composer on top of it.
-- **The action row is always present, dimmed until there is text.**
-  Discoverable at rest, and the bar never changes height as you type.
-  Estimate and Search Online are disabled on an empty query.
+- ~~**The action row is always present, dimmed until there is text.**~~
+  **REVERSED the same evening, on the device** (the user: "The +,
+  Estimate with AI and Search Online should only show up when the
+  keyboard/field is active"). The row belongs to the field and arrives
+  with its keyboard. What "discoverable at rest" actually bought was
+  three dead controls under a sheet you were reading — and not even
+  legibly, since "Estimate with AI" truncated to "Estimate wit…" to fit
+  beside the others. Estimate and Search Online are still disabled
+  until something is typed, which now means "focused but empty".
+  - The fear that justified always-on — a bar that changes height on
+    the first keystroke shoving the list — doesn't apply: the row
+    arrives with the keyboard, at the one moment the bar was going to
+    move anyway.
 - **The list's trigger rows go away.** Both of them:
   `AIEstimateSection`'s tap-to-run row and `OnlineResultsSection`'s
   "Search OpenFoodFacts & USDA for …" row. The buttons are the only

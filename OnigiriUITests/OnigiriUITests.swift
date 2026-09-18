@@ -3063,6 +3063,11 @@ final class OnigiriUITests: XCTestCase {
                        "No .searchable drawer on the Log sheet")
         let water = app.buttons["Log Water"].firstMatch
         XCTAssertTrue(water.waitForExistence(timeout: 5), "Water leads the sheet at rest")
+        // Where the list's first row sits while BROWSING — the mark the
+        // searching state has to hit, taken before the scope bar leaves.
+        let scopeBar = app.segmentedControls.firstMatch
+        XCTAssertTrue(scopeBar.waitForExistence(timeout: 5), "Scope bar leads the sheet at rest")
+        let browsingTop = scopeBar.frame.minY
         attachShot(named: "logsheet-field-rest")
 
         field.tap()
@@ -3073,20 +3078,25 @@ final class OnigiriUITests: XCTestCase {
                       "Water leaves for a query that doesn't name it")
         XCTAssertFalse(app.segmentedControls.firstMatch.exists, "Scope bar hides while searching")
 
-        // The gap the search state has to keep. Measured, not eyeballed:
-        // flush meant `rowMinY == navBarMaxY` to the point, and the
-        // `flushTopContent(searching ? Layout.screenSpacing : 0)` value
-        // is what stands between that and this. 12 rather than 16 so a
-        // rounding or a Dynamic Type nudge can't fail it, and still far
-        // enough from 0 that the flush state cannot pass.
+        // THE FIRST ROW MUST NOT MOVE. Measured, never eyeballed — a
+        // screenshot passed this twice while it was wrong, because the
+        // estimate chip's own internal padding reads as a gap that
+        // isn't there. The two states put different rows first (scope
+        // bar while browsing, estimate row while searching) and both
+        // have to start at the same Y, or the first keystroke jolts the
+        // list (the user, 2026-09-17: "so the button doesn't 'jump'").
+        // Recorded history, for whoever loosens this: flush was 0.0
+        // against the scope bar's 142.67, and a first fix overshot to
+        // 148.0. The 1.5pt tolerance is for pixel-grid rounding at
+        // other scale factors, nothing more.
         let estimateRow = app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH 'Estimate with'")).firstMatch
         XCTAssertTrue(estimateRow.waitForExistence(timeout: 10),
                       "The estimate row leads the results with AI on")
-        let gapAboveRow = estimateRow.frame.minY - app.navigationBars["Log"].frame.maxY
-        XCTAssertGreaterThan(gapAboveRow, 12,
-                             "The first search row must not sit flush against the nav bar "
-                             + "(measured \(gapAboveRow)pt; it was 0.0 when this shipped wrong)")
+        let searchingTop = estimateRow.frame.minY
+        XCTAssertEqual(searchingTop, browsingTop, accuracy: 1.5,
+                       "The list's first row must sit at the same height browsing and searching "
+                       + "(browsing \(browsingTop)pt, searching \(searchingTop)pt)")
         attachShot(named: "logsheet-field-rice")
 
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4))

@@ -49,13 +49,21 @@ enum Layout {
     /// Gap between top-level groups on ScrollView screens (Today, Water,
     /// Calendar).
     static let screenSpacing: CGFloat = 16
+
+    /// The gap between sections in every Form and sectioned List
+    /// (`compactSections()`). Named because the Log sheet ALSO spends it
+    /// as a top content margin while searching, to land its first row
+    /// exactly where the scope bar sits when browsing — one number, so
+    /// the two can't drift apart and make the first row jump on the
+    /// first keystroke (the user, 2026-09-17).
+    static let sectionSpacing: CGFloat = 10
 }
 
 extension View {
     /// The standard compact gap between form/list sections, matching the
     /// food form. Apply to every Form and sectioned List.
     func compactSections() -> some View {
-        listSectionSpacing(10)
+        listSectionSpacing(Layout.sectionSpacing)
     }
 
     /// Caps scrollable content at a readable width and centers it —

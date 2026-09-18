@@ -472,7 +472,16 @@ struct QuickLogSheet: View {
             // varies by state, never a modifier that appears and
             // disappears — the identity rule in CLAUDE.md's
             // SwiftData/SwiftUI landmines.
-            .flushTopContent(searching ? Layout.screenSpacing : 0)
+            //
+            // The value is the SECTION gap, not the screen gap: the
+            // scope bar sits 10.67pt under the bar while browsing (the
+            // List's own first-section spacing, measured — `ScopeBar`
+            // has no padding of its own), so spending the same number
+            // here lands the estimate row in the scope bar's place and
+            // the first keystroke moves nothing. 16 was the first
+            // attempt and overshot it by ~5pt — a visible jump (the
+            // user: "so the button doesn't 'jump'").
+            .flushTopContent(searching ? Layout.sectionSpacing : 0)
             // NO `.searchable` drawer on this sheet — the ONE text field
             // is in the door bar below (the user, 2026-09-17: "Unify the
             // Search dialog on Log into the Describe Food or Meal …

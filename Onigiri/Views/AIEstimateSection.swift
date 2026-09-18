@@ -28,7 +28,18 @@ struct AIEstimateSection: View {
         Section {
             TapToEstimateRow(
                 query: query,
-                title: "Estimate with \(AIProviderSettings.selected.displayName)",
+                // GENERIC, with the provider named in the RESULT
+                // instead (the user, 2026-09-17). PLAN-unified-search's
+                // amendment 1 put the provider here on 2026-07-20
+                // because a bare "Estimate" didn't read as AI — "with
+                // AI" keeps that much — and because for a REMOTE engine
+                // it disclosed where the typed text was about to go
+                // before you tapped. That disclosure now arrives with
+                // the answer (`resultRow`'s caption is the engine that
+                // actually replied), which is the accepted cost: the
+                // provider is the user's own setting, chosen in
+                // Settings, on a single-person app.
+                title: "Estimate with AI",
                 estimate: { await FoodIntelligence.describeFood($0) },
                 // The typed description is the grounding, so a note
                 // corrects the answer instead of restarting from a

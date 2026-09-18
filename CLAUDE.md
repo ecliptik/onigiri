@@ -1086,6 +1086,20 @@ Each cost a debugging session.
   camera button beside a "Describe food or meal" field. Neither on: the
   field is hidden entirely (nothing behind it works) and the camera
   becomes the labeled door, "Scan Barcode, Label, or Menu".
+  - **The CAMERA LEADS THE FIELD, and putting it on the right breaks
+    barcode scanning SILENTLY** — asked for in those words and reverted
+    twice now (2026-09-16, and again 2026-09-17 after the bar had
+    changed enough to look worth retrying: it wasn't). The camera stays
+    present, hittable and taps cleanly; the scanner simply never opens.
+    No crash, no error, no log line. `testBarcodeLookupPrefillsForm` is
+    the ONLY thing that catches it — two assertions downstream, on the
+    scanner's own "Barcode" field never appearing — so RUN IT after any
+    change to that HStack's composition. The mechanism is unconfirmed
+    (a `GlassEffectContainer` hit-testing quirk with a fixed-size
+    circle trailing a flexible-width field is the suspicion). Don't
+    swap them a third time hoping; diagnose the hit-testing, or move
+    the camera out of that HStack altogether —
+    `plans/PLAN-log-composer.md`'s action row is the intended home.
   - **The describe field owns its OWN query** (`QuickLogSheet.describeQuery`
     / `FoodFormView.describeQuery`), driving `AIEstimateSection` directly.
     From 2026-08-29 to 09-17 the Log sheet ALSO had a separate

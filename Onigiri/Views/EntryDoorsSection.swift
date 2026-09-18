@@ -208,22 +208,41 @@ struct EntryDoorBar: View {
                 // the floor there's no glass to coordinate, so a plain
                 // HStack does the same job.
                 //
-                // Camera LEADING, describe field trailing — tried the
-                // reverse (the user, 2026-09-16: "the camera button on
-                // log is on the right of the search") and it silently
-                // broke real barcode scanning: `testBarcodeLookupPrefillsForm`
-                // failed twice, reproducibly, with the tap on the camera
-                // never opening the scanner at all — no crash, no error,
-                // just a no-op. Swapping the two views' ORDER in this
-                // HStack was the only change between a passing and a
-                // failing run (isolated by testing each independently);
-                // the exact mechanism wasn't found (a `GlassEffectContainer`
-                // hit-testing quirk when the fixed-size circle trails a
-                // flexible-width field is the leading suspect, but
-                // unconfirmed) and wasn't worth guessing further at
-                // under time pressure. Don't reorder these two without
-                // re-running that test on a device — it will not fail
-                // loudly.
+                // Camera LEADING, describe field trailing. THE REVERSE
+                // HAS NOW BROKEN BARCODE SCANNING TWICE, asked for in
+                // the same words both times (the user, 2026-09-16 and
+                // again 2026-09-17: "Move the camera button to the
+                // right of the unified search field"), and reverted the
+                // same day both times.
+                //
+                // The failure is silent: the camera button is present,
+                // hittable and taps cleanly — `scanRow` finds it, the
+                // tap "succeeds" — and the scanner never opens. No
+                // crash, no error, nothing in the log.
+                // `testBarcodeLookupPrefillsForm` is the ONLY thing
+                // that catches it, and it catches it on the scanner's
+                // own "Barcode" field never appearing, two assertions
+                // downstream of the tap.
+                //
+                // The 09-17 retry was deliberate, not forgetful: this
+                // bar had changed underneath the old note — the field
+                // gained a trailing dismiss button, the row's metrics
+                // changed with `defaultMinListRowHeight`, and the whole
+                // search moved into this field. None of it mattered.
+                // Swapping these two views was again the ONLY change
+                // between a passing and a failing run, isolated by
+                // reverting just the order and re-running (the chevron
+                // was cleared of involvement the same way).
+                //
+                // The mechanism is still unconfirmed — a
+                // `GlassEffectContainer` hit-testing quirk when the
+                // fixed-size circle trails a flexible-width field is
+                // the standing suspicion. DON'T swap these two again
+                // hoping the third time differs. If the camera has to
+                // move right, diagnose the hit-testing first, or move
+                // it out of this HStack entirely (the composer's action
+                // row, `plans/PLAN-log-composer.md`, is the obvious
+                // home and sidesteps the arrangement completely).
                 if #available(iOS 26.0, *) {
                     GlassEffectContainer(spacing: 14) {
                         HStack(spacing: 14) {

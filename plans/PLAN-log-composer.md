@@ -38,6 +38,18 @@ One container, pinned where `entryDoorBar` pins it now. Decisions:
   already knows it. The action row below holds Estimate and Search
   Online. (The alternative — camera as a third action, field full width
   — was offered and declined.)
+  - Moving it to the field's TRAILING edge was asked for twice
+    (2026-09-16, 2026-09-17) and reverted twice: it silently breaks
+    barcode scanning, the camera tap simply not opening the scanner,
+    caught only by `testBarcodeLookupPrefillsForm`. `EntryDoorBar`'s
+    own comment has the detail. **This is the one part of the composer
+    that could fix it properly**: a camera in the ACTION ROW is no
+    longer a fixed-size circle trailing a flexible-width field inside a
+    `GlassEffectContainer`, which is the standing suspicion. If the
+    user wants the camera off the leading edge, building the action row
+    first and putting it there is the route that doesn't fight the bug.
+  - Re-run `testBarcodeLookupPrefillsForm` after ANY change to this
+    row's composition, including building the composer on top of it.
 - **The action row is always present, dimmed until there is text.**
   Discoverable at rest, and the bar never changes height as you type.
   Estimate and Search Online are disabled on an empty query.
@@ -134,7 +146,22 @@ One container, pinned where `entryDoorBar` pins it now. Decisions:
   device: the bar's existing glass rules are in `DoorBarChrome`, and
   the 2026-08-30 lesson (a hierarchical material washing out on the
   phone in dark mode) applies to anything new put in this bar.
-- Whether Estimate's label carries the provider name, as the row does
-  today ("Estimate with Apple Intelligence" / "with Anthropic"). The
-  row had the width for it; a button in a three-up row may not, and the
-  provider name is disclosure for remote engines, not decoration.
+(The provider-name question is settled — see below.)
+
+## Decided since
+
+- **The Estimate label is generic: "Estimate with AI"**, with the
+  provider named in the RESULT instead (the user, 2026-09-17). Applied
+  to today's row immediately, so the composer inherits it.
+  `PLAN-unified-search`'s amendment 1 had put the provider in the idle
+  row for two reasons: a bare "Estimate" didn't read as AI, and for a
+  REMOTE engine it disclosed where the typed text was about to go
+  before you tapped. "with AI" keeps the first. The second now arrives
+  with the answer — `resultRow`'s caption is the engine that actually
+  replied, which is the more honest figure anyway (an unreachable
+  remote provider hands off to Apple Intelligence, and the caption is
+  the only thing that says so). Accepted on the grounds that the
+  provider is the user's own setting on a single-person app.
+  `MealEstimateSection` still says "Estimate this meal with
+  <provider>" — left alone, not asked about; match it if the generic
+  form is meant to be the rule everywhere.

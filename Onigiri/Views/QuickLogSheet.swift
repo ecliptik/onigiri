@@ -69,7 +69,12 @@ struct QuickLogSheet: View {
         case portion(PortionTarget)
         /// The notice rides the case so a re-presented scanner can say
         /// why it's back (a barcode the database didn't have).
-        case scanner(notice: String?)
+        /// The door carries in the VALUE, never a flag beside it —
+        /// a sheet reads its content closure when it presents, and a
+        /// mode set in the same breath as a Bool can arrive late
+        /// (`plans/PLAN-multi-item-import.md`, the same lesson the
+        /// menu listing learned).
+        case scanner(notice: String?, door: ScanSheet.Door?)
         case form(ProductPrefill)
         case editFood(Food)
         case editMeal(Meal)
@@ -77,7 +82,8 @@ struct QuickLogSheet: View {
         var id: String {
             switch self {
             case .portion(let target): "portion-\(target.name)"
-            case .scanner(let notice): "scanner-\(notice ?? "")"
+            case .scanner(let notice, let door):
+                "scanner-\(notice ?? "")-\(door.map(String.init(describing:)) ?? "")"
             case .form(let prefill): "form-\(prefill.id)"
             case .editFood(let food): "editFood-\(food.persistentModelID.hashValue)"
             case .editMeal(let meal): "editMeal-\(meal.uuid.uuidString)"
@@ -551,32 +557,7 @@ struct QuickLogSheet: View {
             // the twice-decided history). Never hidden now: the field
             // that IS the search lives in it, and hiding the bar while
             // searching would take the keyboard's field away.
-            .entryDoorBar(isHidden: false) {
-                EntryDoorBar(
-                    scanBusy: isLookingUpBarcode,
-                    describeQuery: $describeQuery,
-                    onScan: { activeSheet = .scanner(notice: nil) },
-                    onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } },
-                    describeFocused: $describeFocused,
-                    // The composer's actions. Gated on the same two
-                    // switches the list sections were: nothing offers a
-                    // door that isn't there.
-                    // "Describe" only while something can be described
-                    // TO — with AI and online lookups both off the
-                    // field is library search alone, and the prompt
-                    // promises just that (the camera door's own rule:
-                    // a label only promises what it can keep).
-                    describePrompt: FoodIntelligence.isAvailable || SharedStore.onlineLookups
-                        ? "Search or Describe Food"
-                        : "Search Foods and Meals",
-                    onEstimate: FoodIntelligence.isAvailable ? { estimateToken = UUID() } : nil,
-                    onSearchOnline: SharedStore.onlineLookups
-                        ? { Task { await onlineSearch.search(describeQuery) } }
-                        : nil,
-                    isEstimating: isEstimating,
-                    searchesLibrary: true
-                )
-            }
+            .entryDoorBar(isHidden: false) { composer }
             .toolbar {
                 // Cancel leading, Sort + Done trailing — the shape every
                 // other sheet in the app has (the user, 2026-07-19 and
@@ -652,7 +633,7 @@ struct QuickLogSheet: View {
                     switch initialKind {
                     case .scan:
                         kind = .favorites
-                        activeSheet = .scanner(notice: nil)
+                        activeSheet = .scanner(notice: nil, door: nil)
                     case .all:
                         kind = .favorites
                     default:
@@ -708,7 +689,7 @@ struct QuickLogSheet: View {
                     )
                 }
                 .presentationDetents([.medium, .large])
-            case .scanner(let notice):
+            case .scanner(let notice, let door):
                 // A parsed label takes the unknown-barcode route: the
                 // single sheet slot re-presents as the prefilled food
                 // form, whose Log action returns here with logDate
@@ -731,7 +712,7 @@ struct QuickLogSheet: View {
                     // here with logDate intact.
                     let prefill = ProductPrefill(product: product)
                     Task { activeSheet = .form(prefill) }
-                }, purpose: .logging, logDate: logDate, notice: notice)
+                }, purpose: .logging, logDate: logDate, notice: notice, openDoor: door)
             case .form(let prefill):
                 // New foods go through the full form — reviewable and
                 // complete. Its Log action returns here (the sheet stays
@@ -834,6 +815,41 @@ struct QuickLogSheet: View {
         }
     }
 
+    /// The composer: the text row and the actions on that text. Split
+    /// out of the body because the argument list grew past what the
+    /// type checker will do inside a `List` — "unable to type-check
+    /// this expression in reasonable time", which is a size complaint,
+    /// not a correctness one.
+    private var composer: some View {
+        EntryDoorBar(
+            scanBusy: isLookingUpBarcode,
+            describeQuery: $describeQuery,
+            onScan: { activeSheet = .scanner(notice: nil, door: nil) },
+            // Both land in the scan sheet's ONE cascade — a photo reads
+            // the way a photographed label does, a PDF the way a shared
+            // menu does.
+            onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } },
+            describeFocused: $describeFocused,
+            // "Describe" only while something can be described TO — with
+            // AI and online lookups both off the field is library search
+            // alone, and the prompt promises just that (the camera
+            // door's own rule: a label only promises what it can keep).
+            describePrompt: FoodIntelligence.isAvailable || SharedStore.onlineLookups
+                ? "Search or Describe Food"
+                : "Search Foods and Meals",
+            onAddPhoto: { activeSheet = .scanner(notice: nil, door: .photos) },
+            onAddFile: { activeSheet = .scanner(notice: nil, door: .file) },
+            // The actions, gated on the same two switches the list
+            // sections were: nothing offers a door that isn't there.
+            onEstimate: FoodIntelligence.isAvailable ? { estimateToken = UUID() } : nil,
+            onSearchOnline: SharedStore.onlineLookups
+                ? { Task { await onlineSearch.search(describeQuery) } }
+                : nil,
+            isEstimating: isEstimating,
+            searchesLibrary: true
+        )
+    }
+
     /// The Foods screen's sort circle, third surface — kept on the
     /// trailing edge to match Foods/Today/Calendar (and clear of the
     /// leading back-swipe zone).
@@ -896,7 +912,7 @@ struct QuickLogSheet: View {
             // Straight back to the camera, saying why — the panel is in
             // their hand and the scanner already reads labels.
             presentLabelScan: {
-                activeSheet = .scanner(notice: BarcodeRouter.missNotice)
+                activeSheet = .scanner(notice: BarcodeRouter.missNotice, door: nil)
             }
         )
     }

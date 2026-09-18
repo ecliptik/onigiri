@@ -182,6 +182,11 @@ struct EntryDoorBar: View {
     @FocusState.Binding var describeFocused: Bool
     /// Passed through to `EntryDoorDescribeField`; see its doc comment.
     var describePrompt = EntryDoorDescribeField.defaultPrompt
+    /// Add a picture from the photo library, or a document (a menu
+    /// PDF). Both land in the scan sheet's ONE cascade — see
+    /// `ScanSheet.Door`. nil hides the "+".
+    var onAddPhoto: (() -> Void)?
+    var onAddFile: (() -> Void)?
     /// Run the AI estimate on what's typed. nil = this host has no
     /// estimate to offer, and the button doesn't render.
     var onEstimate: (() -> Void)?
@@ -304,8 +309,41 @@ struct EntryDoorBar: View {
     @ViewBuilder
     private var actionRow: some View {
         let hasQuery = !describeQuery.trimmingCharacters(in: .whitespaces).isEmpty
-        if onEstimate != nil || onSearchOnline != nil {
+        if onEstimate != nil || onSearchOnline != nil || onAddPhoto != nil {
             HStack(spacing: 10) {
+                // "+" under the camera, the two text actions trailing
+                // (the user, 2026-09-17: "right align these and add a +
+                // button under the camera"). The attach affordance sits
+                // in the same column as the other way of getting a
+                // picture in; what ACTS ON THE TEXT lines up with the
+                // text's own trailing edge.
+                if onAddPhoto != nil || onAddFile != nil {
+                    Menu {
+                        if let onAddPhoto {
+                            Button {
+                                onAddPhoto()
+                            } label: {
+                                Label("Photo from Photos", systemImage: "photo.on.rectangle")
+                            }
+                        }
+                        if let onAddFile {
+                            Button {
+                                onAddFile()
+                            } label: {
+                                Label("File — a Menu PDF", systemImage: "doc.text")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.footnote.weight(.bold))
+                            .foregroundStyle(Color(.label))
+                            .frame(width: 36, height: 36)
+                            .contentShape(.circle)
+                            .modifier(DoorBarChrome(tinted: false, shape: AnyShape(Circle())))
+                    }
+                    .accessibilityLabel("Add a Photo or File")
+                }
+                Spacer(minLength: 0)
                 if let onEstimate {
                     ComposerAction(
                         title: isEstimating ? "Estimating…" : "Estimate with AI",
@@ -327,7 +365,6 @@ struct EntryDoorBar: View {
                         action: onSearchOnline
                     )
                 }
-                Spacer(minLength: 0)
             }
         }
     }

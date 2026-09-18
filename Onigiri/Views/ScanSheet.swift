@@ -42,6 +42,18 @@ struct ScanSheet: View {
     /// database doesn't have — the sheet reopens on the label path and
     /// has to say so, or it just looks like the scan didn't take.
     var notice: String?
+    /// Open straight onto one of this sheet's OTHER doors, skipping the
+    /// live camera. The composer's "+" offers Photos and Files directly
+    /// (the user, 2026-09-17), and routing them through here is what
+    /// keeps the promise that every image and document runs the ONE
+    /// cascade this sheet already owns — never a second reader wired up
+    /// beside it (CLAUDE.md, "Food entry").
+    var openDoor: Door?
+
+    enum Door {
+        case photos
+        case file
+    }
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.modelContext) private var context
@@ -71,6 +83,9 @@ struct ScanSheet: View {
     /// `.sheet(item:)`, for the same reason `listing` is — see its note.
     @State private var estimate: Estimate?
     @State private var showingMenuFile = false
+    /// Drives the photo picker when the composer's "+" asked for it —
+    /// the button below presents its own.
+    @State private var showingPhotos = false
 
     /// One read's list, identified per arrival so a second read
     /// re-presents.
@@ -255,7 +270,20 @@ struct ScanSheet: View {
                 // place the reader's own messages appear, and it clears
                 // itself the moment the shutter is pressed.
                 if failureMessage == nil { failureMessage = notice }
+                // The composer's "+" asked for one of the other doors —
+                // raise it over the viewfinder rather than making the
+                // person find it. The camera still runs underneath, so
+                // cancelling the picker leaves them somewhere useful.
+                switch openDoor {
+                case .photos: showingPhotos = true
+                case .file: showingMenuFile = true
+                case nil: break
+                }
             }
+            // The Bool-driven twin of the photos BUTTON below: same
+            // `photoItem`, so a pick from either lands in the same
+            // `onChange` and runs the same cascade.
+            .photosPicker(isPresented: $showingPhotos, selection: $photoItem, matching: .images)
             // A library pick here can be a menu screenshot too, so this
             // sheet raises the same chooser the entry doors do.
             .fileImporter(isPresented: $showingMenuFile, allowedContentTypes: [.pdf]) { result in

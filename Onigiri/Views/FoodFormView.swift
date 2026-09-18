@@ -91,11 +91,17 @@ struct FoodFormView: View {
     /// view compete (the CLAUDE.md landmine — FoodsView/QuickLogSheet
     /// already got this consolidation); a single .sheet(item:) can't.
     private enum ActiveSheet: Identifiable {
-        case scanner(notice: String?)
+        /// The door carries in the VALUE, never a flag beside it —
+        /// a sheet reads its content closure when it presents, and a
+        /// mode set in the same breath as a Bool can arrive late
+        /// (`plans/PLAN-multi-item-import.md`, the same lesson the
+        /// menu listing learned).
+        case scanner(notice: String?, door: ScanSheet.Door?)
         case portion(PortionTarget)
         var id: String {
             switch self {
-            case .scanner(let notice): "scanner-\(notice ?? "")"
+            case .scanner(let notice, let door):
+                "scanner-\(notice ?? "")-\(door.map(String.init(describing:)) ?? "")"
             case .portion(let target): "portion-\(target.id)"
             }
         }
@@ -529,9 +535,14 @@ struct FoodFormView: View {
                 EntryDoorBar(
                     scanBusy: isLookingUp,
                     describeQuery: $describeQuery,
-                    onScan: { activeSheet = .scanner(notice: nil) },
+                    onScan: { activeSheet = .scanner(notice: nil, door: nil) },
+                    // Both land in the scan sheet's ONE cascade — a
+                    // photo reads the way a photographed label does,
+                    // a PDF the way a shared menu does.
                     onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } },
                     describeFocused: $describeFocused,
+                    onAddPhoto: { activeSheet = .scanner(notice: nil, door: .photos) },
+                    onAddFile: { activeSheet = .scanner(notice: nil, door: .file) },
                     onEstimate: FoodIntelligence.isAvailable ? { estimateToken = UUID() } : nil,
                     onSearchOnline: SharedStore.onlineLookups
                         ? { Task { await onlineSearch.search(describeQuery) } }
@@ -542,7 +553,7 @@ struct FoodFormView: View {
             .recedesBehindSheet(activeSheet != nil)
             .sheet(item: $activeSheet, onDismiss: sheetDidDismiss) { sheet in
                 switch sheet {
-                case .scanner(let notice):
+                case .scanner(let notice, let door):
                     ScanSheet(onCode: { code in
                         Task { await lookup(code) }
                     }, onLabel: { parsed in
@@ -555,7 +566,7 @@ struct FoodFormView: View {
                         // device; "on-device" would be a lie there).
                         apply(product)
                         lookupMessage = product.aiEngine?.photoEstimateCaption
-                    }, notice: notice)
+                    }, notice: notice, openDoor: door)
                 case .portion(let target):
                     PortionSheet(target: target) { quantity, category, _ in
                         portionDidLog = true
@@ -571,7 +582,7 @@ struct FoodFormView: View {
                     apply(prefill)
                     if let prefillMessage { lookupMessage = prefillMessage }
                 } else if startScanning {
-                    activeSheet = .scanner(notice: nil)
+                    activeSheet = .scanner(notice: nil, door: nil)
                 }
                 // After the initial load: a pristine form (or an
                 // untouched prefill) dismisses freely; anything typed
@@ -733,7 +744,7 @@ struct FoodFormView: View {
             // scanner is still dismissing, and re-presenting into the
             // same slot mid-dismissal dies silently.
             barcode = code
-            Task { activeSheet = .scanner(notice: BarcodeRouter.missNotice) }
+            Task { activeSheet = .scanner(notice: BarcodeRouter.missNotice, door: nil) }
         } catch {
             // Transient lookup failures toast; lookupMessage stays for
             // the persistent "no calorie data" hint tied to the fields.

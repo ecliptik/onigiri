@@ -12,6 +12,18 @@ enum DebugSeeder {
         // privacy stance would skip all of it, so seeded runs opt in.
         // AI stays off here: AI-dependent tests opt in themselves.
         SharedStore.defaults.set(true, forKey: SharedStore.onlineLookupsKey)
+        // The site's AI clip (`testSiteClip`) is the one seeded run that
+        // wants the switch on. On a simulator its absence switches AI
+        // back OFF, so a later run doesn't inherit it (defaults outlive
+        // the install, like the store) — never on a device, where a
+        // DEBUG build lands weekly and that switch is the user's own.
+        if ProcessInfo.processInfo.arguments.contains("--seed-ai-on") {
+            SharedStore.defaults.set(true, forKey: AIProviderSettings.enabledKey)
+        } else {
+            #if targetEnvironment(simulator)
+            SharedStore.defaults.set(false, forKey: AIProviderSettings.enabledKey)
+            #endif
+        }
         let foodCount = (try? context.fetchCount(FetchDescriptor<Food>())) ?? 0
         if foodCount == 0 {
             let chicken = Food(name: "Chicken breast", kcal: 280, sodiumMg: 540, servingDescription: "8 oz",

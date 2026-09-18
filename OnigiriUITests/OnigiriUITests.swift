@@ -631,6 +631,115 @@ final class OnigiriUITests: XCTestCase {
                       "Scale change should carry an lb figure, row read: \(scale)")
     }
 
+    /// The site's three clips (opt-in: TEST_RUNNER_SITE_CLIP=day-swipe |
+    /// add-food | ai-estimate). This test only DRIVES — an external
+    /// `simctl io recordVideo` films it, and `CLIPMARK <name> <epoch>`
+    /// lines in the log say roughly where each beat fell. "Roughly": a
+    /// tap lands up to a second after it is asked for and the recorder
+    /// starts 0.2–2 s late, so the cut is always measured from FRAMES
+    /// (`plans/PLAN-site-and-media.md`). XCUITest rather than `axe`
+    /// because the iOS 26 tab bar is absent from the tree `axe` reads,
+    /// and the + that opens two of these clips lives in it.
+    ///
+    /// day-swipe opens and closes on Today at rest, so the loop has no
+    /// seam. The other two end somewhere new and cut back, as they
+    /// always have. Every take logs or types something — one take per
+    /// launch; the seed resets Health on a simulator.
+    @MainActor
+    func testSiteClip() throws {
+        guard let clip = ProcessInfo.processInfo.environment["SITE_CLIP"] else {
+            throw XCTSkip("Set TEST_RUNNER_SITE_CLIP=day-swipe|add-food|ai-estimate")
+        }
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--seed-sample-data"] + (clip == "ai-estimate" ? ["--seed-ai-on"] : [])
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        func mark(_ name: String) {
+            print("CLIPMARK \(name) \(Date().timeIntervalSince1970)")
+        }
+        func beat(_ seconds: TimeInterval) { Thread.sleep(forTimeInterval: seconds) }
+        /// The ENABLED match: while a child sheet is up the host's own
+        /// Cancel/Log/Done stay in the tree, disabled (`recedesWithSheet`).
+        func enabledButton(_ label: String) -> XCUIElement {
+            app.buttons.matching(NSPredicate(format: "label == %@ AND enabled == true", label)).firstMatch
+        }
+
+        XCTAssertTrue(app.buttons["Previous day"].waitForExistence(timeout: 15), "Today should be up")
+        beat(4) // the first load, the ring's fill, the prime's write
+
+        switch clip {
+        case "day-swipe":
+            let previous = app.buttons["Previous day"]
+            let next = app.buttons["Next day"]
+            mark("start")
+            beat(1.6)
+            for (name, button) in [("back1", previous), ("back2", previous), ("fwd1", next), ("fwd2", next)] {
+                mark(name)
+                button.tap()
+                beat(1.1)
+            }
+            mark("end")
+            beat(3)
+
+        case "add-food":
+            mark("start")
+            beat(1.4)
+            app.buttons["Add"].firstMatch.tap()
+            mark("sheet")
+            XCTAssertTrue(app.navigationBars["Log"].waitForExistence(timeout: 5), "Log sheet should be up")
+            beat(1.8)
+            // The meal's ROW opens the portion sheet (with Contains); its
+            // + would log it outright.
+            let mealRow = app.buttons.matching(NSPredicate(
+                format: "label BEGINSWITH 'Chicken & rice'")).firstMatch
+            XCTAssertTrue(mealRow.waitForExistence(timeout: 5), "The seeded favorite meal should be listed")
+            mealRow.tap()
+            mark("portion")
+            beat(2.6)
+            enabledButton("Log").tap()
+            mark("logged")
+            beat(4)
+
+        case "ai-estimate":
+            app.buttons["Add"].firstMatch.tap()
+            XCTAssertTrue(app.navigationBars["Log"].waitForExistence(timeout: 5), "Log sheet should be up")
+            beat(2)
+            mark("start")
+            beat(1.4)
+            let describe = app.textFields["entryDoorsDescribeField"].firstMatch
+            XCTAssertTrue(describe.waitForExistence(timeout: 5), "The describe field needs AI on")
+            describe.tap()
+            beat(0.6)
+            mark("typing")
+            for character in "Pork and beans" {
+                describe.typeText(String(character))
+            }
+            beat(1.4)
+            let estimate = app.descendants(matching: .any).matching(NSPredicate(
+                format: "label BEGINSWITH 'Estimate with'")).firstMatch
+            XCTAssertTrue(estimate.waitForExistence(timeout: 5), "The tap-to-estimate row should be offered")
+            estimate.tap()
+            mark("estimating")
+            // Only true once the model has ANSWERED — the query text is in
+            // the tree from the first keystroke and proves nothing.
+            let result = app.descendants(matching: .any).matching(NSPredicate(
+                format: "label CONTAINS 'AI estimate'")).firstMatch
+            XCTAssertTrue(result.waitForExistence(timeout: 90), "The estimate should land")
+            mark("answered")
+            beat(2.2)
+            result.tap()
+            mark("form")
+            XCTAssertTrue(app.navigationBars["New Food"].waitForExistence(timeout: 8), "The food form should open")
+            beat(4)
+
+        default:
+            XCTFail("Unknown SITE_CLIP '\(clip)'")
+        }
+    }
+
     /// Showcase tour (opt-in via TEST_RUNNER_SHOWCASE=1): walks every
     /// feature at reading pace on seeded data, attaching a named
     /// screenshot per scene plus a JSON of wall-clock scene timings — an
@@ -3265,28 +3374,34 @@ final class OnigiriUITests: XCTestCase {
             turnOnAll.tap()
         }
 
-        let allow = app.buttons["Allow"]
-        if allow.waitForExistence(timeout: 5) {
-            allow.tap()
-        } else {
-            // iOS 27.0: the sheet's confirm row is a StaticText 'Allow'
-            // (beside 'Don’t Allow') at the very bottom of the scrolling
-            // topic list, not a Button — `app.buttons["Allow"]` finds
-            // nothing and the tree dump (2026-09-15, plans/
-            // PLAN-tab-bar-jank.md) is how that was learned. It reports
-            // a placeholder frame until scrolled into view, so scroll
-            // until it is hittable, then tap the text itself.
-            let allowText = app.staticTexts["Allow"]
-            XCTAssertTrue(allowText.waitForExistence(timeout: 5),
-                          "Allow (Button on 26.5, StaticText on 27.0) should exist after Turn On All")
-            var swipes = 0
-            while !allowText.isHittable, swipes < 20 {
-                app.swipeUp(velocity: .fast)
-                swipes += 1
-            }
-            XCTAssertTrue(allowText.isHittable, "Allow row should scroll into view")
-            allowText.tap()
+        // Nothing about the confirm control is stable across builds, and
+        // it isn't even ONE control — this sheet can present it two
+        // different ways depending on path taken through "Turn On All":
+        // a compact secondary confirmation with real Buttons carrying the
+        // identifier `UIA.Health.Allow.Button` ("Allow" on 26.5, seen
+        // relabeled "Continue" on a 27.0 build 24A434, both WITH that
+        // identifier); or — reached by scrolling the full 88-topic list
+        // to its end (9 pages on that same 24A434 build) instead of
+        // going through the compact path — a plain StaticText labeled
+        // "Allow" with NO identifier at all, inside one Cell with
+        // "Don’t Allow" (found 2026-09-17 re-filming the AI clip: the
+        // failure named its own query, `'"Allow" IN identifiers'`, and
+        // that subscript never matched this text although the tree
+        // dump showed it). So match on identifier OR label with an
+        // explicit predicate, across any element type, and be ready to
+        // scroll a long way.
+        let confirm = app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier == 'UIA.Health.Allow.Button' OR label == 'Allow' OR label == 'Continue'"
+        )).firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5),
+                      "The Health sheet's confirm control should exist after Turn On All")
+        var swipes = 0
+        while !confirm.isHittable, swipes < 60 {
+            app.swipeUp(velocity: .fast)
+            swipes += 1
         }
+        XCTAssertTrue(confirm.isHittable, "The Health sheet's confirm control should scroll into view")
+        confirm.tap()
         _ = sheet.waitForNonExistence(timeout: 10)
         dismissHealthSyncPrompt(in: app)
     }

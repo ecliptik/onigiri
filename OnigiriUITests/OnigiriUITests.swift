@@ -3109,9 +3109,13 @@ final class OnigiriUITests: XCTestCase {
         // The "+" shares the camera's vertical: same column, both
         // centred in it (the user: the + "looks disproportionate").
         let camera = scanRow(in: app)
-        XCTAssertEqual(addAction.frame.midX, camera.frame.midX, accuracy: 1.5,
-                       "The + is centred under the camera "
-                       + "(+ \(addAction.frame.midX), camera \(camera.frame.midX))")
+        // LEADING EDGES, not centres (the user, 2026-09-18): the + is
+        // narrower than the camera, and centring it cost 7pt of indent
+        // on the left and left a 17pt gap beside the first pill against
+        // the 10pt between them.
+        XCTAssertEqual(addAction.frame.minX, camera.frame.minX, accuracy: 1.5,
+                       "The + starts where the camera does "
+                       + "(+ \(addAction.frame.minX), camera \(camera.frame.minX))")
         // The two actions SPLIT what the + leaves, equally, and reach
         // the field's own trailing edge. The fill lived on the Button
         // rather than inside its label for a day, so the capsules drew
@@ -3130,13 +3134,15 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertEqual(onlineAction.frame.maxX, barTrailing, accuracy: 2,
                        "…and the row reaches the bar's trailing margin "
                        + "(online \(onlineAction.frame.maxX), margin \(barTrailing))")
-        // One 10pt gap after the camera's COLUMN — which is where the
-        // field starts too, so the two rows line up. Measured from the
-        // camera rather than from the + glyph: the glyph is 36pt centred
-        // in that 50pt column, so its own edge sits 7pt inside it.
-        XCTAssertEqual(estimateAction.frame.minX, camera.frame.maxX + 10, accuracy: 2,
-                       "…and the actions start where the field does "
-                       + "(estimate \(estimateAction.frame.minX), camera ends \(camera.frame.maxX))")
+        // ONE spacing across the whole row: + to Estimate must equal
+        // Estimate to Search Online. This is the assertion the user's
+        // eye made — "standard gaps between pills" — and it was 17
+        // against 10 while the + wore a wider column than its glyph.
+        let gapAfterPlus = estimateAction.frame.minX - addAction.frame.maxX
+        let gapBetweenPills = onlineAction.frame.minX - estimateAction.frame.maxX
+        XCTAssertEqual(gapAfterPlus, gapBetweenPills, accuracy: 1.5,
+                       "…with one gap across the row "
+                       + "(after + \(gapAfterPlus), between pills \(gapBetweenPills))")
 
         // The "+" opens a CHOOSER, and what it offers matters: the
         // camera is one of three doors you pick, never one that arrives

@@ -340,13 +340,19 @@ struct EntryDoorBar: View {
                             .modifier(DoorBarChrome(tinted: false, shape: AnyShape(Circle())))
                     }
                     .accessibilityLabel("Add a Photo or File")
-                    // CENTRED under the camera, not merely leading: the
-                    // camera's circle is `controlHeight` across and this
-                    // one is smaller, so left-aligning them put the +
-                    // off-axis and reading as a mistake (the user: "the
-                    // + button also looks disproportionate"). Same
-                    // column width, both centred in it, one vertical.
-                    .frame(width: Self.controlHeight)
+                    // LEADING EDGE, not centred under the camera (the
+                    // user, 2026-09-18: "left aligned the +"). It spent
+                    // a day in a `controlHeight`-wide column so its
+                    // smaller circle sat on the camera's axis, and that
+                    // column is 7pt wider than the glyph on each side —
+                    // so the + started 7pt in from the camera above it
+                    // AND the gap to the first pill measured 17pt
+                    // against the 10pt between the pills. Uneven gaps
+                    // read as a mistake more loudly than an off-axis
+                    // circle does. At its natural width the row's three
+                    // controls share one spacing, the + starts where the
+                    // camera and the field start, and the 14pt this
+                    // frees goes to the pills.
                 }
                 if let onEstimate {
                     ComposerAction(

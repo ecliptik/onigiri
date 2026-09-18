@@ -211,6 +211,21 @@ One container, pinned where `entryDoorBar` pins it now. Decisions:
   around a small chip is invisible to an existence check; and the
   showcase tour's `label BEGINSWITH 'Estimate with'` query — which the
   rename had quietly broken — works again.
+- **The "+" is LEFT-ALIGNED, reversing "centred under the camera"** (the
+  user, 2026-09-18: "left aligned the +, right align Search Online and
+  widen the Estimate with AI and Search Online pills so they evenly fill
+  in the row with standard gaps between pills"). The + had been wrapped
+  in a `controlHeight`-wide frame so its 36pt circle sat on the 50pt
+  camera's axis — which put it 7pt in from the leading edge the camera
+  and field share, and made the gap beside the first pill 17pt against
+  the 10pt between the pills. Uneven gaps read as a mistake more loudly
+  than an off-axis circle does, and the earlier complaint the centring
+  answered ("the + button also looks disproportionate") was about its
+  SIZE, which is unchanged. At its natural width all three controls in
+  the row share one spacing and the 14pt freed goes to the pills (150 →
+  157 each). The test now asserts leading EDGES against the camera, and
+  that the two gaps are equal — which is the assertion the user's eye
+  actually made.
 - **The camera must not come up behind a door that isn't the camera**
   (the user, same message: "even after viewing/dismissing the photo or
   file picker the Camera Scan always comes up too. Camera Scan should

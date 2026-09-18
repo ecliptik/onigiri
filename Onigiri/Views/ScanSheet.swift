@@ -86,6 +86,10 @@ struct ScanSheet: View {
     /// Drives the photo picker when the composer's "+" asked for it —
     /// the button below presents its own.
     @State private var showingPhotos = false
+    /// Did the door actually hand something over? Distinguishes a
+    /// cancelled picker (close the sheet — there is nothing behind it)
+    /// from a pick (stay, and show what the read found).
+    @State private var doorDelivered = false
 
     /// One read's list, identified per arrival so a second read
     /// re-presents.
@@ -228,7 +232,17 @@ struct ScanSheet: View {
     var body: some View {
         NavigationStack {
             Group {
-                if DataScannerViewController.isSupported && DataScannerViewController.isAvailable {
+                if openDoor != nil {
+                    // NO CAMERA on a photo or file door. It used to run
+                    // underneath, and dismissing the picker dropped you
+                    // onto a live viewfinder you never asked for (the
+                    // user, 2026-09-18: "even after viewing/dismissing
+                    // the photo or file picker the Camera Scan always
+                    // comes up too. Camera Scan should only come up
+                    // with the camera button"). A comment in the first
+                    // cut called that a feature; it wasn't.
+                    doorLayout
+                } else if DataScannerViewController.isSupported && DataScannerViewController.isAvailable {
                     cameraLayout
                 } else {
                     fallbackLayout
@@ -252,6 +266,7 @@ struct ScanSheet: View {
             // sheet and food form got (2026-09-14).
             .recedesBehindSheet(listing != nil || estimate != nil)
             .onChange(of: photoItem) { _, item in
+                if item != nil { doorDelivered = true }
                 guard let item else { return }
                 readTask?.cancel()
                 readTask = Task {
@@ -284,10 +299,24 @@ struct ScanSheet: View {
             // `photoItem`, so a pick from either lands in the same
             // `onChange` and runs the same cascade.
             .photosPicker(isPresented: $showingPhotos, selection: $photoItem, matching: .images)
+            // A door that was cancelled takes the sheet with it: there
+            // is nothing behind a photo pick but an empty canvas, and
+            // leaving that up would be the camera bug again in a
+            // quieter costume. `doorDelivered` is set by the pick
+            // itself, so only a genuine cancel closes anything.
+            .onChange(of: showingPhotos) { _, shown in
+                if !shown, openDoor == .photos, !doorDelivered { dismiss() }
+            }
             // A library pick here can be a menu screenshot too, so this
             // sheet raises the same chooser the entry doors do.
             .fileImporter(isPresented: $showingMenuFile, allowedContentTypes: [.pdf]) { result in
-                guard case .success(let url) = result else { return }
+                guard case .success(let url) = result else {
+                    // Cancelled. On a file DOOR there is no camera
+                    // behind this, so the sheet goes with it.
+                    if openDoor == .file { dismiss() }
+                    return
+                }
+                doorDelivered = true
                 // Through `readTask` like every other trigger in this
                 // file: a bare `Task` here was invisible to the Cancel
                 // button and to the scenePhase handler, so neither
@@ -361,6 +390,34 @@ struct ScanSheet: View {
     }
 
     // MARK: Camera layout
+
+    /// What a photo/file door shows: the sheet's own canvas, the read's
+    /// progress, and whatever the read has to say. No viewfinder — the
+    /// camera is the camera button's door, not this one.
+    private var doorLayout: some View {
+        ZStack {
+            Color.riceCanvas.ignoresSafeArea()
+            if isReading {
+                VStack(spacing: 12) {
+                    ProgressView()
+                    Text(readingStatus.isEmpty ? "Reading…" : readingStatus)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } else if let failureMessage {
+                VStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.title2)
+                        .foregroundStyle(.orange)
+                    Text(failureMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 32)
+            }
+        }
+    }
 
     private var cameraLayout: some View {
         // isCapturing gates live barcode delivery: a label photo almost

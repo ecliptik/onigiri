@@ -75,6 +75,8 @@ struct QuickLogSheet: View {
         /// (`plans/PLAN-multi-item-import.md`, the same lesson the
         /// menu listing learned).
         case scanner(notice: String?, door: ScanSheet.Door?)
+        /// The composer's "+": camera, photos or a file.
+        case addContext
         case form(ProductPrefill)
         case editFood(Food)
         case editMeal(Meal)
@@ -84,6 +86,7 @@ struct QuickLogSheet: View {
             case .portion(let target): "portion-\(target.name)"
             case .scanner(let notice, let door):
                 "scanner-\(notice ?? "")-\(door.map(String.init(describing:)) ?? "")"
+            case .addContext: "addContext"
             case .form(let prefill): "form-\(prefill.id)"
             case .editFood(let food): "editFood-\(food.persistentModelID.hashValue)"
             case .editMeal(let meal): "editMeal-\(meal.uuid.uuidString)"
@@ -689,6 +692,18 @@ struct QuickLogSheet: View {
                     )
                 }
                 .presentationDetents([.medium, .large])
+            case .addContext:
+                // Each tile hands back a door and the chooser dismisses
+                // itself; the swap waits a turn, because setting the
+                // slot synchronously inside a closure the sheet follows
+                // with its own dismiss tears the NEW sheet down with the
+                // old (CLAUDE.md, 2026-07-22).
+                AddContextSheet(
+                    onCamera: { Task { activeSheet = .scanner(notice: nil, door: nil) } },
+                    onPhotos: { Task { activeSheet = .scanner(notice: nil, door: .photos) } },
+                    onFiles: { Task { activeSheet = .scanner(notice: nil, door: .file) } }
+                )
+                .presentationDetents([.height(260)])
             case .scanner(let notice, let door):
                 // A parsed label takes the unknown-barcode route: the
                 // single sheet slot re-presents as the prefilled food
@@ -837,8 +852,7 @@ struct QuickLogSheet: View {
             describePrompt: FoodIntelligence.isAvailable || SharedStore.onlineLookups
                 ? "Search or Describe Food"
                 : "Search Foods and Meals",
-            onAddPhoto: { activeSheet = .scanner(notice: nil, door: .photos) },
-            onAddFile: { activeSheet = .scanner(notice: nil, door: .file) },
+            onAddContext: { activeSheet = .addContext },
             // The actions, gated on the same two switches the list
             // sections were: nothing offers a door that isn't there.
             onEstimate: FoodIntelligence.isAvailable ? { estimateToken = UUID() } : nil,

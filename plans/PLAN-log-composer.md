@@ -175,3 +175,37 @@ One container, pinned where `entryDoorBar` pins it now. Decisions:
   `MealEstimateSection` still says "Estimate this meal with
   <provider>" — left alone, not asked about; match it if the generic
   form is meant to be the rule everywhere.
+- **The action row fills its width, and the `+` sits in the camera's
+  column** (the user, 2026-09-17: "have the +, Estimate with AI and
+  Search Online fill the entire row, with + left aligned and then
+  increase the width of the other two buttons. Change copy to AI
+  Estimate if it will help make it fit better"). The `+` is a fixed
+  `controlHeight` square so it lands on the camera's midX — the row
+  reads as a column under the camera rather than three unrelated
+  pills — and the two `ComposerAction` capsules split what's left
+  with `maxWidth: .infinity`. "AI Estimate" is what makes that fit;
+  "Estimate with AI" truncated at the widths this leaves. The test
+  measures the `+` against the camera's midX (±1.5pt), so a future
+  layout that drifts them apart fails rather than looking slightly off.
+- **`+` opens a chooser, not a `Menu`** (the user, same message: "make
+  it bring up a dialog similar to Claude", with a screenshot).
+  `AddContextSheet` — Camera / Photos / Files tiles, "Add Food From",
+  a close button — presented from the host's ONE sheet slot like
+  everything else here, each tile handing back a `ScanSheet.Door` and
+  dismissing, with the host's swap deferred a turn (the 2026-07-22
+  race). A `Menu` was the first build and reads as a system control,
+  not as part of the composer.
+- **The camera must not come up behind a door that isn't the camera**
+  (the user, same message: "even after viewing/dismissing the photo or
+  file picker the Camera Scan always comes up too. Camera Scan should
+  only come up with the camera button"). `ScanSheet` took a door and
+  presented the picker OVER its live viewfinder, so dismissing the
+  picker revealed a running scanner nobody asked for — and my own code
+  comment had called that a feature. `ScanSheet.openDoor` now selects
+  a THIRD layout beside camera and fallback: `doorLayout`, the rice
+  canvas plus progress/failure, with no `DataScannerViewController` at
+  all. Cancelling the picker dismisses the whole sheet
+  (`onChange(of: showingPhotos)` for Photos, the `fileImporter`'s
+  failure path for Files), so a cancelled door costs nothing and
+  leaves nothing running. `doorDelivered` keeps a SUCCESSFUL pick from
+  tripping that same dismissal while the read is in flight.

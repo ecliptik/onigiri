@@ -3067,10 +3067,10 @@ final class OnigiriUITests: XCTestCase {
         // with the estimate's own label truncated to fit (the user,
         // 2026-09-17, from device). They belong to the field, so they
         // arrive with its keyboard.
-        let estimateAction = app.buttons["Estimate with AI"]
+        let estimateAction = app.buttons["AI Estimate"]
         let onlineAction = app.buttons["Search Online"]
         let addAction = app.buttons["Add a Photo or File"]
-        XCTAssertFalse(estimateAction.exists, "No Estimate action until the field is active")
+        XCTAssertFalse(estimateAction.exists, "No AI Estimate action until the field is active")
         XCTAssertFalse(onlineAction.exists, "…nor Search Online")
         XCTAssertFalse(addAction.exists, "…nor the +")
 
@@ -3101,7 +3101,7 @@ final class OnigiriUITests: XCTestCase {
         field.tap()
         // …and they arrive with the keyboard, the "+" among them,
         // still disabled until there is something to act on.
-        XCTAssertTrue(estimateAction.waitForExistence(timeout: 5), "Estimate arrives with the field")
+        XCTAssertTrue(estimateAction.waitForExistence(timeout: 5), "AI Estimate arrives with the field")
         XCTAssertTrue(onlineAction.exists, "…with Search Online")
         XCTAssertTrue(addAction.exists, "…and the +")
         XCTAssertFalse(estimateAction.isEnabled, "…and it is dead until something is typed")
@@ -3112,6 +3112,25 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertEqual(addAction.frame.midX, camera.frame.midX, accuracy: 1.5,
                        "The + is centred under the camera "
                        + "(+ \(addAction.frame.midX), camera \(camera.frame.midX))")
+
+        // The "+" opens a CHOOSER, and what it offers matters: the
+        // camera is one of three doors you pick, never one that arrives
+        // on its own. Photos and Files used to open the scan sheet with
+        // the live viewfinder running behind the picker, so dismissing
+        // the picker dropped you on a camera you never asked for (the
+        // user, 2026-09-18). Whether the camera stays away is checked
+        // below; that it is OFFERED here is checked now.
+        addAction.tap()
+        XCTAssertTrue(app.buttons["Photos"].waitForExistence(timeout: 5), "The chooser offers Photos")
+        XCTAssertTrue(app.buttons["Files"].exists, "…and Files")
+        XCTAssertTrue(app.buttons["Camera"].exists, "…and the Camera, as a choice")
+        attachShot(named: "logsheet-add-context")
+        app.buttons["Close"].tap()
+        XCTAssertTrue(app.buttons["Photos"].waitForNonExistence(timeout: 5), "Close leaves the chooser")
+        XCTAssertTrue(app.navigationBars["Log"].exists, "…and the sheet is still the Log sheet")
+        // Nothing opened a scanner on the way through.
+        XCTAssertFalse(app.navigationBars["Scan"].exists,
+                       "Opening and closing the chooser must not raise the camera")
 
         field.typeText("rice")
         XCTAssertTrue(app.buttons["Log Rice bowl"].waitForExistence(timeout: 10),
@@ -3139,11 +3158,18 @@ final class OnigiriUITests: XCTestCase {
         // matches are gone: the sole "Estimate with…" element anywhere
         // is the composer's own, below every result, and the online
         // section's "Search OpenFoodFacts…" row is nowhere.
-        XCTAssertTrue(estimateAction.isEnabled, "Estimate wakes with a query")
+        XCTAssertTrue(estimateAction.isEnabled, "AI Estimate wakes with a query")
         XCTAssertTrue(onlineAction.isEnabled, "…and so does Search Online")
+        // Two labels, and that is what makes this checkable: the
+        // composer's button says "AI Estimate" while the in-list idle
+        // row `AIEstimateSection` would draw still says "Estimate with
+        // <…>". Exactly one of the first, none of the second.
         let estimateLabelled = app.buttons.matching(
-            NSPredicate(format: "label BEGINSWITH 'Estimate with'")).allElementsBoundByIndex
+            NSPredicate(format: "label == 'AI Estimate'")).allElementsBoundByIndex
         XCTAssertEqual(estimateLabelled.count, 1, "One estimate trigger, not two")
+        XCTAssertFalse(app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH 'Estimate with'")).firstMatch.exists,
+                       "The in-list estimate row stayed gone")
         let resultCells = app.cells.allElementsBoundByIndex
         XCTAssertFalse(resultCells.isEmpty, "The query matched something to show")
         XCTAssertGreaterThan(estimateLabelled[0].frame.minY, resultCells[0].frame.maxY,

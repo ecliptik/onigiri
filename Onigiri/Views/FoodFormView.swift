@@ -97,11 +97,14 @@ struct FoodFormView: View {
         /// (`plans/PLAN-multi-item-import.md`, the same lesson the
         /// menu listing learned).
         case scanner(notice: String?, door: ScanSheet.Door?)
+        /// The composer's "+": camera, photos or a file.
+        case addContext
         case portion(PortionTarget)
         var id: String {
             switch self {
             case .scanner(let notice, let door):
                 "scanner-\(notice ?? "")-\(door.map(String.init(describing:)) ?? "")"
+            case .addContext: "addContext"
             case .portion(let target): "portion-\(target.id)"
             }
         }
@@ -541,8 +544,7 @@ struct FoodFormView: View {
                     // a PDF the way a shared menu does.
                     onDescribeSubmit: { Task { await onlineSearch.search(describeQuery) } },
                     describeFocused: $describeFocused,
-                    onAddPhoto: { activeSheet = .scanner(notice: nil, door: .photos) },
-                    onAddFile: { activeSheet = .scanner(notice: nil, door: .file) },
+                    onAddContext: { activeSheet = .addContext },
                     onEstimate: FoodIntelligence.isAvailable ? { estimateToken = UUID() } : nil,
                     onSearchOnline: SharedStore.onlineLookups
                         ? { Task { await onlineSearch.search(describeQuery) } }
@@ -553,6 +555,18 @@ struct FoodFormView: View {
             .recedesBehindSheet(activeSheet != nil)
             .sheet(item: $activeSheet, onDismiss: sheetDidDismiss) { sheet in
                 switch sheet {
+                case .addContext:
+                    // Each tile hands back a door and the chooser dismisses
+                    // itself; the swap waits a turn, because setting the
+                    // slot synchronously inside a closure the sheet follows
+                    // with its own dismiss tears the NEW sheet down with the
+                    // old (CLAUDE.md, 2026-07-22).
+                    AddContextSheet(
+                        onCamera: { Task { activeSheet = .scanner(notice: nil, door: nil) } },
+                        onPhotos: { Task { activeSheet = .scanner(notice: nil, door: .photos) } },
+                        onFiles: { Task { activeSheet = .scanner(notice: nil, door: .file) } }
+                    )
+                    .presentationDetents([.height(260)])
                 case .scanner(let notice, let door):
                     ScanSheet(onCode: { code in
                         Task { await lookup(code) }

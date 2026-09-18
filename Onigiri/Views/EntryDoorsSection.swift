@@ -182,11 +182,11 @@ struct EntryDoorBar: View {
     @FocusState.Binding var describeFocused: Bool
     /// Passed through to `EntryDoorDescribeField`; see its doc comment.
     var describePrompt = EntryDoorDescribeField.defaultPrompt
-    /// Add a picture from the photo library, or a document (a menu
-    /// PDF). Both land in the scan sheet's ONE cascade — see
-    /// `ScanSheet.Door`. nil hides the "+".
-    var onAddPhoto: (() -> Void)?
-    var onAddFile: (() -> Void)?
+    /// Open the attach chooser — camera, photos, or a file. nil hides
+    /// the "+". A sheet rather than a `Menu` (the user, 2026-09-18,
+    /// with the Claude app's "Add context" as the reference): three
+    /// tiles you can hit with a thumb, not a list you read.
+    var onAddContext: (() -> Void)?
     /// Run the AI estimate on what's typed. nil = this host has no
     /// estimate to offer, and the button doesn't render.
     var onEstimate: (() -> Void)?
@@ -321,31 +321,16 @@ struct EntryDoorBar: View {
     @ViewBuilder
     private var actionRow: some View {
         let hasQuery = !describeQuery.trimmingCharacters(in: .whitespaces).isEmpty
-        if onEstimate != nil || onSearchOnline != nil || onAddPhoto != nil {
+        if onEstimate != nil || onSearchOnline != nil || onAddContext != nil {
             HStack(spacing: 10) {
-                // "+" under the camera, the two text actions trailing
-                // (the user, 2026-09-17: "right align these and add a +
-                // button under the camera"). The attach affordance sits
-                // in the same column as the other way of getting a
-                // picture in; what ACTS ON THE TEXT lines up with the
-                // text's own trailing edge.
-                if onAddPhoto != nil || onAddFile != nil {
-                    Menu {
-                        if let onAddPhoto {
-                            Button {
-                                onAddPhoto()
-                            } label: {
-                                Label("Photo from Photos", systemImage: "photo.on.rectangle")
-                            }
-                        }
-                        if let onAddFile {
-                            Button {
-                                onAddFile()
-                            } label: {
-                                Label("File — a Menu PDF", systemImage: "doc.text")
-                            }
-                        }
-                    } label: {
+                // "+" in the camera's column, the two actions SPLITTING
+                // what's left (the user, 2026-09-18: "fill the entire
+                // row, with + left aligned and then increase the width
+                // of the other two buttons"). The attach affordance
+                // shares the camera's vertical; the actions on the text
+                // span the field's width, as the field does.
+                if let onAddContext {
+                    Button(action: onAddContext) {
                         Image(systemName: "plus")
                             .font(.footnote.weight(.bold))
                             .foregroundStyle(Color(.label))
@@ -362,18 +347,23 @@ struct EntryDoorBar: View {
                     // column width, both centred in it, one vertical.
                     .frame(width: Self.controlHeight)
                 }
-                Spacer(minLength: 0)
                 if let onEstimate {
                     ComposerAction(
-                        title: isEstimating ? "Estimating…" : "Estimate with AI",
+                        // "AI Estimate", not "Estimate with AI": two
+                        // words fit a half-row where four needed
+                        // shrinking to (the user offered the shorter
+                        // form for exactly that). The sparkle still
+                        // carries the ✨ mark the rest of the app uses.
+                        title: isEstimating ? "Estimating…" : "AI Estimate",
                         systemImage: "sparkles",
                         tint: Color.riceToast,
-                        // Disabled, not hidden, on an empty query: the
-                        // point of the row is that you can see what the
-                        // field is for before you type into it.
+                        // Disabled, not hidden, once the row is up: you
+                        // can see what the field's actions are before
+                        // there is anything to act on.
                         isEnabled: hasQuery && !isEstimating,
                         action: onEstimate
                     )
+                    .frame(maxWidth: .infinity)
                 }
                 if let onSearchOnline {
                     ComposerAction(
@@ -383,6 +373,7 @@ struct EntryDoorBar: View {
                         isEnabled: hasQuery,
                         action: onSearchOnline
                     )
+                    .frame(maxWidth: .infinity)
                 }
             }
         }
@@ -531,5 +522,80 @@ private struct ComposerAction: View {
 
     private var textColor: Color {
         isEnabled ? Color(.label) : Color(.secondaryLabel)
+    }
+}
+
+/// What the composer's "+" opens: camera, photos, or a file, as three
+/// tiles (the user, 2026-09-18, with the Claude app's "Add context"
+/// sheet in hand). A sheet rather than the `Menu` this replaced — a
+/// menu is a list you read at the top of the screen, and these are
+/// three equal doors a thumb picks between.
+///
+/// It only CHOOSES. Each tile hands the decision back and the host
+/// opens the real door, so the one cascade behind all three
+/// (`ScanSheet`) still owns every read.
+struct AddContextSheet: View {
+    let onCamera: () -> Void
+    let onPhotos: () -> Void
+    let onFiles: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 18) {
+            HStack {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(Color(.label))
+                        .frame(width: 34, height: 34)
+                        .background(Color(.tertiarySystemGroupedBackground), in: .circle)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close")
+                Spacer()
+                Text("Add Food From")
+                    .font(.headline)
+                Spacer()
+                // Balances the close button so the title sits centred.
+                Color.clear.frame(width: 34, height: 34)
+            }
+            HStack(spacing: 12) {
+                tile("Camera", systemImage: "camera", action: onCamera)
+                tile("Photos", systemImage: "photo", action: onPhotos)
+                tile("Files", systemImage: "doc", action: onFiles)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(20)
+        .riceCanvas()
+    }
+
+    private func tile(
+        _ title: String, systemImage: String, action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            // The host swaps this sheet for the door's own, and a
+            // synchronous swap inside a closure the sheet follows with
+            // its own dismiss tears the new sheet down with the old
+            // (CLAUDE.md's 2026-07-22 race). Dismiss here, and the host
+            // defers its swap a turn.
+            action()
+            dismiss()
+        } label: {
+            VStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.title2)
+                Text(title)
+                    .font(.subheadline)
+            }
+            .foregroundStyle(Color(.label))
+            .frame(maxWidth: .infinity)
+            .frame(height: 96)
+            .background(Color(.tertiarySystemGroupedBackground),
+                        in: .rect(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 }

@@ -87,7 +87,7 @@ cd Packages/OnigiriKit && swift test     # pure-logic tests; ALSO needs the
 
 ```sh
 TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
-  -scheme Onigiri -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -scheme Onigiri -destination 'platform=iOS Simulator,id=<udid>' \
   -derivedDataPath build test -only-testing:OnigiriTests
   # An iOS 26+ sim, or every eval skips. "iPhone 16 Pro" stopped
   # working 2026-08-17: the roster now holds TWO sims by that name
@@ -95,6 +95,38 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   # and neither runs the model anyway. Check `simctl list` if this
   # name drifts again.
 ```
+
+- **The Health grant is TWO pages now, and missing the second one looks
+  exactly like a broken app** (2026-09-18). After the category list
+  comes "How much data would you like to share with …?" — a scope
+  choice (`Past 30 Days and Future Data` / `All Recorded Data and
+  Future Data`) whose **Allow is DISABLED until one is picked**. Its
+  nav bar's identifier is `HealthUI.HKAuthorizationTimeBoundedView`
+  and the only thing on it labeled "Health Access" is the BACK button,
+  so `grantHealthAccess`'s `navigationBars["Health Access"]` never
+  matched: the helper returned having granted nothing and left the
+  sheet standing over the app. Every later step then failed as
+  "exists but is not tappable", pointing at `dismissModals` and at the
+  tab bar, neither of which had anything to do with it. Take
+  `All Recorded Data` — the seeder writes months of weigh-ins and logs,
+  and a 30-day window hides the history Goal and the Calendar are
+  tested against.
+  - **The sheet is ANOTHER PROCESS (`HealthPrivacyService`), and that
+    is what makes this diagnosable.** It does not appear in a
+    screenshot of the wrong device and it carries no app-side state, so
+    the app's own tree looks perfectly healthy — but every element of
+    it in the hierarchy dump reads a DIFFERENT pid than the app's. When
+    a UI test fails on a tap with the app looking correct, grep the
+    attached `App UI hierarchy` for a pid that isn't the app's before
+    reading any diff; the covering window names itself there.
+  - Corollary, learned the same hour by getting it wrong first: the
+    roster now holds TWO `iPhone 17 Pro` sims (26.5 and 27.0) and
+    `-destination '…,name=iPhone 17 Pro'` does NOT refuse the
+    ambiguity the way the 16 Pro note above says — it silently picks
+    one. Pass `id=<udid>` so a run's device is never in question. That
+    was NOT the cause here (both runtimes failed identically), and the
+    hour it cost is the reason the rule above is "find the foreign pid
+    FIRST".
 
 - Commits are GPG-signed: run `git commit` with the sandbox disabled (gpg needs
   `~/.gnupg`). If it fails with "Operation cancelled", the passphrase cache
@@ -360,6 +392,27 @@ Each cost a debugging session.
   `testSheetRoundTripKeepsFoodsScroll` bites on the branch form. When a
   modifier must vary by state, vary a VALUE (an opacity, an overlay's
   presence, a layout) — never which modifiers wrap `content`.
+- **`.frame(maxWidth: .infinity)` on a `Button` expands the SLOT, not
+  the chip** (2026-09-18). The composer's action pills carried it
+  outside their label, so each capsule drew at its natural width inside
+  a stretched, invisible hit area — the row read as pills adrift in
+  their own gaps and no existence check could see it. The fill belongs
+  INSIDE the label, before whatever draws the background. The test
+  therefore measures the chips (equal widths, reaching the bar's
+  trailing margin), and measures the trailing margin off the WINDOW:
+  the describe field's element is the `TextField` inside its capsule and
+  stops ~52pt short of the row, so anchoring to it fails on a correct
+  layout.
+- **A sheet may not present before it has something to show**
+  (2026-09-18, `plans/PLAN-log-composer.md`). The composer's "+" opened
+  `ScanSheet` on a photo/file door, which then raised the picker over
+  itself and closed again if you cancelled — an empty canvas flashing in
+  both directions ("still looks janky"). The chooser owns
+  `.photosPicker`/`.fileImporter` now and `ScanSheet.opening` carries
+  the PICK, not a request for one, so the reader appears already
+  reading and a cancelled picker presents nothing at all. A door
+  layout's default state is its spinner, not its `isReading` branch,
+  or the frames before the task starts are blank for the same reason.
 - Every relationship needs an explicit inverse. Without one, deleting the target
   leaves a dangling reference, and SwiftData KILLS THE PROCESS ("backing data
   could no longer be found") on the next property access — the app crash-looped

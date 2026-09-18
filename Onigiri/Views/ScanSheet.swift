@@ -42,17 +42,26 @@ struct ScanSheet: View {
     /// database doesn't have — the sheet reopens on the label path and
     /// has to say so, or it just looks like the scan didn't take.
     var notice: String?
-    /// Open straight onto one of this sheet's OTHER doors, skipping the
-    /// live camera. The composer's "+" offers Photos and Files directly
-    /// (the user, 2026-09-17), and routing them through here is what
-    /// keeps the promise that every image and document runs the ONE
-    /// cascade this sheet already owns — never a second reader wired up
-    /// beside it (CLAUDE.md, "Food entry").
-    var openDoor: Door?
+    /// Something the HOST already picked, to be read on the first frame.
+    /// The composer's "+" offers Photos and Files directly (the user,
+    /// 2026-09-17), and routing them through here is what keeps the
+    /// promise that every image and document runs the ONE cascade this
+    /// sheet already owns — never a second reader wired up beside it
+    /// (CLAUDE.md, "Food entry").
+    ///
+    /// It carries the PICK, not a request for one. This sheet raised the
+    /// picker itself for a day and it flashed: an empty canvas appeared,
+    /// threw a picker over itself, and on cancel closed again — "still
+    /// looks janky" (the user, 2026-09-18). A sheet may not appear before
+    /// it has anything to show, so `AddContextSheet` owns the pickers now
+    /// and this opens already reading.
+    var opening: Opening?
 
-    enum Door {
-        case photos
-        case file
+    /// Equatable so a host can hold it in an `ActiveSheet` case;
+    /// `PhotosPickerItem` is itself Equatable.
+    enum Opening: Equatable {
+        case photo(PhotosPickerItem)
+        case menuFile(URL)
     }
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -83,13 +92,6 @@ struct ScanSheet: View {
     /// `.sheet(item:)`, for the same reason `listing` is — see its note.
     @State private var estimate: Estimate?
     @State private var showingMenuFile = false
-    /// Drives the photo picker when the composer's "+" asked for it —
-    /// the button below presents its own.
-    @State private var showingPhotos = false
-    /// Did the door actually hand something over? Distinguishes a
-    /// cancelled picker (close the sheet — there is nothing behind it)
-    /// from a pick (stay, and show what the read found).
-    @State private var doorDelivered = false
 
     /// One read's list, identified per arrival so a second read
     /// re-presents.
@@ -109,6 +111,23 @@ struct ScanSheet: View {
     /// A menu DOCUMENT chosen from Files, read exactly the way a shared
     /// one is — same reader, same OCR fallback, same picker.
     @MainActor
+    /// The one photo path, whether the pick came from this sheet's own
+    /// button or was handed in by the composer's "+". Clearing
+    /// `photoItem` afterwards is what lets the SAME image be picked
+    /// twice in a row from the button.
+    private func startReading(_ item: PhotosPickerItem) {
+        readTask?.cancel()
+        readTask = Task {
+            defer { photoItem = nil }
+            guard let data = try? await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data) else {
+                failureMessage = "Couldn't load that photo — try another."
+                return
+            }
+            await read(image, source: .imported)
+        }
+    }
+
     private func readMenuDocument(_ url: URL) async {
         isReading = true
         readingStatus = "Looking for nutrition…"
@@ -232,7 +251,7 @@ struct ScanSheet: View {
     var body: some View {
         NavigationStack {
             Group {
-                if openDoor != nil {
+                if opening != nil {
                     // NO CAMERA on a photo or file door. It used to run
                     // underneath, and dismissing the picker dropped you
                     // onto a live viewfinder you never asked for (the
@@ -266,62 +285,37 @@ struct ScanSheet: View {
             // sheet and food form got (2026-09-14).
             .recedesBehindSheet(listing != nil || estimate != nil)
             .onChange(of: photoItem) { _, item in
-                if item != nil { doorDelivered = true }
                 guard let item else { return }
-                readTask?.cancel()
-                readTask = Task {
-                    defer { photoItem = nil }
-                    guard let data = try? await item.loadTransferable(type: Data.self),
-                          let image = UIImage(data: data) else {
-                        failureMessage = "Couldn't load that photo — try another."
-                        return
-                    }
-                    await read(image, source: .imported)
-                }
+                startReading(item)
             }
             .onAppear {
-                refreshCameraAuth()
                 // Reuses the failure capsule over the viewfinder: same
                 // place the reader's own messages appear, and it clears
                 // itself the moment the shutter is pressed.
                 if failureMessage == nil { failureMessage = notice }
-                // The composer's "+" asked for one of the other doors —
-                // raise it over the viewfinder rather than making the
-                // person find it. The camera still runs underneath, so
-                // cancelling the picker leaves them somewhere useful.
-                switch openDoor {
-                case .photos: showingPhotos = true
-                case .file: showingMenuFile = true
-                case nil: break
+                // Handed a pick, this sheet's whole job is to read it —
+                // there is no camera to wake and nothing to ask.
+                switch opening {
+                case .photo(let item):
+                    startReading(item)
+                case .menuFile(let url):
+                    // Through `readTask` like every other trigger in
+                    // this file: a bare `Task` here was invisible to
+                    // the Cancel button and to the scenePhase handler,
+                    // so neither actually stopped a menu read —
+                    // contrary to what the property's own comment
+                    // promises (audit, 2026-08-17).
+                    readTask?.cancel()
+                    readTask = Task { await readMenuDocument(url) }
+                case nil:
+                    refreshCameraAuth()
                 }
             }
-            // The Bool-driven twin of the photos BUTTON below: same
-            // `photoItem`, so a pick from either lands in the same
-            // `onChange` and runs the same cascade.
-            .photosPicker(isPresented: $showingPhotos, selection: $photoItem, matching: .images)
-            // A door that was cancelled takes the sheet with it: there
-            // is nothing behind a photo pick but an empty canvas, and
-            // leaving that up would be the camera bug again in a
-            // quieter costume. `doorDelivered` is set by the pick
-            // itself, so only a genuine cancel closes anything.
-            .onChange(of: showingPhotos) { _, shown in
-                if !shown, openDoor == .photos, !doorDelivered { dismiss() }
-            }
-            // A library pick here can be a menu screenshot too, so this
-            // sheet raises the same chooser the entry doors do.
+            // A library pick from the BUTTON below can be a menu
+            // screenshot too, so this sheet raises the same chooser the
+            // entry doors do.
             .fileImporter(isPresented: $showingMenuFile, allowedContentTypes: [.pdf]) { result in
-                guard case .success(let url) = result else {
-                    // Cancelled. On a file DOOR there is no camera
-                    // behind this, so the sheet goes with it.
-                    if openDoor == .file { dismiss() }
-                    return
-                }
-                doorDelivered = true
-                // Through `readTask` like every other trigger in this
-                // file: a bare `Task` here was invisible to the Cancel
-                // button and to the scenePhase handler, so neither
-                // actually stopped a menu read — contrary to what the
-                // property's own comment promises (audit, 2026-08-17).
+                guard case .success(let url) = result else { return }
                 readTask?.cancel()
                 readTask = Task { await readMenuDocument(url) }
             }
@@ -394,17 +388,16 @@ struct ScanSheet: View {
     /// What a photo/file door shows: the sheet's own canvas, the read's
     /// progress, and whatever the read has to say. No viewfinder — the
     /// camera is the camera button's door, not this one.
+    ///
+    /// The spinner is the DEFAULT state, not the `isReading` one: this
+    /// sheet is only ever presented with a pick in hand, and the frames
+    /// between its first and `startReading` setting the flag would
+    /// otherwise be a blank canvas — the flash this door was rebuilt to
+    /// remove, one layer down.
     private var doorLayout: some View {
         ZStack {
             Color.riceCanvas.ignoresSafeArea()
-            if isReading {
-                VStack(spacing: 12) {
-                    ProgressView()
-                    Text(readingStatus.isEmpty ? "Reading…" : readingStatus)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            } else if let failureMessage {
+            if let failureMessage {
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.title2)
@@ -415,6 +408,13 @@ struct ScanSheet: View {
                         .multilineTextAlignment(.center)
                 }
                 .padding(.horizontal, 32)
+            } else {
+                VStack(spacing: 12) {
+                    ProgressView()
+                    Text(readingStatus.isEmpty ? "Reading…" : readingStatus)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }

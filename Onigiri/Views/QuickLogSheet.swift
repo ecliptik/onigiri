@@ -74,7 +74,7 @@ struct QuickLogSheet: View {
         /// mode set in the same breath as a Bool can arrive late
         /// (`plans/PLAN-multi-item-import.md`, the same lesson the
         /// menu listing learned).
-        case scanner(notice: String?, door: ScanSheet.Door?)
+        case scanner(notice: String?, opening: ScanSheet.Opening?)
         /// The composer's "+": camera, photos or a file.
         case addContext
         case form(ProductPrefill)
@@ -84,8 +84,8 @@ struct QuickLogSheet: View {
         var id: String {
             switch self {
             case .portion(let target): "portion-\(target.name)"
-            case .scanner(let notice, let door):
-                "scanner-\(notice ?? "")-\(door.map(String.init(describing:)) ?? "")"
+            case .scanner(let notice, let opening):
+                "scanner-\(notice ?? "")-\(opening.map(String.init(describing:)) ?? "")"
             case .addContext: "addContext"
             case .form(let prefill): "form-\(prefill.id)"
             case .editFood(let food): "editFood-\(food.persistentModelID.hashValue)"
@@ -636,7 +636,7 @@ struct QuickLogSheet: View {
                     switch initialKind {
                     case .scan:
                         kind = .favorites
-                        activeSheet = .scanner(notice: nil, door: nil)
+                        activeSheet = .scanner(notice: nil, opening: nil)
                     case .all:
                         kind = .favorites
                     default:
@@ -693,18 +693,22 @@ struct QuickLogSheet: View {
                 }
                 .presentationDetents([.medium, .large])
             case .addContext:
-                // Each tile hands back a door and the chooser dismisses
-                // itself; the swap waits a turn, because setting the
-                // slot synchronously inside a closure the sheet follows
-                // with its own dismiss tears the NEW sheet down with the
-                // old (CLAUDE.md, 2026-07-22).
+                // The chooser raises its own pickers and hands back what
+                // came OUT of them; the swap waits a turn, because
+                // setting the slot synchronously inside a closure the
+                // sheet follows with its own dismiss tears the NEW sheet
+                // down with the old (CLAUDE.md, 2026-07-22).
                 AddContextSheet(
-                    onCamera: { Task { activeSheet = .scanner(notice: nil, door: nil) } },
-                    onPhotos: { Task { activeSheet = .scanner(notice: nil, door: .photos) } },
-                    onFiles: { Task { activeSheet = .scanner(notice: nil, door: .file) } }
+                    onCamera: { Task { activeSheet = .scanner(notice: nil, opening: nil) } },
+                    onPhoto: { item in
+                        Task { activeSheet = .scanner(notice: nil, opening: .photo(item)) }
+                    },
+                    onFile: { url in
+                        Task { activeSheet = .scanner(notice: nil, opening: .menuFile(url)) }
+                    }
                 )
                 .presentationDetents([.height(260)])
-            case .scanner(let notice, let door):
+            case .scanner(let notice, let opening):
                 // A parsed label takes the unknown-barcode route: the
                 // single sheet slot re-presents as the prefilled food
                 // form, whose Log action returns here with logDate
@@ -727,7 +731,7 @@ struct QuickLogSheet: View {
                     // here with logDate intact.
                     let prefill = ProductPrefill(product: product)
                     Task { activeSheet = .form(prefill) }
-                }, purpose: .logging, logDate: logDate, notice: notice, openDoor: door)
+                }, purpose: .logging, logDate: logDate, notice: notice, opening: opening)
             case .form(let prefill):
                 // New foods go through the full form — reviewable and
                 // complete. Its Log action returns here (the sheet stays
@@ -839,7 +843,7 @@ struct QuickLogSheet: View {
         EntryDoorBar(
             scanBusy: isLookingUpBarcode,
             describeQuery: $describeQuery,
-            onScan: { activeSheet = .scanner(notice: nil, door: nil) },
+            onScan: { activeSheet = .scanner(notice: nil, opening: nil) },
             // Both land in the scan sheet's ONE cascade — a photo reads
             // the way a photographed label does, a PDF the way a shared
             // menu does.
@@ -926,7 +930,7 @@ struct QuickLogSheet: View {
             // Straight back to the camera, saying why — the panel is in
             // their hand and the scanner already reads labels.
             presentLabelScan: {
-                activeSheet = .scanner(notice: BarcodeRouter.missNotice, door: nil)
+                activeSheet = .scanner(notice: BarcodeRouter.missNotice, opening: nil)
             }
         )
     }

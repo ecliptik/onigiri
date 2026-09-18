@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 import OnigiriKit
 
 // The entry doors — the camera and the "Describe food or meal" field —
@@ -349,12 +350,13 @@ struct EntryDoorBar: View {
                 }
                 if let onEstimate {
                     ComposerAction(
-                        // "AI Estimate", not "Estimate with AI": two
-                        // words fit a half-row where four needed
-                        // shrinking to (the user offered the shorter
-                        // form for exactly that). The sparkle still
-                        // carries the ✨ mark the rest of the app uses.
-                        title: isEstimating ? "Estimating…" : "AI Estimate",
+                        // "Estimate with AI" — the active voice the
+                        // rest of the app's buttons are written in, and
+                        // the shorter "AI Estimate" only existed to fit
+                        // a pill that wasn't filling its slot (the
+                        // user, 2026-09-18, restoring it once it did).
+                        // The sparkle still carries the ✨ mark.
+                        title: isEstimating ? "Estimating…" : "Estimate with AI",
                         systemImage: "sparkles",
                         tint: Color.riceToast,
                         // Disabled, not hidden, once the row is up: you
@@ -363,7 +365,6 @@ struct EntryDoorBar: View {
                         isEnabled: hasQuery && !isEstimating,
                         action: onEstimate
                     )
-                    .frame(maxWidth: .infinity)
                 }
                 if let onSearchOnline {
                     ComposerAction(
@@ -373,7 +374,6 @@ struct EntryDoorBar: View {
                         isEnabled: hasQuery,
                         action: onSearchOnline
                     )
-                    .frame(maxWidth: .infinity)
                 }
             }
         }
@@ -495,15 +495,21 @@ private struct ComposerAction: View {
                     .font(.subheadline)
                     .foregroundStyle(textColor)
                     .lineLimit(1)
-                    // "Estimate with AI" truncated to "Estimate wit…"
-                    // beside "Search Online" and the + — three controls
-                    // across 402pt, and the ellipsis landed on the one
-                    // word that says what the button does. Shrink
-                    // before clipping; at 0.8 the full label fits on
+                    // Shrink before clipping: an ellipsis lands on the
+                    // one word that says what the button does
+                    // ("Estimate wit…"). At 0.8 the longest label fits
                     // the narrowest phone this app supports.
                     .minimumScaleFactor(0.8)
             }
             .padding(.horizontal, 12)
+            // INSIDE the chrome, so the CHIP fills the slot and not
+            // just the slot the chip sits in. Hung on the Button
+            // outside this label, the capsule drew at its natural
+            // width and the row read as three pills adrift in their
+            // own gaps (the user, 2026-09-18: "have the AI Estimate
+            // and Search Online buttons be wider to fill in the space
+            // in the second row").
+            .frame(maxWidth: .infinity)
             .frame(height: 36)
             .contentShape(.capsule)
             .modifier(DoorBarChrome(tinted: false, shape: AnyShape(Capsule())))
@@ -536,9 +542,18 @@ private struct ComposerAction: View {
 /// (`ScanSheet`) still owns every read.
 struct AddContextSheet: View {
     let onCamera: () -> Void
-    let onPhotos: () -> Void
-    let onFiles: () -> Void
+    /// A pick, not a request: the chooser raises the pickers itself and
+    /// hands back what came out, so the reader sheet appears only once
+    /// there is something to read. It presented the reader FIRST for a
+    /// day and that flashed an empty canvas on the way to the picker,
+    /// and again on the way back out (the user, 2026-09-18: "Scan still
+    /// comes up with +, but disappears itself, still looks janky").
+    let onPhoto: (PhotosPickerItem) -> Void
+    let onFile: (URL) -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var showingPhotos = false
+    @State private var showingFiles = false
+    @State private var photoItem: PhotosPickerItem?
 
     var body: some View {
         VStack(spacing: 18) {
@@ -562,28 +577,48 @@ struct AddContextSheet: View {
                 Color.clear.frame(width: 34, height: 34)
             }
             HStack(spacing: 12) {
-                tile("Camera", systemImage: "camera", action: onCamera)
-                tile("Photos", systemImage: "photo", action: onPhotos)
-                tile("Files", systemImage: "doc", action: onFiles)
+                // Only the camera closes the chooser on the tap: the
+                // other two stay up under their picker, so cancelling
+                // one lands back here — where the choice was made —
+                // instead of dropping the whole errand.
+                tile("Camera", systemImage: "camera") {
+                    onCamera()
+                    dismiss()
+                }
+                tile("Photos", systemImage: "photo") { showingPhotos = true }
+                tile("Files", systemImage: "doc") { showingFiles = true }
             }
             Spacer(minLength: 0)
         }
         .padding(20)
         .riceCanvas()
+        .photosPicker(isPresented: $showingPhotos, selection: $photoItem, matching: .images)
+        .onChange(of: photoItem) { _, item in
+            guard let item else { return }
+            deliver { onPhoto(item) }
+        }
+        .fileImporter(isPresented: $showingFiles, allowedContentTypes: [.pdf]) { result in
+            // Cancelled: stay on the chooser. Nothing was picked, so
+            // there is nothing for the host to open.
+            guard case .success(let url) = result else { return }
+            deliver { onFile(url) }
+        }
+    }
+
+    /// Hand the pick up and close. The host swaps this sheet for the
+    /// reader, and a synchronous swap inside a closure the sheet follows
+    /// with its own `dismiss()` tears the new sheet down with the old
+    /// (CLAUDE.md's 2026-07-22 race) — so the host defers its swap a
+    /// turn, and this only has to keep the order.
+    private func deliver(_ pick: () -> Void) {
+        pick()
+        dismiss()
     }
 
     private func tile(
         _ title: String, systemImage: String, action: @escaping () -> Void
     ) -> some View {
-        Button {
-            // The host swaps this sheet for the door's own, and a
-            // synchronous swap inside a closure the sheet follows with
-            // its own dismiss tears the new sheet down with the old
-            // (CLAUDE.md's 2026-07-22 race). Dismiss here, and the host
-            // defers its swap a turn.
-            action()
-            dismiss()
-        } label: {
+        Button(action: action) {
             VStack(spacing: 10) {
                 Image(systemName: systemImage)
                     .font(.title2)

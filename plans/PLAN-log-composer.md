@@ -195,6 +195,22 @@ One container, pinned where `entryDoorBar` pins it now. Decisions:
   dismissing, with the host's swap deferred a turn (the 2026-07-22
   race). A `Menu` was the first build and reads as a system control,
   not as part of the composer.
+- **The actions FILL the row, and "Estimate with AI" came back with the
+  width** (the user, 2026-09-18: "have the AI Estimate and Search Online
+  buttons be wider to fill in the space in the second row, go back to
+  'Estimate with AI' copy to match the active voice style and fit with
+  the larger width"). `.frame(maxWidth: .infinity)` had been hung on the
+  BUTTON, outside its label — which expands the slot and leaves the
+  capsule at its natural width, so the row read as three pills adrift in
+  their own gaps. Inside the label, before `DoorBarChrome`, the chip
+  itself fills. The shorter "AI Estimate" only ever existed to fit the
+  unfilled version; the active voice is the house style and is what the
+  rest of the app's buttons are written in. Two consequences worth
+  knowing: `testLogSheetOneFieldAndWater` now measures the CHIPS (equal
+  halves, reaching the field's trailing edge) because an expanded slot
+  around a small chip is invisible to an existence check; and the
+  showcase tour's `label BEGINSWITH 'Estimate with'` query — which the
+  rename had quietly broken — works again.
 - **The camera must not come up behind a door that isn't the camera**
   (the user, same message: "even after viewing/dismissing the photo or
   file picker the Camera Scan always comes up too. Camera Scan should
@@ -209,3 +225,19 @@ One container, pinned where `entryDoorBar` pins it now. Decisions:
   failure path for Files), so a cancelled door costs nothing and
   leaves nothing running. `doorDelivered` keeps a SUCCESSFUL pick from
   tripping that same dismissal while the read is in flight.
+  - **That was still wrong, and the second cut moved the PICKERS
+    instead** (the user, the same day: "Scan still comes up with +, but
+    disappears itself, still looks janky"). Taking the viewfinder out
+    left the sheet still PRESENTING before it had anything to show — an
+    empty canvas that threw a picker over itself and closed again on
+    cancel. A sheet may not appear before it has something to show, so
+    `AddContextSheet` owns `.photosPicker`/`.fileImporter` now and
+    `ScanSheet.opening` carries the PICK (`.photo(PhotosPickerItem)` /
+    `.menuFile(URL)`) rather than a request for one. The reader opens
+    already reading — its door layout's DEFAULT state is the spinner,
+    not the `isReading` one, so even the frames before the task starts
+    aren't blank — and a cancelled picker presents nothing at all,
+    leaving the chooser up where the choice was made. This deleted the
+    whole `showingPhotos`/`doorDelivered`/self-dismiss apparatus above.
+    A `fileImporter` URL survives the hand-off because
+    `MenuDocumentReader` claims the security scope itself at read time.

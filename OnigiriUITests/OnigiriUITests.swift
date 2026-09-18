@@ -3067,10 +3067,10 @@ final class OnigiriUITests: XCTestCase {
         // with the estimate's own label truncated to fit (the user,
         // 2026-09-17, from device). They belong to the field, so they
         // arrive with its keyboard.
-        let estimateAction = app.buttons["AI Estimate"]
+        let estimateAction = app.buttons["Estimate with AI"]
         let onlineAction = app.buttons["Search Online"]
         let addAction = app.buttons["Add a Photo or File"]
-        XCTAssertFalse(estimateAction.exists, "No AI Estimate action until the field is active")
+        XCTAssertFalse(estimateAction.exists, "No estimate action until the field is active")
         XCTAssertFalse(onlineAction.exists, "…nor Search Online")
         XCTAssertFalse(addAction.exists, "…nor the +")
 
@@ -3101,7 +3101,7 @@ final class OnigiriUITests: XCTestCase {
         field.tap()
         // …and they arrive with the keyboard, the "+" among them,
         // still disabled until there is something to act on.
-        XCTAssertTrue(estimateAction.waitForExistence(timeout: 5), "AI Estimate arrives with the field")
+        XCTAssertTrue(estimateAction.waitForExistence(timeout: 5), "Estimate with AI arrives with the field")
         XCTAssertTrue(onlineAction.exists, "…with Search Online")
         XCTAssertTrue(addAction.exists, "…and the +")
         XCTAssertFalse(estimateAction.isEnabled, "…and it is dead until something is typed")
@@ -3112,6 +3112,31 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertEqual(addAction.frame.midX, camera.frame.midX, accuracy: 1.5,
                        "The + is centred under the camera "
                        + "(+ \(addAction.frame.midX), camera \(camera.frame.midX))")
+        // The two actions SPLIT what the + leaves, equally, and reach
+        // the field's own trailing edge. The fill lived on the Button
+        // rather than inside its label for a day, so the capsules drew
+        // at their natural width and the row read as three pills adrift
+        // (the user, 2026-09-18) — a slot that expands while the chip
+        // in it doesn't is invisible to an existence check and obvious
+        // on a phone, so this measures the CHIPS.
+        XCTAssertEqual(estimateAction.frame.width, onlineAction.frame.width, accuracy: 1.5,
+                       "The two actions are equal halves "
+                       + "(estimate \(estimateAction.frame.width), online \(onlineAction.frame.width))")
+        // The bar's own trailing margin, NOT `field.frame.maxX`: the
+        // field element is the TextField inside the capsule and stops
+        // short of the in-capsule chevron, so it is 52pt narrower than
+        // the row and measuring against it fails on a correct layout.
+        let barTrailing = app.windows.firstMatch.frame.maxX - 16
+        XCTAssertEqual(onlineAction.frame.maxX, barTrailing, accuracy: 2,
+                       "…and the row reaches the bar's trailing margin "
+                       + "(online \(onlineAction.frame.maxX), margin \(barTrailing))")
+        // One 10pt gap after the camera's COLUMN — which is where the
+        // field starts too, so the two rows line up. Measured from the
+        // camera rather than from the + glyph: the glyph is 36pt centred
+        // in that 50pt column, so its own edge sits 7pt inside it.
+        XCTAssertEqual(estimateAction.frame.minX, camera.frame.maxX + 10, accuracy: 2,
+                       "…and the actions start where the field does "
+                       + "(estimate \(estimateAction.frame.minX), camera ends \(camera.frame.maxX))")
 
         // The "+" opens a CHOOSER, and what it offers matters: the
         // camera is one of three doors you pick, never one that arrives
@@ -3158,21 +3183,20 @@ final class OnigiriUITests: XCTestCase {
         // matches are gone: the sole "Estimate with…" element anywhere
         // is the composer's own, below every result, and the online
         // section's "Search OpenFoodFacts…" row is nowhere.
-        XCTAssertTrue(estimateAction.isEnabled, "AI Estimate wakes with a query")
+        XCTAssertTrue(estimateAction.isEnabled, "Estimate with AI wakes with a query")
         XCTAssertTrue(onlineAction.isEnabled, "…and so does Search Online")
-        // Two labels, and that is what makes this checkable: the
-        // composer's button says "AI Estimate" while the in-list idle
-        // row `AIEstimateSection` would draw still says "Estimate with
-        // <…>". Exactly one of the first, none of the second.
+        // The composer's button and the in-list idle row read the SAME
+        // words now ("Estimate with AI" everywhere, 2026-09-18), so the
+        // count and the geometry are what tell them apart — one such
+        // button in the whole tree, and it below the last result rather
+        // than among the rows.
         let estimateLabelled = app.buttons.matching(
-            NSPredicate(format: "label == 'AI Estimate'")).allElementsBoundByIndex
+            NSPredicate(format: "label == 'Estimate with AI'")).allElementsBoundByIndex
         XCTAssertEqual(estimateLabelled.count, 1, "One estimate trigger, not two")
-        XCTAssertFalse(app.buttons.matching(
-            NSPredicate(format: "label BEGINSWITH 'Estimate with'")).firstMatch.exists,
-                       "The in-list estimate row stayed gone")
         let resultCells = app.cells.allElementsBoundByIndex
         XCTAssertFalse(resultCells.isEmpty, "The query matched something to show")
-        XCTAssertGreaterThan(estimateLabelled[0].frame.minY, resultCells[0].frame.maxY,
+        let lastCellBottom = resultCells.map(\.frame.maxY).max() ?? 0
+        XCTAssertGreaterThan(estimateLabelled[0].frame.minY, lastCellBottom,
                              "…and it is the composer's, below the results rather than among them")
         XCTAssertFalse(app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH 'Search OpenFoodFacts'")).firstMatch.exists,
@@ -3586,6 +3610,9 @@ final class OnigiriUITests: XCTestCase {
 
         let sheet = app.navigationBars["Health Access"]
         guard sheet.waitForExistence(timeout: timeout) else {
+            // The scope page can be up on its own — this helper is
+            // called twice and the first call may have left it there.
+            grantHealthTimeScope(in: app)
             dismissHealthSyncPrompt(in: app)
             return
         }
@@ -3624,7 +3651,51 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(confirm.isHittable, "The Health sheet's confirm control should scroll into view")
         confirm.tap()
         _ = sheet.waitForNonExistence(timeout: 10)
+        grantHealthTimeScope(in: app)
         dismissHealthSyncPrompt(in: app)
+    }
+
+    /// The SECOND page of the grant (2026-09-18): "How much data would
+    /// you like to share with …?", a scope choice whose Allow is
+    /// DISABLED until one of the two rows is picked.
+    ///
+    /// It cost an afternoon because nothing about it looks like a Health
+    /// sheet from the outside. Its nav bar identifies as
+    /// `HealthUI.HKAuthorizationTimeBoundedView`, so the caller's
+    /// `navigationBars["Health Access"]` misses it (the only thing here
+    /// with that label is the BACK button) and the caller returned
+    /// having granted nothing — leaving this sheet standing over the
+    /// app, out of process, so the app's own tree read perfectly healthy
+    /// while every tap failed as "exists but is not tappable".
+    ///
+    /// ALL recorded data, not "Past 30 Days": the seeder writes months
+    /// of weigh-ins and logs, and a 30-day window hides the history Goal
+    /// and the Calendar are tested against.
+    @MainActor
+    private func grantHealthTimeScope(in app: XCUIApplication) {
+        let scopeLabel = "All Recorded Data and Future Data"
+        let scope = app.staticTexts[scopeLabel]
+        guard scope.waitForExistence(timeout: 10) else { return }
+        scope.tap()
+        let allow = app.buttons["Allow"]
+        guard allow.waitForExistence(timeout: 5) else {
+            XCTFail("The scope page should offer Allow")
+            return
+        }
+        // The row may swallow the tap without selecting; the cell around
+        // it is the control. Poll rather than asserting immediately —
+        // enabling follows the selection by a frame or two.
+        let cell = app.cells.containing(
+            NSPredicate(format: "label CONTAINS %@", scopeLabel)
+        ).firstMatch
+        let deadline = Date().addingTimeInterval(5)
+        while !allow.isEnabled, Date() < deadline {
+            if cell.exists, cell.isHittable { cell.tap() }
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        XCTAssertTrue(allow.isEnabled, "Choosing a data scope should enable Allow")
+        allow.tap()
+        _ = allow.waitForNonExistence(timeout: 10)
     }
 
     @MainActor

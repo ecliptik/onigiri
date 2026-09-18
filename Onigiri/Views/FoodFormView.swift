@@ -96,14 +96,14 @@ struct FoodFormView: View {
         /// mode set in the same breath as a Bool can arrive late
         /// (`plans/PLAN-multi-item-import.md`, the same lesson the
         /// menu listing learned).
-        case scanner(notice: String?, door: ScanSheet.Door?)
+        case scanner(notice: String?, opening: ScanSheet.Opening?)
         /// The composer's "+": camera, photos or a file.
         case addContext
         case portion(PortionTarget)
         var id: String {
             switch self {
-            case .scanner(let notice, let door):
-                "scanner-\(notice ?? "")-\(door.map(String.init(describing:)) ?? "")"
+            case .scanner(let notice, let opening):
+                "scanner-\(notice ?? "")-\(opening.map(String.init(describing:)) ?? "")"
             case .addContext: "addContext"
             case .portion(let target): "portion-\(target.id)"
             }
@@ -538,7 +538,7 @@ struct FoodFormView: View {
                 EntryDoorBar(
                     scanBusy: isLookingUp,
                     describeQuery: $describeQuery,
-                    onScan: { activeSheet = .scanner(notice: nil, door: nil) },
+                    onScan: { activeSheet = .scanner(notice: nil, opening: nil) },
                     // Both land in the scan sheet's ONE cascade — a
                     // photo reads the way a photographed label does,
                     // a PDF the way a shared menu does.
@@ -556,18 +556,23 @@ struct FoodFormView: View {
             .sheet(item: $activeSheet, onDismiss: sheetDidDismiss) { sheet in
                 switch sheet {
                 case .addContext:
-                    // Each tile hands back a door and the chooser dismisses
-                    // itself; the swap waits a turn, because setting the
-                    // slot synchronously inside a closure the sheet follows
-                    // with its own dismiss tears the NEW sheet down with the
-                    // old (CLAUDE.md, 2026-07-22).
+                    // The chooser raises its own pickers and hands back
+                    // what came OUT of them; the swap waits a turn,
+                    // because setting the slot synchronously inside a
+                    // closure the sheet follows with its own dismiss
+                    // tears the NEW sheet down with the old (CLAUDE.md,
+                    // 2026-07-22).
                     AddContextSheet(
-                        onCamera: { Task { activeSheet = .scanner(notice: nil, door: nil) } },
-                        onPhotos: { Task { activeSheet = .scanner(notice: nil, door: .photos) } },
-                        onFiles: { Task { activeSheet = .scanner(notice: nil, door: .file) } }
+                        onCamera: { Task { activeSheet = .scanner(notice: nil, opening: nil) } },
+                        onPhoto: { item in
+                            Task { activeSheet = .scanner(notice: nil, opening: .photo(item)) }
+                        },
+                        onFile: { url in
+                            Task { activeSheet = .scanner(notice: nil, opening: .menuFile(url)) }
+                        }
                     )
                     .presentationDetents([.height(260)])
-                case .scanner(let notice, let door):
+                case .scanner(let notice, let opening):
                     ScanSheet(onCode: { code in
                         Task { await lookup(code) }
                     }, onLabel: { parsed in
@@ -580,7 +585,7 @@ struct FoodFormView: View {
                         // device; "on-device" would be a lie there).
                         apply(product)
                         lookupMessage = product.aiEngine?.photoEstimateCaption
-                    }, notice: notice, openDoor: door)
+                    }, notice: notice, opening: opening)
                 case .portion(let target):
                     PortionSheet(target: target) { quantity, category, _ in
                         portionDidLog = true
@@ -596,7 +601,7 @@ struct FoodFormView: View {
                     apply(prefill)
                     if let prefillMessage { lookupMessage = prefillMessage }
                 } else if startScanning {
-                    activeSheet = .scanner(notice: nil, door: nil)
+                    activeSheet = .scanner(notice: nil, opening: nil)
                 }
                 // After the initial load: a pristine form (or an
                 // untouched prefill) dismisses freely; anything typed
@@ -758,7 +763,7 @@ struct FoodFormView: View {
             // scanner is still dismissing, and re-presenting into the
             // same slot mid-dismissal dies silently.
             barcode = code
-            Task { activeSheet = .scanner(notice: BarcodeRouter.missNotice, door: nil) }
+            Task { activeSheet = .scanner(notice: BarcodeRouter.missNotice, opening: nil) }
         } catch {
             // Transient lookup failures toast; lookupMessage stays for
             // the persistent "no calorie data" hint tied to the fields.

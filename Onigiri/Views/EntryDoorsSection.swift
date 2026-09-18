@@ -79,6 +79,11 @@ struct EntryDoorDescribeField: View {
     /// back. The string predates the bar; don't rename it.
     static let accessibilityID = "entryDoorsDescribeField"
 
+    /// The in-capsule keyboard dismiss. Its own identifier because the
+    /// app has two other "Done"s on this screen (the sheet's, and the
+    /// system's) and a test must not tap one meaning the other.
+    static let dismissAccessibilityID = "entryDoorsHideKeyboard"
+
     /// The HOST owns this. It started owned here — the accessory below
     /// is all the field itself needs — but the Log sheet's leading
     /// toolbar button changes with it too (2026-09-17), and a toolbar
@@ -114,26 +119,42 @@ struct EntryDoorDescribeField: View {
                 .accessibilityIdentifier(Self.accessibilityID)
                 .focused($isFocused)
                 .onSubmit { onDescribeSubmit?() }
-                // Put the keyboard away without leaving the screen (the
-                // user, 2026-09-17). Until this there was no way out of
-                // it but Cancel or Done, which take the whole sheet with
-                // them, or picking a row.
-                //
-                // A keyboard accessory, NOT a Cancel that turns into a
-                // back button while typing: a button that changes what
-                // it does under you is a mode error, it would be the one
-                // escape hatch disappearing exactly when a long
-                // description makes you want it, and this sheet's
-                // Cancel-left/Done-right shape has been settled twice
-                // (CLAUDE.md, "Food entry"). Scoped to this field's own
-                // focus, so the food form's other fields are untouched.
-                .toolbar {
-                    ToolbarItemGroup(placement: .keyboard) {
-                        Spacer()
-                        Button("Done") { isFocused = false }
-                    }
+            // Put the keyboard away without leaving the screen (the
+            // user, 2026-09-17). Until this there was no way out of it
+            // but Cancel or Done, which take the whole sheet with them,
+            // or picking a row.
+            //
+            // INSIDE the capsule, not a `.keyboard` toolbar accessory:
+            // that accessory and this bar both sit above the keyboard,
+            // so they overlapped — the Done floated across the field's
+            // trailing edge (the user, from device: "overlaps the
+            // search field"). A control that belongs to the field is
+            // laid out BY the field and cannot collide with it. And not
+            // in the nav bar either, where a keyboard glyph replacing
+            // Cancel didn't land ("I don't like the keyboard icon").
+            //
+            // A chevron, not a keyboard glyph: this collapses the thing
+            // it sits on, which is what the arrow says and what the
+            // same arrow means on every disclosure in the app.
+            if isFocused {
+                Button {
+                    isFocused = false
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color(.secondaryLabel))
+                        // A 44pt target around a small glyph, without
+                        // the glyph growing to match.
+                        .frame(width: 30, height: 30)
+                        .contentShape(.rect)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Hide Keyboard")
+                .accessibilityIdentifier(Self.dismissAccessibilityID)
+                .transition(.opacity)
+            }
         }
+        .animation(.easeInOut(duration: 0.15), value: isFocused)
     }
 }
 

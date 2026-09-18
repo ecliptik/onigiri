@@ -3123,35 +3123,31 @@ final class OnigiriUITests: XCTestCase {
         // with what was typed still in the field.
         XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5),
                       "The keyboard is up while the field has focus")
-        // The LEADING button is the keyboard's exit while it is up, and
-        // says so — "Cancel" is gone for exactly as long as it would
-        // have closed the sheet out from under a thumb reaching for it.
-        XCTAssertFalse(app.buttons["Cancel"].exists,
-                       "No Cancel while typing — the leading slot is the keyboard's")
-        let hideKeyboard = app.buttons["Hide Keyboard"]
-        XCTAssertTrue(hideKeyboard.waitForExistence(timeout: 5), "Hide Keyboard leads the bar")
+        // Cancel does not move, change or disappear while typing — the
+        // keyboard's exit is its own control, in the field's capsule.
+        XCTAssertTrue(app.buttons["Cancel"].exists, "Cancel stays Cancel while typing")
+        let hideKeyboard = app.buttons["entryDoorsHideKeyboard"]
+        XCTAssertTrue(hideKeyboard.waitForExistence(timeout: 5),
+                      "The capsule offers a way out of the keyboard")
+        // It is laid out BESIDE the text, never across it — the whole
+        // complaint about the `.keyboard` toolbar accessory it replaced
+        // (the user, from device: "overlaps the search field"). Not
+        // containment: `field.frame` is the text input alone, and this
+        // button is its sibling inside the capsule, so the honest test
+        // is that the two rectangles don't meet.
+        XCTAssertFalse(field.frame.intersects(hideKeyboard.frame),
+                       "The dismiss must not overlap the text "
+                       + "(field \(field.frame), button \(hideKeyboard.frame))")
+        XCTAssertGreaterThanOrEqual(hideKeyboard.frame.minX, field.frame.maxX,
+                                    "…and sits after it, on the trailing edge")
         hideKeyboard.tap()
         XCTAssertTrue(app.keyboards.element.waitForNonExistence(timeout: 5),
                       "…and it puts the keyboard away")
         XCTAssertTrue(app.navigationBars["Log"].exists,
-                      "…leaving the sheet open — it is not Cancel wearing another name")
+                      "…leaving the sheet open — this is not Cancel wearing another name")
         XCTAssertEqual(field.value as? String, "rice", "…with the query still in the field")
-        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5),
-                      "Cancel is back once the keyboard is gone")
+        XCTAssertFalse(hideKeyboard.exists, "…and it goes when the keyboard does")
         attachShot(named: "logsheet-keyboard-dismissed")
-
-        // The door bar's own accessory does the same job from the other
-        // end of the screen — both, on purpose ("Can we do both?").
-        field.tap()
-        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5), "Keyboard back on refocus")
-        let keyboardDone = app.buttons.matching(
-            NSPredicate(format: "label == 'Done'")).allElementsBoundByIndex
-            .first { $0.isHittable && $0.frame.minY > estimateRow.frame.maxY }
-        XCTAssertNotNil(keyboardDone, "A Done above the keyboard, below the list")
-        keyboardDone?.tap()
-        XCTAssertTrue(app.keyboards.element.waitForNonExistence(timeout: 5),
-                      "The accessory puts the keyboard away too")
-        XCTAssertTrue(app.navigationBars["Log"].exists, "…and also leaves the sheet open")
 
         field.tap()
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4))

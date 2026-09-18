@@ -567,44 +567,28 @@ struct QuickLogSheet: View {
                 // anything; Done stays the affirmative finish for
                 // multi-item lunches, in the confirm slot (emphasized)
                 // like Settings' Done.
-                // Cancel — EXCEPT while the keyboard is up, when it puts
-                // the keyboard away and leaves the sheet standing (the
-                // user, 2026-09-17, asked for this alongside the door
-                // bar's own accessory: "Can we do both?"). The glyph
-                // changes with the job, and that is the point: a button
-                // that did something different while LOOKING the same
-                // would be a trap, since a thumb goes to the leading
-                // slot expecting to leave. Here the word "Cancel" is
-                // gone for exactly as long as it would have lied.
-                //
-                // One ToolbarItem, two labels — the ITEM is never
-                // rebuilt, only what it shows. `.keyboardShortcut` moves
-                // with the branch: ⎋ should dismiss the keyboard first
-                // and the sheet second, the same order the button does.
+                // ALWAYS Cancel. It spent an hour on 2026-09-17 becoming
+                // a keyboard-dismiss glyph while the field had focus —
+                // the user's own suggestion, asked for as "Can we do
+                // both?" — and the answer from the device was "I don't
+                // like the keyboard icon in the upper [left]". The
+                // keyboard's exit lives in the door bar's capsule now,
+                // beside the text it dismisses. Leave this slot alone:
+                // Cancel-left/Done-right is the shape settled three
+                // times over (CLAUDE.md, "Food entry").
                 ToolbarItem(placement: .cancellationAction) {
-                    if describeFocused {
-                        Button {
-                            describeFocused = false
-                        } label: {
-                            Image(systemName: "keyboard.chevron.compact.down")
-                        }
-                        .keyboardShortcut(.cancelAction)
-                        .accessibilityLabel("Hide Keyboard")
-                        .recedesWithSheet(activeSheet != nil)
-                    } else {
-                        Button("Cancel") {
-                            // The in-flight online search dies with the
-                            // sheet — clear() cancels its search/page tasks
-                            // instead of letting them keep the model alive
-                            // for one wasted round trip (audit, 2026-08-17;
-                            // deliberately here, never .onDisappear —
-                            // CLAUDE.md's .searchable teardown trap).
-                            onlineSearch.clear()
-                            dismiss()
-                        }
-                        .keyboardShortcut(.cancelAction)
-                        .recedesWithSheet(activeSheet != nil)
+                    Button("Cancel") {
+                        // The in-flight online search dies with the
+                        // sheet — clear() cancels its search/page tasks
+                        // instead of letting them keep the model alive
+                        // for one wasted round trip (audit, 2026-08-17;
+                        // deliberately here, never .onDisappear —
+                        // CLAUDE.md's .searchable teardown trap).
+                        onlineSearch.clear()
+                        dismiss()
                     }
+                    .keyboardShortcut(.cancelAction)
+                    .recedesWithSheet(activeSheet != nil)
                 }
                 // Sort is the item that may overflow first on iOS 27 —
                 // Done (`.confirmationAction`) already resists it, and

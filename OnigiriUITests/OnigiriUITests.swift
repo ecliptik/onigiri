@@ -741,7 +741,14 @@ final class OnigiriUITests: XCTestCase {
             beat(2.2)
             result.tap()
             mark("form")
-            XCTAssertTrue(app.navigationBars["New Food"].waitForExistence(timeout: 8), "The food form should open")
+            // A new food's nav title is the EMPTY STRING — it crowded
+            // the confirm pair and was dropped; "New Food" survives only
+            // as an invisible header `Text` for VoiceOver. This asked
+            // for the nav bar, which `testFormLogPair` asserts is
+            // absent, so the clip drove correctly and then failed on its
+            // last line (found 2026-09-18 probing the AI clip).
+            XCTAssertTrue(app.staticTexts["New Food"].waitForExistence(timeout: 8),
+                          "The food form should open")
             beat(4)
 
         default:

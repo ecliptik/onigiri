@@ -1115,7 +1115,18 @@ Each cost a debugging session.
   user: "Remove Log Water from the search results unless water is
   searched for"); the dead-end state reads "No matches in your library"
   and hides its Add Food while `OnlineResultsSection` is offering its own
-  for the same words; the bar is never hidden (`isHidden: false`) since
+  for the same words; **its second line NAMES THE CONTROLS that answer
+  the dead end — "Add Food, Estimate with AI or Search Online." — and is
+  BUILT from the ones actually on screen** (`deadEndHint`, 2026-09-18:
+  a dead end is more useful pointing at the ways out than at the way
+  back in, which "Try different words…" did). All three routes are
+  gated, so the sentence must never be written down as a literal:
+  Add Food yields to the online section's own button, the estimate
+  needs `FoodIntelligence.isAvailable` and the search needs
+  `onlineLookups`, and naming a control that isn't there is worse than
+  saying less. `testLogSheetOneFieldAndWater` types a query nothing
+  matches and asserts the whole sentence, because a derived string can
+  promise a missing button silently; the bar is never hidden (`isHidden: false`) since
   hiding it would take the keyboard's field away; **the field itself is
   never collapsed either** — `EntryDoorBar(searchesLibrary: true)` keeps
   it with AI and online lookups both off, where the bar otherwise folds

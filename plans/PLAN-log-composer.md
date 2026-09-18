@@ -172,9 +172,22 @@ One container, pinned where `entryDoorBar` pins it now. Decisions:
   remote provider hands off to Apple Intelligence, and the caption is
   the only thing that says so). Accepted on the grounds that the
   provider is the user's own setting on a single-person app.
-  `MealEstimateSection` still says "Estimate this meal with
-  <provider>" — left alone, not asked about; match it if the generic
-  form is meant to be the rule everywhere.
+  `MealEstimateSection` followed on 2026-09-18 ("Match AI copy to be
+  consistent") and now reads **"Estimate this meal with AI"** — the
+  provider leaves the label, the OBJECT stays, because the meal builder
+  also carries a ✨ name button a row up and "Estimate with AI" alone
+  would not say which of the two this is.
+- **A dead end names the ways OUT** (the user, 2026-09-18: change
+  "Try different words, or tap Search Online" to "Add Food, Estimate
+  with AI or Search Online"). `deadEndHint` BUILDS that sentence from
+  the controls actually on screen — Add Food yields to the online
+  section's own button, the estimate needs `isAvailable`, the search
+  needs `onlineLookups` — because a hardcoded list would promise
+  buttons that aren't there whenever a feature is off. Order follows
+  the eye: this card's own button, then the bar's two actions, left to
+  right. The Foods tab's "Try different words, or add it as a new
+  food." is UNCHANGED: that screen has no AI and no online search, so
+  its one route is already the one it names.
 - **The action row fills its width, and the `+` sits in the camera's
   column** (the user, 2026-09-17: "have the +, Estimate with AI and
   Search Online fill the entire row, with + left aligned and then

@@ -3209,6 +3209,22 @@ final class OnigiriUITests: XCTestCase {
                        "The online search row left the list with it")
         attachShot(named: "logsheet-field-rice")
 
+        // A dead end names the ways OUT, and the sentence is BUILT from
+        // the controls that are actually on screen rather than written
+        // down (the user, 2026-09-18) — so it can silently promise a
+        // button that isn't there, which is what this pins. Both
+        // features are on under `--seed-ai-on`, so all three routes are
+        // named, in the order the eye meets them.
+        field.typeText("zzqx")
+        XCTAssertTrue(app.staticTexts["No matches in your library"].waitForExistence(timeout: 10),
+                      "A query the library can't answer reaches the dead end")
+        XCTAssertTrue(
+            app.staticTexts["Add Food, Estimate with AI or Search Online."]
+                .waitForExistence(timeout: 5),
+            "…and it points at the three controls that answer it")
+        attachShot(named: "logsheet-dead-end")
+        for _ in 0..<4 { field.typeText(XCUIKeyboardKey.delete.rawValue) }
+
         // The button really starts a run. Asserted on EITHER outcome,
         // never on the happy one alone: on-device inference fails in
         // seconds on some Macs (the ModelManagerError 1001 this machine

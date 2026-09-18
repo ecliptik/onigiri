@@ -133,7 +133,14 @@ struct MealEstimateSection: View {
     var body: some View {
         TapToEstimateRow(
             query: query,
-            title: "Estimate this meal with \(AIProviderSettings.selected.displayName)",
+            // Generic, like the composer's "Estimate with AI" (the user,
+            // 2026-09-18: "Match AI copy to be consistent"). The PROVIDER
+            // is what came out of the label, not the object — this row
+            // still says which thing it estimates, because the meal
+            // builder also has a ✨ name button one row up. The provider
+            // is named in the RESULT instead, where it is the engine that
+            // actually replied rather than the one configured.
+            title: "Estimate this meal with AI",
             isEstimating: isEstimating,
             estimate: { await FoodIntelligence.describeMeal($0) }
         ) { meal in

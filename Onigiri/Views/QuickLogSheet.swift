@@ -752,6 +752,29 @@ struct QuickLogSheet: View {
         .toastHost()
     }
 
+    /// What to do about a query the library doesn't answer, named as the
+    /// controls that do it: "Add Food, Estimate with AI or Search Online"
+    /// (the user, 2026-09-18). It replaces "Try different words, or tap
+    /// Search Online." — a dead end is more useful pointing at the ways
+    /// out than at the way back in.
+    ///
+    /// BUILT from what is on screen, never hardcoded. All three routes
+    /// are gated — Add Food yields to the online section's own button
+    /// for the same words, the estimate needs `isAvailable` and the
+    /// search needs `onlineLookups` — and naming a control that isn't
+    /// there is worse than saying less. The order matches the order the
+    /// eye meets them: the button in this card, then the bar's two
+    /// actions, left to right.
+    private func deadEndHint(offerAddFood: Bool) -> String {
+        var routes: [String] = []
+        if offerAddFood { routes.append("Add Food") }
+        if FoodIntelligence.isAvailable { routes.append("Estimate with AI") }
+        if SharedStore.onlineLookups { routes.append("Search Online") }
+        guard let last = routes.last else { return "Try different words." }
+        guard routes.count > 1 else { return "\(last)." }
+        return "\(routes.dropLast().joined(separator: ", ")) or \(last)."
+    }
+
     /// Scope-aware empty states, rendered inside the leading section.
     /// `visible` is the count of rows actually rendered — the ranked
     /// pool when browsing, the flattened group total when searching.
@@ -793,13 +816,11 @@ struct QuickLogSheet: View {
                 VStack(spacing: 4) {
                     Text("No matches in your library")
                         .font(.headline)
-                    // Names the BUTTON, not a section: since 2026-09-17
+                    // Names the BUTTONS, not a section: since 2026-09-17
                     // the online search is a composer action, and
                     // "search online below" pointed at a list section
                     // that no longer exists.
-                    Text(SharedStore.onlineLookups
-                        ? "Try different words, or tap Search Online."
-                        : "Try different words, or add it as a new food.")
+                    Text(deadEndHint(offerAddFood: offerAddFood))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

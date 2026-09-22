@@ -1,0 +1,198 @@
+import SwiftUI
+import OnigiriKit
+
+/// The picker for a parsed menu, wherever it came from — a shared
+/// document, a shared page, or a photograph of the board over the counter
+/// (`plans/PLAN-menu-import.md`).
+///
+/// A restaurant publishes every item at once, so this is a searchable
+/// LIST and not a dialog: a "Which item?" confirmationDialog is sized for
+/// a handful, a menu runs to dozens, and — since
+/// `plans/PLAN-multi-item-import.md` — a dialog has nowhere to say what
+/// has already been logged and no way to be returned to. It is now the
+/// only chooser in the product: the multi-food screenshot read raises it
+/// too, mapped through `MenuRow`. What makes a long menu usable is the
+/// same thing that makes the rest of the app usable — the standard
+/// system search field, top drawer, no custom bar and no auto-focus.
+/// The placement is INLINED rather than routed through `Style.swift`'s
+/// shared `librarySearch` helper: this file also compiles into
+/// `OnigiriShare` (project.yml), which doesn't carry `Style.swift`, so
+/// the shared modifier isn't visible there.
+struct MenuPicker: View {
+    let rows: [MenuRow]
+    /// What has already been logged from this list, when anything has
+    /// (`MenuPickProgress`).
+    var note: String?
+    /// Rows already logged in this sitting. The note names the last one
+    /// and counts the rest, which after four picks cannot answer "did I
+    /// already add the fries" — the row can. Keyed by ID, not name: a
+    /// menu section can print "Small" twice.
+    var loggedRowIDs: Set<Int> = []
+    /// Rows saved to the library WITHOUT being logged — its own mark,
+    /// because "Already logged" would be a lie for a row nobody told
+    /// Health about (the user, 2026-08-29: "not necessarily log it").
+    var savedRowIDs: Set<Int> = []
+    /// Owned by `MenuPickerFlow`, not this view: this picker remounts
+    /// every time picking resumes after a log, and a local `@State`
+    /// here reset on each remount, reopening "Where is this menu from?"
+    /// after every item past the first one (the user, 2026-08-29). The
+    /// flow sets the initial value and asks once, in its own `.task`,
+    /// which — unlike this view's — runs for the life of the import.
+    ///
+    /// The PROMPT itself moved up there too, on 2026-09-20: presented
+    /// from here it died with this view the moment the flow left the
+    /// picking phase, which for a single shared item is the same instant
+    /// it was raised. This view only shows the answer and asks for a new
+    /// one; it no longer presents the question, and it no longer folds
+    /// the answer into the name — the flow does, so the one item that
+    /// never passes through here gets it too.
+    @Binding var source: String
+    @Binding var askingSource: Bool
+    /// The row rides along with the label because the caller cannot
+    /// recover it from the label alone: two rows can print the same
+    /// name, and the marks the list draws are keyed by ID.
+    let onPick: (ParsedLabel, MenuRow) -> Void
+
+    @State private var query = ""
+
+    var body: some View {
+        // Computed once per render and threaded through — sections(of:)
+        // and the empty-state check below used to each call the
+        // computed `visible` property separately, filtering the whole
+        // `rows` array twice per body (health-check audit, 2026-09-14).
+        let visible = visibleRows
+        List {
+            // A LIST ROW, not a bar pinned over the list: "Saving as …
+            // (STEAK SHACK)" crowded the header and read as chrome
+            // rather than as something editable (the user, 2026-08-16).
+            Section {
+                LabeledContent("Restaurant") {
+                    HStack(spacing: 12) {
+                        Text(source.isEmpty ? "None" : source)
+                            .foregroundStyle(source.isEmpty ? .tertiary : .secondary)
+                        Button(source.isEmpty ? "Add" : "Change") { askingSource = true }
+                            .buttonStyle(.borderless)
+                    }
+                }
+            } footer: {
+                if let note {
+                    Label(note, systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            ForEach(sections(of: visible), id: \.title) { section in
+                Section(section.title ?? "Menu") {
+                    ForEach(section.rows) { row in
+                        Button { choose(row) } label: {
+                            MenuItemRow(
+                                row: row,
+                                isLogged: loggedRowIDs.contains(row.id),
+                                isSaved: savedRowIDs.contains(row.id))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            if visible.isEmpty {
+                Text("No items match “\(query)”.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        // Pinned top drawer, matching the rest of the library screens
+        // (`plans/PLAN-log-sheet-layout.md`, 2026-09-15; this used to
+        // take the bottom-aligned default). `.always`, not the plain
+        // drawer: see `librarySearch`'s own doc comment in Style.swift
+        // for why — inlined here rather than calling that helper since
+        // this file also compiles into OnigiriShare, which doesn't
+        // carry Style.swift.
+        .searchable(
+            text: $query,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Search \(rows.count) items"
+        )
+    }
+
+    private struct MenuSection {
+        let title: String?
+        let rows: [MenuRow]
+    }
+
+    private var visibleRows: [MenuRow] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return rows }
+        return rows.filter {
+            $0.name.localizedStandardContains(trimmed)
+                || ($0.section?.localizedStandardContains(trimmed) ?? false)
+        }
+    }
+
+    /// Grouped in the order the menu prints, not alphabetically — the
+    /// document's own order is information ("BASES" after "CURATED
+    /// BOWLS"), and sorting throws it away.
+    private func sections(of visible: [MenuRow]) -> [MenuSection] {
+        var titles: [String?] = []
+        var grouped: [String?: [MenuRow]] = [:]
+        for row in visible {
+            if grouped[row.section] == nil { titles.append(row.section) }
+            grouped[row.section, default: []].append(row)
+        }
+        return titles.map { MenuSection(title: $0, rows: grouped[$0] ?? []) }
+    }
+
+    /// The row, as the menu printed it. The restaurant is folded in by
+    /// `MenuPickerFlow` (`MenuSourceName`) rather than here, so that the
+    /// single item which never reaches this list is named the same way
+    /// — and so that an answer typed while the confirm is already up
+    /// still lands (2026-09-20).
+    private func choose(_ row: MenuRow) {
+        onPick(row.parsedLabel, row)
+    }
+}
+
+/// One menu row: the dish, what logging it would cost, and whether it
+/// already went in.
+private struct MenuItemRow: View {
+    let row: MenuRow
+    let isLogged: Bool
+    /// Saved to the library, never logged. Mutually exclusive with
+    /// `isLogged` in practice (a logged row has no reason to be re-saved),
+    /// but logged wins if both are somehow true — a real log outranks a
+    /// library save.
+    let isSaved: Bool
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.name)
+                if let serving = row.serving {
+                    Text(serving)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 12)
+            if let kcal = row.kcal {
+                Text("\(kcal.formatted(.number.precision(.fractionLength(0)))) kcal")
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            // A mark, not a disabled row: ordering two of something is a
+            // real order, so a marked row stays tappable.
+            if isLogged {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Already logged")
+            } else if isSaved {
+                Image(systemName: "bookmark.fill")
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Saved to library")
+            }
+        }
+        .contentShape(.rect)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+extension String {
+    var nilWhenEmpty: String? { isEmpty ? nil : self }
+}

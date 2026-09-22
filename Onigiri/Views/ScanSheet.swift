@@ -1,0 +1,843 @@
+import SwiftUI
+import SwiftData
+import PhotosUI
+import UniformTypeIdentifiers
+import VisionKit
+import AVFoundation
+import OnigiriKit
+import os
+
+/// Scan outcomes only reach any log through here — visible in the device
+/// console during pantry QA, invisible to users.
+private let scanLog = Logger(subsystem: "com.ecliptik.Onigiri", category: "scan")
+
+/// ONE camera for the whole package (the user: one scan button): the live
+/// scanner fires on a barcode exactly as before, and a shutter button
+/// photographs the Nutrition Facts panel for foods no database knows —
+/// no mode to pick. The same still cascades (PLAN-identify-food): a
+/// photo that yields no nutrition panel falls through to on-device food
+/// identification when Apple Intelligence is around, so photographing
+/// the food itself is the third door with zero new controls. A
+/// photo-library pick covers labels photographed earlier; the no-camera
+/// fallback (simulator) keeps manual barcode entry and the photo paths.
+struct ScanSheet: View {
+    let onCode: (String) -> Void
+    let onLabel: (ParsedLabel) -> Void
+    /// An identified food photo, prefill-shaped like the label path.
+    let onFood: (ScannedProduct) -> Void
+    /// What a pick off a LIST is for, which is not the same question in
+    /// every host (`plans/PLAN-multi-item-import.md`). The Log sheet is
+    /// logging, so a menu read there is ordered from until Done; the Add
+    /// Food form is FILLING A FORM, and a door inside a form that
+    /// started writing to Health would be a different feature. Single
+    /// reads — a barcode, a label, an identified photo — hand off and
+    /// dismiss in both, as they always have.
+    var purpose: Purpose = .filling
+    /// The day the host is logging into. The Log sheet browses days and
+    /// backfills into the one on screen; without this a menu row logged
+    /// straight from the picker would land on today (new plumbing —
+    /// until now this sheet never logged anything).
+    var logDate: Date = .now
+    /// Why the camera is back. Set when a scan found a barcode the
+    /// database doesn't have — the sheet reopens on the label path and
+    /// has to say so, or it just looks like the scan didn't take.
+    var notice: String?
+    /// Something the HOST already picked, to be read on the first frame.
+    /// The composer's "+" offers Photos and Files directly (the user,
+    /// 2026-09-17), and routing them through here is what keeps the
+    /// promise that every image and document runs the ONE cascade this
+    /// sheet already owns — never a second reader wired up beside it
+    /// (CLAUDE.md, "Food entry").
+    ///
+    /// It carries the PICK, not a request for one. This sheet raised the
+    /// picker itself for a day and it flashed: an empty canvas appeared,
+    /// threw a picker over itself, and on cancel closed again — "still
+    /// looks janky" (the user, 2026-09-18). A sheet may not appear before
+    /// it has anything to show, so `AddContextSheet` owns the pickers now
+    /// and this opens already reading.
+    var opening: Opening?
+
+    /// Equatable so a host can hold it in an `ActiveSheet` case;
+    /// `PhotosPickerItem` is itself Equatable.
+    enum Opening: Equatable {
+        case photo(PhotosPickerItem)
+        case menuFile(URL)
+    }
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.modelContext) private var context
+
+    enum Purpose {
+        case logging
+        case filling
+    }
+
+    @State private var manualCode = ""
+    @State private var photoItem: PhotosPickerItem?
+    /// The list to order from, when a read produced one. Rows and source
+    /// travel together in ONE value, and the sheet is presented from it
+    /// with `.sheet(item:)` — never from a Bool beside them.
+    ///
+    /// This is load-bearing, not tidiness. A sheet's content closure is
+    /// evaluated when it presents, so a separate `menuSource` set in the
+    /// same breath as a `showing = true` flag can arrive AFTER the
+    /// picker has already read it: `MenuPicker` then asks "Where is this
+    /// menu from?" about a menu that named itself — the exact fault
+    /// fixed on 2026-08-16 — and its `.task` never runs again to take
+    /// the answer back. Seen on 2026-08-23 in the food form while the
+    /// Log sheet, running identical code, got the ordering it wanted.
+    @State private var listing: MenuListing?
+    /// The ESTIMATE to check before it goes anywhere
+    /// (`plans/PLAN-refine-with-context.md`). One value, presented with
+    /// `.sheet(item:)`, for the same reason `listing` is — see its note.
+    @State private var estimate: Estimate?
+    @State private var showingMenuFile = false
+
+    /// One read's list, identified per arrival so a second read
+    /// re-presents.
+    private struct MenuListing: Identifiable {
+        let id = UUID()
+        let rows: [MenuRow]
+        let source: String?
+    }
+
+    /// One read's estimate, identified per arrival so a second read
+    /// re-presents.
+    private struct Estimate: Identifiable {
+        let id = UUID()
+        let context: RefineContext
+    }
+
+    /// A menu DOCUMENT chosen from Files, read exactly the way a shared
+    /// one is — same reader, same OCR fallback, same picker.
+    @MainActor
+    /// The one photo path, whether the pick came from this sheet's own
+    /// button or was handed in by the composer's "+". Clearing
+    /// `photoItem` afterwards is what lets the SAME image be picked
+    /// twice in a row from the button.
+    private func startReading(_ item: PhotosPickerItem) {
+        readTask?.cancel()
+        readTask = Task {
+            defer { photoItem = nil }
+            guard let data = try? await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data) else {
+                failureMessage = "Couldn't load that photo — try another."
+                return
+            }
+            await read(image, source: .imported)
+        }
+    }
+
+    private func readMenuDocument(_ url: URL) async {
+        isReading = true
+        readingStatus = "Looking for nutrition…"
+        failureMessage = nil
+        defer { isReading = false }
+        // Read AND parse off the main actor — see ShareFlow/MenuImportSheet.
+        let outcome = await Task.detached(priority: .userInitiated) {
+            () -> Result<(MenuDocument, [MenuRow]), Error> in
+            do {
+                let document = try await MenuDocumentReader.readOCR(url)
+                return .success((document, MenuTableParser.parse(pages: document.pages)))
+            } catch { return .failure(error) }
+        }.value
+
+        switch outcome {
+        case .failure:
+            failureMessage = "Onigiri couldn't open that document."
+        case .success(let (document, rows)):
+            guard !rows.isEmpty else {
+                failureMessage = "No nutrition found in that document. Try a photo or screenshot of one item."
+                return
+            }
+            var source = document.suggestedSource
+            if source == nil {
+                source = await FoodIntelligence.readMenuSource(pages: document.pages)
+            }
+            listing = MenuListing(rows: rows, source: source)
+        }
+    }
+    @State private var isReading = false
+    /// The one in-flight OCR/identify pipeline. Stored so Cancel (and
+    /// backgrounding) actually STOPS it — an orphaned cascade used to
+    /// fire onLabel/onFood into the parent after dismissal, silently
+    /// re-presenting sheets or overwriting form fields (2026-07-20
+    /// audit HIGH).
+    @State private var readTask: Task<Void, Never>?
+    /// Camera permission explicitly denied/restricted — distinct from
+    /// "no camera hardware", which shares the same fallback layout.
+    @State private var cameraAuthDenied = false
+    /// What the progress capsule says — the cascade's second leg takes
+    /// long enough that "Analyzing photo…" would read as a hang.
+    @State private var readingStatus = ""
+    @State private var failureMessage: String?
+    /// Reaches the live scanner for capturePhoto() — the representable
+    /// parks its controller here.
+    @State private var scannerProxy = ScannerProxy()
+    /// The still the shutter just took, held over the live preview while
+    /// the cascade runs. Without it the preview keeps moving through
+    /// several seconds of OCR and inference, which reads as "the photo
+    /// hasn't been taken yet — keep the phone pointed at the label or
+    /// you'll lose it" (the user, 2026-07-26). Freezing on the captured
+    /// frame is the whole answer: it shows WHAT was caught, and that
+    /// the camera is done with you.
+    @State private var capturedStill: UIImage?
+    /// A result already handed to the host and the sheet on its way out.
+    /// Keeps the freeze up through the dismissal animation instead of
+    /// flashing the live camera as isReading clears.
+    @State private var delivered = false
+
+    /// The frozen frame outlives `isReading`: the multi-item chooser
+    /// sits on top of it, and a delivered result dismisses behind it.
+    /// Every one of these resolves, so the preview can't wedge — a
+    /// failed read drops straight back to live for the retry.
+    ///
+    /// The condition is "some list is up", not a roll-call of every
+    /// state variable that can mean that: the menu picker was missing
+    /// from the old list, so a photographed board already ran the live
+    /// camera behind its own picker.
+    private var showsFrozenFrame: Bool {
+        capturedStill != nil
+            && (isReading || delivered || listing != nil || estimate != nil)
+    }
+
+    /// UI-test hook (LABEL_SCAN=1): a bundled label photo stands in for
+    /// the pickers, exercising the real Vision request end to end.
+    private static let sampleAvailable =
+        ProcessInfo.processInfo.arguments.contains("--label-scan-sample")
+
+    /// UI-test hook (MENU_LOOP=1): a three-row menu, standing in for a
+    /// read no headless runner can perform — a camera pointed at a board
+    /// or a document picked from Files. It skips the PARSER on purpose;
+    /// what it exercises is the loop after it
+    /// (`plans/PLAN-multi-item-import.md`), which is where the list used
+    /// to be thrown away. `MenuTableParserTests` covers the reading.
+    private static let menuSampleAvailable =
+        ProcessInfo.processInfo.arguments.contains("--menu-scan-sample")
+
+    /// Printed calories, so nothing here waits on a model the simulator
+    /// may not have.
+    private static let sampleMenu = [
+        MenuRow(id: 0, name: "Sample Bowl", section: "Mains", kcal: 540, sodiumMg: 900),
+        MenuRow(id: 1, name: "Sample Fries", section: "Sides", kcal: 320, sodiumMg: 400),
+        MenuRow(id: 2, name: "Sample Shake", section: "Drinks", kcal: 610, sodiumMg: 260),
+    ]
+
+    /// UI-test hook (REFINE_STEP=1): one identified food, standing in
+    /// for a read no headless runner can perform — the camera pointed at
+    /// a plate. It skips the CASCADE on purpose; what it exercises is
+    /// the step after it (`plans/PLAN-refine-with-context.md`), where
+    /// the rules that matter live: a failed refine keeps the estimate,
+    /// Revert restores the first one, Use hands off.
+    ///
+    /// AI ships OFF, so in this run the refine genuinely declines and
+    /// the "unchanged" path is the deterministic one to assert.
+    private static let refineSampleAvailable =
+        ProcessInfo.processInfo.arguments.contains("--refine-sample")
+
+    private static var refineSample: RefineContext {
+        RefineContext(
+            prior: FoodIntelligence.RefinedFood(
+                name: "Sample Chicken Salad", serving: "", kcal: 0, sodiumMg: 0,
+                components: [
+                    .init(name: "mixed greens", portion: "2 cups", kcal: 180, sodiumMg: 220),
+                    .init(name: "grilled chicken", portion: "4 oz", kcal: 220, sodiumMg: 400),
+                    .init(name: "vinaigrette", portion: "2 tbsp", kcal: 120, sodiumMg: 200),
+                ]),
+            grounding: .classifierLabels(["salad", "chicken", "plate"]),
+            image: nil, orientation: nil)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if opening != nil {
+                    // NO CAMERA on a photo or file door. It used to run
+                    // underneath, and dismissing the picker dropped you
+                    // onto a live viewfinder you never asked for (the
+                    // user, 2026-09-18: "even after viewing/dismissing
+                    // the photo or file picker the Camera Scan always
+                    // comes up too. Camera Scan should only come up
+                    // with the camera button"). A comment in the first
+                    // cut called that a feature; it wasn't.
+                    doorLayout
+                } else if DataScannerViewController.isSupported && DataScannerViewController.isAvailable {
+                    cameraLayout
+                } else {
+                    fallbackLayout
+                }
+            }
+            .navigationTitle("Scan")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        readTask?.cancel()
+                        dismiss()
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    .recedesWithSheet(listing != nil || estimate != nil)
+                }
+            }
+            // The camera feed stays live under `listing`/`estimate` —
+            // unlike the menu-import hosts, nothing blanks this view
+            // first — so it needs the same recede treatment the Log
+            // sheet and food form got (2026-09-14).
+            .recedesBehindSheet(listing != nil || estimate != nil)
+            .onChange(of: photoItem) { _, item in
+                guard let item else { return }
+                startReading(item)
+            }
+            .onAppear {
+                // Reuses the failure capsule over the viewfinder: same
+                // place the reader's own messages appear, and it clears
+                // itself the moment the shutter is pressed.
+                if failureMessage == nil { failureMessage = notice }
+                // Handed a pick, this sheet's whole job is to read it —
+                // there is no camera to wake and nothing to ask.
+                switch opening {
+                case .photo(let item):
+                    startReading(item)
+                case .menuFile(let url):
+                    // Through `readTask` like every other trigger in
+                    // this file: a bare `Task` here was invisible to
+                    // the Cancel button and to the scenePhase handler,
+                    // so neither actually stopped a menu read —
+                    // contrary to what the property's own comment
+                    // promises (audit, 2026-08-17).
+                    readTask?.cancel()
+                    readTask = Task { await readMenuDocument(url) }
+                case nil:
+                    refreshCameraAuth()
+                }
+            }
+            // A library pick from the BUTTON below can be a menu
+            // screenshot too, so this sheet raises the same chooser the
+            // entry doors do.
+            .fileImporter(isPresented: $showingMenuFile, allowedContentTypes: [.pdf]) { result in
+                guard case .success(let url) = result else { return }
+                readTask?.cancel()
+                readTask = Task { await readMenuDocument(url) }
+            }
+            // ONE list for every multi-item read — a photographed board,
+            // a menu document, a screenshot naming several foods. It is a
+            // sheet OVER this one, never a swap of this one's binding:
+            // nesting is fine, swapping mid-dismissal is the 2026-07-22
+            // race.
+            .sheet(item: $listing) { listing in
+                NavigationStack {
+                    MenuPickerFlow(
+                        rows: listing.rows,
+                        suggestedSource: listing.source,
+                        completion: flowCompletion,
+                        onFinish: { logged in
+                            self.listing = nil
+                            // Done goes back to the host with the day's
+                            // logs written; Cancel leaves the camera up
+                            // for another try.
+                            if logged {
+                                delivered = true
+                                dismiss()
+                            }
+                        })
+                }
+            }
+            // A single ESTIMATE gets looked at before it fills anything.
+            // Sheet OVER this one, from ONE value, exactly like the list
+            // above — and for the same two reasons.
+            .sheet(item: $estimate) { estimate in
+                NavigationStack {
+                    EstimateRefineStep(
+                        context: estimate.context,
+                        onBack: { self.estimate = nil },
+                        onUse: { product in
+                            self.estimate = nil
+                            delivered = true
+                            // Deferred one turn: this step is dismissing
+                            // while `onFood` raises the host's own
+                            // sheet, and swapping the two in one breath
+                            // tears the new one down with the old
+                            // (2026-07-22).
+                            Task {
+                                onFood(product)
+                                dismiss()
+                            }
+                        })
+                }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    // Coming back from Settings after granting camera
+                    // access: re-evaluate, so the sheet recovers without
+                    // a relaunch.
+                    refreshCameraAuth()
+                } else {
+                    // A cascade mid-flight when the app suspends either
+                    // burns background time or dies unrecoverably —
+                    // cancel and reset instead.
+                    readTask?.cancel()
+                    isReading = false
+                }
+            }
+            .interactiveDismissDisabled(isReading)
+        }
+    }
+
+    // MARK: Camera layout
+
+    /// What a photo/file door shows: the sheet's own canvas, the read's
+    /// progress, and whatever the read has to say. No viewfinder — the
+    /// camera is the camera button's door, not this one.
+    ///
+    /// The spinner is the DEFAULT state, not the `isReading` one: this
+    /// sheet is only ever presented with a pick in hand, and the frames
+    /// between its first and `startReading` setting the flag would
+    /// otherwise be a blank canvas — the flash this door was rebuilt to
+    /// remove, one layer down.
+    private var doorLayout: some View {
+        ZStack {
+            Color.riceCanvas.ignoresSafeArea()
+            if let failureMessage {
+                VStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.title2)
+                        .foregroundStyle(.orange)
+                    Text(failureMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 32)
+            } else {
+                VStack(spacing: 12) {
+                    ProgressView()
+                    Text(readingStatus.isEmpty ? "Reading…" : readingStatus)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var cameraLayout: some View {
+        // isCapturing gates live barcode delivery: a label photo almost
+        // always still has the package barcode in frame, and an
+        // undeferred barcode hit would race the OCR/identify cascade
+        // for the same single-slot sheet state in every host
+        // (2026-07-20 audit HIGH).
+        ScannerRepresentable(
+            proxy: scannerProxy,
+            isCapturing: { isReading },
+            // The list is a sheet OVER this one, so the camera would
+            // otherwise keep running — and be looked at for as long as
+            // choosing a dish takes. It never showed before because the
+            // sheet dismissed on the first pick.
+            isPaused: listing != nil
+        ) { code in
+            readTask?.cancel()
+            onCode(code)
+            dismiss()
+        }
+        .ignoresSafeArea()
+        // The nav bar (Cancel) floats as bare Liquid Glass directly over
+        // whatever the camera sees — no card background behind it like a
+        // sheet has, and the live feed can be any color/brightness. A
+        // bright frame (the user, 2026-09-14: a light nutrition label)
+        // washed the glass pill out until "Cancel" was barely legible.
+        // Not a button-styling fix — CLAUDE.md is explicit that a custom
+        // `.buttonStyle` on a Cancel item is the WRONG fix elsewhere in
+        // this app — this is the standard camera-UI answer instead: a
+        // subtle top-edge scrim, the same trick Camera.app and most
+        // scanners use, so the toolbar stays legible regardless of
+        // content underneath.
+        .overlay(alignment: .top) {
+            LinearGradient(
+                colors: [.black.opacity(0.35), .clear],
+                startPoint: .top, endPoint: .bottom
+            )
+            .frame(height: 140)
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+        // Under the controls overlay below, so the progress capsule and
+        // the shutter stay legible on top of the frozen frame.
+        .overlay {
+            if let capturedStill, showsFrozenFrame {
+                Image(uiImage: capturedStill)
+                    .resizable()
+                    .scaledToFill()
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: showsFrozenFrame)
+        .overlay(alignment: .bottom) {
+            VStack(spacing: 12) {
+                if isReading {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text(readingStatus)
+                    }
+                    .padding(10)
+                    .background(.regularMaterial, in: .capsule)
+                }
+                if let failureMessage {
+                    Text(failureMessage)
+                        .font(.footnote)
+                        .multilineTextAlignment(.center)
+                        .padding(10)
+                        .background(.regularMaterial, in: .rect(cornerRadius: 12))
+                }
+                // Names what works, nothing more (the user, 2026-07-26):
+                // the previous "Point at a barcode, or photograph the
+                // nutrition label or the food itself" instructed at
+                // length in a spot where a list does the job. Still
+                // promises the food door only when the model that opens
+                // it is available, and still goes away once the shot is
+                // taken — "point at a barcode" told you to keep aiming
+                // at the exact moment aiming stopped mattering.
+                if !showsFrozenFrame {
+                    Text(FoodIntelligence.isAvailable
+                        ? "Barcode, nutrition label, or food."
+                        : "Barcode or nutrition label.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(8)
+                        .background(.regularMaterial, in: .capsule)
+                }
+                HStack {
+                    PhotosPicker(selection: $photoItem, matching: .images) {
+                        Image(systemName: "photo.on.rectangle")
+                            .font(.title2)
+                            .foregroundStyle(.white)
+                            .frame(width: 52, height: 52)
+                            .background(.ultraThinMaterial, in: .circle)
+                    }
+                    .accessibilityLabel("Choose a label photo")
+                    Spacer()
+                    // The shutter: a still of the label for the OCR path.
+                    // isReading flips SYNCHRONOUSLY here — set inside the
+                    // task (after the capture await) a fast double-tap
+                    // started two concurrent pipelines.
+                    Button {
+                        guard !isReading else { return }
+                        isReading = true
+                        readingStatus = "Analyzing photo…"
+                        failureMessage = nil
+                        readTask = Task { await captureLabel() }
+                    } label: {
+                        ZStack {
+                            Circle().strokeBorder(.white, lineWidth: 4)
+                                .frame(width: 68, height: 68)
+                            Circle().fill(.white)
+                                .frame(width: 54, height: 54)
+                        }
+                    }
+                    .accessibilityLabel(FoodIntelligence.isAvailable
+                        ? "Photograph the nutrition label or your food"
+                        : "Photograph the nutrition label")
+                    .disabled(isReading)
+                    Spacer()
+                    // Balances the picker so the shutter stays centered.
+                    Color.clear.frame(width: 52, height: 52)
+                }
+                .padding(.horizontal, 24)
+            }
+            .padding(.bottom, 24)
+            .padding(.horizontal, 16)
+        }
+    }
+
+    /// Logging hosts order from the list until Done; the Add Food form
+    /// takes the first pick and closes. The estimate for a row that
+    /// printed no calories runs inside the flow either way, so a menu
+    /// board fills the form exactly as it used to.
+    private var flowCompletion: MenuPickerFlow.Completion {
+        switch purpose {
+        case .logging:
+            .logging(saving: .optional, write: log, saveOnly: saveOnly)
+        case .filling:
+            .filling { picked in
+                listing = nil
+                delivered = true
+                onLabel(picked)
+                dismiss()
+            }
+        }
+    }
+
+    private func log(_ request: MenuLogRequest) async -> String? {
+        let ok = await LogActions.logFood(
+            name: request.name,
+            kcal: (request.label.kcal ?? 0) * request.quantity,
+            sodiumMg: (request.label.sodiumMg ?? 0) * request.quantity,
+            nutrients: request.label.nutrients.scaled(by: request.quantity),
+            category: request.category,
+            // The day the HOST is browsing, not today — the Log sheet
+            // backfills, and this sheet now writes on its behalf.
+            date: logDate,
+            aiGenerated: request.label.aiGenerated,
+            quantity: request.quantity)
+        guard ok else { return "Couldn't log that item. Try again." }
+        if request.saveToLibrary, !MenuLibrarySave.insert(request, into: context) {
+            return "Logged, but couldn't save it to your library."
+        }
+        return nil
+    }
+
+    /// The library keeps the dish; nothing goes to Health.
+    private func saveOnly(_ request: MenuLogRequest) async -> String? {
+        MenuLibrarySave.insert(request, into: context) ? nil : "Couldn't save that to your library."
+    }
+
+    private func captureLabel() async {
+        // The shutter set isReading before this task started; every
+        // early exit must clear it (read() re-sets and clears its own).
+        defer { isReading = false }
+        guard let scanner = scannerProxy.controller else {
+            failureMessage = "The camera isn't ready — try again."
+            return
+        }
+        do {
+            let photo = try await scanner.capturePhoto()
+            guard !Task.isCancelled else { return }
+            // Freeze BEFORE the cascade — its first leg is the slow one.
+            capturedStill = photo
+            await read(photo)
+        } catch {
+            scanLog.error("Label capture failed: \(String(describing: error))")
+            failureMessage = "Couldn't take that photo — try again."
+        }
+    }
+
+    // MARK: No-camera fallback (simulator, restricted devices)
+
+    private var fallbackLayout: some View {
+        Form {
+            Section {
+                // Denied is FIXABLE — say so and open the door; the
+                // generic copy made a revoked permission read as
+                // missing hardware with no way back.
+                if cameraAuthDenied {
+                    // One sentence, matching the no-camera message below.
+                    Text("Camera access is off — enter the barcode digits manually, or read a label from a photo.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    } label: {
+                        Label("Turn On Camera Access", systemImage: "gear")
+                    }
+                } else {
+                    Text("Camera scanning isn't available — enter the barcode digits manually, or read a nutrition label from a photo.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                TextField("Barcode", text: $manualCode)
+                    .keyboardType(.numberPad)
+                Button("Look Up") {
+                    onCode(manualCode)
+                    dismiss()
+                }
+                .disabled(manualCode.count < 8)
+            }
+            Section {
+                PhotosPicker(selection: $photoItem, matching: .images) {
+                    Label("Choose Photo", systemImage: "photo.on.rectangle")
+                }
+                // The fourth door, and the one the share sheet already
+                // had: a restaurant's nutrition PDF, read into a list to
+                // choose from. Sharing a document from Files worked;
+                // reaching the same reader from inside the app meant
+                // leaving it first (the user, 2026-08-16).
+                Button {
+                    showingMenuFile = true
+                } label: {
+                    Label("Choose Menu Document", systemImage: "doc.text.magnifyingglass")
+                }
+                if Self.sampleAvailable {
+                    Button {
+                        useSamplePhoto()
+                    } label: {
+                        Label("Use Sample Photo", systemImage: "testtube.2")
+                    }
+                    .accessibilityIdentifier("labelScanSample")
+                }
+                if Self.refineSampleAvailable {
+                    Button {
+                        estimate = Estimate(context: Self.refineSample)
+                    } label: {
+                        Label("Use Sample Estimate", systemImage: "testtube.2")
+                    }
+                    .accessibilityIdentifier("refineScanSample")
+                }
+                if Self.menuSampleAvailable {
+                    Button {
+                        listing = MenuListing(rows: Self.sampleMenu, source: "Sample Cafe")
+                    } label: {
+                        Label("Use Sample Menu", systemImage: "testtube.2")
+                    }
+                    .accessibilityIdentifier("menuScanSample")
+                }
+                if isReading {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text(readingStatus)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if let failureMessage {
+                    Text(failureMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
+            }
+        }
+        .riceCanvas()
+    }
+
+    private func useSamplePhoto() {
+        guard let url = Bundle.main.url(forResource: "sample-nutrition-label", withExtension: "png"),
+              let image = UIImage(contentsOfFile: url.path) else {
+            failureMessage = "Sample photo missing from the bundle."
+            return
+        }
+        readTask?.cancel()
+        readTask = Task { await read(image) }
+    }
+
+    private func refreshCameraAuth() {
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        cameraAuthDenied = status == .denied || status == .restricted
+    }
+
+    // MARK: Label pipeline
+
+    private func read(_ image: UIImage, source: FoodImageSource = .camera) async {
+        isReading = true
+        failureMessage = nil
+        defer { isReading = false }
+        // The cascade itself lives in FoodImageReader — shared with the
+        // paste/photo doors so every route reads identically.
+        switch await FoodImageReader.read(image, source: source, status: { readingStatus = $0 }) {
+        case .label(let parsed):
+            delivered = true
+            onLabel(parsed)
+            dismiss()
+        case .food(let product, let refine):
+            // An estimate is checkable; anything not refinable hands off
+            // exactly as it always has.
+            if let refine {
+                estimate = Estimate(context: refine)
+            } else {
+                delivered = true
+                onFood(product)
+                dismiss()
+            }
+        case .candidates(let list):
+            // A screenshot listing several foods gets the same list a
+            // menu does: the "Which item?" dialog could not say what had
+            // already been logged, and could not be returned to
+            // (PLAN-multi-item-import).
+            listing = MenuListing(rows: MenuRow.list(from: list), source: nil)
+        case .menu(let items, let source):
+            listing = MenuListing(rows: items, source: source)
+        case .nothing(let message):
+            failureMessage = message
+        case .cancelled:
+            break
+        }
+    }
+}
+
+/// Hands the live controller to the SwiftUI layer for capturePhoto().
+@MainActor
+final class ScannerProxy {
+    weak var controller: DataScannerViewController?
+}
+
+private struct ScannerRepresentable: UIViewControllerRepresentable {
+    let proxy: ScannerProxy
+    /// True while the shutter cascade runs — live barcode hits are
+    /// ignored so the two paths can't race each other's sheet slot.
+    let isCapturing: () -> Bool
+    /// True while a picker covers this sheet. Scanning STOPS rather
+    /// than merely being ignored: the choosing can take minutes, and a
+    /// camera nobody can see is only heat.
+    let isPaused: Bool
+    let onCode: (String) -> Void
+
+    func makeUIViewController(context: Context) -> DataScannerViewController {
+        let scanner = DataScannerViewController(
+            recognizedDataTypes: [.barcode(symbologies: [.ean13, .ean8, .upce, .code128])],
+            qualityLevel: .balanced,
+            recognizesMultipleItems: false,
+            // VisionKit's own guidance ("Find nearby barcodes", "Slow
+            // down") is on by default and speaks for a barcode-only
+            // scanner — wrong for a sheet that also takes labels and
+            // food, and it argued with our hint right beside it. Ours
+            // says what this camera does; the system's doesn't know
+            // (the user, 2026-07-26).
+            isGuidanceEnabled: false,
+            isHighlightingEnabled: true
+        )
+        scanner.delegate = context.coordinator
+        proxy.controller = scanner
+        return scanner
+    }
+
+    func updateUIViewController(_ scanner: DataScannerViewController, context: Context) {
+        context.coordinator.isCapturing = isCapturing
+        // Dismissal after a successful scan re-runs updates — don't
+        // restart the camera for the teardown animation.
+        guard !context.coordinator.delivered else { return }
+        if isPaused {
+            scanner.stopScanning()
+        } else {
+            try? scanner.startScanning()
+        }
+    }
+
+    static func dismantleUIViewController(_ scanner: DataScannerViewController, coordinator: Coordinator) {
+        // Deterministic camera-off on EVERY dismissal path (Cancel,
+        // swipe, label/food success) — not just the barcode-hit one.
+        scanner.stopScanning()
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onCode: onCode)
+    }
+
+    final class Coordinator: NSObject, DataScannerViewControllerDelegate {
+        let onCode: (String) -> Void
+        var isCapturing: () -> Bool = { false }
+        private(set) var delivered = false
+
+        init(onCode: @escaping (String) -> Void) {
+            self.onCode = onCode
+        }
+
+        func dataScanner(
+            _ dataScanner: DataScannerViewController,
+            didAdd addedItems: [RecognizedItem],
+            allItems: [RecognizedItem]
+        ) {
+            guard !delivered, !isCapturing() else { return }
+            for item in addedItems {
+                if case .barcode(let barcode) = item, let code = barcode.payloadStringValue {
+                    delivered = true
+                    dataScanner.stopScanning()
+                    onCode(code)
+                    return
+                }
+            }
+        }
+    }
+}
+
+

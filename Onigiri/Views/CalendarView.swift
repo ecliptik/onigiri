@@ -1,0 +1,710 @@
+import SwiftUI
+import SwiftData
+import OnigiriKit
+
+/// Gamification: a month grid where every day that met the deficit goal
+/// earned an onigiri, with the current streak at the bottom.
+struct CalendarView: View {
+    @State private var model = CalendarModel()
+    @State private var quickActions = QuickActions.shared
+    /// Same reason as DayNutritionView's: an unscaled slot lets the
+    /// glyph overflow onto the text at accessibility sizes. Tighter here
+    /// — the day card is three columns at `spacing: 0`.
+    @ScaledMetric(relativeTo: .caption) private var iconSlot = 22.0
+    /// The one thing this tab pushes. A bound path rather than a bare
+    /// destination `NavigationLink` so a deep link can POP it: the
+    /// month-stats widget says "the calendar", and it used to land on
+    /// whatever detail screen happened to be pushed (audit,
+    /// 2026-08-17). TodayView has always worked this way.
+    private enum Route: Hashable { case monthDetail(Date) }
+    @State private var navPath: [Route] = []
+    @State private var displayedMonth = Calendar.current.startOfMonth(for: .now)
+    @State private var selectedDay = Calendar.current.startOfDay(for: .now)
+    @Query private var goals: [GoalSettings]
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Differentiate Without Color: limit-mode status hues gain a glyph
+    /// twin (see BrandColors.sodiumStatusSymbol).
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
+    // AppStorage (not static SharedStore reads) so icon changes re-render
+    // this screen immediately.
+    @AppStorage(SharedStore.waterIconKey, store: SharedStore.defaults) private var waterIcon = "sfDrop"
+    @AppStorage(SharedStore.foodIconKey, store: SharedStore.defaults) private var foodIcon = "sfFork"
+    @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
+    @AppStorage(SharedStore.trackedMetric1Key, store: SharedStore.defaults) private var trackedMetric1 = "sodium"
+    /// Re-grades every day shown (`plans/PLAN-burn-correction.md`).
+    @AppStorage(SharedStore.burnCorrectionKcalKey, store: SharedStore.defaults)
+    private var burnCorrectionKcal = 0.0
+    @AppStorage(SharedStore.trackedMetric1IconKey, store: SharedStore.defaults) private var trackedMetric1Icon = ""
+    @AppStorage(SharedStore.trackedMetric2Key, store: SharedStore.defaults) private var trackedMetric2 = "water"
+    @AppStorage(SharedStore.trackedMetric2IconKey, store: SharedStore.defaults) private var trackedMetric2Icon = ""
+
+    private let calendar = Calendar.current
+
+    var body: some View {
+        NavigationStack(path: $navPath) {
+            ScrollView {
+                VStack(spacing: Layout.screenSpacing) {
+                    // Stats first — they were below the fold at the bottom.
+                    summaryCard
+                    // Region-scoped swipes: the grid pages months, the day
+                    // area pages days. Chevrons stay as the visible,
+                    // accessible affordance for both.
+                    MonthGridView(
+                        month: displayedMonth,
+                        earned: model.earned,
+                        tracked: model.trackedDaySet,
+                        selectedDay: selectedDay,
+                        onSelect: { selectedDay = $0 }
+                    )
+                    .simultaneousGesture(horizontalSwipe { shiftMonth($0) })
+                    // The legend the grid never had: three marks, three
+                    // stories.
+                    Text("\(SharedStore.rewardEmoji(for: rewardIcon)) goal met  ·  ○ tracked, goal missed  ·  blank: not tracked")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    VStack(spacing: Layout.screenSpacing) {
+                        dayHeader
+                        daySummaryCard
+                    }
+                    .simultaneousGesture(horizontalSwipe { shiftDay($0) })
+                    if model.targetDeficitKcal == nil {
+                        Text("No goal set — any deficit earns a badge. Set a goal to raise the bar.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                    }
+                }
+                .padding(.horizontal)
+            }
+            // Grouped surface idiom, app-wide (see TodayView).
+            .readableContentWidth(groupedBackground: true)
+            // The month as the title and both chevrons beside it on the
+            // SAME row (`inlineLargeTitle`, Style.swift — the one header
+            // shape every screen uses now). Both chevrons trailing,
+            // matching Today's day chevrons: the leading ~20pt is iOS's
+            // back-swipe zone, which intermittently stole taps from a
+            // control placed there (see TodayView, v2.5.10).
+            // "Sep 2026", not "September 2026": beside the chevron pill a
+            // native title has ~265pt on a 402pt phone, and the wide
+            // month truncated ("September 20…", from-sim screenshot,
+            // 2026-09-16). The pushed month detail keeps the wide form —
+            // its title is inline and has the whole bar.
+            .inlineLargeTitle(displayedMonth.formatted(.dateTime.month(.abbreviated).year()))
+            .toolbar {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        shiftMonth(-1)
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .accessibilityLabel("Previous month")
+                    Button {
+                        shiftMonth(1)
+                    } label: {
+                        Image(systemName: "chevron.right")
+                    }
+                    .disabled(calendar.isDate(displayedMonth, equalTo: .now, toGranularity: .month))
+                    .accessibilityLabel("Next month")
+                }
+            }
+            // INSIDE the NavigationStack's content, and it has to be.
+            // `navigationDestination` resolves against the stack it is
+            // declared WITHIN, so attached to the stack itself — one
+            // brace further out — it registers with nothing and every
+            // value-based NavigationLink here is inert. That is where it
+            // sat from the 2026-08-17 switch to a bound path until
+            // 2026-08-18: tapping the month card did nothing at all,
+            // silently, with no error, no log and no build warning. A
+            // bare `NavigationLink(destination:)` needs no registration,
+            // which is why the older form worked and the rewrite broke
+            // it — the two are not interchangeable.
+            .navigationDestination(for: Route.self) { route in
+                switch route {
+                case .monthDetail(let month):
+                    MonthDetailView(model: model, month: month)
+                }
+            }
+        }
+        .task {
+            // Ungated until 2026-09-15: `.task` re-fires on every tab
+            // bounce back to Calendar (same shape as `TodayModel.start()`),
+            // and an unconditional `refresh()` here queried HealthKit and
+            // wrote several @Observable properties every time. Routed
+            // through the same staleness check the scenePhase handler
+            // below already uses — a fresh gate (cold launch) still reads
+            // stale, so this still refreshes on first appearance. (Found
+            // hunting that day's tab-bar stutter; it wasn't the cause —
+            // plans/PLAN-tab-bar-jank.md — but it was real waste.)
+            if model.shouldForegroundRefresh(
+                healthWriteVersion: ToastCenter.shared.healthWriteVersion
+            ) {
+                await refresh()
+            }
+        }
+        // onChange covers the live case (the app is foregrounded by the
+        // widget tap itself, so the request arrives while this view is
+        // mounted); onAppear covers the cold launch, where the request
+        // is set before this view exists. No scenePhase hook: the
+        // foreground IS what delivered the request.
+        .onChange(of: quickActions.calendarRootRequest) { _, request in
+            consumeRootRequest(request)
+        }
+        .onAppear {
+            // Last refresh's days, re-judged now — before the first frame.
+            model.applyLaunchPrimeIfNeeded()
+            consumeRootRequest(quickActions.calendarRootRequest)
+        }
+        .refreshable { await refresh(forceWeights: true) }
+        // Months beyond the preloaded window load on demand — otherwise
+        // they render every day as "goal not met" with a "—" day card.
+        .task(id: displayedMonth) {
+            await model.ensureTotals(forMonthOf: displayedMonth)
+        }
+        .onChange(of: selectedDay) { _, day in
+            Task { await model.loadDaySummary(for: day) }
+        }
+        // Slot changes in Settings need fresh Health queries here too.
+        .onChange(of: trackedMetric1) { _, _ in
+            Task { await model.loadDaySummary(for: selectedDay) }
+        }
+        .onChange(of: trackedMetric2) { _, _ in
+            Task { await model.loadDaySummary(for: selectedDay) }
+        }
+        // Accepted or removed on Goal: every day's burn moved, so every
+        // badge is re-judged from fresh totals.
+        .onChange(of: burnCorrectionKcal) { _, _ in
+            model.burnCorrectionChanged()
+            Task {
+                await refresh()
+                await model.ensureTotals(forMonthOf: displayedMonth)
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Once visited, this view stays alive in the TabView, so this
+            // fires on every activation even with another tab frontmost —
+            // only refresh when the model says the data went stale.
+            if phase == .active,
+               model.shouldForegroundRefresh(
+                   healthWriteVersion: ToastCenter.shared.healthWriteVersion
+               ) {
+                Task { await refresh() }
+            }
+        }
+        // A log arriving from outside the app (watch, widget button, Siri)
+        // while it's ALREADY running — the foreground gate above never
+        // fires for that, so these day summaries went stale exactly like
+        // Today's log did (2026-07-30). Routed through the same staleness
+        // check so it also records the version it judged, and the next
+        // foreground doesn't repeat the work.
+        .onChange(of: ToastCenter.shared.healthWriteVersion) { _, version in
+            if model.shouldForegroundRefresh(healthWriteVersion: version) {
+                Task { await refresh() }
+            }
+        }
+    }
+
+    private func refresh(forceWeights: Bool = false) async {
+        let goal = goals.first.map {
+            SyncedGoal(
+                targetWeightLb: $0.targetWeightLb,
+                targetDate: $0.targetDate,
+                fallbackCurrentWeightLb: $0.fallbackCurrentWeightLb,
+                mode: $0.mode
+            )
+        }
+        // Side by side. The day card's read used to queue behind the
+        // whole refresh — the plan, 92 days of totals and a year of
+        // weigh-ins, none of which it needs — so its sodium/water slots
+        // sat on "—" for a beat after everything else had filled (the
+        // user, 2026-09-17; the shape `TodayModel.start()` had until the
+        // day before).
+        async let window: Void = model.refresh(goal: goal, forceWeights: forceWeights)
+        async let card: Void = model.loadDaySummary(for: selectedDay)
+        _ = await (window, card)
+    }
+
+    // MARK: - Pieces
+
+    // Weekday header, grid, and DayCell live in MonthGridView (shared
+    // with Today's day-jump sheet).
+
+    /// Cycle the selected day like the month header cycles months; the
+    /// grid follows across month boundaries.
+    private var dayHeader: some View {
+        HStack {
+            Button {
+                shiftDay(-1)
+            } label: {
+                Image(systemName: "chevron.left")
+            }
+            .accessibilityLabel("Previous day")
+            Spacer()
+            // "Today" over the date: while browsing an earlier month the
+            // persistent day card read like that month's data at a glance.
+            if calendar.isDateInToday(selectedDay) {
+                Text("Today")
+                    .font(.headline)
+            } else {
+                Text(selectedDay, format: .dateTime.weekday(.abbreviated).month(.wide).day())
+                    .font(.headline)
+            }
+            Spacer()
+            Button {
+                shiftDay(1)
+            } label: {
+                Image(systemName: "chevron.right")
+            }
+            .disabled(calendar.isDateInToday(selectedDay))
+            .accessibilityLabel("Next day")
+        }
+    }
+
+    private func shiftDay(_ delta: Int) {
+        guard let day = calendar.date(byAdding: .day, value: delta, to: selectedDay) else { return }
+        selectedDay = min(calendar.startOfDay(for: day), calendar.startOfDay(for: .now))
+        if !calendar.isDate(selectedDay, equalTo: displayedMonth, toGranularity: .month) {
+            displayedMonth = calendar.startOfMonth(for: selectedDay)
+        }
+    }
+
+    private func shiftMonth(_ delta: Int) {
+        guard let month = calendar.date(byAdding: .month, value: delta, to: displayedMonth),
+              month <= calendar.startOfMonth(for: .now) else { return }
+        displayedMonth = month
+    }
+
+    /// Left = forward, right = back — same thresholds as Today's day swipe.
+    private func horizontalSwipe(_ shift: @escaping (Int) -> Void) -> some Gesture {
+        DragGesture(minimumDistance: 30).onEnded { value in
+            guard abs(value.translation.width) > abs(value.translation.height) else { return }
+            if value.translation.width < -60 {
+                shift(1)
+            } else if value.translation.width > 60 {
+                shift(-1)
+            }
+        }
+    }
+
+    private var daySummaryCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Goal status centered in the card; the chevron pinned
+            // trailing is the ONLY tap affordance (see below).
+            ZStack {
+                HStack {
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                if model.earned.contains(selectedDay) {
+                    Text("Goal met \(SharedStore.rewardEmoji(for: rewardIcon))")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.green)
+                } else if calendar.isDateInToday(selectedDay) {
+                    Text("In progress")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else if model.trackedDaySet.contains(selectedDay) {
+                    // A blank slot here read as a loading failure.
+                    Text("Goal not met")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Not tracked")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            // Fixed three-column grid, always rendered ("—" when a day has
+            // no data): every icon keeps its exact position across day
+            // changes, so only the numbers repaint.
+            let totals = model.totalsByDay[selectedDay]
+            HStack(spacing: 0) {
+                metric(icon: { FoodIconView(raw: foodIcon) },
+                       text: totals.map { "\($0.intakeKcal.formatted(.number.precision(.fractionLength(0)))) in" } ?? "—")
+                metric(icon: { Image(systemName: "flame.fill").foregroundStyle(.red) },
+                       text: totals.map { "\($0.burnKcal.formatted(.number.precision(.fractionLength(0)))) out" } ?? "—")
+                Text(totals.map(deficitText(for:)) ?? "—")
+                    .fontWeight(.semibold)
+                    .foregroundStyle(deficitTint(for: totals))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .font(.subheadline)
+            .monospacedDigit()
+
+            // The two tracked-metric slots, mirroring Today's row (a None
+            // slot drops out; both None drops the line).
+            if slotNutrient(1) != nil || slotNutrient(2) != nil {
+                HStack(spacing: 0) {
+                    if let nutrient = slotNutrient(1) {
+                        slotMetric(slot: 1, nutrient: nutrient)
+                    }
+                    if let nutrient = slotNutrient(2) {
+                        slotMetric(slot: 2, nutrient: nutrient)
+                    }
+                    Spacer()
+                        .frame(maxWidth: .infinity)
+                }
+                .font(.subheadline)
+                .monospacedDigit()
+            }
+
+            // The day's own snapshotted target when one was recorded
+            // (history is judged by it); today's target otherwise. A 0
+            // snapshot means the day ran goal-less — no line.
+            if let target = model.targetDeficit(for: selectedDay), target > 0 {
+                // Same vocabulary as Today's "Daily goal" card.
+                Text("Daily goal: \(target, format: .number.precision(.fractionLength(0))) kcal deficit")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            // No "Details ›" footer here: the whole card is ONE tap
+            // target, and the chevron pinned top-trailing already says
+            // so. Two affordances for one gesture cost a whole line and
+            // pushed the card below the fold (the user, 2026-08-02).
+            // The month card keeps its footer — it has no chevron.
+        }
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 14))
+        .contentShape(.rect)
+        // The whole card is the tap target: opens the day's full record
+        // (sodium, water, entries, backfill) on Today.
+        .onTapGesture {
+            QuickActions.shared.dayRequest = selectedDay
+        }
+        // ONE VoiceOver stop, like MonthGrid's DayCell and this file's
+        // own slotMetric: without combining, the goal line, the metrics,
+        // and the target caption were separate swipe stops and the
+        // button trait landed on none the user could tell apart (audit,
+        // 2026-08-17 — the grouping lesson slotMetric already recorded).
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Opens this day on Today, where you can view and edit it")
+        .animation(reduceMotion ? nil : .snappy, value: selectedDay)
+    }
+
+    /// A slot's nutrient from the reactive raw key; nil when set to None.
+    private func slotNutrient(_ slot: Int) -> TrackedNutrient? {
+        let raw = slot == 1 ? trackedMetric1 : trackedMetric2
+        if raw == SharedStore.trackedMetricNone { return nil }
+        return TrackedNutrient(key: raw) ?? (slot == 1 ? .sodium : .water)
+    }
+
+    /// The browsed day's total for a slot: sodium/water ride the day
+    /// summary; anything else was fetched with it into the model.
+    /// nil (untracked day, failed read) renders as "—" like the energy
+    /// columns.
+    private func slotValue(slot: Int, nutrient: TrackedNutrient) -> Double? {
+        switch nutrient {
+        case .sodium: model.selectedDaySummary?.sodiumMg
+        case .water: model.selectedDaySummary?.waterOz
+        default: model.selectedDaySlotTotals[slot - 1]
+        }
+    }
+
+    /// One tracked metric column, same read as Today's row: limit mode
+    /// shows the total colored toward the ceiling; goal mode "x / target",
+    /// green when met.
+    private func slotMetric(slot: Int, nutrient: TrackedNutrient) -> some View {
+        let mode = SharedStore.trackedMode(slot: slot, nutrient: nutrient)
+        let target = SharedStore.trackedTarget(slot: slot, nutrient: nutrient)
+        let value = slotValue(slot: slot, nutrient: nutrient)
+        let text: String = value.map { total in
+            let water = SharedStore.waterUnit
+            let sodium = SharedStore.sodiumUnit
+            let digits = nutrient.displayFractionDigits(sodium: sodium)
+            let totalText = nutrient.displayValue(total, water: water, sodium: sodium)
+                .formatted(.number.precision(.fractionLength(digits)))
+            let symbol = nutrient.displayUnitSymbol(water: water, sodium: sodium)
+            // Color-only on screen by ruling; VoiceOver gets the limit
+            // status via the value below. Status math stays canonical.
+            return mode == .limit
+                ? "\(totalText) \(symbol)"
+                : "\(totalText) / \(nutrient.displayValue(target, water: water, sodium: sodium).formatted(.number.precision(.fractionLength(digits)))) \(symbol)"
+        } ?? "—"
+        let color: Color = value.map { total in
+            mode == .limit
+                ? Color.sodiumStatus(mg: total, limitMg: target)
+                : (total >= target ? .green : .primary)
+        } ?? .secondary
+        let status = (mode == .limit ? value : nil)
+            .flatMap { Color.sodiumStatusLabel(mg: $0, limitMg: target) }
+        let symbol = differentiateWithoutColor
+            ? (mode == .limit ? value : nil)
+                .flatMap { Color.sodiumStatusSymbol(mg: $0, limitMg: target) }
+            : nil
+        return metric(icon: { slotIcon(slot: slot, nutrient: nutrient) },
+                      text: text, color: color, symbol: symbol)
+            // Without grouping, the value never reaches VoiceOver — it
+            // must sit on a combined element, not a plain HStack.
+            .accessibilityElement(children: .combine)
+            .accessibilityValue(status ?? "")
+    }
+
+    @ViewBuilder
+    private func slotIcon(slot: Int, nutrient: TrackedNutrient) -> some View {
+        if nutrient == .water {
+            WaterIconView(raw: waterIcon)
+        } else {
+            let stored = slot == 1 ? trackedMetric1Icon : trackedMetric2Icon
+            Text(SharedStore.isCustomEmoji(stored) ? stored : nutrient.defaultEmoji)
+        }
+    }
+
+    /// One equal-width column with a fixed-width icon slot, so SF Symbol
+    /// and emoji rows line up exactly and icons never move across days.
+    private func metric(
+        @ViewBuilder icon: () -> some View,
+        text: String,
+        color: Color = .primary,
+        symbol: String? = nil
+    ) -> some View {
+        HStack(spacing: 6) {
+            icon()
+                .frame(width: iconSlot, alignment: .center)
+            Text(text).foregroundStyle(color)
+            // Differentiate Without Color's glyph twin of the status
+            // hue; callers pass it only under that setting.
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.caption)
+                    .foregroundStyle(color)
+                    .accessibilityHidden(true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The RING's figure — "N left" or "+N over" — so the day card
+    /// and Today say the same thing in the same words.
+    ///
+    /// It showed the banked deficit alone before, which let the card
+    /// contradict the ring: a day read "N deficit" in green under
+    /// "Goal not met" while Today showed "+M kcal over" (the user,
+    /// 2026-08-02). Both were true — N banked plus M short IS the
+    /// target — but the card printed one half and the ring the
+    /// other. Spelling out "N / target deficit" fixed the contradiction
+    /// and cost a line: it WRAPPED, pushing the card below the fold, so
+    /// the short form the ring already uses wins instead.
+    ///
+    /// Without a target that day there is nothing to be over, so the
+    /// plain net stands.
+    private func deficitText(for totals: DayEnergyTotals) -> String {
+        guard let remaining = remainingKcal(for: totals) else {
+            let deficit = totals.deficitKcal.rounded()
+            let amount = abs(deficit).formatted(.number.precision(.fractionLength(0)))
+            return deficit >= 0 ? "\(amount) deficit" : "\(amount) excess"
+        }
+        // Shared with the ring so the "+" and the wording can't drift;
+        // the "kcal" is dropped to match "N in" / "N out".
+        let headline = CalorieBudget.remainingHeadline(remaining)
+        let amount = headline.value.formatted(.number.precision(.fractionLength(0)))
+        return headline.over ? "+\(amount) over" : "\(amount) left"
+    }
+
+    /// Budget − intake for the day, on its OWN recorded target. nil when
+    /// the day ran goal-less.
+    private func remainingKcal(for totals: DayEnergyTotals) -> Double? {
+        guard let target = model.targetDeficit(for: selectedDay), target > 0 else { return nil }
+        return ((totals.burnKcal - target) - totals.intakeKcal).rounded()
+    }
+
+    /// The ring's own tint, for the same reason as the wording. Green
+    /// used to mean "any deficit at all", so a missed day wore the
+    /// colour of a win.
+    private func deficitTint(for totals: DayEnergyTotals?) -> Color {
+        guard let totals else { return .primary }
+        guard let remaining = remainingKcal(for: totals) else {
+            return totals.deficitKcal > 0 ? .green : .orange
+        }
+        return .remainingStatus(kcal: remaining)
+    }
+
+    /// Highlights only — the full month story (deficit, predicted vs
+    /// scale, best streak) lives one tap deeper. The screen was getting
+    /// crowded with all six stats on the card.
+    /// Pop to this tab's root for a deep link that means "the calendar".
+    /// Consumed (set back to nil) so it can't fire twice.
+    private func consumeRootRequest(_ request: Bool?) {
+        guard request == true else { return }
+        quickActions.calendarRootRequest = nil
+        navPath.removeAll()
+    }
+
+    private var summaryCard: some View {
+        NavigationLink(value: Route.monthDetail(displayedMonth)) {
+            VStack(spacing: 8) {
+                HStack(spacing: 0) {
+                    // "this month" while browsing March claimed the
+                    // wrong month — name it when it isn't the current.
+                    stat(
+                        "\(SharedStore.rewardEmoji(for: rewardIcon)) \(model.earnedCount(inMonthOf: displayedMonth))",
+                        caption: calendar.isDate(displayedMonth, equalTo: .now, toGranularity: .month)
+                            ? "this month"
+                            : "in \(displayedMonth.formatted(.dateTime.month(.wide)))"
+                    )
+                    Divider().frame(height: 36)
+                    // A broken streak reads as a zero next to a month of
+                    // earned days — sixteen of them, the morning after one
+                    // miss (the user's own calendar, 2026-07-30). That
+                    // reports a good month as a failure. The best run
+                    // stands beside it: the part a single day can't take
+                    // away. Shown only once there IS one, so a first week
+                    // doesn't carry a second zero.
+                    if model.streak == 0, model.bestStreak > 0 {
+                        stat(
+                            "\(model.bestStreak) \(model.bestStreak == 1 ? "day" : "days")",
+                            caption: "best streak"
+                        )
+                    } else {
+                        stat(
+                            "\(model.streak) \(model.streak == 1 ? "day" : "days")",
+                            caption: "current streak",
+                            color: model.streak > 0 ? .green : .secondary
+                        )
+                    }
+                }
+                DetailsCaption()
+            }
+            .padding(.vertical, 12)
+            .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 14))
+            // Neither a prime nor a Health answer yet: "🍙 0" and "0
+            // days" would be claims, not counts (`CalendarPrime`).
+            .redacted(reason: model.hasContent ? [] : .placeholder)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Shows the month's deficit, weight change, and records")
+    }
+
+    private func stat(_ value: String, caption: String, color: Color = .primary) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(color)
+                .monospacedDigit()
+            Text(caption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+}
+
+/// The browsed month's full story, pushed from Calendar's summary card
+/// and Today's goal card: outcome totals, predicted vs scale weight
+/// change, and all-time records.
+struct MonthDetailView: View {
+    let model: CalendarModel
+    let month: Date
+    @AppStorage(SharedStore.rewardIconKey, store: SharedStore.defaults) private var rewardIcon = "onigiri"
+    @AppStorage(SharedStore.weightUnitKey, store: SharedStore.defaults) private var weightUnitRaw = SharedStore.unitAutomatic
+
+    var body: some View {
+        // Bound once per evaluation (the house pattern): the stats are
+        // one pass over the month, and each row below used to re-derive
+        // its number — twice where the tint reads it too.
+        let stats = model.monthStats(inMonthOf: month)
+        let actual = model.actualLb(inMonthOf: month)
+        List {
+            Section("This month") {
+                LabeledContent("Days goal met") {
+                    Text("\(SharedStore.rewardEmoji(for: rewardIcon)) \(model.earnedCount(inMonthOf: month))")
+                }
+                LabeledContent("Days tracked") {
+                    Text("\(stats.daysTracked)")
+                        .monospacedDigit()
+                }
+                LabeledContent("Foods logged") {
+                    Text(model.monthFoodEntries.map { "\($0)" } ?? "—")
+                        .monospacedDigit()
+                }
+                // Values carry the app's semantic colors so the story
+                // pops out of the grey (the user): water blue, burn red,
+                // and the green/orange outcome pair everywhere a sign
+                // means winning or losing ground.
+                LabeledContent("Total water") {
+                    Text(model.monthWaterOz.map {
+                        SharedStore.waterUnit.text(fromOz: $0)
+                    } ?? "—")
+                    .monospacedDigit()
+                    .foregroundStyle(model.monthWaterOz != nil ? Color.blue : Color.secondary)
+                }
+                // The energy rows read as one sum (the user):
+                // burned − calories = deficit.
+                LabeledContent("Total calories") {
+                    Text("\(stats.totalCalories, format: .number.precision(.fractionLength(0))) kcal")
+                        .monospacedDigit()
+                }
+                LabeledContent("Total burned") {
+                    Text("\(stats.totalBurned, format: .number.precision(.fractionLength(0))) kcal")
+                        .monospacedDigit()
+                        .foregroundStyle(.red)
+                }
+                // Signed like the weight rows (the user): under burn
+                // reads negative — and green, the day cards' outcome
+                // colors.
+                LabeledContent("Total deficit") {
+                    Text(stats.totalDeficit.map { signedKcal(-$0) } ?? "—")
+                        .monospacedDigit()
+                        .foregroundStyle(outcomeColor(stats.totalDeficit.map { -$0 }))
+                }
+                LabeledContent("Predicted") {
+                    // No ≈ — the label already says predicted, and the
+                    // "Scale change" row below carries none (the user,
+                    // 2026-08-08). Goal's Last-30-days pair is the twin.
+                    Text(stats.predictedLb.map { signedLb($0) } ?? "—")
+                        .monospacedDigit()
+                        .foregroundStyle(outcomeColor(stats.predictedLb))
+                }
+                LabeledContent("Scale change") {
+                    Text(actual.map(signedLb) ?? "—")
+                        .monospacedDigit()
+                        .foregroundStyle(outcomeColor(actual))
+                }
+            }
+            Section("Streaks") {
+                LabeledContent("Current") {
+                    Text("\(model.streak) \(model.streak == 1 ? "day" : "days")")
+                        .foregroundStyle(model.streak > 0 ? .green : .secondary)
+                }
+                LabeledContent("Best ever") {
+                    Text("\(model.bestStreak) \(model.bestStreak == 1 ? "day" : "days")")
+                }
+            }
+        }
+        .readableContentWidth(groupedBackground: true)
+        .navigationTitle(month.formatted(.dateTime.month(.wide).year()))
+        .navigationBarTitleDisplayMode(.inline)
+        // Water total and food count need their own Health queries; the
+        // rest of the stats come from the already-loaded day totals.
+        .task(id: month) { await model.loadMonthStats(for: month) }
+    }
+
+    private func signedLb(_ value: Double) -> String {
+        let unit = WeightUnit.resolve(weightUnitRaw)
+        return "\(unit.fromLb(value).formatted(.number.precision(.fractionLength(1)).sign(strategy: .always(includingZero: false)))) \(unit.symbol)"
+    }
+
+    private func signedKcal(_ value: Double) -> String {
+        "\(value.formatted(.number.precision(.fractionLength(0)).sign(strategy: .always(includingZero: false)))) kcal"
+    }
+
+    /// The day cards' outcome pair: negative (losing ground on the
+    /// scale, eating under burn) is green, positive is orange, absent
+    /// or zero stays quiet.
+    private func outcomeColor(_ value: Double?) -> Color {
+        guard let value, value != 0 else { return .secondary }
+        return value < 0 ? .green : .orange
+    }
+}
+
+// Calendar.startOfMonth(for:) lives in MonthGrid.swift, shared with
+// Today's day-jump sheet.
+
+#Preview {
+    CalendarView()
+        .modelContainer(for: [Food.self, Meal.self, GoalSettings.self], inMemory: true)
+}

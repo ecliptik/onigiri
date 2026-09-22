@@ -1,0 +1,496 @@
+import Foundation
+
+/// A meal as it travels from iPhone to Watch: what one-tap logging needs.
+/// Category and nutrients are optional so payloads from older phones still
+/// decode — without them a watch/widget log falls back to time-of-day slot
+/// inference and kcal+sodium only.
+public struct SyncedMeal: Codable, Identifiable, Sendable, Hashable {
+    public let id: UUID
+    public let name: String
+    public let kcal: Double
+    public let sodiumMg: Double
+    public let category: String?
+    public let nutrients: NutrientValues?
+    /// Meal composition for the log's breakdown metadata — optional so
+    /// payloads survive version skew in both directions (an old watch
+    /// just logs meals without a breakdown; foods never carry it).
+    public let items: [LoggedMealItem]?
+    /// Whether this row is a MEAL rather than a food. The type carries
+    /// both — `recentFoods` and half of `favorites` are foods — and
+    /// until 2026-08-14 nothing on the wire said which, so watch rows
+    /// could not mark meals the way every phone list does.
+    ///
+    /// Optional for version skew in both directions, and nil renders as
+    /// unmarked: a watch running ahead of its phone shows what it always
+    /// showed rather than guessing. Do NOT infer this from `items` —
+    /// an old phone sends nil there for meals too, and a meal with no
+    /// members is legal.
+    public let isMeal: Bool?
+
+    public init(
+        id: UUID, name: String, kcal: Double, sodiumMg: Double,
+        category: String? = nil, nutrients: NutrientValues? = nil,
+        items: [LoggedMealItem]? = nil,
+        isMeal: Bool? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.kcal = kcal
+        self.sodiumMg = sodiumMg
+        self.category = category
+        self.nutrients = nutrients
+        self.items = items
+        self.isMeal = isMeal
+    }
+}
+
+/// The weight goal as it travels to the watch; the watch combines it with
+/// its own HealthKit weight/burn data to compute the daily plan.
+public struct SyncedGoal: Codable, Sendable, Equatable, Hashable {
+    public let targetWeightLb: Double
+    public let targetDate: Date
+    public let fallbackCurrentWeightLb: Double?
+    /// "lose" (nil, the historical default) or "maintain" — optional so
+    /// payloads survive version skew in both directions.
+    public let mode: String?
+
+    public init(
+        targetWeightLb: Double, targetDate: Date,
+        fallbackCurrentWeightLb: Double?, mode: String? = nil
+    ) {
+        self.targetWeightLb = targetWeightLb
+        self.targetDate = targetDate
+        self.fallbackCurrentWeightLb = fallbackCurrentWeightLb
+        self.mode = mode
+    }
+
+    public var isMaintenance: Bool { mode == GoalMode.maintain }
+}
+
+/// The two goal modes, as stored strings (SwiftData + sync payload).
+public enum GoalMode {
+    public static let lose = "lose"
+    public static let maintain = "maintain"
+}
+
+/// What a sync says to do with the watch's stored goal. "Absent from the
+/// context" means the phone has no goal (clear it); "present but
+/// undecodable" (version skew) must keep the last good copy, not wipe it.
+public enum GoalUpdate: Sendable, Equatable, Hashable {
+    case set(SyncedGoal)
+    case clear
+    case keep
+}
+
+/// Everything one WatchConnectivity application context carries.
+/// Hashable so the phone's push can fingerprint the whole payload —
+/// a hand-enumerated field list silently missed future additions.
+public struct SyncPayload: Sendable, Hashable {
+    /// nil when the meals data was missing or failed to decode — keep the
+    /// watch's last good list.
+    public let meals: [SyncedMeal]?
+    /// The phone's most recently used foods, SyncedMeal-shaped so the
+    /// watch logs them through the same one-tap path. nil = keep.
+    public let recentFoods: [SyncedMeal]?
+    /// Favorite foods and meals by recency — the watch's Favorites page
+    /// mirrors the phone Log sheet's scope. nil = keep.
+    public let favorites: [SyncedMeal]?
+    public let goal: GoalUpdate
+    public let waterServingOz: Double?
+    public let waterGoalOz: Double?
+    public let balanceStyle: String?
+    /// Icon personalization rides along so the watch matches the phone.
+    public let foodIcon: String?
+    public let waterIcon: String?
+    public let rewardIcon: String?
+    /// The meal mark. It travels for the same reason the others do —
+    /// the watch draws it beside meal names, and without it the watch
+    /// would have to hardcode a default the phone may have changed.
+    public let mealIcon: String?
+    /// The tracked-metric slots and the sodium limit their targets can
+    /// reference — the watch's metrics page mirrors the phone's slots.
+    /// Keyed by the SharedStore key, stored verbatim.
+    public let trackedMetricSettings: [String: String]?
+    public let sodiumLimitMg: Double?
+    /// The weight the phone's PLAN is built from — its
+    /// `targetBasisWeightLb`, not its latest weigh-in (those differ by
+    /// the diurnal swing, and a pound is 3500/daysRemaining kcal of
+    /// allowance). The watch prefers it while fresh — its own Health store
+    /// purges old samples, so a weigh-in older than that window is
+    /// invisible there and the two devices' plans drift.
+    /// Day-stamped (not time-stamped) so an unchanged value hashes
+    /// identically and the phone's send-skip fingerprint still works.
+    /// nil = keep.
+    ///
+    /// A trailing-average BURN used to ride here too. It went with the
+    /// average-based budget (2026-08-02): both devices now derive the
+    /// day's budget from that day's own Health channels, which they
+    /// already share, so there is nothing left to reconcile.
+    public let planWeightLb: Double?
+    public let planWeightDay: String?
+    /// When the phone last saw a Health log write (epoch seconds). Rides
+    /// the context so a phone log's push wakes the watch complications —
+    /// HealthKit's own sync carries the sample, but its background
+    /// delivery is capped hourly on watchOS. nil = keep.
+    public let lastLogAt: Double?
+
+    public init(
+        meals: [SyncedMeal]?,
+        recentFoods: [SyncedMeal]? = nil,
+        favorites: [SyncedMeal]? = nil,
+        goal: GoalUpdate,
+        waterServingOz: Double?,
+        waterGoalOz: Double?,
+        balanceStyle: String? = nil,
+        foodIcon: String? = nil,
+        waterIcon: String? = nil,
+        rewardIcon: String? = nil,
+        mealIcon: String? = nil,
+        trackedMetricSettings: [String: String]? = nil,
+        sodiumLimitMg: Double? = nil,
+        planWeightLb: Double? = nil,
+        planWeightDay: String? = nil,
+        lastLogAt: Double? = nil
+    ) {
+        self.meals = meals
+        self.recentFoods = recentFoods
+        self.favorites = favorites
+        self.goal = goal
+        self.waterServingOz = waterServingOz
+        self.waterGoalOz = waterGoalOz
+        self.balanceStyle = balanceStyle
+        self.foodIcon = foodIcon
+        self.waterIcon = waterIcon
+        self.rewardIcon = rewardIcon
+        self.mealIcon = mealIcon
+        self.trackedMetricSettings = trackedMetricSettings
+        self.sodiumLimitMg = sodiumLimitMg
+        self.planWeightLb = planWeightLb
+        self.planWeightDay = planWeightDay
+        self.lastLogAt = lastLogAt
+    }
+}
+
+/// Encoding/decoding of the phone→watch application context, and watch-side
+/// persistence into the shared defaults (readable by complications).
+public enum WatchSync {
+    static let mealsKey = "sync.meals"
+    static let recentFoodsKey = "sync.recentFoods"
+    static let favoritesKey = "sync.favorites"
+    static let goalKey = "sync.goal"
+    static let trackedKey = "sync.trackedMetrics"
+    static let planWeightKey = "sync.planWeightLb"
+    static let planWeightDayKey = "sync.planWeightDay"
+    /// On the phone this is the stamp's origin (set on every observed
+    /// Health log write); on the watch it's the synced copy. Same key,
+    /// different stores.
+    public static let lastLogAtKey = "sync.lastLogAt"
+
+    /// The watch → phone `transferUserInfo` payload key, carrying the
+    /// moment of a watch-side log.
+    ///
+    /// The ONLY channel that runs this direction. The application context
+    /// is phone → watch and nothing came back, so the phone learned about
+    /// a watch log solely through HealthKit's own sync — and watchOS caps
+    /// its background delivery at roughly hourly, which is how a 7 AM
+    /// watch-logged glass of water was still invisible to the 11 AM
+    /// reminder replan (the user, 2026-08-17; `plans/PLAN-reminders.md`).
+    ///
+    /// `transferUserInfo` is the right primitive: queued, guaranteed, and
+    /// it WAKES the phone app in the background to receive. It is still
+    /// only best-effort in time — a queued transfer arrives when it
+    /// arrives — so nothing may depend on its promptness.
+    public static let watchLogNoticeKey = "sync.watchLoggedAt"
+
+    /// The one place the sync wire format is configured. Every encode and
+    /// decode in this file must use these — SyncedGoal.targetDate crosses
+    /// devices and app versions, so a single call site drifting to its own
+    /// strategy would silently corrupt every round-trip (the decode paths
+    /// are all `try?`). `.deferredToDate` is the historical default that
+    /// deployed watches already have on disk and on the wire; changing it
+    /// would orphan their stored goal, so it's pinned explicitly.
+    /// Computed, not stored: JSONEncoder/JSONDecoder aren't Sendable.
+    static var encoder: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .deferredToDate
+        return encoder
+    }
+
+    static var decoder: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .deferredToDate
+        return decoder
+    }
+
+    /// The slot settings that ride the context, values stringified
+    /// (targets included — store() re-parses the numeric ones).
+    public static var trackedMetricKeys: [String] { [
+        SharedStore.trackedMetric1Key, SharedStore.trackedMetric1ModeKey,
+        SharedStore.trackedMetric1TargetKey, SharedStore.trackedMetric1IconKey,
+        SharedStore.trackedMetric2Key, SharedStore.trackedMetric2ModeKey,
+        SharedStore.trackedMetric2TargetKey, SharedStore.trackedMetric2IconKey,
+    ] }
+
+    /// Numeric slot keys — stored back as Doubles on the watch. Public:
+    /// the phone must send these even at 0 (reset-to-default), where
+    /// string keys ride only when set.
+    public static var trackedNumericKeys: Set<String> { [
+        SharedStore.trackedMetric1TargetKey, SharedStore.trackedMetric2TargetKey,
+    ] }
+
+    /// Unit preferences ride the same stringified settings dict — but
+    /// ALWAYS send, with an explicit "auto" when unset: a ride-only-when-
+    /// set key would leave a stale explicit choice (say, kg) alive on the
+    /// watch after the phone resets to Automatic.
+    public static var unitPreferenceKeys: [String] { [
+        SharedStore.weightUnitKey, SharedStore.waterUnitKey, SharedStore.sodiumUnitKey,
+    ] }
+
+    /// Plan preferences ride that same dict and are likewise ALWAYS sent —
+    /// but as resolved pairs rather than a key list, because each one's
+    /// absent value means its own default ("the 7-day average"), not the
+    /// units' shared "follow the region".
+    ///
+    /// The weight basis travels because it picks WHICH weight a deficit is
+    /// derived from, and the watch computes its own deficit whenever the
+    /// phone's synced plan weight has aged out of `planInput`'s window. A
+    /// watch left on a different basis would then quote a different budget
+    /// from the very same weigh-ins.
+    ///
+    /// The burn correction travels for the same reason and with the same
+    /// discipline — both keys, always, 0 included: the watch composes its
+    /// own `dayBurn`, and a correction only one device applies is two
+    /// budgets for one day (`plans/PLAN-burn-correction.md`). Numbers
+    /// ride as their `description`, which round-trips a Double exactly,
+    /// and land back as Doubles (`planNumericKeys`).
+    public static var planPreferencePairs: [(String, String)] {
+        [
+            (SharedStore.weightBasisKey, SharedStore.weightBasis.rawValue),
+            (SharedStore.burnCorrectionKcalKey,
+             String(SharedStore.defaults.double(forKey: SharedStore.burnCorrectionKcalKey))),
+            (SharedStore.burnCorrectionSetAtKey,
+             String(SharedStore.defaults.double(forKey: SharedStore.burnCorrectionSetAtKey))),
+        ]
+    }
+
+    /// Plan keys stored back as Doubles on the watch, like the numeric
+    /// slot targets.
+    public static var planNumericKeys: Set<String> { [
+        SharedStore.burnCorrectionKcalKey, SharedStore.burnCorrectionSetAtKey,
+    ] }
+
+    // The budget-style keys used to ride here so a watch left on
+    // Automatic couldn't compute a different allowance than the phone.
+    // The setting is gone (2026-08-02): both devices now derive the
+    // budget from the day's own Health channels, which they already
+    // share, so there is no style left to disagree about.
+
+    // MARK: Phone side
+
+    public static func makeContext(
+        meals: [SyncedMeal],
+        recentFoods: [SyncedMeal] = [],
+        favorites: [SyncedMeal] = [],
+        goal: SyncedGoal?,
+        waterServingOz: Double,
+        waterGoalOz: Double,
+        balanceStyle: String = "remaining",
+        foodIcon: String = "sfFork",
+        waterIcon: String = "sfDrop",
+        rewardIcon: String = "onigiri",
+        mealIcon: String = "plate",
+        trackedMetricSettings: [String: String] = [:],
+        sodiumLimitMg: Double = 2300,
+        planWeightLb: Double? = nil,
+        planWeightDay: String? = nil,
+        lastLogAt: Double? = nil
+    ) -> [String: Any] {
+        var context: [String: Any] = [
+            SharedStore.waterServingKey: waterServingOz,
+            SharedStore.waterGoalKey: waterGoalOz,
+            SharedStore.balanceStyleKey: balanceStyle,
+            SharedStore.foodIconKey: foodIcon,
+            SharedStore.waterIconKey: waterIcon,
+            SharedStore.rewardIconKey: rewardIcon,
+            SharedStore.mealIconKey: mealIcon,
+            trackedKey: trackedMetricSettings,
+            SharedStore.sodiumLimitKey: sodiumLimitMg,
+        ]
+        if let planWeightLb, let planWeightDay {
+            context[planWeightKey] = planWeightLb
+            context[planWeightDayKey] = planWeightDay
+        }
+        if let lastLogAt {
+            context[lastLogAtKey] = lastLogAt
+        }
+        if let data = try? encoder.encode(meals) {
+            context[mealsKey] = data
+        }
+        if let data = try? encoder.encode(recentFoods) {
+            context[recentFoodsKey] = data
+        }
+        if let data = try? encoder.encode(favorites) {
+            context[favoritesKey] = data
+        }
+        if let goal, let data = try? encoder.encode(goal) {
+            context[goalKey] = data
+        }
+        return context
+    }
+
+    // MARK: Watch side
+
+    public static func parse(_ context: [String: Any]) -> SyncPayload {
+        let meals: [SyncedMeal]? = (context[mealsKey] as? Data)
+            .flatMap { try? decoder.decode([SyncedMeal].self, from: $0) }
+        let goal: GoalUpdate
+        if let data = context[goalKey] as? Data {
+            goal = (try? decoder.decode(SyncedGoal.self, from: data))
+                .map(GoalUpdate.set) ?? .keep
+        } else {
+            goal = .clear
+        }
+        let recentFoods: [SyncedMeal]? = (context[recentFoodsKey] as? Data)
+            .flatMap { try? decoder.decode([SyncedMeal].self, from: $0) }
+        let favorites: [SyncedMeal]? = (context[favoritesKey] as? Data)
+            .flatMap { try? decoder.decode([SyncedMeal].self, from: $0) }
+        return SyncPayload(
+            meals: meals,
+            recentFoods: recentFoods,
+            favorites: favorites,
+            goal: goal,
+            waterServingOz: context[SharedStore.waterServingKey] as? Double,
+            waterGoalOz: context[SharedStore.waterGoalKey] as? Double,
+            balanceStyle: context[SharedStore.balanceStyleKey] as? String,
+            foodIcon: context[SharedStore.foodIconKey] as? String,
+            waterIcon: context[SharedStore.waterIconKey] as? String,
+            rewardIcon: context[SharedStore.rewardIconKey] as? String,
+            mealIcon: context[SharedStore.mealIconKey] as? String,
+            trackedMetricSettings: context[trackedKey] as? [String: String],
+            sodiumLimitMg: context[SharedStore.sodiumLimitKey] as? Double,
+            planWeightLb: context[planWeightKey] as? Double,
+            planWeightDay: context[planWeightDayKey] as? String,
+            lastLogAt: context[lastLogAtKey] as? Double
+        )
+    }
+
+    public static func store(_ payload: SyncPayload) {
+        let defaults = SharedStore.defaults
+        if let meals = payload.meals, let data = try? encoder.encode(meals) {
+            defaults.set(data, forKey: mealsKey)
+        }
+        if let recents = payload.recentFoods, let data = try? encoder.encode(recents) {
+            defaults.set(data, forKey: recentFoodsKey)
+        }
+        if let favorites = payload.favorites, let data = try? encoder.encode(favorites) {
+            defaults.set(data, forKey: favoritesKey)
+        }
+        switch payload.goal {
+        case .set(let goal):
+            if let data = try? encoder.encode(goal) {
+                defaults.set(data, forKey: goalKey)
+            }
+        case .clear:
+            defaults.removeObject(forKey: goalKey)
+        case .keep:
+            break
+        }
+        if let serving = payload.waterServingOz {
+            defaults.set(serving, forKey: SharedStore.waterServingKey)
+        }
+        if let goalOz = payload.waterGoalOz {
+            defaults.set(goalOz, forKey: SharedStore.waterGoalKey)
+        }
+        if let style = payload.balanceStyle {
+            defaults.set(style, forKey: SharedStore.balanceStyleKey)
+        }
+        if let foodIcon = payload.foodIcon {
+            defaults.set(foodIcon, forKey: SharedStore.foodIconKey)
+        }
+        if let waterIcon = payload.waterIcon {
+            defaults.set(waterIcon, forKey: SharedStore.waterIconKey)
+        }
+        if let rewardIcon = payload.rewardIcon {
+            defaults.set(rewardIcon, forKey: SharedStore.rewardIconKey)
+        }
+        if let mealIcon = payload.mealIcon {
+            defaults.set(mealIcon, forKey: SharedStore.mealIconKey)
+        }
+        if let tracked = payload.trackedMetricSettings {
+            for (key, value) in tracked {
+                if trackedNumericKeys.contains(key) || planNumericKeys.contains(key) {
+                    defaults.set(Double(value) ?? 0, forKey: key)
+                } else {
+                    defaults.set(value, forKey: key)
+                }
+            }
+        }
+        if let sodiumLimit = payload.sodiumLimitMg {
+            defaults.set(sodiumLimit, forKey: SharedStore.sodiumLimitKey)
+        }
+        // Value and day land together (makeContext pairs them) — a value
+        // without its day would look eternally fresh or eternally stale.
+        if let weight = payload.planWeightLb, let day = payload.planWeightDay {
+            defaults.set(weight, forKey: planWeightKey)
+            defaults.set(day, forKey: planWeightDayKey)
+        }
+        if let stamp = payload.lastLogAt {
+            defaults.set(stamp, forKey: lastLogAtKey)
+        }
+    }
+
+    public static func loadMeals() -> [SyncedMeal] {
+        guard let data = SharedStore.defaults.data(forKey: mealsKey) else { return [] }
+        return (try? decoder.decode([SyncedMeal].self, from: data)) ?? []
+    }
+
+    public static func loadRecentFoods() -> [SyncedMeal] {
+        guard let data = SharedStore.defaults.data(forKey: recentFoodsKey) else { return [] }
+        return (try? decoder.decode([SyncedMeal].self, from: data)) ?? []
+    }
+
+    public static func loadFavorites() -> [SyncedMeal] {
+        guard let data = SharedStore.defaults.data(forKey: favoritesKey) else { return [] }
+        return (try? decoder.decode([SyncedMeal].self, from: data)) ?? []
+    }
+
+    public static func loadGoal() -> SyncedGoal? {
+        guard let data = SharedStore.defaults.data(forKey: goalKey) else { return nil }
+        return try? decoder.decode(SyncedGoal.self, from: data)
+    }
+
+    /// The phone's synced weigh-in, day stamp included — the loader
+    /// judges freshness through `isRecentDay`.
+    public static func syncedPlanWeight() -> (lb: Double, day: String)? {
+        let defaults = SharedStore.defaults
+        guard let lb = defaults.object(forKey: planWeightKey) as? Double,
+              let day = defaults.string(forKey: planWeightDayKey) else { return nil }
+        return (lb, day)
+    }
+
+    /// When the phone last saw a Health log write. On the phone this reads
+    /// the local stamp; on the watch, the synced copy.
+    public static func lastPhoneLogAt() -> Date? {
+        guard let stamp = SharedStore.defaults.object(forKey: lastLogAtKey) as? Double
+        else { return nil }
+        return Date(timeIntervalSince1970: stamp)
+    }
+
+    /// Phone-side: a Health log just happened — stamp it so the next
+    /// context push carries it and wakes the watch complications.
+    public static func stampPhoneLog(at date: Date = .now) {
+        SharedStore.defaults.set(date.timeIntervalSince1970, forKey: lastLogAtKey)
+    }
+
+    /// Today or yesterday, by calendar day — the freshness window for the
+    /// phone's plan inputs. The phone re-stamps on every foreground, so
+    /// anything older means the devices haven't talked; fall back to the
+    /// watch's own store rather than trust a stale budget.
+    static func isRecentDay(
+        _ day: String, calendar: Calendar = .current, now: Date = .now
+    ) -> Bool {
+        if day == DeficitTargetHistory.dayKey(for: now, calendar: calendar) { return true }
+        guard let yesterday = calendar.date(byAdding: .day, value: -1, to: now) else { return false }
+        return day == DeficitTargetHistory.dayKey(for: yesterday, calendar: calendar)
+    }
+}

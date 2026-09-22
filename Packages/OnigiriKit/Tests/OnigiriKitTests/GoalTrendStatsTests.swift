@@ -1,0 +1,457 @@
+import Foundation
+import Testing
+@testable import OnigiriKit
+
+/// The Goal chart's derivation rules — the WeightTrend primitives are
+/// tested elsewhere; these pin their composition (windows, cutoffs,
+/// domains) that lived untested in GoalView.
+struct GoalTrendStatsTests {
+    private static let cal = Calendar(identifier: .gregorian)
+    private static let now = cal.date(from: DateComponents(year: 2026, month: 7, day: 16, hour: 12))!
+
+    private static func day(_ offset: Int) -> Date {
+        cal.date(byAdding: .day, value: offset, to: now)!
+    }
+
+    /// A weigh-in at a wall-clock hour on an offset day (`now` is 12:00).
+    private static func at(_ dayOffset: Int, hour: Int) -> Date {
+        cal.date(byAdding: DateComponents(day: dayOffset, hour: hour - 12), to: now)!
+    }
+
+    /// A steady loss: one weigh-in per day dropping `slope` lb/day.
+    private static func history(days: Int, startLb: Double, slope: Double) -> [WeightTrend.Point] {
+        (0..<days).map { i in
+            WeightTrend.Point(date: day(i - days + 1), weightLb: startLb + slope * Double(i))
+        }
+    }
+
+    @Test func predictedComesFromWindowedDeficits() {
+        // Ten 350-kcal days inside the window, one huge day outside it.
+        let totals = (0..<10).map { DayEnergyTotals(day: Self.day(-$0), intakeKcal: 2000, burnKcal: 2350) }
+            + [DayEnergyTotals(day: Self.day(-40), intakeKcal: 0, burnKcal: 99000)]
+        let stats = GoalTrendStats.derive(
+            weightHistory: [], dailyTotals: totals,
+            targetWeightLb: nil, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        // 10 × 350 kcal = one pound of predicted LOSS (change is
+        // signed, down = negative); the out-of-window day is ignored.
+        #expect(stats.predicted30Lb == -1.0)
+    }
+
+    /// An UNTRACKED day is burn with nothing logged against it, which
+    /// reads as a ~2,500 kcal deficit that was never earned. `banked`
+    /// has always excluded those; the 30-day prediction did not, so one
+    /// such day inflated it by most of a pound — and since this row is
+    /// compared against the scale, the fiction landed as "the scale is
+    /// lagging" (2026-08-08).
+    @Test func untrackedDaysDoNotInflateThePrediction() {
+        let tracked = (0..<10).map {
+            DayEnergyTotals(day: Self.day(-$0), intakeKcal: 2000, burnKcal: 2350)
+        }
+        let untracked = DayEnergyTotals(day: Self.day(-11), intakeKcal: 0, burnKcal: 2500)
+        let stats = GoalTrendStats.derive(
+            weightHistory: [], dailyTotals: tracked + [untracked],
+            targetWeightLb: nil, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        // Still exactly the ten tracked days' pound — not 1.71.
+        #expect(stats.predicted30Lb == -1.0)
+        // And the all-time figure agrees, as it always did.
+        #expect(stats.bankedKcal == 3500)
+        #expect(stats.bankedDays == 10)
+    }
+
+    /// The threshold form of the same rule: a day logging less than the
+    /// untracked floor is not evidence either.
+    @Test func thePredictionRespectsTheUntrackedThreshold() {
+        let totals = (0..<10).map {
+            DayEnergyTotals(day: Self.day(-$0), intakeKcal: 2000, burnKcal: 2350)
+        } + [DayEnergyTotals(day: Self.day(-11), intakeKcal: 200, burnKcal: 2500)]
+        let stats = GoalTrendStats.derive(
+            weightHistory: [], dailyTotals: totals,
+            targetWeightLb: nil, isMaintenance: false,
+            untrackedBelowKcal: 500,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(stats.predicted30Lb == -1.0)
+    }
+
+    @Test func noLoggedDaysMeansNoPrediction() {
+        let stats = GoalTrendStats.derive(
+            weightHistory: [],
+            dailyTotals: [DayEnergyTotals(day: Self.day(-45), intakeKcal: 2000, burnKcal: 2500)],
+            targetWeightLb: nil, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(stats.predicted30Lb == nil)
+    }
+
+    @Test func steadyLossProjectsATargetDate() throws {
+        // 0.2 lb/day down from 200: 10 lb above the 190 target ≈ 50 days.
+        let history = Self.history(days: 30, startLb: 205.8, slope: -0.2)
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: 190, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        let window = try #require(stats.projectedWindow)
+        let from = Self.cal.dateComponents([.day], from: Self.now, to: window.lowerBound).day!
+        let to = Self.cal.dateComponents([.day], from: Self.now, to: window.upperBound).day!
+        #expect(to - from == GoalTrendStats.projectionWindowDays)
+        #expect(from <= 55 && to >= 45)
+    }
+
+    @Test func flatTrendProjectsNothing() {
+        let history = Self.history(days: 30, startLb: 200, slope: 0)
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: 190, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(stats.projectedWindow == nil)
+    }
+
+    @Test func projectionsPastThreeYearsAreNoise() {
+        // Barely-meaningful slope, 50 lb to go: thousands of days out.
+        let history = Self.history(days: 30, startLb: 240.6, slope: -0.02)
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: 190, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(stats.projectedWindow == nil)
+    }
+
+    @Test func freshDietOutweighsAFlatPriorWeek() throws {
+        // Six flat days around 189 (two weigh-ins a day), then a week
+        // losing 2 lb/week down to 187, target 180 — the shape that
+        // motivated the recency-weighted fit. An unweighted fit over
+        // the same window reads ~1 lb/week and quotes ~50 days; the
+        // old fit-the-moving-average read even less. Weighted: ~40.
+        var history: [WeightTrend.Point] = []
+        for i in 0..<6 {
+            let d = i - 13
+            history.append(.init(date: Self.at(d, hour: 7), weightLb: 188.25))
+            history.append(.init(date: Self.at(d, hour: 20), weightLb: 189.75))
+        }
+        for i in 0...7 {
+            let d = i - 7
+            let trend = 189.0 - 2.0 * Double(i) / 7.0
+            history.append(.init(date: Self.at(d, hour: 7), weightLb: trend - 0.75))
+            if i < 7 {
+                history.append(.init(date: Self.at(d, hour: 20), weightLb: trend + 0.75))
+            }
+        }
+        let stats = GoalTrendStats.derive(
+            weightHistory: history,
+            dailyTotals: [],
+            targetWeightLb: 180, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        let window = try #require(stats.projectedWindow)
+        let from = Self.cal.dateComponents([.day], from: Self.now, to: window.lowerBound).day!
+        let to = Self.cal.dateComponents([.day], from: Self.now, to: window.upperBound).day!
+        #expect(from <= 44 && to >= 37)
+    }
+
+    @Test func sparseWeeklyWeighInsStillProject() throws {
+        // One weigh-in a week, 1 lb/week down, 8 lb to go ≈ 56 days.
+        let history = (0...3).map {
+            WeightTrend.Point(date: Self.day(-7 * (3 - $0)), weightLb: 191 - Double($0))
+        }
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: 180, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        let window = try #require(stats.projectedWindow)
+        let from = Self.cal.dateComponents([.day], from: Self.now, to: window.lowerBound).day!
+        let to = Self.cal.dateComponents([.day], from: Self.now, to: window.upperBound).day!
+        #expect(from <= 58 && to >= 54)
+    }
+
+    @Test func aWeekendOfWeighInsProjectsNothing() {
+        // Two days of plunging readings — no projection until weigh-ins
+        // cover three distinct days across a full week.
+        let history = [
+            WeightTrend.Point(date: Self.at(-1, hour: 7), weightLb: 191),
+            WeightTrend.Point(date: Self.at(-1, hour: 20), weightLb: 190),
+            WeightTrend.Point(date: Self.at(0, hour: 7), weightLb: 189),
+        ]
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: 180, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(stats.projectedWindow == nil)
+    }
+
+    @Test func sixDailyWeighInsAreTooYoungToProject() {
+        // A clear loss, but the history is only six days deep — the
+        // span gate holds until a full week exists.
+        let history = (0..<6).map {
+            WeightTrend.Point(date: Self.day($0 - 5), weightLb: 190 - 0.3 * Double($0))
+        }
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: 180, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(stats.projectedWindow == nil)
+    }
+
+    @Test func domainPadsWeighInsAndTargetWhenLosing() {
+        let history = [
+            WeightTrend.Point(date: Self.day(-1), weightLb: 200),
+            WeightTrend.Point(date: Self.day(0), weightLb: 198),
+        ]
+        let losing = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: 190, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(losing.chartYDomain == 188...202)
+        // Maintenance draws the hold-near anchor line, so a set anchor
+        // stretches the domain exactly like a lose target…
+        let anchored = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: 190, isMaintenance: true,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(anchored.chartYDomain == 188...202)
+        // …while the 0 "no anchor parked" placeholder must not drag the
+        // domain to zero.
+        let anchorless = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: 0, isMaintenance: true,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(anchorless.chartYDomain == 196...202)
+    }
+
+    @Test func maintenanceReadsDriftInsteadOfProjecting() throws {
+        // The same steady loss that projects a date in lose mode reads
+        // as drift in maintenance — and never a projection, even with
+        // the parked target still on the record.
+        let history = Self.history(days: 30, startLb: 205.8, slope: -0.2)
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: 190, isMaintenance: true,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(stats.projectedWindow == nil)
+        let drift = try #require(stats.driftLbPerWeek)
+        #expect(abs(drift - (-1.4)) < 0.05)
+    }
+
+    @Test func loseModeReadsNoDrift() {
+        let history = Self.history(days: 30, startLb: 205.8, slope: -0.2)
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: 190, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(stats.driftLbPerWeek == nil)
+    }
+
+    @Test func flatMaintenanceReadsSteady() throws {
+        let history = Self.history(days: 30, startLb: 200, slope: 0)
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: nil, isMaintenance: true,
+            calendar: Self.cal, now: Self.now
+        )
+        let drift = try #require(stats.driftLbPerWeek)
+        #expect(abs(drift) < GoalTrendStats.steadyDriftThresholdLbPerWeek)
+    }
+
+    @Test func driftGatesOnYoungDataLikeTheProjection() {
+        // Six days of clear movement — same span gate as lose mode.
+        let history = (0..<6).map {
+            WeightTrend.Point(date: Self.day($0 - 5), weightLb: 200 + 0.3 * Double($0))
+        }
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: nil, isMaintenance: true,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(stats.driftLbPerWeek == nil)
+    }
+
+    @Test func emptyDataFallsBackToUnitDomain() {
+        let stats = GoalTrendStats.derive(
+            weightHistory: [], dailyTotals: [],
+            targetWeightLb: nil, isMaintenance: true,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(stats.chartYDomain == 0...1)
+        #expect(stats == GoalTrendStats.empty)
+    }
+
+    // MARK: Pace as a choice
+
+    @Test func moreDeficitProjectsASoonerWindow() throws {
+        // 0.2 lb/day down from ~205.8, target 190 ≈ 50 days out. Another
+        // 100 kcal/day is 0.0286 lb/day, ~14% faster — a real bucket or
+        // three sooner.
+        let history = Self.history(days: 30, startLb: 205.8, slope: -0.2)
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: 190, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        let base = try #require(stats.projectedWindow)
+        let faster = try #require(stats.fasterWindow)
+        #expect(faster.lowerBound < base.lowerBound)
+        // It's a WINDOW like everything else, on the same grid.
+        let width = Self.cal.dateComponents(
+            [.day], from: faster.lowerBound, to: faster.upperBound).day!
+        #expect(width == GoalTrendStats.projectionWindowDays)
+        let midnight = Self.cal.startOfDay(for: Self.now)
+        let from = Self.cal.dateComponents([.day], from: midnight, to: faster.lowerBound).day!
+        #expect(from % GoalTrendStats.projectionWindowDays == 0)
+    }
+
+    @Test func noProjectionMeansNoFasterOffer() {
+        // Flat: nothing to be faster THAN. Offering a date here would
+        // invent the trend the base projection just refused to claim.
+        let flat = GoalTrendStats.derive(
+            weightHistory: Self.history(days: 30, startLb: 200, slope: 0),
+            dailyTotals: [], targetWeightLb: 190, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(flat.projectedWindow == nil)
+        #expect(flat.fasterWindow == nil)
+        // Same in maintenance, which projects nothing by design.
+        let maintaining = GoalTrendStats.derive(
+            weightHistory: Self.history(days: 30, startLb: 205.8, slope: -0.2),
+            dailyTotals: [], targetWeightLb: 190, isMaintenance: true,
+            calendar: Self.cal, now: Self.now
+        )
+        #expect(maintaining.fasterWindow == nil)
+    }
+
+    /// Close enough to the target that the boost can't buy a bucket —
+    /// two identical date ranges read as a broken promise, so there's no
+    /// offer at all.
+    @Test func aBoostThatChangesNothingIsNotOffered() throws {
+        // ~0.5 lb to go at 0.2 lb/day: both answers land in days 0–5.
+        let history = Self.history(days: 30, startLb: 196.3, slope: -0.2)
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: [],
+            targetWeightLb: 190, isMaintenance: false,
+            calendar: Self.cal, now: Self.now
+        )
+        let base = try #require(stats.projectedWindow)
+        let midnight = Self.cal.startOfDay(for: Self.now)
+        #expect(base.lowerBound == midnight)
+        #expect(stats.fasterWindow == nil)
+    }
+
+    @Test func theEmptyStatsOfferNothing() {
+        #expect(GoalTrendStats.empty.fasterWindow == nil)
+    }
+
+    // MARK: The window's whole job
+
+    /// Estimates that wander within a bucket must not move the screen.
+    /// This is the point of the change — "that date can seem to change
+    /// widely depending on the day" (the user, 2026-07-31).
+    @Test func nearbyEstimatesShareOneWindow() throws {
+        let a = try #require(GoalTrendStats.projectionWindow(
+            daysOut: 46, from: Self.now, calendar: Self.cal))
+        let b = try #require(GoalTrendStats.projectionWindow(
+            daysOut: 49.4, from: Self.now, calendar: Self.cal))
+        #expect(a == b)
+    }
+
+    /// …but a real move still moves it.
+    @Test func aBucketApartReadsDifferently() throws {
+        let a = try #require(GoalTrendStats.projectionWindow(
+            daysOut: 46, from: Self.now, calendar: Self.cal))
+        let b = try #require(GoalTrendStats.projectionWindow(
+            daysOut: 53, from: Self.now, calendar: Self.cal))
+        #expect(a != b)
+    }
+
+    @Test func theWindowIsFiveDaysWideAndContainsTheEstimate() throws {
+        for estimate in [3.0, 17.2, 46.0, 128.9] {
+            let window = try #require(GoalTrendStats.projectionWindow(
+                daysOut: estimate, from: Self.now, calendar: Self.cal))
+            // Width measured between the bounds themselves: both are
+            // start-of-day, so this survives a DST change inside the
+            // window (measuring from a midday `now` truncated to 4).
+            let width = Self.cal.dateComponents(
+                [.day], from: window.lowerBound, to: window.upperBound).day!
+            #expect(width == GoalTrendStats.projectionWindowDays)
+            let midnight = Self.cal.startOfDay(for: Self.now)
+            let from = Self.cal.dateComponents([.day], from: midnight, to: window.lowerBound).day!
+            let to = Self.cal.dateComponents([.day], from: midnight, to: window.upperBound).day!
+            #expect(Double(from) <= estimate.rounded())
+            #expect(Double(to) >= estimate.rounded())
+        }
+    }
+
+    /// A target already reached can't project into the past.
+    @Test func aNegativeEstimateClampsToNow() throws {
+        let window = try #require(GoalTrendStats.projectionWindow(
+            daysOut: -12, from: Self.now, calendar: Self.cal))
+        #expect(window.lowerBound >= Self.cal.startOfDay(for: Self.now))
+    }
+
+    /// The cross-check that makes the predicted-vs-scale gap legible,
+    /// back on Goal since 2026-09-22. `ObservedBurnTests` pins the
+    /// arithmetic and the sign; what had no coverage until here is the
+    /// COMPOSITION this type owns — which days feed the mean intake, and
+    /// which rate it is read against.
+    @Test func observedBurnReadsTheScaleAgainstTrackedDaysOnly() throws {
+        // Past the 21-day minimum, plus one untracked day whose zero
+        // intake would drag the mean down — and the implied burn with
+        // it — if the gate were missing. That is the same fiction
+        // `untrackedDaysDoNotInflateThePrediction` guards one row up:
+        // burn with nothing logged against it.
+        let tracked = (0..<24).map {
+            DayEnergyTotals(day: Self.day(-$0), intakeKcal: 2_000, burnKcal: 2_600)
+        }
+        let untracked = DayEnergyTotals(day: Self.day(-25), intakeKcal: 0, burnKcal: 2_500)
+        let history = Self.history(days: 30, startLb: 210, slope: -0.1)
+        let stats = GoalTrendStats.derive(
+            weightHistory: history, dailyTotals: tracked + [untracked],
+            targetWeightLb: nil, isMaintenance: false,
+            untrackedBelowKcal: 500,
+            calendar: Self.cal, now: Self.now
+        )
+        // 2,000 eaten + 0.1 lb/day x 3,500 = 2,350 kcal/day implied.
+        // Counting the untracked day would read 2,270 — a plausible
+        // number that is simply wrong, which is why it needs pinning.
+        #expect(abs(try #require(stats.observedBurnKcal) - 2_350) < 5)
+    }
+
+    /// Silence, not a number, when the window is too thin for the mean
+    /// intake of the tracked days to stand in for every day the scale
+    /// moved across. The view renders nil as NO ROW; a zero would read
+    /// as "you burn nothing".
+    @Test func observedBurnStaysSilentOnAThinWindow() {
+        let history = Self.history(days: 30, startLb: 210, slope: -0.1)
+        func stats(trackedDays: Int) -> GoalTrendStats {
+            GoalTrendStats.derive(
+                weightHistory: history,
+                dailyTotals: (0..<trackedDays).map {
+                    DayEnergyTotals(day: Self.day(-$0), intakeKcal: 2_000, burnKcal: 2_600)
+                },
+                targetWeightLb: nil, isMaintenance: false,
+                untrackedBelowKcal: 500,
+                calendar: Self.cal, now: Self.now
+            )
+        }
+        let thin = stats(trackedDays: ObservedBurn.minimumTrackedDays - 1)
+        #expect(thin.observedBurnKcal == nil)
+        // The pair it explains still renders: the cross-check goes
+        // quiet, the gap it would have explained does not.
+        #expect(thin.predicted30Lb != nil)
+        #expect(thin.actual30Lb != nil)
+        // And it speaks on the very next day.
+        #expect(stats(trackedDays: ObservedBurn.minimumTrackedDays).observedBurnKcal != nil)
+    }
+}

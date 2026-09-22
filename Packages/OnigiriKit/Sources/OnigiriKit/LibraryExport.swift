@@ -1,0 +1,178 @@
+import Foundation
+
+/// The JSON export/import format for everything the app itself stores:
+/// the food/meal library, the weight goal, and water settings. Daily logs
+/// live in Apple Health (exportable from the Health app) and are not here.
+/// Meals reference foods by name — human-readable and survives re-import.
+public struct LibraryExport: Codable, Sendable, Equatable {
+    public struct FoodItem: Codable, Sendable, Equatable {
+        public var name: String
+        public var kcal: Double
+        public var sodiumMg: Double
+        public var servingDescription: String
+        public var barcode: String?
+        public var nutrients: NutrientValues?
+        public var isFavorite: Bool?
+        public var category: String?
+        /// Preserved so a restore keeps the Recent/ranked ordering —
+        /// dropping it silently reset recency on every round-trip.
+        /// Optional: old exports.
+        public var lastUsedAt: Date?
+        /// The other half of recency: `recencyDate = lastUsedAt ?? createdAt`.
+        /// Most foods (scanned/created and logged in one shot) never bump
+        /// lastUsedAt, so their recency lives entirely in createdAt —
+        /// dropping it collapsed every such food to the restore timestamp
+        /// and broke Recent sort after a backup. Optional: old exports.
+        public var createdAt: Date?
+        /// AI-estimate provenance (the ✨ mark). Optional: old exports.
+        public var aiGenerated: Bool?
+
+        public init(
+            name: String,
+            kcal: Double,
+            sodiumMg: Double,
+            servingDescription: String,
+            barcode: String?,
+            nutrients: NutrientValues? = nil,
+            isFavorite: Bool? = nil,
+            category: String? = nil,
+            lastUsedAt: Date? = nil,
+            createdAt: Date? = nil,
+            aiGenerated: Bool? = nil
+        ) {
+            self.name = name
+            self.kcal = kcal
+            self.sodiumMg = sodiumMg
+            self.servingDescription = servingDescription
+            self.barcode = barcode
+            self.nutrients = nutrients
+            self.isFavorite = isFavorite
+            self.category = category
+            self.lastUsedAt = lastUsedAt
+            self.createdAt = createdAt
+            self.aiGenerated = aiGenerated
+        }
+    }
+
+    public struct MealItemRef: Codable, Sendable, Equatable {
+        public var foodName: String
+        public var quantity: Double
+
+        public init(foodName: String, quantity: Double) {
+            self.foodName = foodName
+            self.quantity = quantity
+        }
+    }
+
+    public struct MealDef: Codable, Sendable, Equatable {
+        public var name: String
+        public var items: [MealItemRef]
+        public var isFavorite: Bool?
+        public var category: String?
+        /// Preserved across export/import so widget configurations that
+        /// reference the meal survive a restore. Optional: old exports.
+        public var uuid: UUID?
+        /// Recency, like FoodItem's — optional: old exports.
+        public var lastUsedAt: Date?
+        /// Recency fallback, like FoodItem's — optional: old exports.
+        public var createdAt: Date?
+        /// AI-named provenance (the ✨ mark). Optional: old exports.
+        public var aiGenerated: Bool?
+
+        public init(
+            name: String, items: [MealItemRef], isFavorite: Bool? = nil,
+            category: String? = nil, uuid: UUID? = nil, lastUsedAt: Date? = nil,
+            createdAt: Date? = nil, aiGenerated: Bool? = nil
+        ) {
+            self.name = name
+            self.items = items
+            self.isFavorite = isFavorite
+            self.category = category
+            self.uuid = uuid
+            self.lastUsedAt = lastUsedAt
+            self.createdAt = createdAt
+            self.aiGenerated = aiGenerated
+        }
+    }
+
+    public struct GoalDef: Codable, Sendable, Equatable {
+        public var targetWeightLb: Double
+        public var targetDate: Date
+        public var fallbackCurrentWeightLb: Double?
+        /// GoalMode raw value; optional so exports from before
+        /// maintenance mode (≤ v1.7.0) decode — nil means .lose, same
+        /// as GoalSettings.mode itself.
+        public var mode: String?
+        /// The journey's start point, carried so a restore doesn't reset
+        /// progress to zero. Optional for the same reason `mode` is:
+        /// older exports predate it, and the app already knows how to
+        /// live without it.
+        public var startWeightLb: Double?
+        public var startedAt: Date?
+        /// Whether that start was the user's own choice — restoring it
+        /// as a stamp would let the next target change quietly discard
+        /// it.
+        public var startIsManual: Bool?
+
+        public init(
+            targetWeightLb: Double, targetDate: Date,
+            fallbackCurrentWeightLb: Double?, mode: String? = nil,
+            startWeightLb: Double? = nil, startedAt: Date? = nil,
+            startIsManual: Bool? = nil
+        ) {
+            self.targetWeightLb = targetWeightLb
+            self.targetDate = targetDate
+            self.fallbackCurrentWeightLb = fallbackCurrentWeightLb
+            self.mode = mode
+            self.startWeightLb = startWeightLb
+            self.startedAt = startedAt
+            self.startIsManual = startIsManual
+        }
+    }
+
+    public struct WaterDef: Codable, Sendable, Equatable {
+        public var servingOz: Double
+        public var goalOz: Double
+
+        public init(servingOz: Double, goalOz: Double) {
+            self.servingOz = servingOz
+            self.goalOz = goalOz
+        }
+    }
+
+    public var version: Int
+    public var exportedAt: Date
+    public var foods: [FoodItem]
+    public var meals: [MealDef]
+    public var goal: GoalDef?
+    public var water: WaterDef
+
+    public init(
+        version: Int = 1,
+        exportedAt: Date,
+        foods: [FoodItem],
+        meals: [MealDef],
+        goal: GoalDef?,
+        water: WaterDef
+    ) {
+        self.version = version
+        self.exportedAt = exportedAt
+        self.foods = foods
+        self.meals = meals
+        self.goal = goal
+        self.water = water
+    }
+
+    public func encoded() throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(self)
+    }
+
+    public static func decode(_ data: Data) throws -> LibraryExport {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(LibraryExport.self, from: data)
+    }
+}

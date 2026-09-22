@@ -1,0 +1,243 @@
+# Roadmap
+
+Working queue for upcoming releases. Details get their own PLAN-x.y.md
+when a release starts; this file is the durable to-do between sessions.
+
+## 1.8.1 — Foods screen restructure (built — see archive/PLAN-1.8.1.md)
+
+- [x] Foods / Meals / Favorites scope menu (shared ScopeBar with Log).
+- [x] "Scan Barcode" row under the scope menu (known barcode → portion
+  sheet; new → prefilled form).
+- [x] Sheet consolidation into one `.sheet(item:)` slot.
+- [~] Bottom search: BLOCKED by platform — with the Add pill occupying
+  the search-tab slot, `DefaultToolbarItem(kind: .search, .bottomBar)`
+  renders the field behind the floating tab bar (verified on the 26.5
+  sim, 2026-07-13). Kept the standard top drawer; details in
+  archive/PLAN-1.8.1.md and the FoodsView comment.
+- [x] Log-vs-Foods recommendation written (archive/PLAN-1.8.1.md): keep two
+  screens, share components; three convergence follow-ups listed.
+
+## 1.9 — Quality pass
+
+- [x] Axiom skills enabled; six-lens review run (2026-07-13).
+- [x] Batches A (correctness), B (polish/a11y), C (performance)
+  applied — see archive/PLAN-1.9.md status notes. Watch fixes deployed
+  2026-07-13; verify complication freshness over the week.
+- [x] On-device feedback arc (2026-07-13/14): pinned Foods search
+  drawer, first-scroll smoothing, one-surface grouped idiom, the
+  rice-paper canvas, the nori structural accent, month grid on a
+  card, Favorites-first scopes, scan rows with LogButton-sized
+  icons, Goal mode picker on top.
+- [x] RELEASED as v1.9.0 (2026-07-14).
+- [x] Batch D shipped as v1.9.1 (2026-07-14, all items except
+  Always-On privacy — declined): watch to 3 pages (favorites fold
+  into the meal picker), locked-phone widgets keep the last-good
+  snapshot, midnight-spanning burn apportions, streak/month widgets
+  pre-render midnight, streak warning says N+1, chart/grid/watch
+  accessibility, complication Smart Stack relevance, widget-intent
+  echo guard, and the gated iOS 26 garnish (hard scroll edges, glass
+  swipe pills, symbol effects).
+
+## 2.0 — Intelligence (RELEASED 2026-07-14 — see archive/PLAN-2.0.md)
+
+- [x] Scan Nutrition Label: Vision OCR → kit LabelParser (five real
+  fixture transcripts) → the existing prefill path; iOS 26
+  documents-request table branch, gated; ONE scan row + ONE camera
+  ("Scan Barcode or Nutrition Label", shutter on the live scanner).
+- [x] Apple Intelligence (Foundation Models, iOS 26, fully gated):
+  label-parse refinement (fills blanks only), "describe it" quick
+  add, meal-name suggestions; deterministic paths precede and
+  outrank the model everywhere; decline list held.
+- [x] Same-day UX round from on-device feedback: Goal ScopeBar,
+  Favorites-first scopes, meal-builder overhaul (typed fractional
+  portions, live Total, members-first, sort), sort menus on all
+  library surfaces, first-tracked-slot metric captions (phone +
+  watch), Month Details arithmetic + semantic colors, the Add-pill
+  search wedge and the TabBarPin gesture-storm fixes.
+- On-device QA still open: pantry tour, both-paths A/B on the 16,
+  Foundation Models feel.
+
+## 2.1 — Glance (BUILT 2026-07-14 — see PLAN-2.1.md; awaiting on-device verdict)
+
+Planned 2026-07-14 (PLAN-2.1.md): widget in LARGE + MEDIUM, day
+paging snaps back at day roll, barcode-routing cleanup AND the OFF
+nutrition-facts filter (verify-live-first) ride along, paid-account
+question deferred again.
+
+- [x] Built + on-device tested 2026-07-14. TodayCardWidget in
+  small/medium/large: the kcal ring with burned/eaten, the tracked
+  pills, and a prominent Log button (a Link deep into the Log sheet).
+  Watch home "Log" rename + unified Favorites→Recent sheet. Details›
+  grammar unified across the three sites. Shared BarcodeRouter
+  replaces the FoodsView/QuickLogSheet copies. QA-tour edit shots
+  fixed.
+- Interactive widget AppIntent buttons DROPPED after the on-device
+  pass: the planned ‹ › day paging and in-place water wouldn't
+  dispatch as WidgetKit buttons on the device (they no-op'd / flashed)
+  and couldn't on the simulator either (linkd doesn't index
+  widget-intent metadata; the shipped Control Center water button
+  failed identically). The card keeps the glance + the reliable Log
+  deep link (Link/openURL). LogWaterIntent stays for Control Center /
+  Siri.
+- Widget lineup trimmed (the user): removed Calorie Meter, Daily
+  Progress, Month, and the Weight Trend chart; added a Month Stats
+  card (goal-met days + streak). The onigiri gauge lost its water
+  button. All home-screen widgets wear the Today card's rice-paper
+  canvas. Bumped to MARKETING_VERSION 2.1.0 (build 2).
+- OFF search-a-licious nutrition-facts-completed filter SLIPPED back
+  to the backlog: probed 2026-07-14, search-a-licious returned 502 and
+  legacy 503 (service mid-outage), so the exact filter syntax couldn't
+  be verified — and its failure mode is a silent 200-with-zero-hits.
+- Release (tag + push) pending the final on-device verdict.
+
+- Today-mirror widget (the user, 2026-07-14, with reference
+  screenshot): a medium/large home-screen widget that looks exactly
+  like the top of Today — the kcal-left ring with Burned/Eaten
+  flanking, the sodium/water metric pills, the rice-paper canvas.
+  Interactive: widgets can't scroll, so day paging = ‹ › AppIntent
+  buttons swapping the rendered day; a + button deep-links into the
+  Log sheet for the shown day (widgetURL routing like the existing
+  quick actions), and a water button (the water icon/emoji) that logs
+  the default serving IN PLACE — the Control Center "Log Water"
+  AppIntent already does exactly this, so the widget reuses it; one
+  glance at the day, food and water one tap away (the user).
+  Existing pieces to build on: DailyProgressWidget,
+  BalanceAccessoryView, the Log Water control intent, the kit's
+  PlanCache/DaySnapshot plumbing.
+
+- Watch home "Log" button (the user, 2026-07-14): rename "Log a
+  meal" → "Log" and shape its sheet exactly like the phone's default
+  Log view — Favorites first (meals + foods mixed), then Recent, one
+  unified list. NO Meal-or-Food chooser (an extra tap per log on the
+  tappiest device; ruled out after discussion — the Meals/Foods pages
+  remain the scope switch, one swipe away).
+
+- "Details ›" everywhere (the user, 2026-07-14): ONE grammar for the
+  three tap-for-more affordances — the Calendar day card's "View &
+  edit on Today" and Today's headline "Details" both become the month
+  card's "Details ›" (text + chevron.right, caption, secondary).
+  Reverses the 2026-07-13 chevron removal on Today, deliberately —
+  the chevron is the "this navigates" signal and text+chevron is the
+  strongest form (audited: no other candidates; Settings' "See Water
+  settings" is a pointer caption, not a tap target). Keep the day
+  card's edit/cross-tab cue in the accessibility hint.
+
+## 2.4 — Identify Food + Siri foundation (RELEASED 2026-07-16 as v2.4.0)
+
+- [x] Photo of actual food (salad, plate, bowl) → reviewable food with
+  components as evidence, prefilled like a label scan. iOS 26 relay
+  (kit `FoodPhotoClassifier` Vision classify → `FoodIntelligence`
+  text decomposition), shaped so iOS 27 multimodal drops into the
+  same `identifyFood` seam. Third door via the existing ScanSheet
+  cascade — shutter still, label parse empty → identify (no mode to
+  pick, camera only in v1). Evals in OnigiriTests (7/7); scan-row
+  copy signed off ("Scan Barcode, Label, or Food", AI-gated).
+- [x] Siri logging foundation (water / saved meals / favorite+recent
+  foods by name) — the rest of Siri is 2.5 below.
+- [x] Stale-reminder fix: the HealthKit observer now replans
+  reminders, so out-of-app logs (watch, widget, Control Center,
+  Siri) update pre-scheduled notification bodies ("0 of N oz" bug).
+- [x] Docs: wiki guide (scan cascade + Siri section), marketing page,
+  README; eval suite + audit round 2 also in this release.
+- [x] On-device Identify-Food QA — validated 2026-07-17 (the user ran it
+  on real food: "not great, but worked well enough").
+- [ ] Still open from PLAN-identify-food: the --food-id-sample UI-test
+  fixture (needs a real food photo).
+
+## 2.5 — Siri (planned 2026-07-16 — see PLAN-siri.md)
+
+- [x] Foundation shipped same day (c678c3a): water/meal/food App
+  Shortcuts with parameterized phrases, EntityStringQuery spoken-name
+  matching, vocabulary refresh on mirror rewrites.
+- [x] Ask-back queries ("calories left / water / sodium today") —
+  one intent, metric AppEnum, live HealthKit reads, snippet card
+  (fb44824).
+- [x] Watch-side registration (phone-free raise-to-speak logging)
+  (5ccade5).
+- [x] Water ounces parameter (optional, clamped, speaks the result)
+  (5ccade5).
+- [x] Describe-to-log via the on-device model, ALWAYS confirmed before
+  the HealthKit write; spoken-grammar rows in the eval suite (5ccade5).
+- [ ] negativePhrases pass ("delete/undo my log" must not log).
+
+## Open — burn correction review (2026-10-06)
+
+- [ ] After the fortnight of weighed logging (2026-09-22 → 10-05), decide
+  whether to accept Goal's burn-correction offer — decision rule in
+  `plans/PLAN-burn-correction.md` (Hazards). Built, deployed and OFF
+  since `baa4888`.
+- [ ] If accepted: pull `budget-diagnostics.log` from phone AND watch and
+  confirm both show the same non-zero `correction=`.
+- [ ] Tag a release once the mechanism has been exercised on device.
+
+## Backlog (unscheduled)
+
+- NOT DOING: native-List rebuild of Today (for real .swipeActions on log
+  rows + fixing the "first vertical swipe on a row does nothing" stick).
+  Considered and DECLINED 2026-07-17 — v2.5.5 smoothed the custom swipe
+  (track-from-0, axis lock, elastic stretch, spring settle) and the user
+  confirmed it feels right, not worth re-architecting the whole screen.
+  Log-row swipe stays the custom DragGesture in LogRowSwipeActions.
+
+- Today's swipe day-paging was REMOVED for good 2026-07-16 (the user:
+  chevrons are more discoverable and don't trigger false movement).
+  It was a .simultaneousGesture DragGesture over the scroll that
+  perturbed the scroll phase the iOS 26 tab bar reads, stranding the
+  bar minimized (root-caused on device by removing it → bug fixed).
+  Nav-bar ‹ › chevrons are the day-paging affordance. Don't reintroduce
+  a scroll-spanning swipe gesture here.
+
+- Backup name collision — FIXED same night (timestamped filenames,
+  empty-library auto-backups skipped, prune by modification date).
+  Still open from the 2026-07-16 restore saga: onboarding should gain
+  a "Restore from backup" door — the user instinctively looked for one.
+
+- OFF search-a-licious `nutrition-facts-completed` filter (slipped
+  from 2.1, 2026-07-14): the legacy leg already filters unfilled
+  entries; the primary leg still weeds client-side. Add the equivalent
+  via search-a-licious's query DSL (likely appending
+  `states_tags:en:nutrition-facts-completed` to `q`) — but ONLY after
+  a live probe of the exact syntax during a STABLE window, since a
+  wrong filter fails as a silent 200-with-zero-hits that never trips
+  the legacy fallback. Breadcrumb in `OpenFoodFactsClient.searchALicious`.
+- Security round SHIPPED 2026-07-20: window-level PrivacyShield (the
+  v2.2.0 in-tree overlay never covered SHEETS in the app-switcher
+  snapshot — sim-proven fixed), watch dock-snapshot shield, API-key
+  re-mask on backgrounding. Considered and DECLINED (don't re-propose):
+  certificate pinning for the AI/FDC endpoints (cert-rotation breakage
+  outweighs the gain here); FDC api_key-in-URL stays accepted (USDA's
+  contract — just never log request URLs in FoodDataCentralClient).
+  The manifest's C617.1 FileTimestamp reason is CORRECT (own-container
+  metadata; 3B52.1 is the picker-granted one — an audit had them
+  swapped).
+- Accessibility round SHIPPED 2026-07-20 (a409c5a on main, both
+  devices): Differentiate Without Color glyph twins (kit statusSymbol
+  seam), Reduce Motion gating, hit-area-only 44 pt targets, VoiceOver
+  water-shortcut twin, meter groupings, iPad keyboard shortcuts —
+  device-verified. Only deliberately-open item: a manual "type the
+  barcode" row for VoiceOver users when the live camera is available
+  (text search and the AI estimate door cover the same foods today).
+- Watch complication-freshness verification over a normal week
+  (1.9 batch A).
+- Budget/goal-model review, 2026-08-16 — `PLAN-beyond-the-scale.md`
+  (prompted by the JACC central-adiposity paper and its HN thread).
+  SHIPPED from it: the two raw-weight resting-estimate call sites now
+  ride the basis (F1), and `shouldRequestAuthorization` is decoupled
+  from `readTypes` via a frozen core set (F2) — **adding a Health read
+  type is no longer a widget regression**, which had made the
+  permission set unable to grow. ALSO shipped: the below-resting
+  guardrail (F3 — a budget over the flat 1,500 but under the body's own
+  resting energy used to pass silently), and with it a defect it
+  uncovered — **Today's "Aggressive pace" warning could never render**,
+  because the card read `isAggressive` off a `completedDayPlan`, which
+  hardcodes it false. The default tab's warning had never once appeared
+  while Goal's identical sentence worked. VERDICT on what remains
+  (2026-08-16): F4/F5 restate a signal `predicted30Lb` vs `actual30Lb`
+  already shows, F7's bioimpedance input error swamps its gain, and the
+  proportional half of F3 changes nothing at ~200 lb — the accuracy
+  left on the table is in logging fidelity, not budget math. DECLINED
+  (don't re-propose without the data actually arriving in Health):
+  waist circumference as a tracked measure — the user doesn't take the
+  measurements, so the row and chart series would be fed by nothing.
+- The paid-developer-account question: CloudKit library sync,
+  TestFlight.

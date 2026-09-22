@@ -1,0 +1,1246 @@
+import Foundation
+
+/// One item read off a restaurant's nutrition table
+/// (`plans/PLAN-menu-import.md`). Printed values only — like
+/// `LabelParser`, this never estimates and never invents a name, so a
+/// row carries no AI-provenance mark.
+public struct MenuRow: Sendable, Equatable, Identifiable {
+    /// How many nutrient fields this row actually carries — the measure
+    /// behind `minimumFieldFillRate`.
+    var filledFieldCount: Int {
+        var count = kcal == nil ? 0 : 1
+        if sodiumMg != nil { count += 1 }
+        for value in [nutrients.fatG, nutrients.saturatedFatG, nutrients.transFatG,
+                      nutrients.cholesterolMg, nutrients.carbsG, nutrients.fiberG,
+                      nutrients.sugarG, nutrients.proteinG] where value != nil {
+            count += 1
+        }
+        return count
+    }
+
+    /// Stable within one parse: the source order, which is also the
+    /// order the menu prints. Rows are not unique by name (a section can
+    /// repeat "Small"), so the index is the identity.
+    public let id: Int
+    public let name: String
+    /// The heading this row printed under ("CURATED BOWLS"), when the
+    /// table had one. Display grouping only — never part of the name.
+    public let section: String?
+    /// What the table's own serving column said ("153g"), verbatim. Nil
+    /// when the table has no such column, which is the common case — a
+    /// print nutrition guide states the item as sold and names no
+    /// serving. Never invented.
+    public let serving: String?
+    public let kcal: Double?
+    public let sodiumMg: Double?
+    public let nutrients: NutrientValues
+    /// True when the numbers are a model's ESTIMATE rather than figures
+    /// the menu printed — a menu without calorie labeling. Carries the
+    /// provenance dot and the review contract through to the form.
+    public let aiGenerated: Bool
+
+    /// Public so the app can build rows from a source the kit cannot see
+    /// — a menu whose dishes were LISTED rather than measured, where
+    /// `kcal` is nil until the one being eaten is estimated.
+    public init(
+        id: Int, name: String, section: String? = nil, serving: String? = nil,
+        kcal: Double? = nil, sodiumMg: Double? = nil,
+        nutrients: NutrientValues = NutrientValues(), aiGenerated: Bool = false
+    ) {
+        self.id = id
+        self.name = name
+        self.section = section
+        self.serving = serving
+        self.kcal = kcal
+        self.sodiumMg = sodiumMg
+        self.nutrients = nutrients
+        self.aiGenerated = aiGenerated
+    }
+
+    /// The other direction: labels read off ONE image — a screenshot
+    /// listing several foods — as rows, so the multi-item chooser is the
+    /// same list for both (`plans/PLAN-multi-item-import.md`). It used
+    /// to be a `confirmationDialog`, which can neither report what has
+    /// already been logged nor be returned to.
+    ///
+    /// Position is the identity, as it is for a parsed table: a
+    /// comparison screenshot can name two sizes of the same drink.
+    public static func list(from labels: [ParsedLabel]) -> [MenuRow] {
+        labels.enumerated().map { index, label in
+            MenuRow(
+                id: index,
+                name: label.name ?? "Item",
+                serving: label.servingDescription,
+                kcal: label.kcal,
+                sodiumMg: label.sodiumMg,
+                nutrients: label.nutrients,
+                aiGenerated: label.aiGenerated)
+        }
+    }
+
+    /// Folded into a `ParsedLabel` so a picked row enters exactly the
+    /// plumbing a screenshot read already uses — the prefilled food
+    /// form, unchanged.
+    public var parsedLabel: ParsedLabel {
+        var parsed = ParsedLabel()
+        parsed.name = name.isEmpty ? nil : name
+        parsed.kcal = kcal
+        parsed.sodiumMg = sodiumMg
+        parsed.nutrients = nutrients
+        // Only when the table PRINTED one. A guide that states the item
+        // as sold names no serving, and inventing "1 serving" would be
+        // the parser guessing, which it never does.
+        parsed.servingDescription = serving
+        parsed.aiGenerated = aiGenerated
+        // The gate runs HERE rather than at parse time: a mis-mapped
+        // column is a per-field mistake, and this is the one place every
+        // consumer of a row — the picker, the form, the share sheet's
+        // confirm step — passes through (`NutritionPlausibility`).
+        return NutritionPlausibility.checked(parsed)
+    }
+}
+
+/// Deterministic parser for a published nutrition TABLE — the whole menu
+/// at once, as opposed to `LabelParser`'s single FDA panel.
+///
+/// Input is the same `[LabelObservation]` currency `LabelParser` takes,
+/// so a PDF page (`MenuDocument`) and an OCR transcript (`LabelScan`)
+/// are interchangeable here.
+///
+/// The table's geometry does the work, and it has to: flattening a table
+/// to text is what strands the column headers dozens of lines away from
+/// their numbers, which is why the model path could never read one
+/// (`plans/PLAN-menu-import.md`).
+public enum MenuTableParser {
+
+    // MARK: Columns
+
+    enum Field: Hashable {
+        case energy, fat, saturated, trans, cholesterol, sodium
+        case carbs, fiber, sugars, protein
+        /// Parsed so its column is consumed, then DISCARDED. It exists
+        /// only to stop "Cal. from Fat" being read as the calorie
+        /// column — see the match order below.
+        case energyFromFat
+        /// TEXT, not a number ("153g"). Recognized so it lands in the
+        /// serving field instead of being swept into the NAME, which is
+        /// what an unrecognized column left of the numbers does: every
+        /// Chick-fil-A item read as "Spicy Chicken Biscuit 153g".
+        case serving
+    }
+
+    /// Match order is specificity order, exactly as `LabelParser`'s table
+    /// is, and here it is load-bearing twice over on one real document:
+    ///
+    /// - `Cal.` appears TWICE in the CAVA header — once as the
+    ///   calorie column and once as the first half of `Cal. from Fat`.
+    ///   `energyFromFat` must be tested first or the calories column is
+    ///   read off the wrong number.
+    /// - THREE columns contain the word "fat" (`Total Fat`, `Sat. Fat`,
+    ///   `Trans. fat`), so plain `fat` must be tested last.
+    ///
+    /// A keyword may be SEVERAL WORDS, and where it is, the extra words
+    /// are what let a merged header run be cut back into cells: a run
+    /// reading "… Total Fat (g) Sat Fat (g) Trans Fat (g) …" is one
+    /// column name per phrase, and only `trans fat` beside plain `fat`
+    /// says where one ends and the next begins (`splitMergedHeaderRun`).
+    static let headerTable: [(Field, [String])] = [
+        (.serving, ["serving size", "serving", "portion size", "amount per"]),
+        (.energyFromFat, [
+            "cal from fat", "calories from fat", "cal fr fat",
+            // Dave's Hot Chicken prints the column the other way round.
+            "fat calories", "fat cal",
+        ]),
+        (.trans, ["trans fat", "trans"]),
+        (.saturated, ["saturated fat", "sat fat", "saturated"]),
+        (.cholesterol, ["chol"]),
+        (.sodium, ["sodium", "natrium", "salt"]),
+        (.fiber, ["dietary fiber", "fiber", "fibre"]),
+        (.sugars, ["total sugars", "sugars", "sugar"]),
+        (.carbs, ["total carb", "carbohydrate", "carb"]),
+        (.protein, ["protein"]),
+        (.fat, ["total fat", "fat"]),
+        (.energy, ["calories", "cal", "energy", "kcal"]),
+    ]
+
+    struct Column {
+        var minX: Double
+        var maxX: Double
+        var text: String
+        var field: Field?
+        var unit: Unit?
+        /// The span is where this column IS, and a value outside every
+        /// span belongs to no column. True only for a diagonal header,
+        /// where the names are read one per column and can go MISSING
+        /// one at a time — see `diagonalColumns`. An upright header's
+        /// cells are merged by overlap and their spans are approximate,
+        /// so the nearest-centre reading stays the rule there.
+        var anchored = false
+        var center: Double { (minX + maxX) / 2 }
+    }
+
+    enum Unit { case g, mg }
+
+    // MARK: Bands
+
+    struct Band {
+        var runs: [LabelObservation]
+        var midY: Double
+        var height: Double
+        /// Computed ONCE, at cluster time, and summed on merge. The
+        /// verdict is asked for on every band by the join pass, the
+        /// header search and the name-column scan, and recomputing it
+        /// means re-parsing every run's numbers each time.
+        var numberCount = 0
+        var hasTextRun = false
+
+        var isData: Bool { numberCount >= 3 && hasTextRun }
+    }
+
+    /// Cluster runs into visual rows. Same rule `LabelParser.clusterRows`
+    /// uses — tolerance from the SHORTER box, so a tall display number
+    /// never swallows the small-print line above it.
+    static func bands(_ observations: [LabelObservation]) -> [Band] {
+        joinSubPitch(cluster(observations), anchor: isDataBand)
+    }
+
+    static func cluster(_ observations: [LabelObservation]) -> [Band] {
+        var bands: [Band] = []
+        for run in observations.sorted(by: { $0.midY > $1.midY }) {
+            // Mutated through the subscript, in place: the pulled-out
+            // copy (`var last`) held a second reference to the runs
+            // buffer, so every append paid a full copy-on-write clone of
+            // the accumulated band (audit, 2026-08-17 — same shape as
+            // LabelParser.clusterRows and joinSubPitch below).
+            if let lastIndex = bands.indices.last,
+               abs(run.midY - bands[lastIndex].midY) < 0.5 * min(run.h, bands[lastIndex].height) {
+                bands[lastIndex].runs.append(run)
+                bands[lastIndex].midY = (bands[lastIndex].midY
+                    * Double(bands[lastIndex].runs.count - 1) + run.midY)
+                    / Double(bands[lastIndex].runs.count)
+                bands[lastIndex].height = min(bands[lastIndex].height, run.h)
+            } else {
+                bands.append(Band(runs: [run], midY: run.midY, height: run.h))
+            }
+        }
+        for i in bands.indices {
+            bands[i].runs.sort { $0.x < $1.x }
+            for run in bands[i].runs {
+                let found = numbers(in: run.text).count
+                bands[i].numberCount += found
+                // A run with LETTERS in it is text, even when it also
+                // carries a number. This used to require a run with no
+                // numbers at all, and Shake Shack's guide sets each
+                // item's name, allergens and calories as ONE run ("Big
+                // Shack Contains: Milk, Egg, Wheat, Soy, Sesame 900"),
+                // so every burger row looked like numbers with no name
+                // and `isData` rejected the lot — fourteen rows parsed
+                // as one (2026-08-16). A band of bare units ("12g")
+                // that this now admits still has no name, and a
+                // nameless row is dropped later.
+                if looksLikeProse(run.text) || (found == 0 && !run.text.isEmpty) {
+                    bands[i].hasTextRun = true
+                }
+            }
+        }
+        return bands
+    }
+
+    /// Second pass: pull a band into its neighbour when the two are far
+    /// closer together than the table's own row spacing.
+    ///
+    /// A visual row is not always one baseline. The Chick-fil-A table
+    /// puts an item's NAME on a baseline a hair below its numbers, and
+    /// wraps a long name onto a line below that — three bands, one row.
+    /// Left split, the name band reads as a numberless row and gets
+    /// glued to the row ABOVE it, which is how "Hash Brown Scramble
+    /// Bowl" came out as "…Bowl 233g Dipping Sauces Dressings".
+    ///
+    /// The measure is the table's own DATA pitch, not glyph height:
+    /// heights vary within a row, pitch does not. Two data bands are
+    /// never merged — that would fuse two real items.
+    /// `anchor` names the bands that ARE rows, whose spacing defines the
+    /// pitch. `requireSimilarHeight` additionally refuses to absorb text
+    /// set much smaller than the row it would join — a menu board's
+    /// item description sits within a pitch of its item and must not
+    /// become part of the dish's name.
+    static func joinSubPitch(
+        _ bands: [Band],
+        anchor: (Band) -> Bool,
+        requireSimilarHeight: Bool = false
+    ) -> [Band] {
+        let dataMidYs = bands.filter(anchor).map(\.midY)
+        guard dataMidYs.count >= 3 else { return bands }
+        let gaps = zip(dataMidYs, dataMidYs.dropFirst()).map { abs($0 - $1) }.sorted()
+        let pitch = gaps[gaps.count / 2]
+        guard pitch > 0 else { return bands }
+        let threshold = 0.35 * pitch
+
+        var joined: [Band] = []
+        for band in bands {
+            // Subscript mutation — the same COW rationale as `cluster`.
+            guard let lastIndex = joined.indices.last,
+                  abs(joined[lastIndex].midY - band.midY) < threshold,
+                  !(anchor(joined[lastIndex]) && anchor(band)),
+                  !requireSimilarHeight || similarHeight(joined[lastIndex], band)
+            else {
+                joined.append(band)
+                continue
+            }
+            joined[lastIndex].runs.append(contentsOf: band.runs)
+            joined[lastIndex].runs.sort { $0.x < $1.x }
+            joined[lastIndex].numberCount += band.numberCount
+            joined[lastIndex].hasTextRun = joined[lastIndex].hasTextRun || band.hasTextRun
+            // Keep the ANCHOR's geometry: a name that trails its numbers
+            // must not drag the band's midY away from the row.
+            joined[lastIndex].height = min(joined[lastIndex].height, band.height)
+        }
+        return joined
+    }
+
+    /// Compared on the TALLEST run in each band, not the band height,
+    /// which `cluster` has already shrunk to its smallest member.
+    static func similarHeight(_ a: Band, _ b: Band) -> Bool {
+        let ha = a.runs.map(\.h).max() ?? 0
+        let hb = b.runs.map(\.h).max() ?? 0
+        guard ha > 0, hb > 0 else { return false }
+        return min(ha, hb) / max(ha, hb) >= 0.75
+    }
+
+    // MARK: Numbers
+
+    /// Numbers in a run, left to right. Reuses `LabelParser`'s numeric
+    /// fixups so OCR damage ("Og", "1,5") reads the same on both paths;
+    /// a percentage is skipped, since a %DV column is not a value.
+    static func numbers(in text: String) -> [Double] {
+        // A page is mostly WORDS — dish names, descriptions, navigation.
+        // Without this the five regex passes in normalizedNumericText run
+        // on every one of them, and `isDataBand` asks for this repeatedly
+        // (banding, header search, name-column detection). It was 2.5 s
+        // on a 1,673-run page, on a Mac.
+        guard text.contains(where: \.isNumber) else { return [] }
+        let normalized = LabelParser.normalizedNumericText(text)
+        var found: [Double] = []
+        for match in normalized.matches(of: /\d+(?:\.\d+)?/) {
+            var after = match.range.upperBound
+            while after < normalized.endIndex, normalized[after] == " " {
+                after = normalized.index(after: after)
+            }
+            if after < normalized.endIndex, normalized[after] == "%" { continue }
+            if let value = Double(normalized[match.range]) { found.append(value) }
+        }
+        return found
+    }
+
+    static func fold(_ text: String) -> String {
+        let lowered = text.lowercased()
+            .folding(options: [.diacriticInsensitive], locale: nil)
+        let stripped = lowered.map { character -> Character in
+            character.isLetter || character.isNumber ? character : " "
+        }
+        return String(stripped).split(separator: " ").joined(separator: " ")
+    }
+
+    /// Columns recognised in order to be IGNORED. A nutrition table's
+    /// right-hand end is micronutrients and % Daily Value, none of which
+    /// Onigiri stores — and "Calcium" CONTAINS "cal", so it matched the
+    /// calorie column and, sitting to the right, overwrote it: every
+    /// McDonald's row read 25 kcal instead of 740 (2026-08-16). Naming
+    /// them here is safer than tightening every keyword, because the
+    /// next table will invent another one.
+    ///
+    /// `added sugar` is here for the same reason and not for the same
+    /// cause: it is a column Onigiri does not store, and it CONTAINS the
+    /// keyword for one it does. Where a table prints both, the leftmost
+    /// rule already gave `Total Sugars` the field — but somisomi's
+    /// `TOTAL ADDED SUGAR` outlived its neighbour when OCR lost the
+    /// plain `SUGAR` heading beside it, and every soft serve then
+    /// reported its added sugars as its sugars (2026-08-23).
+    static let ignoredHeaderWords = [
+        "calcium", "vitamin", "iron", "potassium", "daily value", "dv",
+        "added sugar",
+    ]
+
+    /// A nutrition table states each value once. When two columns
+    /// resolve to the same field the later one is an artifact — a
+    /// repeated header half, a footnote, a second table's edge — and
+    /// letting it through means the right-hand one silently wins.
+    static func deduplicated(_ columns: [Column]) -> [Column] {
+        var seen = Set<Field>()
+        return columns.map { column in
+            guard let field = column.field else { return column }
+            guard seen.insert(field).inserted else {
+                var copy = column
+                copy.field = nil
+                return copy
+            }
+            return column
+        }
+    }
+
+    /// Whether a run reads as a column HEADING at all, including one
+    /// recognised only in order to be skipped.
+    ///
+    /// Detection of a diagonal header is about the header's LAYOUT, not
+    /// about which columns Onigiri keeps — and the difference is not
+    /// academic: the moment `TOTAL ADDED SUGAR` joined the ignored list
+    /// it stopped counting toward that layout, the somisomi header fell
+    /// back to being read as upright, and every soft serve reported its
+    /// carbohydrates as sodium (2026-08-23).
+    static func namesAColumn(_ text: String) -> Bool {
+        if field(forHeader: text) != nil { return true }
+        let folded = fold(text)
+        return ignoredHeaderWords.contains { folded.contains($0) }
+    }
+
+    static func field(forHeader text: String) -> Field? {
+        let folded = fold(text)
+        guard !folded.isEmpty else { return nil }
+        if ignoredHeaderWords.contains(where: { folded.contains($0) }) { return nil }
+        for (field, keywords) in headerTable {
+            for keyword in keywords where folded.contains(keyword) { return field }
+        }
+        return nil
+    }
+
+    /// The column name starting at `index`, matched WORD FOR WORD
+    /// against the header table — the reading `field(forHeader:)` cannot
+    /// give, because a merged header run holds a dozen names and
+    /// `contains` finds each of them anywhere in the whole line.
+    ///
+    /// Two rules, and each is load-bearing on a real document:
+    ///
+    /// - **Anchored.** A keyword's words must line up with the run's,
+    ///   one for one, from this position. Unanchored, the two-word
+    ///   `total fat` matches the phrase "Calories Fat" (it contains
+    ///   "fat") and the calorie column is swallowed by the fat column.
+    /// - **Longest wins.** "TRANS FAT (G)" is ONE column: `trans fat`
+    ///   beats the bare `fat` that starts at its second word, which
+    ///   otherwise cut every table's trans-fat heading in half. The
+    ///   table's own order breaks a tie, as it does everywhere else.
+    ///
+    /// The header's word may be LONGER than the keyword — "Cholest"
+    /// carries `chol`, "Carbohydrates" carries `carb` — which is the
+    /// same containment `field(forHeader:)` allows, narrowed to a word.
+    static func headerMatch(in words: [String], at index: Int) -> (field: Field, length: Int)? {
+        guard index < words.count,
+              !ignoredHeaderWords.contains(where: { words[index].contains($0) })
+        else { return nil }
+        var best: (field: Field, length: Int)?
+        for (field, keywords) in headerTable {
+            for keyword in keywords {
+                let parts = keyword.split(separator: " ")
+                guard index + parts.count <= words.count,
+                      parts.indices.allSatisfy({ words[index + $0].contains(parts[$0]) })
+                else { continue }
+                if parts.count > (best?.length ?? 0) { best = (field, parts.count) }
+            }
+        }
+        return best
+    }
+
+    /// A header cell names its own unit — `Sodium (mg)`, `Carb. (g)`.
+    /// Read it so a table printing sodium in grams still lands in mg.
+    static func unit(forHeader text: String) -> Unit? {
+        let folded = fold(text)
+        if folded.contains("mg") { return .mg }
+        if folded.contains(" g") || folded.hasSuffix("g") { return .g }
+        return nil
+    }
+
+    // MARK: Parse
+
+    /// One page. Returns nothing when the page carries no nutrition
+    /// table — which is how the guide's ALLERGEN pages exclude
+    /// themselves: their header has no calorie column, so no table is
+    /// recognized and no page whitelist is needed.
+    public static func parse(_ observations: [LabelObservation]) -> [MenuRow] {
+        parse(pages: [observations])
+    }
+
+    /// A whole document. Each page re-detects its own header — the guide
+    /// repeats it per page at DIFFERENT x positions, so columns found
+    /// once and reused would misread every page after the first.
+    public static func parse(pages: [[LabelObservation]]) -> [MenuRow] {
+        var rows: [MenuRow] = []
+        // Both carry across a page break, because the table does: a
+        // heading is printed once, and a CONTINUATION page may reprint
+        // no header at all. (The CAVA guide reprints its header on
+        // every page — at different x positions — so a page's own header
+        // always wins; this only fills in when there is none.)
+        var section: String?
+        var inherited: [Column]?
+        for page in pages {
+            rows.append(contentsOf: parsePage(
+                page, section: &section, columns: &inherited, startingAt: rows.count))
+        }
+        return rows
+    }
+
+    private static func parsePage(
+        _ observations: [LabelObservation],
+        section: inout String?,
+        columns inherited: inout [Column]?,
+        startingAt offset: Int
+    ) -> [MenuRow] {
+        let bands = bands(observations)
+        guard let dataStart = bands.firstIndex(where: { isDataBand($0) }) else { return [] }
+        // How wide upright text of this table runs, per character, per
+        // unit of height. Measured on the ROWS, which are upright by
+        // construction, and used below to tell a turned column name from
+        // a straight one — see `turnedColumns`.
+        //
+        // On the ROWS' WORDS, and only those. A cell that merged with
+        // its neighbour comes back as "0 0" — three characters across
+        // the width of two columns — and a page of those carries the
+        // median far above anything type can measure: CAVA's drinks
+        // page read 1.74 against 0.53 on the page before it, which
+        // raised the turned-header threshold high enough to admit its
+        // own perfectly upright header. All 33 drinks were lost, and
+        // the guide silently dropped from 113 items to 80 (2026-08-23).
+        let rowAspects = bands.filter(\.isData).flatMap(\.runs)
+            .filter { looksLikeProse($0.text) }
+            .compactMap(charAspect).sorted()
+        let rowAspect = rowAspects.isEmpty ? 0 : rowAspects[rowAspects.count / 2]
+        let header = header(above: dataStart, in: bands, rowAspect: rowAspect)
+        // A page that reprints no header continues the previous page's
+        // table. Without this the tail of a long menu is silently
+        // dropped — the Chick-fil-A render puts its drinks on a second,
+        // header-less page.
+        guard let columns = header?.columns ?? inherited, !columns.isEmpty else { return [] }
+        inherited = columns
+        guard let firstValueX = columns.first(where: { $0.field != nil })?.minX else { return [] }
+        // A table with no calorie column is not a nutrition table. The
+        // allergen pages reach here and stop.
+        guard columns.contains(where: { $0.field == .energy }) else { return [] }
+
+        let body = Array(bands[(header?.bodyStart ?? 0)...])
+        let nameStart = nameColumnStart(in: body, before: firstValueX)
+        // The table's own type size, for telling a section heading from
+        // a wrapped name below.
+        let dataHeights = body.filter(\.isData).compactMap { $0.runs.map(\.h).max() }.sorted()
+        let dataHeight = dataHeights.isEmpty ? 0 : dataHeights[dataHeights.count / 2]
+
+        var rows: [MenuRow] = []
+        // Where the rows ARE, for deciding which way a name-only band
+        // leans — see `carriesDown` below.
+        let dataMidYs = body.filter(\.isData).map(\.midY)
+        var carried: String?
+        // From just below the header, NOT from the first data row: the
+        // first section heading ("CURATED BOWLS") sits between the two,
+        // and starting at the data would drop it and leave every row in
+        // the opening section unlabelled.
+        for band in body {
+            // `nameStart` and not simply "everything to the left": the
+            // Chick-fil-A page carries a category SIDEBAR at the far
+            // left, and its entries share bands with table rows —
+            // "Kid's Meals (nutrition per entrée only) Egg White Grill"
+            // was a real parsed name.
+            // Normally a name run is one that ENDS before the values.
+            // Shake Shack breaks that: it sets the item, its allergens
+            // and its calories as a single run reaching well past the
+            // calorie column, so on those bands nothing ends in the name
+            // column, the name came out empty and the row was dropped —
+            // fourteen burgers parsed as one (2026-08-16).
+            //
+            // So the wider rule applies ONLY to a band with no ordinary
+            // name run at all. Chick-fil-A has ordinary names AND runs
+            // that straddle the boundary, and taking the wide reading
+            // there swept a "Serving Size" header into a section and
+            // broke a wrapped name — measured, not supposed.
+            // …and only on a DATA band. A header band has no ordinary
+            // name run either, and read widely its "SERVING SIZE" cell
+            // becomes part of a name, which then reads as a section
+            // heading. The fallback exists to rescue rows whose name
+            // merged with a VALUE, so rows are all it may touch.
+            let hasNarrowName = band.runs.contains { $0.maxX <= firstValueX && $0.x >= nameStart }
+            let wide = !hasNarrowName && band.isData
+            func isNameRun(_ run: LabelObservation) -> Bool {
+                guard run.x >= nameStart else { return false }
+                return wide ? run.x < firstValueX : run.maxX <= firstValueX
+            }
+            let nameRuns = band.runs.filter(isNameRun)
+            let valueRuns = band.runs.filter { !isNameRun($0) && $0.maxX > firstValueX }
+            // Reading order, not x order: a wrapped name continues on
+            // the line BELOW, and both halves sit at the same x.
+            var name = nameRuns
+                .sorted { $0.midY == $1.midY ? $0.x < $1.x : $0.midY > $1.midY }
+                .map(\.text)
+                .joined(separator: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard !valueRuns.isEmpty, valueRuns.contains(where: { !numbers(in: $0.text).isEmpty })
+            else {
+                guard !name.isEmpty else { continue }
+                // A band with a name and no numbers is either a section
+                // heading or the second line of a wrapped name, and
+                // nothing else distinguishes them. All-caps means
+                // heading; anything else continues the row above.
+                let height = band.runs.map(\.h).max() ?? 0
+                if isHeading(name, height: height, dataHeight: dataHeight) {
+                    section = name
+                } else if !continuesAName(height: height, dataHeight: dataHeight) {
+                    // Small print, not a name.
+                } else if band.numberCount == 0,
+                          carriesDown(band.midY, among: dataMidYs) {
+                    carried = carried.map { "\($0) \(name)" } ?? name
+                } else if let last = rows.last {
+                    rows[rows.count - 1] = MenuRow(
+                        id: last.id, name: "\(last.name) \(name)", section: last.section,
+                        serving: last.serving, kcal: last.kcal,
+                        sodiumMg: last.sodiumMg, nutrients: last.nutrients)
+                }
+                continue
+            }
+            // A name that broke over two lines and leaned DOWN onto this
+            // row rejoins it in reading order, ahead of its own line.
+            if let carried {
+                name = "\(carried) \(name)".trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            carried = nil
+            // A NAME IS MADE OF WORDS. The Cheesecake Factory's booklet
+            // sets its product names as individual letters, which
+            // cluster into bands across neighbouring columns and came
+            // out as "T R I P O L A C I G G N R E E L O O C R" beside a
+            // 0 kcal — 171 rows of confident nonsense (2026-08-16).
+            // A parse that has gone wrong should return nothing, not
+            // something: nothing prompts a screenshot, and something
+            // gets logged.
+            guard !name.isEmpty, looksLikeProse(name) else { continue }
+            guard let row = row(
+                name: name, section: section, valueRuns: valueRuns,
+                columns: columns, id: offset + rows.count)
+            else { continue }
+            rows.append(row)
+        }
+        // DID THE ROWS KEEP THE HEADER'S PROMISE?
+        //
+        // A header that declares protein and sodium columns sits above
+        // rows that fill them. When almost none do, the column mapping
+        // is wrong rather than the table sparse — and a wrong mapping
+        // does not fail loudly, it returns confident nonsense: the
+        // Cheesecake Factory booklet produced "HUMMUS, 10 kcal" and 170
+        // more like it (2026-08-16). Better to return nothing and let
+        // the sheet say so; a screenshot of one item still works.
+        let declared = columns.filter { $0.field != nil && $0.field != .serving }.count
+        guard !rows.isEmpty else { return rows }
+        // THREE columns, not one. `header` needs three nutrient WORDS to
+        // accept a block, but after merging and splitting they can
+        // collapse to a single usable column — and a page offering only
+        // "calories" will map any stray number to it. The Cheesecake
+        // booklet's decorative pages did exactly that.
+        guard declared >= 3 else { return [] }
+        let filled = rows.reduce(0) { $0 + $1.filledFieldCount }
+        let rate = Double(filled) / Double(rows.count * declared)
+        guard rate >= minimumFieldFillRate else { return [] }
+        return rows
+    }
+
+    /// How much of a declared header a real table actually fills. Set
+    /// well below a sparse-but-honest table (Wendy's fills 4 of 4,
+    /// McDonald's nearly all) and well above a broken mapping (the
+    /// Cheesecake booklet managed 0.13).
+    static let minimumFieldFillRate = 0.35
+
+    /// A WORD, not a unit. Deciding "this run is text" on any letter at
+    /// all counts `662g` and `79g` as names, so a row's value-only band
+    /// stopped being merged into the name band beside it and a wrapped
+    /// Chick-fil-A name came apart (2026-08-16). Three letters in a row
+    /// is the line: `g`, `mg`, `oz` fall below it, `Nuggets` and
+    /// `Sesame` do not.
+    static func looksLikeProse(_ text: String) -> Bool {
+        var streak = 0
+        for character in text {
+            guard character.isLetter else { streak = 0; continue }
+            streak += 1
+            if streak >= 3 { return true }
+        }
+        return false
+    }
+
+    /// "Big Shack Contains: Milk, Egg, Wheat, Soy, Sesame" is one cell
+    /// holding a name and an allergen notice. The notice is FDA
+    /// boilerplate, worded the same way everywhere, and it is not part
+    /// of what anyone would call the food — nor of what they would
+    /// search for later.
+    static func strippingAllergens(from name: String) -> String {
+        var name = name
+        // The FDA calorie footnote runs along the foot of many menus and
+        // lands in whichever row sits on its baseline: "ORIGINAL
+        // CHEESECAKE * Adults need an average of 2000 calories…". No
+        // dish is named with an asterisk.
+        if let star = name.range(of: " *") {
+            let head = String(name[name.startIndex..<star.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if head.contains(where: \.isLetter) { name = head }
+        }
+        guard let range = name.range(of: "contains:", options: .caseInsensitive) else { return name }
+        let head = String(name[name.startIndex..<range.lowerBound])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return head.contains(where: \.isLetter) ? head : name
+    }
+
+    /// The trailing number in a name cell that merged with the value
+    /// beside it, and the name without it. Nil unless what remains is
+    /// still a name — a bare number is a stray run, not an item.
+    static func splitTrailingNumber(from name: String) -> (name: String, value: Double)? {
+        guard let match = name.firstMatch(of: /\s(\d{1,5}(?:[.,]\d{1,3})?)\s*$/) else { return nil }
+        let head = String(name[name.startIndex..<match.range.lowerBound])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard head.contains(where: \.isLetter),
+              let value = numbers(in: String(match.1)).first else { return nil }
+        return (head, value)
+    }
+
+    /// Where the NAME column starts, taken from the table rather than
+    /// assumed: the most common left edge among the text sitting left of
+    /// the values. A page's own furniture — a category sidebar, a
+    /// footnote — lands at some other x and appears in far fewer rows,
+    /// so the mode is the names and the outliers drop out.
+    static func nameColumnStart(in body: [Band], before firstValueX: Double) -> Double {
+        var histogram: [Int: Int] = [:]
+        for band in body where isDataBand(band) {
+            for run in band.runs where run.maxX <= firstValueX {
+                histogram[Int((run.x * 200).rounded()), default: 0] += 1
+            }
+        }
+        guard let mode = histogram.max(by: {
+            $0.value == $1.value ? $0.key > $1.key : $0.value < $1.value
+        })?.key else { return 0 }
+        // A shade of slack: a wrapped line or an italic variant can start
+        // a hair left of the column.
+        return Double(mode) / 200 - 0.01
+    }
+
+    /// ≥3 numbers on one line, with something non-numeric to its left.
+    /// Prose survives this: a paragraph mentioning "100%" carries one
+    /// number, not three.
+    static func isDataBand(_ band: Band) -> Bool { band.isData }
+
+    /// A numberless band is either a SECTION HEADING or the second line
+    /// of a wrapped name, and the text alone often cannot say which:
+    /// Shake Shack sets its sections in Title Case ("Burgers",
+    /// "Chicken"), so an all-caps test called them continuations and
+    /// glued them onto the row above — no document in the sweep
+    /// produced a single section (2026-08-16).
+    ///
+    /// Type SIZE separates them, and measurably: on that page a heading
+    /// runs 1.5x the height of a data row while the paragraph of
+    /// marketing prose beside it runs 0.81x. A wrapped name is set in
+    /// the row's own size, so it stays a continuation.
+    static func isHeading(_ name: String, height: Double, dataHeight: Double) -> Bool {
+        let letters = name.filter(\.isLetter)
+        guard !letters.isEmpty else { return false }
+        // A COLON is a heading whatever its size or case: "Combos:",
+        // "Sides:". No dish is named with one, and Dave's Hot Chicken
+        // sets both of its sections in the rows' own type — which every
+        // other test here reads as a wrapped name.
+        if name.hasSuffix(":") { return true }
+        if !letters.contains(where: \.isLowercase) { return true }
+        guard dataHeight > 0 else { return false }
+        return height >= 1.25 * dataHeight
+    }
+
+    /// A wrapped name is set in the ROW'S OWN SIZE — which is what
+    /// tells it from the small print at the foot of the page.
+    ///
+    /// Dave's Hot Chicken sets its FDA footnote in lines that begin left
+    /// of the value columns, so the wide reading takes each of them for
+    /// a name, and having no numbers of their own they were appended to
+    /// the last item on the page: four of its five pages ended in a dish
+    /// called "… Recommended Daily Values for a 2,000 calorie diet are
+    /// 78g total fat, …" (2026-08-23). Type size is the same measure
+    /// `isHeading` uses in the other direction, and the same ratio
+    /// `similarHeight` calls a match.
+    static func continuesAName(height: Double, dataHeight: Double) -> Bool {
+        guard dataHeight > 0, height > 0 else { return true }
+        return height / dataHeight >= 0.75
+    }
+
+    /// Whether a name-only band belongs to the row BELOW it rather than
+    /// the row above — it sits nearer that one.
+    ///
+    /// Which way a stray name leans is not a matter of style: the
+    /// Chick-fil-A page sets an item's name a hair below its numbers and
+    /// wraps it below that, so a name band there continues the row
+    /// ABOVE, while Dave's Hot Chicken wraps a long name onto the line
+    /// over its numbers — a whole row pitch above them, too far for
+    /// `joinSubPitch`, because the wrapped row is set double height.
+    /// Read upward, "Single Not Chicken Slider (no sides), Not Hot &
+    /// Lite" joined the tender above it and left its own row answering
+    /// to "Mild Spice" (2026-08-23).
+    ///
+    /// Asked only of a band carrying NO figures: Chipotle's menu merges
+    /// whole blocks of the table into one run, numbers and all, and
+    /// those belong to the row they were cut from rather than the one
+    /// below.
+    static func carriesDown(_ midY: Double, among dataMidYs: [Double]) -> Bool {
+        let above = dataMidYs.filter { $0 > midY }.min()
+        guard let below = dataMidYs.filter({ $0 < midY }).max() else { return false }
+        guard let above else { return true }
+        return midY - below < above - midY
+    }
+
+    /// Build the columns from the header block — the bands immediately
+    /// above the first data row that carry nutrient words.
+    ///
+    /// The header is not one line: `Sodium` sits above `(mg)`, and
+    /// `Cal.` sits above `from Fat`. So cells are assembled by X-RANGE
+    /// across every header band, never per line — which is also what
+    /// keeps the bare `Cal.` column apart from `Cal. from Fat`.
+    struct Header {
+        var columns: [Column]
+        /// First band BELOW the header — where the table body starts.
+        var bodyStart: Int
+    }
+
+    /// One header run holding SEVERAL column names, split back apart.
+    ///
+    /// The Cheesecake Factory's booklet extracts its header as
+    /// "Cholesterol Carbohydrates Total Sugars Added" — one run across
+    /// four columns — so the column that swallowed them all took every
+    /// value with it and the page parsed into letter-soup names with
+    /// zero calories (2026-08-16).
+    ///
+    /// Split only where the run names TWO OR MORE different nutrients,
+    /// which no single column heading does; the sub-ranges are
+    /// apportioned by character offset, which is exact enough for
+    /// monospaced-ish header type and only has to be good enough to
+    /// separate neighbours.
+    ///
+    /// The names are found by `headerMatch`, one PHRASE at a time, and
+    /// they have to be: read a word at a time, "Trans Fat (g)" is two
+    /// matches and every table in the fixtures had its trans-fat column
+    /// cut in half. That went unnoticed for as long as it did because
+    /// the pieces landed edge to edge and the column merge in `header`
+    /// glued them straight back together — which is also why Dave's Hot
+    /// Chicken, whose ENTIRE header is one run of twelve names, read as
+    /// two columns and returned nothing (the user, 2026-08-23).
+    static func splitMergedHeaderRun(_ run: LabelObservation) -> [LabelObservation] {
+        let words = run.text.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
+        guard words.count >= 2 else { return [run] }
+        let folded = words.map(fold)
+        // Where each word starts, in characters.
+        var offsets: [Int] = []
+        var cursor = 0
+        for word in words {
+            offsets.append(cursor)
+            cursor += word.count + 1
+        }
+
+        // Where each column name starts. A field claimed twice is a
+        // repeated header half, not a second column, exactly as
+        // `deduplicated` treats it.
+        var starts: [(offset: Int, field: Field)] = []
+        var index = 0
+        while index < words.count {
+            guard let match = headerMatch(in: folded, at: index) else {
+                index += 1
+                continue
+            }
+            if !starts.contains(where: { $0.field == match.field }) {
+                starts.append((offsets[index], match.field))
+            }
+            index += match.length
+        }
+        guard starts.count >= 2 else { return [run] }
+
+        let total = Double(max(run.text.count, 1))
+        // ONE expression for both sides of a boundary, so the piece that
+        // ends there and the piece that begins there land on the same
+        // Double and `header`'s overlap test sees no sliver between them.
+        func edge(_ offset: Int) -> Double { run.x + run.w * (Double(offset) / total) }
+
+        var pieces: [LabelObservation] = []
+        for (index, match) in starts.enumerated() {
+            // A segment runs from the previous match's word to this
+            // one's, so unmatched words ("(g)" after "Total Fat") stay
+            // with the name they qualify.
+            let from = index == 0 ? 0 : match.offset
+            let to = index + 1 < starts.count ? starts[index + 1].offset : run.text.count
+            guard to > from else { continue }
+            let start = run.text.index(run.text.startIndex, offsetBy: from)
+            let end = run.text.index(run.text.startIndex, offsetBy: min(to, run.text.count))
+            pieces.append(LabelObservation(
+                text: String(run.text[start..<end]).trimmingCharacters(in: .whitespaces),
+                x: edge(from), y: run.y, w: edge(to) - edge(from), h: run.h))
+        }
+        return pieces.isEmpty ? [run] : pieces
+    }
+
+    /// How much two header spans overlap, as a share of the narrower —
+    /// the test for "these two cells are the same COLUMN".
+    ///
+    /// A stacked unit line sits squarely under its name and scores near
+    /// 1; two halves of a split run touch at a boundary and score 0.
+    /// Asking merely whether they overlap AT ALL cannot tell those
+    /// apart, because a boundary is a rounded Double and lands either
+    /// side of itself.
+    static func columnOverlap(_ a: (min: Double, max: Double), _ b: (min: Double, max: Double)) -> Double {
+        let overlap = min(a.max, b.max) - max(a.min, b.min)
+        let narrower = min(a.max - a.min, b.max - b.min)
+        guard narrower > 0 else { return overlap > 0 ? 1 : 0 }
+        return overlap / narrower
+    }
+
+    /// Below this, two header cells are neighbours rather than a stack.
+    static let sameColumnOverlap = 0.25
+
+    /// How narrow a run is for the text it holds: its width per
+    /// character, per unit of height. Upright text of any size lands on
+    /// one value; a turned word's box is as tall as the word is long and
+    /// lands far below it. Free of the page's own proportions, which the
+    /// normalized coordinates do not carry.
+    static func charAspect(_ run: LabelObservation) -> Double? {
+        let count = run.text.trimmingCharacters(in: .whitespaces).count
+        guard count >= 1, run.h > 0 else { return nil }
+        return run.w / (run.h * Double(count))
+    }
+
+    /// A column name this much narrower than the table's own rows can
+    /// only be turned. The gap it sits in is wide — CAVA's upright cells
+    /// measure 0.46 and up, somisomi's turned ones 0.22 and down.
+    static let turnedCharAspect = 0.35
+
+    /// Column names printed on a DIAGONAL, one column each — nil when
+    /// the header is the ordinary upright kind.
+    ///
+    /// A one-page guide that has to fit eleven column names above narrow
+    /// number columns turns them 60°, and the somisomi sheet does
+    /// exactly that. OCR reads such a name into an AXIS-ALIGNED box, so
+    /// "SATURATED FAT" comes back spanning its own column AND its
+    /// neighbour's — and the upright rule below, which merges any run
+    /// starting before the previous column ends, then fuses the whole
+    /// header into two or three columns whose text reads "SATURATED FAT
+    /// TRANS FAT". Every value after that lands under the wrong name:
+    /// the cholesterol column held sodium's figures (2026-08-23).
+    ///
+    /// The box's LEFT EDGE is where the column is: a name rising to the
+    /// right starts at the column it belongs to (measured on the
+    /// somisomi sheet — `CALORIES` starts at 0.270 against data at
+    /// 0.264, `SODIUM` at 0.592 against 0.590). So the runs are kept as
+    /// they were read, one column apiece, and nothing is merged.
+    ///
+    /// Only the turned runs become columns. A name the same size as the
+    /// rows is upright text that happens to sit in the header block —
+    /// a section label, a unit line — and has no column of its own.
+    static func turnedColumns(_ runs: [LabelObservation], rowAspect: Double) -> [Column]? {
+        guard rowAspect > 0 else { return nil }
+        let sorted = runs.sorted { $0.x < $1.x }
+        // TWO conditions, and both are needed — measured on every menu
+        // in the fixtures.
+        //
+        // OVERLAP is the harm. A name at 60° is wide enough to lean over
+        // the column beside it, and the merge below then fuses the two.
+        // A name at a full 90° is NARROWER than its column and leans on
+        // nothing, which is why McDonald's, Shake Shack and Chipotle set
+        // their headings vertically and have read correctly through the
+        // merge since the day they were fixtured.
+        //
+        // ROTATION is what keeps CAVA out. It has one overlapping pair
+        // of its own — `Cal.` sitting under `from Fat` — so overlap
+        // alone routed a perfectly upright header down here and took all
+        // 113 of its rows with it. Its cells measure 0.46–0.92 of the
+        // rows' own width-per-character; somisomi's measure 0.07–0.22,
+        // because a turned word's box is as tall as the word is long.
+        // NEIGHBOURS AMONG THE NAMES, not among all the runs: a unit
+        // line sorts between two headings and would otherwise stand
+        // between them, hiding the very overlap this is looking for.
+        let named = sorted.filter { namesAColumn($0.text) }
+        var leaning = false
+        for (left, right) in zip(named, named.dropFirst()) {
+            guard right.x < left.maxX,
+                  let leftAspect = charAspect(left), let rightAspect = charAspect(right),
+                  leftAspect <= turnedCharAspect * rowAspect,
+                  rightAspect <= turnedCharAspect * rowAspect
+            else { continue }
+            // The same name read twice is one column, not two — and a
+            // stacked unit line names no column at all.
+            if let a = field(forHeader: left.text), a == field(forHeader: right.text) { continue }
+            leaning = true
+            break
+        }
+        guard leaning else { return nil }
+
+        var columns: [Column] = []
+        for run in sorted {
+            guard let matched = field(forHeader: run.text) else { continue }
+            // The unit line ("mg") is set UPRIGHT beneath its turned
+            // name, so it is claimed by overlap the way the upright path
+            // claims it — but ONLY a run that is nothing but a unit. A
+            // turned name leans across its neighbour, so anything looser
+            // pulls the next column's heading into this one's text.
+            let unitText = sorted
+                .filter {
+                    $0.text.count <= 4 && unit(forHeader: $0.text) != nil
+                        && $0.x < run.maxX && $0.maxX > run.x
+                }
+                .sorted { $0.x < $1.x }
+                .map(\.text)
+                .joined(separator: " ")
+            let text = "\(run.text) \(unitText)".trimmingCharacters(in: .whitespacesAndNewlines)
+            columns.append(Column(
+                minX: run.x, maxX: run.maxX, text: text,
+                field: matched, unit: unit(forHeader: text), anchored: true))
+        }
+        return columns.count >= 3 ? columns : nil
+    }
+
+    static func header(above dataStart: Int, in bands: [Band], rowAspect: Double) -> Header? {
+        var block: [Band] = []
+        var bottom = dataStart
+        var index = dataStart - 1
+        while index >= 0, block.count < 3 {
+            let band = bands[index]
+            let hasHeaderWord = band.runs.contains { field(forHeader: $0.text) != nil }
+            if !hasHeaderWord, !block.isEmpty { break }
+            if !hasHeaderWord, block.isEmpty { index -= 1; continue }
+            block.insert(band, at: 0)
+            bottom = index
+            index -= 1
+        }
+        guard !block.isEmpty else { return nil }
+        let runs = block.flatMap(\.runs).flatMap(splitMergedHeaderRun)
+        let matches = runs.reduce(0) { $0 + (field(forHeader: $1.text) != nil ? 1 : 0) }
+        guard matches >= 3 else { return nil }
+
+        if let turned = turnedColumns(runs, rowAspect: rowAspect) {
+            return Header(columns: deduplicated(turned), bodyStart: bottom + 1)
+        }
+
+        var columns: [Column] = []
+        for run in runs.sorted(by: { $0.x < $1.x }) {
+            if var last = columns.last,
+               columnOverlap((last.minX, last.maxX), (run.x, run.maxX)) > sameColumnOverlap {
+                last.minX = min(last.minX, run.x)
+                last.maxX = max(last.maxX, run.maxX)
+                columns[columns.count - 1] = last
+            } else {
+                columns.append(Column(minX: run.x, maxX: run.maxX, text: "", field: nil, unit: nil))
+            }
+        }
+        // Cell text reads top line first, then left to right, so
+        // "Sodium" + "(mg)" assembles as "Sodium (mg)" and not the
+        // reverse.
+        for i in columns.indices {
+            let members = runs
+                .filter {
+                    columnOverlap((columns[i].minX, columns[i].maxX), ($0.x, $0.maxX))
+                        > sameColumnOverlap
+                }
+                .sorted { $0.midY == $1.midY ? $0.x < $1.x : $0.midY > $1.midY }
+            columns[i].text = members.map(\.text).joined(separator: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            columns[i].field = field(forHeader: columns[i].text)
+            columns[i].unit = unit(forHeader: columns[i].text)
+        }
+        return Header(columns: deduplicated(columns), bodyStart: bottom + 1)
+    }
+
+    /// Which cells a run holding SEVERAL numbers covers, read from its
+    /// EDGES — nil when they do not land on distinct columns and some
+    /// other reading has to try.
+    ///
+    /// A run's outer edges are measured and its inside is not: the one
+    /// space in "9 15" stands for however wide a gap the table sets, so
+    /// apportioning by character puts the second figure in the middle of
+    /// the run instead of at the end of it. Anchoring the first number
+    /// to the run's left edge and the last to its right edge is what
+    /// reads a run that reaches ACROSS a blank cell — Dave's Hot Chicken
+    /// leaves trans fat empty on a page where it prints, and both the
+    /// spanned reading and the apportioned one filed its cholesterol
+    /// under trans fat: 15 mg became 15 g (2026-08-23).
+    static func anchoredTargets(
+        _ count: Int, in run: LabelObservation, columns: [Column]
+    ) -> [Column]? {
+        guard count >= 2 else { return nil }
+        let placed = (0..<count).map { index -> Int in
+            let at: Double
+            switch index {
+            case 0: at = run.x
+            case count - 1: at = run.maxX
+            default: at = run.x + run.w * (Double(index) + 0.5) / Double(count)
+            }
+            return columns.indices.first { columns[$0].minX <= at && at <= columns[$0].maxX }
+                ?? columns.indices.min {
+                    abs(columns[$0].center - at) < abs(columns[$1].center - at)
+                }!
+        }
+        // A row prints one figure per cell, so two figures landing on
+        // one column means the spans are the approximate kind and this
+        // reading has nothing to say.
+        guard Set(placed).count == count, placed == placed.sorted() else { return nil }
+        return placed.map { columns[$0] }
+    }
+
+    private static func row(
+        name: String, section: String?, valueRuns: [LabelObservation],
+        columns: [Column], id: Int
+    ) -> MenuRow? {
+        var values: [Field: Double] = [:]
+        var serving: String?
+        // The serving cell is TEXT ("153g", "1 sandwich") and is taken
+        // whole rather than parsed — its number is a weight, not a
+        // nutrient, and running it through the numeric path would file
+        // 153 under whatever column it happened to land near.
+        if let column = columns.first(where: { $0.field == .serving }) {
+            let cell = valueRuns
+                .filter { $0.x < column.maxX && $0.maxX > column.minX }
+                .sorted { $0.x < $1.x }
+                .map(\.text)
+                .joined(separator: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            serving = cell.isEmpty ? nil : cell
+        }
+        let servingColumn = columns.first { $0.field == .serving }
+        let numberRuns = valueRuns.filter { run in
+            guard let servingColumn else { return true }
+            return !(run.x < servingColumn.maxX && run.maxX > servingColumn.minX)
+        }
+        let valueColumns = columns.filter { $0.field != nil && $0.field != .serving }
+
+        // A DIAGONAL header knows exactly where its columns are, and
+        // that changes what an unplaceable number means. Its names are
+        // read one per column, so OCR can lose ONE and leave a real gap
+        // in the middle of the table — and both readings below fill a
+        // gap rather than admit it. Counting put nine numbers under nine
+        // surviving names; nearest-centre handed the fibre and sugar
+        // figures to total-carbs and added-sugar, three columns away.
+        // Every soft-serve row came out plausible and wrong
+        // (2026-08-23).
+        //
+        // So where the span is authoritative, a value is placed INSIDE a
+        // column or not at all. A dropped figure costs that one field;
+        // a filled gap costs every field to its right.
+        if columns.contains(where: \.anchored) {
+            for run in numberRuns {
+                let found = numbers(in: run.text)
+                guard found.count == 1, let value = found.first else { continue }
+                let at = run.x + run.w / 2
+                // Overlapping spans are ordinary here — a turned name
+                // leans over its neighbour — so the innermost match
+                // wins: the column that starts latest still containing
+                // the figure.
+                guard let column = columns
+                    .filter({ $0.minX <= at && at <= $0.maxX })
+                    .max(by: { $0.minX < $1.minX }),
+                    let field = column.field, field != .serving
+                else { continue }
+                values[field] = converted(value, for: field, unit: column.unit)
+            }
+            return assemble(
+                id: id, name: strippingAllergens(from: name), section: section,
+                serving: serving, values: values)
+        }
+
+        // PRIMARY: count match. A table row prints one number per value
+        // column, in column order, so when the counts agree the mapping
+        // is positional and needs no geometry at all.
+        //
+        // This is not an optimisation — geometry alone gets it WRONG
+        // here. On the Chick-fil-A page the header words and the numbers
+        // under them have different extents ("FIBER (G)" spans
+        // 0.841–0.859 while its data starts at 0.860), so a run holding
+        // two values landed both on the same column: fibre came out nil
+        // and sugar took the fibre figure.
+        var ordered = numberRuns.sorted { $0.x < $1.x }.flatMap { numbers(in: $0.text) }
+        var name = name
+
+        // A NAME CELL THAT SWALLOWED THE FIRST VALUE. Shake Shack's
+        // guide sets the item, its allergen list and its calories as one
+        // text run — "Big Shack Contains: Milk, Egg, Wheat, Soy, Sesame
+        // 900" — so the calorie column holds nothing at all and the row
+        // came up exactly one number short of its columns. Fourteen
+        // burgers parsed as one (2026-08-16).
+        //
+        // Gated on being EXACTLY one short, which is what makes it safe:
+        // a name that merely ends in a digit ("Coke 12") sits in a row
+        // whose numbers already match its columns, so nothing is taken
+        // from it.
+        if ordered.count + 1 == valueColumns.count,
+           let split = splitTrailingNumber(from: name) {
+            name = split.name
+            ordered.insert(split.value, at: 0)
+        }
+        // AFTER the split, never before: the merged cell reads
+        // "… Contains: Milk, Egg, Wheat, Soy, Sesame 900", so trimming
+        // the allergen clause first takes the calories with it.
+        name = strippingAllergens(from: name)
+        if ordered.count == valueColumns.count {
+            for (column, value) in zip(valueColumns, ordered) {
+                guard let field = column.field else { continue }
+                values[field] = converted(value, for: field, unit: column.unit)
+            }
+            return assemble(
+                id: id, name: name, section: section, serving: serving, values: values)
+        }
+
+        // FALLBACK: a ragged row — a blank cell, a footnote mark, a value
+        // the parser couldn't read. Place what there is by geometry.
+        for run in numberRuns {
+            let found = numbers(in: run.text)
+            guard !found.isEmpty else { continue }
+            // A run can span TWO columns: adjacent cells whose gap is
+            // narrow come back as one selection ("0 105", "7 7" on the
+            // CAVA page). Columns whose centre falls inside the
+            // run's span, in order, are the cells it covers.
+            let spanned = columns.filter { $0.center >= run.x && $0.center <= run.maxX }
+            let targets: [Column]
+            if found.count == 1 {
+                targets = [columns.min {
+                    abs($0.center - run.midX) < abs($1.center - run.midX)
+                }!]
+            } else if let anchored = anchoredTargets(found.count, in: run, columns: columns) {
+                targets = anchored
+            } else if spanned.count == found.count {
+                targets = spanned
+            } else {
+                // Ragged: place each number under the nearest centre.
+                targets = found.indices.map { i in
+                    let at = run.x + (run.w * (Double(i) + 0.5) / Double(found.count))
+                    return columns.min { abs($0.center - at) < abs($1.center - at) }!
+                }
+            }
+            for (column, value) in zip(targets, found) {
+                guard let field = column.field, field != .serving else { continue }
+                values[field] = converted(value, for: field, unit: column.unit)
+            }
+        }
+        return assemble(id: id, name: name, section: section, serving: serving, values: values)
+    }
+
+    private static func assemble(
+        id: Int, name: String, section: String?, serving: String?, values: [Field: Double]
+    ) -> MenuRow? {
+        // No calories, no food. A heading row, a spacer, or a line the
+        // parser only half-read never becomes an item.
+        guard let kcal = values[.energy] else { return nil }
+        var nutrients = NutrientValues()
+        nutrients.fatG = values[.fat]
+        nutrients.saturatedFatG = values[.saturated]
+        nutrients.transFatG = values[.trans]
+        nutrients.cholesterolMg = values[.cholesterol]
+        nutrients.carbsG = values[.carbs]
+        nutrients.fiberG = values[.fiber]
+        nutrients.sugarG = values[.sugars]
+        nutrients.proteinG = values[.protein]
+        return MenuRow(
+            id: id, name: name, section: section, serving: serving,
+            kcal: kcal, sodiumMg: values[.sodium], nutrients: nutrients)
+    }
+
+    /// Storage stays canonical (CLAUDE.md *Units*): grams for macros,
+    /// milligrams for sodium and cholesterol, whatever the table printed.
+    private static func converted(_ value: Double, for field: Field, unit: Unit?) -> Double {
+        let wantsMg = field == .sodium || field == .cholesterol
+        switch (wantsMg, unit) {
+        case (true, .g): return value * 1000
+        case (false, .mg): return value / 1000
+        default: return value
+        }
+    }
+}
+
+private extension LabelObservation {
+    var midX: Double { x + w / 2 }
+}

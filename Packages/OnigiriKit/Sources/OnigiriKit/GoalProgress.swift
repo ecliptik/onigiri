@@ -1,0 +1,203 @@
+import Foundation
+
+/// Start → now → target: the one resolved start point behind the Goal
+/// tab's progress bar and the chart's milestone marks.
+///
+/// The chart answers "what is the scale doing"; this answers "how far
+/// have I come", which is the question a bad weigh-in can't spoil. Both
+/// need a start, and a start is the only thing the app didn't already
+/// know — hence `GoalSettings.startWeightLb` / `startedAt` and the
+/// derivation below for the goals that predate them.
+public struct GoalProgress: Equatable, Sendable {
+    /// Weight when this journey began, in canonical pounds.
+    public let startLb: Double
+    /// When it began — shown as "since <date>" for a derived start.
+    public let startedAt: Date
+    public let currentLb: Double
+    public let targetLb: Double
+    /// Where the start came from — the UI says so, because a number
+    /// this load-bearing shouldn't be silent about its source.
+    public let origin: StartOrigin
+
+    /// The three ways a journey can acquire a beginning, in precedence
+    /// order: what the user said, what was recorded, what can be
+    /// inferred.
+    public enum StartOrigin: Equatable, Sendable {
+        /// The user picked this start date themselves. It outranks the
+        /// others and survives a target change — a deliberate choice
+        /// that re-stamped itself would be a silent field failure.
+        case chosen
+        /// Recorded when the goal was set, or when its target last
+        /// changed. Needs no explanation on screen: it IS the day the
+        /// journey started.
+        case stamped
+        /// Nothing on record, so: the earliest weigh-in in Health.
+        /// Existing goals have no stamp and can't be given one honestly
+        /// — writing today's weight in would tell someone forty pounds
+        /// down that they're at 0%. Inferring understates a long journey
+        /// (Health history is read 90 days back) but never overstates
+        /// it, and the UI names the date it's counting from.
+        case earliestWeighIn
+    }
+    /// Marks between start and target, nearest first. The target itself
+    /// is NOT among them — the chart already draws that line, and a
+    /// milestone on top of it would only thicken it.
+    public let milestones: [Milestone]
+
+    /// One mark on the way down.
+    public struct Milestone: Equatable, Sendable {
+        /// Where the mark sits on the weight axis (canonical lb).
+        public let weightLb: Double
+        /// How far below the start it is — what the mark is NAMED after
+        /// ("5 lb down"). Naming marks by progress rather than by weight
+        /// keeps them round when the start weight isn't: a journey from
+        /// 183.4 lb would otherwise post milestones at 178.4 and 173.4.
+        public let lostLb: Double
+        /// The scale has reached it.
+        public let isReached: Bool
+    }
+
+    /// The deepest mark a given weight has passed, or nil.
+    ///
+    /// Takes the basis EXPLICITLY rather than reading `currentLb`,
+    /// because the two answer different questions and this one is a
+    /// VERDICT: `Milestone.isReached` is computed against the raw
+    /// weigh-in, and a mark reached by one light morning isn't reached.
+    /// Callers pass `GoalCompletion.evaluate(...).basisLb` — the same
+    /// sustained basis the target itself is judged on (CLAUDE.md's
+    /// weight rule, learned twice).
+    ///
+    /// Lived inline in `TodayView` until 2026-08-17, which left the one
+    /// verdict rule in this family with no test while `GoalCompletion`,
+    /// `WeightTrend` and `GoalFinishLine` all had them.
+    public func deepestMilestone(reachedAtOrBelow basisLb: Double) -> Milestone? {
+        // Crossing two rungs at once reports the deeper one only.
+        milestones
+            .filter { basisLb <= $0.weightLb }
+            .max { $0.lostLb < $1.lostLb }
+    }
+
+    /// Pounds off the start so far, floored at zero: a gain reads as no
+    /// progress, never as negative progress.
+    public var lostLb: Double { max(0, startLb - currentLb) }
+
+    /// The whole journey, start to target.
+    public var totalLb: Double { max(0, startLb - targetLb) }
+
+    /// 0...1 for a progress bar. Clamped at both ends — overshooting the
+    /// target is a full bar, not a 110% one.
+    public var fraction: Double {
+        guard totalLb > 0 else { return 0 }
+        return min(1, max(0, lostLb / totalLb))
+    }
+
+    /// A journey shorter than this has nothing worth drawing a bar for
+    /// (and a derived start can land a hair above the target by
+    /// coincidence).
+    public static let minimumJourneyLb = 1.0
+
+    /// Runaway guard only: a pathological step can't mint a million
+    /// marks. Real journeys produce a handful, and the chart's y-domain
+    /// clips all but the nearby ones anyway.
+    static let maximumMilestones = 60
+
+    /// 5 lb is the milestone people count in; the kilogram equivalent is
+    /// 2 kg, not 2.27. Marks are anchored to the START, so the step is
+    /// all the display unit gets to decide.
+    public static func milestoneStepLb(for unit: WeightUnit) -> Double {
+        unit == .pounds ? 5 : unit.toLb(2)
+    }
+
+    /// The automatic start: the earliest weigh-in on record. Also the
+    /// floor for a start-date picker — before it there is no weight to
+    /// measure from, so a date there could only mint fiction.
+    ///
+    /// `.first` because Health hands weigh-ins back date-ascending, the
+    /// same assumption every other reader of this array makes.
+    public static func automaticStart(in history: [WeightTrend.Point]) -> WeightTrend.Point? {
+        history.first
+    }
+
+    /// What the scale said around a chosen start date: the reading
+    /// nearest it. Nearest rather than on-the-day because scales skip
+    /// days, and a date someone picked deliberately shouldn't be refused
+    /// for landing on one of them.
+    public static func startWeightLb(
+        on date: Date, in history: [WeightTrend.Point]
+    ) -> Double? {
+        history.min {
+            abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
+        }?.weightLb
+    }
+
+    /// Resolve the journey, or nil when there isn't one to show.
+    ///
+    /// nil in maintenance (no journey — the anchor isn't a destination),
+    /// without a target or a current weight, and when no start can be
+    /// found or the start isn't meaningfully above the target.
+    public static func resolve(
+        startWeightLb: Double?,
+        startedAt: Date?,
+        startIsManual: Bool = false,
+        weightHistory: [WeightTrend.Point],
+        currentWeightLb: Double?,
+        targetWeightLb: Double?,
+        isMaintenance: Bool,
+        milestoneStepLb: Double = 5
+    ) -> GoalProgress? {
+        guard !isMaintenance,
+              let current = currentWeightLb,
+              let target = targetWeightLb, target > 0
+        else { return nil }
+
+        // An explicit start wins; the earliest weigh-in on record is the
+        // fallback. Both halves are required — a start weight without a
+        // date can't say what it's measuring from.
+        let start: (lb: Double, at: Date, origin: StartOrigin)
+        if let startWeightLb, let startedAt {
+            start = (startWeightLb, startedAt, startIsManual ? .chosen : .stamped)
+        } else if let earliest = automaticStart(in: weightHistory) {
+            start = (earliest.weightLb, earliest.date, .earliestWeighIn)
+        } else {
+            return nil
+        }
+        guard start.lb - target >= minimumJourneyLb else { return nil }
+
+        return GoalProgress(
+            startLb: start.lb,
+            startedAt: start.at,
+            currentLb: current,
+            targetLb: target,
+            origin: start.origin,
+            milestones: milestones(
+                startLb: start.lb, targetLb: target,
+                currentLb: current, stepLb: milestoneStepLb
+            )
+        )
+    }
+
+    /// Marks every `stepLb` down from the start, stopping short of the
+    /// target's own line.
+    static func milestones(
+        startLb: Double, targetLb: Double, currentLb: Double, stepLb: Double
+    ) -> [Milestone] {
+        let span = startLb - targetLb
+        guard stepLb > 0, span > 0 else { return [] }
+        // Strictly inside the span: a step that lands exactly on the
+        // target (a 25 lb journey in 5 lb steps) yields four marks, not
+        // five. The epsilon keeps floating-point 24.999999 out too.
+        let count = min(Int(((span - 0.01) / stepLb).rounded(.down)), maximumMilestones)
+        guard count > 0 else { return [] }
+        return (1...count).map { index in
+            let lost = stepLb * Double(index)
+            let weight = startLb - lost
+            return Milestone(
+                weightLb: weight,
+                lostLb: lost,
+                // A hair of slack so a weigh-in sitting exactly on the
+                // mark counts as having reached it.
+                isReached: currentLb <= weight + 0.001
+            )
+        }
+    }
+}

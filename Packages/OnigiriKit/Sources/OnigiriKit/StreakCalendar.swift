@@ -1,0 +1,171 @@
+import Foundation
+
+/// One calendar day's energy totals from HealthKit.
+public struct DayEnergyTotals: Sendable, Equatable, Codable {
+    public let day: Date
+    public let intakeKcal: Double
+    /// The burn this day is JUDGED by — `DayBudget.dayBurn`, correction
+    /// included.
+    public let burnKcal: Double
+    /// How much of `burnKcal` is the burn correction, as actually applied
+    /// to this day (after its cap and floor — which is why it is carried
+    /// rather than re-derived from the stored setting). 0 without one.
+    public let correctionKcal: Double
+
+    public init(day: Date, intakeKcal: Double, burnKcal: Double, correctionKcal: Double = 0) {
+        self.day = day
+        self.intakeKcal = intakeKcal
+        self.burnKcal = burnKcal
+        self.correctionKcal = correctionKcal
+    }
+
+    public var deficitKcal: Double { burnKcal - intakeKcal }
+
+    /// What Health measured, before the correction — the basis a new
+    /// suggestion is computed from (`BurnCorrection.suggest`).
+    public var uncorrectedBurnKcal: Double { burnKcal - correctionKcal }
+
+    private enum CodingKeys: String, CodingKey { case day, intakeKcal, burnKcal, correctionKcal }
+
+    /// Lenient: Goal's and the Calendar's primes cache these, and a
+    /// prime written before `correctionKcal` existed must still decode
+    /// (synthesized Decodable ignores the init's default and throws).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        day = try c.decode(Date.self, forKey: .day)
+        intakeKcal = try c.decode(Double.self, forKey: .intakeKcal)
+        burnKcal = try c.decode(Double.self, forKey: .burnKcal)
+        correctionKcal = try c.decodeIfPresent(Double.self, forKey: .correctionKcal) ?? 0
+    }
+}
+
+/// How a completed day is judged for the badge: losing measures the
+/// deficit against that day's target, no-goal celebrates any deficit,
+/// and maintenance scores landing near even — adherence, not
+/// restriction (a big under-eat day deliberately does NOT earn).
+public enum DayBadgeRule: Equatable, Sendable {
+    case deficitTarget(Double)
+    case anyDeficit
+    case maintenanceBand
+
+    /// The rule in force right now, from the current plan/mode.
+    public static func current(targetKcal: Double?, isMaintenance: Bool) -> DayBadgeRule {
+        if isMaintenance { return .maintenanceBand }
+        if let targetKcal, targetKcal > 0 { return .deficitTarget(targetKcal) }
+        return .anyDeficit
+    }
+
+    public func met(deficitKcal: Double) -> Bool {
+        switch self {
+        case .deficitTarget(let target): deficitKcal >= target
+        case .anyDeficit: deficitKcal > 0
+        case .maintenanceBand: abs(deficitKcal) <= StreakCalendar.maintenanceBandKcal
+        }
+    }
+}
+
+/// The gamification rules: which days earned an onigiri, and the streak.
+public enum StreakCalendar {
+    /// Maintenance badge tolerance: the day lands within this many kcal
+    /// of even (|burn − intake|).
+    public static let maintenanceBandKcal = 100.0
+
+    /// A day counts as tracked when enough food was logged to trust its
+    /// numbers. Below the threshold it's a missed day: streak-breaking,
+    /// and excluded from the month's totals (sparse early-adoption days
+    /// were skewing them). 0 disables the threshold — any logging counts.
+    public static func isTracked(_ day: DayEnergyTotals, untrackedBelowKcal: Double) -> Bool {
+        isTracked(intakeKcal: day.intakeKcal, untrackedBelowKcal: untrackedBelowKcal)
+    }
+
+    /// The same rule from an intake figure alone — Today's goal card has
+    /// no `DayEnergyTotals`, and reimplementing the threshold there is
+    /// how it came to not implement it at all: July 30 logged under the
+    /// threshold, so the calendar left it blank while
+    /// Today called it earned (the user, 2026-08-02).
+    public static func isTracked(intakeKcal: Double, untrackedBelowKcal: Double) -> Bool {
+        intakeKcal > 0 && intakeKcal >= untrackedBelowKcal
+    }
+
+    /// A day earns an onigiri when it was tracked and its `DayBadgeRule`
+    /// was met. The badge is awarded only once the day COMPLETES: a live
+    /// "earned" at breakfast (trivially at deficit) read as a broken
+    /// meter.
+    ///
+    /// `rulesByDay` (start-of-day keyed, from
+    /// `DeficitTargetHistory.rulesByDay()`) judges each day by the rule
+    /// in force THAT day; days without a snapshot fall back to
+    /// `fallbackRule` (the current one).
+    public static func earnedDays(
+        totals: [DayEnergyTotals],
+        fallbackRule: DayBadgeRule,
+        rulesByDay: [Date: DayBadgeRule] = [:],
+        untrackedBelowKcal: Double = 0,
+        today: Date = .now,
+        calendar: Calendar = .current
+    ) -> Set<Date> {
+        Set(totals.compactMap { day in
+            guard !calendar.isDate(day.day, inSameDayAs: today),
+                  day.day < today,
+                  isTracked(day, untrackedBelowKcal: untrackedBelowKcal) else { return nil }
+            let dayStart = calendar.startOfDay(for: day.day)
+            let rule = rulesByDay[dayStart] ?? fallbackRule
+            return rule.met(deficitKcal: day.deficitKcal) ? dayStart : nil
+        })
+    }
+
+    /// Consecutive earned days counting back from today — or from yesterday,
+    /// so a still-in-progress today doesn't break the streak.
+    public static func currentStreak(
+        earned: Set<Date>,
+        today: Date = .now,
+        calendar: Calendar = .current
+    ) -> Int {
+        var day = calendar.startOfDay(for: today)
+        if !earned.contains(day) {
+            guard let yesterday = calendar.date(byAdding: .day, value: -1, to: day) else { return 0 }
+            day = yesterday
+        }
+        var streak = 0
+        while earned.contains(day) {
+            streak += 1
+            guard let previous = calendar.date(byAdding: .day, value: -1, to: day) else { break }
+            day = previous
+        }
+        return streak
+    }
+
+    /// Earned count within the month containing `month`.
+    public static func earnedCount(
+        inMonthOf month: Date,
+        earned: Set<Date>,
+        calendar: Calendar = .current
+    ) -> Int {
+        earned.count { calendar.isDate($0, equalTo: month, toGranularity: .month) }
+    }
+
+    /// The longest consecutive run of earned days, ever — drives the
+    /// milestone badges.
+    public static func bestStreak(
+        earned: Set<Date>,
+        calendar: Calendar = .current
+    ) -> Int {
+        var best = 0
+        for day in earned {
+            // Only count runs from their first day.
+            if let previous = calendar.date(byAdding: .day, value: -1, to: day),
+               earned.contains(previous) {
+                continue
+            }
+            var length = 0
+            var current = day
+            while earned.contains(current) {
+                length += 1
+                guard let next = calendar.date(byAdding: .day, value: 1, to: current) else { break }
+                current = next
+            }
+            best = max(best, length)
+        }
+        return best
+    }
+}

@@ -1,0 +1,9 @@
+# Per-developer settings — copy to local.yml (gitignored) before running
+# xcodegen:
+#   cp local.yml.example local.yml
+# For device builds, set your Apple Developer team ID (Xcode → Settings →
+# Accounts; a free personal team works). The empty default is fine for
+# simulator-only builds.
+settings:
+  base:
+    DEVELOPMENT_TEAM: ""

@@ -1,0 +1,483 @@
+import SwiftUI
+import SwiftData
+import OnigiriKit
+
+/// One read, several items (`plans/PLAN-multi-item-import.md`).
+///
+/// A nutrition guide is read once and ordered from several times. Every
+/// door that produces a LIST — a photographed menu board, a screenshot
+/// holding several foods, a shared guide, a shared page — hands its rows
+/// here, and this is what keeps the list alive: pick, confirm, log, land
+/// back on the same list with a note saying what went in. The share
+/// extension has worked this way since 2026-08-16; the in-app doors threw
+/// the read away after the first pick, so a second item cost a second
+/// photograph, a second OCR pass and a second run at the model (the user,
+/// 2026-08-23).
+///
+/// It brings no `NavigationStack` of its own — the host owns that, and
+/// this contributes the title and the toolbar into it. Two hosts already
+/// had a stack each and nesting them would draw two bars.
+///
+/// The confirm REPLACES the list in the same stack rather than opening
+/// over it. That is not the 2026-07-22 sheet race and cannot become it:
+/// no sheet is presented, so there is no binding to swap mid-dismissal.
+struct MenuPickerFlow: View {
+    /// The parsed list. Empty is legal and means a single food arrived
+    /// with nothing behind it — `initialPick` then carries it and Log
+    /// finishes, because there is no list to come back to.
+    let rows: [MenuRow]
+    let suggestedSource: String?
+    /// A food to confirm immediately, skipping the list: a page that
+    /// stated ONE food, or a label read that produced a single panel.
+    var initialPick: ParsedLabel?
+    let completion: Completion
+    let onFinish: (_ logged: Bool) -> Void
+
+    /// What a pick is FOR, which is not the same question in every host.
+    enum Completion {
+        /// Log it here and come back for the next one, OR save it to the
+        /// library without logging and come back for the next one — a
+        /// menu is read once and not everything on it is being eaten now
+        /// (the user, 2026-08-29). The Log sheet, the shared-image sheet,
+        /// the menu import sheet, the share extension.
+        case logging(
+            saving: LibrarySaving,
+            write: (MenuLogRequest) async -> String?,
+            saveOnly: (MenuLogRequest) async -> String?
+        )
+        /// Hand the first pick to the host and stop — the Add Food
+        /// form's doors FILL A FORM, they do not log, and a door that
+        /// starts writing to Health from inside a form nobody asked to
+        /// submit is a different feature.
+        case filling((ParsedLabel) -> Void)
+    }
+
+    /// Whether the dish also lands in the library, and whether that is
+    /// the user's call.
+    enum LibrarySaving {
+        /// The share extension: no other way to keep the dish, and no
+        /// form to keep it from.
+        case always
+        /// The app: "saving to the library is the option, not the price
+        /// of admission" (the user, `QuickLogSheet`). Starts off.
+        case optional
+    }
+
+    @State private var phase = Phase.picking
+    /// Set once, in this view's own `.task` — which runs for the whole
+    /// import, unlike `MenuPicker`'s, which remounts every time picking
+    /// resumes after a log. Owning it here is what makes "ask once" true
+    /// (2026-08-29).
+    @State private var source = ""
+    @State private var askingSource = false
+    /// The setup below runs ONCE per import, not once per appearance.
+    /// Pushing `LogEntryEditor` takes this view off screen, and a
+    /// NavigationStack re-runs a covered root's `.task` when it comes
+    /// back: coming out of the editor re-asked "Where is this menu
+    /// from?", threw away the restaurant that had already been typed —
+    /// and, on a single shared item, would have re-run `initialPick`
+    /// over the correction just made (verified on the 27.0 sim,
+    /// 2026-09-20). "Ask once" has to mean once, however the screen
+    /// comes and goes.
+    @State private var started = false
+    @State private var chosen: ParsedLabel?
+    /// The dish's name as the list printed it, before the restaurant was
+    /// folded in and before anyone edited it. Kept so an answer that
+    /// arrives AFTER the item is on the confirm can still be applied —
+    /// a single shared item confirms itself while the prompt is still
+    /// standing over it (2026-09-20) — and applied to the dish rather
+    /// than to the last thing that was applied to the dish.
+    @State private var pickedName: String?
+    /// The row `chosen` came from, so the list can mark what already
+    /// went in. Nil for `initialPick`, which came from no row.
+    @State private var chosenRowID: Int?
+    /// The in-flight `choose()` estimation, so Back can cancel it — an
+    /// uncancelled one used to land after Back reset `phase` to
+    /// `.picking` and force `.confirming` back open for the item the
+    /// user had just backed out of (health-check audit, 2026-09-14).
+    @State private var estimateTask: Task<Void, Never>?
+    @State private var logged: [Logged] = []
+    /// Reset per item. The MEAL below deliberately is not.
+    @State private var quantity = 1.0
+    /// Survives every log in this flow: several items off one menu are
+    /// one meal, and re-picking "Dinner" each time is the busywork this
+    /// screen exists to remove.
+    @State private var category = FoodCategory.slot(for: .now)
+    @State private var saveToLibrary = false
+    /// Which of the confirm's two actions is in flight, if either — this
+    /// is what disables both buttons and picks the spinner's word
+    /// (`LogConfirmSheet.Busy`).
+    @State private var busy: LogConfirmSheet.Busy?
+    /// Why the last write didn't take. Shown IN the confirm — a toast
+    /// would be behind the host's own sheet.
+    @State private var failure: String?
+
+    private enum Phase: Equatable {
+        case picking
+        /// A menu row that printed no calories, being estimated. Named,
+        /// because this is the slow leg and an unnamed spinner over a
+        /// list you just tapped reads as a hang.
+        case estimating(String)
+        case confirming
+    }
+
+    private struct Logged {
+        let name: String
+        let rowID: Int?
+        /// Logged to Health, or saved to the library alone — the note
+        /// and the row's own mark both need to say which.
+        let kind: MenuPickProgress.Kind
+    }
+
+    var body: some View {
+        content
+            .navigationTitle(phase == .confirming ? "Log Food" : "Choose an Item")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { leadingButton }
+                if case .confirming = phase, let chosen {
+                    ToolbarItemGroup(placement: .confirmationAction) {
+                        // Top-right, matching every sheet in the app,
+                        // where the committing action is never a row at
+                        // the bottom of a form (the user, 2026-08-16).
+                        // TWO actions, not one: a menu is read once, and
+                        // not everything on it is being eaten right now
+                        // — Save keeps the dish without telling Health
+                        // you ate it (the user, 2026-08-29).
+                        Button("Save") { commitSave(chosen) }
+                            .disabled(busy != nil)
+                        Button("Log") { commit(chosen) }
+                            .disabled(busy != nil)
+                    }
+                } else if case .picking = phase, !logged.isEmpty {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { onFinish(true) }
+                    }
+                }
+            }
+            // The prompt belongs to the FLOW, not to `MenuPicker`
+            // (2026-09-20). It hung on the picker, so it was torn down
+            // with it the moment `phase` left `.picking` — and for a
+            // SINGLE shared item that happens in the same breath as the
+            // ask, because `initialPick` confirms itself. The dialog
+            // appeared and vanished, unanswerable, over the confirm (the
+            // user). Same lesson as 2026-08-29 one level further out:
+            // moving `source`/`askingSource` up here stopped the STATE
+            // resetting, but the PRESENTER stayed behind.
+            .alert(sourcePromptTitle, isPresented: $askingSource) {
+                TextField("Restaurant", text: $source)
+                    .textInputAutocapitalization(.words)
+                Button("Use") {}
+                Button("Skip", role: .cancel) { source = "" }
+            } message: {
+                Text(sourcePromptMessage)
+            }
+            // Answered late, applied anyway — and live, as it is typed.
+            // Only to a name nobody has touched since: once the editor
+            // has been in, the name is the user's and nothing appends to
+            // it. That is the whole test, and it needs no flag.
+            .onChange(of: source) { previous, current in
+                guard var label = chosen, let base = pickedName else { return }
+                guard label.name == MenuSourceName.applied(to: base, source: previous)
+                else { return }
+                label.name = MenuSourceName.applied(to: base, source: current)
+                chosen = label
+            }
+            .task {
+                guard !started else { return }
+                started = true
+                source = suggestedSource ?? ""
+                // A single shared item confirms ITSELF, and the prompt
+                // has to wait for that: raised in the same turn as the
+                // phase change it never appeared at all (measured in
+                // the extension on the 27.0 sim, 2026-09-20 — the
+                // screen it was asking about replaced the screen it was
+                // asked from). Awaited here rather than fired and
+                // forgotten, so the question lands over the item it is
+                // about to name. Still stored, so Back can cancel it.
+                if let initialPick {
+                    let pick = Task { await choose(initialPick, rowID: nil) }
+                    estimateTask = pick
+                    await pick.value
+                }
+                // Ask only when the menu didn't say. Detection is the
+                // optimisation; this prompt is the contract.
+                if suggestedSource == nil { askingSource = true }
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch phase {
+        case .picking:
+            if rows.isEmpty {
+                // A single shared item has no list to pick from and is
+                // already on its way to the confirm. The picker rendered
+                // "No items match" over "Search 0 items" in the frames
+                // before it arrived — a menu-shaped empty state for
+                // something that was never a menu (2026-09-20).
+                ContentUnavailableView {
+                    Label("Preparing the item…", systemImage: "fork.knife")
+                } description: {
+                    ProgressView()
+                }
+            } else {
+                MenuPicker(
+                    rows: rows,
+                    note: MenuPickProgress.note(logged.map { .init(name: $0.name, kind: $0.kind) }),
+                    loggedRowIDs: Set(logged.filter { $0.kind == .logged }.compactMap(\.rowID)),
+                    savedRowIDs: Set(logged.filter { $0.kind == .saved }.compactMap(\.rowID)),
+                    source: $source,
+                    askingSource: $askingSource
+                ) { picked, row in
+                    estimateTask = Task { await choose(picked, rowID: row.id) }
+                }
+            }
+        case .estimating(let name):
+            ContentUnavailableView {
+                Label("Estimating \(name)…", systemImage: "sparkles")
+            } description: {
+                ProgressView()
+            }
+        case .confirming:
+            // A BINDING into `chosen`: the confirm's item row pushes
+            // `LogEntryEditor`, and a correction made there is the entry
+            // that Save and Log then commit.
+            if let chosen {
+                LogConfirmSheet(
+                    label: confirmBinding(chosen),
+                    category: $category,
+                    quantity: $quantity,
+                    saveToLibrary: savingBinding,
+                    busy: busy,
+                    failure: failure)
+            }
+        }
+    }
+
+    /// Cancel abandons everything; Back returns to a list that is still
+    /// there. Picking the wrong row must not cost the read — that is the
+    /// whole complaint this screen answers, and Cancel-as-only-exit
+    /// would reintroduce it one level down.
+    @ViewBuilder
+    private var leadingButton: some View {
+        if phase != .picking, !rows.isEmpty {
+            Button("Back") {
+                estimateTask?.cancel()
+                estimateTask = nil
+                chosen = nil
+                pickedName = nil
+                chosenRowID = nil
+                failure = nil
+                phase = .picking
+            }
+            .disabled(busy != nil)
+        } else {
+            Button("Cancel", role: .cancel) { onFinish(!logged.isEmpty) }
+                .disabled(busy != nil)
+        }
+    }
+
+    /// "Menu" is right for a guide with thirty dishes on it and wrong
+    /// for one item shared off a restaurant's own page, which is the
+    /// case that most often reaches the prompt.
+    private var sourcePromptTitle: String {
+        rows.isEmpty ? "Where is this from?" : "Where is this menu from?"
+    }
+
+    private var sourcePromptMessage: String {
+        let target = rows.isEmpty ? "the item" : "each item"
+        return "What you enter goes after \(target), so \"Greek Chicken\" saves as \"Greek Chicken (CAVA)\"."
+    }
+
+    /// A binding to the item being confirmed that survives the item
+    /// ceasing to exist.
+    ///
+    /// **Never `Binding($chosen)` here.** SwiftUI's optional-unwrapping
+    /// initializer force-unwraps on every graph update, and this screen
+    /// sets `chosen` to nil while the confirm is still on screen — Back
+    /// does, and so does a finished Log. The process TRAPS
+    /// (`EXC_BREAKPOINT` in `BindingOperations.ForceUnwrapping.get`,
+    /// caught on the 27.0 sim 2026-09-20 on the very first Back after
+    /// the confirm became editable). No error, no message: the app is
+    /// simply gone, one frame after a successful log, which reads as a
+    /// dismissal rather than as a crash. The confirm is on its way out
+    /// by then and only needs something to read, so the getter falls
+    /// back to the value it was built with.
+    private func confirmBinding(_ current: ParsedLabel) -> Binding<ParsedLabel> {
+        Binding(get: { chosen ?? current }, set: { chosen = $0 })
+    }
+
+    private var savingBinding: Binding<Bool>? {
+        guard case .logging(let saving, _, _) = completion, saving == .optional else { return nil }
+        return $saveToLibrary
+    }
+
+    // MARK: Choosing
+
+    /// A dish with no calories was LISTED, not measured — so the model
+    /// runs for the one item actually being eaten, and only then. A menu
+    /// prints thirty dishes; estimating all of them on the way in would
+    /// spend inference on twenty-nine answers nobody asked for.
+    private func choose(_ picked: ParsedLabel, rowID: Int?) async {
+        var label = picked
+        // Applied HERE rather than in `MenuPicker`, because an
+        // `initialPick` never passes through the picker and used to
+        // reach the confirm with the restaurant missing even when one
+        // had been typed (2026-09-20).
+        pickedName = label.name
+        if let name = label.name {
+            label.name = MenuSourceName.applied(to: name, source: source)
+        }
+        if label.kcal == nil, let name = label.name, FoodIntelligence.isAvailable {
+            phase = .estimating(name)
+            if let described = await FoodIntelligence.describeFood(name) {
+                label.kcal = described.kcal
+                label.sodiumMg = described.sodiumMg
+                label.nutrients = described.nutrients
+                if label.servingDescription == nil, !described.serving.isEmpty {
+                    label.servingDescription = described.serving
+                }
+                // A model's numbers, not the menu's — the mark and the
+                // review contract travel with them.
+                label.aiGenerated = true
+            }
+        }
+        // Back cancels this task while the estimate was in flight — the
+        // user already left this item, so landing in .confirming (or
+        // handing a stale pick to a .filling host) now would silently
+        // override that.
+        guard !Task.isCancelled else { return }
+        // AI off, or the model declined: hand over what the menu said and
+        // nothing more. A half-filled form beats an invented number.
+        switch completion {
+        case .filling(let hand):
+            hand(label)
+        case .logging:
+            chosen = label
+            chosenRowID = rowID
+            failure = nil
+            phase = .confirming
+        }
+    }
+
+    // MARK: Logging
+
+    private func commit(_ label: ParsedLabel) {
+        guard case .logging(let saving, let write, _) = completion, busy == nil else { return }
+        busy = .logging
+        Task {
+            let problem = await write(MenuLogRequest(
+                label: label,
+                category: category,
+                quantity: quantity,
+                saveToLibrary: saving == .always || saveToLibrary))
+            busy = nil
+            guard problem == nil else {
+                failure = problem
+                return
+            }
+            // A single food has no list behind it, so logging it IS the
+            // whole errand.
+            guard !rows.isEmpty else { return onFinish(true) }
+            logged.append(Logged(name: label.name ?? "Menu item", rowID: chosenRowID, kind: .logged))
+            chosen = nil
+            pickedName = nil
+            chosenRowID = nil
+            quantity = 1
+            phase = .picking
+        }
+    }
+
+    /// The library keeps the dish; Health never hears about it. Same
+    /// shape as `commit`, on purpose — the two differ only in which
+    /// closure runs and which `Kind` the row remembers.
+    private func commitSave(_ label: ParsedLabel) {
+        guard case .logging(_, _, let saveOnly) = completion, busy == nil else { return }
+        busy = .saving
+        Task {
+            let problem = await saveOnly(MenuLogRequest(
+                label: label,
+                category: category,
+                quantity: quantity,
+                saveToLibrary: true))
+            busy = nil
+            guard problem == nil else {
+                failure = problem
+                return
+            }
+            guard !rows.isEmpty else { return onFinish(true) }
+            logged.append(Logged(name: label.name ?? "Menu item", rowID: chosenRowID, kind: .saved))
+            chosen = nil
+            pickedName = nil
+            chosenRowID = nil
+            quantity = 1
+            phase = .picking
+        }
+    }
+}
+
+/// One log, as the flow asks for it. A struct rather than four
+/// parameters because `saveToLibrary` answers a question the host asked
+/// (or didn't), and losing it in an argument list is how the app would
+/// quietly start saving everything.
+struct MenuLogRequest {
+    let label: ParsedLabel
+    let category: FoodCategory
+    let quantity: Double
+    let saveToLibrary: Bool
+
+    /// The name to write, never empty.
+    var name: String { label.name ?? "Menu item" }
+}
+
+/// Putting a picked dish in the library, for both hosts — the app when
+/// the toggle is on, the extension always.
+///
+/// Deliberately `Food`-only, and that is a safety property rather than a
+/// simplification: it never reads `MealItem.food`, the one access that
+/// trips the dangling-reference process kill, so it is immune as
+/// written. An audit proposed a `repairDanglingFoodReferences`
+/// pre-flight here as "cheap insurance" (2026-08-17, declined
+/// 2026-08-18) — that pass fetches every Meal and walks `meal.items` and
+/// `item.food`, so it would MANUFACTURE the traversal it protects
+/// against, and it is only safe after the Core Data pass `OnigiriApp`
+/// runs first. Do not give this function a `Meal` fetch.
+enum MenuLibrarySave {
+    /// Returns whether the food is actually in the library afterward —
+    /// already there (the duplicate check) counts as success, a failed
+    /// write does not. Every caller shows a success mark off this instead
+    /// of assuming the write took (audit, 2026-09-14): a `try?` here used
+    /// to swallow the result and every host showed "Saved to library"
+    /// unconditionally, including on a failed disk write.
+    @discardableResult
+    static func insert(_ request: MenuLogRequest, into context: ModelContext) -> Bool {
+        // The app's duplicate rule trims and case-folds; an exact-match
+        // predicate did neither, so the same dish with any difference in
+        // capitalisation minted a twin (audit, 2026-08-17). `nameMatches`
+        // can't be expressed as a `#Predicate` — SwiftData can't compile
+        // the trim or the case fold — so the sweep happens here instead,
+        // over a hand-entered library.
+        let name = request.name
+        let existing = (try? context.fetch(FetchDescriptor<Food>())) ?? []
+        guard !existing.contains(where: { LibraryDuplicate.nameMatches($0.name, name) })
+        else { return true }
+        let label = request.label
+        let food = Food(name: name, kcal: label.kcal ?? 0, sodiumMg: label.sodiumMg ?? 0)
+        food.nutrients = label.nutrients
+        food.servingDescription = label.servingDescription ?? ""
+        food.aiGenerated = label.aiGenerated
+        // Recency means LOGGED, never looked at (2026-08-14) — and this
+        // runs only from the confirm handler, which a cancel never
+        // reaches.
+        food.lastUsedAt = .now
+        context.insert(food)
+        do {
+            try context.save()
+            return true
+        } catch {
+            context.delete(food)
+            return false
+        }
+    }
+}

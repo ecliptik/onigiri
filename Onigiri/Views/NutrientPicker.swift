@@ -1,0 +1,113 @@
+import SwiftUI
+import OnigiriKit
+
+/// Pushed from a tracked-metric slot in Settings: every nutrient a slot
+/// can track, grouped and searchable, with its label unit alongside.
+struct NutrientPickerView: View {
+    @Binding var selectionKey: String
+    /// The OTHER slot's nutrient key — selecting it here would put the
+    /// same metric on Today twice, with two Settings sections editing
+    /// one target. Disabled with a hint instead.
+    var takenKey: String?
+    @Environment(\.dismiss) private var dismiss
+    @State private var searchText = ""
+
+    var body: some View {
+        List {
+            // "None" switches the slot off — Today and the calendar day
+            // card simply drop it.
+            if searchText.isEmpty {
+                Section {
+                    Button {
+                        selectionKey = SharedStore.trackedMetricNone
+                        dismiss()
+                    } label: {
+                        HStack {
+                            Text("None")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            if selectionKey == SharedStore.trackedMetricNone {
+                                // Hidden glyph + trait: VoiceOver says
+                                // "selected", not a literal "Checkmark".
+                                Image(systemName: "checkmark")
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(Color.accentColor)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                    }
+                    .accessibilityAddTraits(
+                        selectionKey == SharedStore.trackedMetricNone ? .isSelected : []
+                    )
+                }
+            }
+            group("General", TrackedNutrient.general)
+            group("Macronutrients", TrackedNutrient.macros)
+            group("Minerals", Micronutrient.minerals.map(TrackedNutrient.micro))
+            group("Vitamins", Micronutrient.vitamins.map(TrackedNutrient.micro))
+            // Every section hides itself independently, so a typo'd
+            // search otherwise rendered a completely BLANK list
+            // (2026-07-20 audit).
+            if !searchText.isEmpty, !anyMatches {
+                ContentUnavailableView.search(text: searchText)
+            }
+        }
+        .compactSections()
+        .readableContentWidth(groupedBackground: true)
+        .navigationTitle("Tracked Metric")
+        .navigationBarTitleDisplayMode(.inline)
+        // Top drawer — the shared `librarySearch` placement
+        // (`plans/PLAN-log-sheet-layout.md`, 2026-09-15).
+        .librarySearch(text: $searchText, prompt: "Search nutrients")
+    }
+
+    private var anyMatches: Bool {
+        let all = TrackedNutrient.general + TrackedNutrient.macros
+            + Micronutrient.minerals.map(TrackedNutrient.micro)
+            + Micronutrient.vitamins.map(TrackedNutrient.micro)
+        return all.contains { $0.displayName.localizedCaseInsensitiveContains(searchText) }
+    }
+
+    @ViewBuilder
+    private func group(_ title: String, _ nutrients: [TrackedNutrient]) -> some View {
+        let visible = nutrients.filter {
+            searchText.isEmpty
+                || $0.displayName.localizedCaseInsensitiveContains(searchText)
+        }
+        if !visible.isEmpty {
+            Section(title) {
+                ForEach(visible) { nutrient in
+                    let taken = nutrient.key == takenKey
+                    Button {
+                        selectionKey = nutrient.key
+                        dismiss()
+                    } label: {
+                        HStack {
+                            Text(nutrient.displayName)
+                                .foregroundStyle(taken ? .secondary : .primary)
+                            Spacer()
+                            if taken {
+                                // .secondary, not .tertiary: this explains
+                                // WHY the row is disabled — informative
+                                // text, not decoration (contrast).
+                                Text("other slot")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Text(nutrient.unitSymbol)
+                                .foregroundStyle(.secondary)
+                            if nutrient.key == selectionKey {
+                                Image(systemName: "checkmark")
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(Color.accentColor)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                    }
+                    .disabled(taken)
+                    .accessibilityAddTraits(nutrient.key == selectionKey ? .isSelected : [])
+                }
+            }
+        }
+    }
+}

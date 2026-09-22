@@ -1,0 +1,364 @@
+name: Onigiri
+# local.yml (gitignored) carries per-developer settings — the signing
+# team. Required by xcodegen; create it once:
+#   cp local.yml.example local.yml
+include:
+  - local.yml
+options:
+  bundleIdPrefix: com.ecliptik
+  # iOS 18 / watchOS 10: the lowest floor that gains devices without
+  # losing APIs (see plans/archive/PLAN-1.8.md). 26-era APIs live behind
+  # #available gates — the compiler enforces every new one.
+  deploymentTarget:
+    # 18.6, not 18.0, since 2026-08-16: MenuLinkLoader renders a shared
+    # web page with WKWebView, and `import WebKit` from Swift pulls in
+    # /usr/lib/swift/libswiftWebKit.dylib, which FIRST SHIPS IN 18.6.
+    # On 18.0–18.5 the app does not launch at all — dyld "Library
+    # missing" before any of our code runs, the worst failure in
+    # CLAUDE.md's app-launch list. It cannot be back-deployed either:
+    # no iOS SDK carries an embeddable copy, so swiftStdLibTool has
+    # nothing to bundle. Raising the floor makes the OS refuse to
+    # install rather than install and crash.
+    iOS: "18.6"
+    watchOS: "10.0"
+  createIntermediateGroups: true
+
+packages:
+  OnigiriKit:
+    path: Packages/OnigiriKit
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    CODE_SIGN_STYLE: Automatic
+    CURRENT_PROJECT_VERSION: 2
+    MARKETING_VERSION: "2.28.2"
+
+targets:
+  Onigiri:
+    type: application
+    platform: iOS
+    # SharedIntents compiles into each target that exposes intents —
+    # NEVER move intents into the kit: linkd rejects SPM-delivered App
+    # Shortcuts metadata (aggregateMetadataIsEmpty) and the app silently
+    # never registers with Siri/Shortcuts (FB13281659, 2026-07-16).
+    sources: [Onigiri, SharedIntents]
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # iPhone + iPad — explicit since 1.3 (was xcodegen's silent default).
+        TARGETED_DEVICE_FAMILY: "1,2"
+    dependencies:
+      - package: OnigiriKit
+      - target: OnigiriWatch
+      - target: OnigiriWidgets
+      - target: OnigiriShare
+    info:
+      path: Onigiri/Info.plist
+      properties:
+        CFBundleDisplayName: Onigiri
+        # Siri's recognizer mangles the app name ("only gary", live test
+        # 2026-07-16) — pronunciation hints and plausible mishearings
+        # teach it. Apple caps alternatives at 3 per app.
+        INAlternativeAppNames:
+          - INAlternativeAppName: Onigiri
+            INAlternativeAppNamePronunciationHint: oh nee gee ree
+          - INAlternativeAppName: Onigeeri
+          - INAlternativeAppName: Nigiri
+        # xcodegen defaults the generated plist to a literal "1.0" unless
+        # told to reference the build setting.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        # HTTPS-only (system TLS); no proprietary encryption — skips the
+        # export-compliance prompt on every upload.
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen: {}
+        # iPhone is portrait-only, matching what's designed and tested
+        # (the UI tests force portrait; landscape was an undeclared,
+        # untested stretch). iPad below keeps all four.
+        UISupportedInterfaceOrientations~iphone:
+          - UIInterfaceOrientationPortrait
+        # Full multitasking on iPad (Split View/Slide Over/Stage
+        # Manager) requires supporting all four orientations.
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # Backups live in Documents/Backups — visible in the Files app.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        # Puts Onigiri in the share sheet for a PDF, which is the whole
+        # door for menu import (plans/PLAN-menu-import.md): a restaurant's
+        # nutrition guide is a PDF, and Safari's Share → Options → PDF
+        # turns a nutrition PAGE into one too — so both arrive here and
+        # no URL is ever fetched. Alternate rank, not Owner: Onigiri is
+        # somewhere you can send a PDF, never the app that should open
+        # every PDF on the phone.
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Nutrition Menu
+            LSItemContentTypes:
+              - com.adobe.pdf
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+        NSHealthShareUsageDescription: Onigiri reads your energy burn, weight, and nutrition history to show your daily calorie balance and goal progress.
+        NSHealthUpdateUsageDescription: Onigiri saves the food, sodium, and water you log to Apple Health.
+        NSCameraUsageDescription: Onigiri uses the camera to scan food barcodes and photograph nutrition labels.
+        # Bring-your-own-AI's "Local server" option (PLAN-byo-ai): a home
+        # Ollama/LM Studio usually speaks plain http on the LAN, which ATS
+        # blocks by default; local networking also triggers iOS's local-
+        # network permission prompt. Cloud endpoints stay HTTPS-only.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: Onigiri connects to your own local AI server, if you configure one in Settings, to estimate nutrition.
+        # The Today-card widget's + button deep-links into the Log sheet
+        # (onigiri://log?day=YYYY-MM-DD).
+        CFBundleURLTypes:
+          - CFBundleURLName: com.ecliptik.Onigiri
+            CFBundleURLSchemes:
+              - onigiri
+        UIApplicationShortcutItems:
+          - UIApplicationShortcutItemType: com.ecliptik.Onigiri.logWater
+            UIApplicationShortcutItemTitle: Log Water
+            UIApplicationShortcutItemIconSymbolName: drop.fill
+          - UIApplicationShortcutItemType: com.ecliptik.Onigiri.logMeal
+            UIApplicationShortcutItemTitle: Log Meal
+            UIApplicationShortcutItemIconSymbolName: fork.knife
+          - UIApplicationShortcutItemType: com.ecliptik.Onigiri.logFood
+            UIApplicationShortcutItemTitle: Log Food
+            UIApplicationShortcutItemIconSymbolName: carrot
+          - UIApplicationShortcutItemType: com.ecliptik.Onigiri.scanBarcode
+            UIApplicationShortcutItemTitle: "Scan Barcode, Label, or Food"
+            UIApplicationShortcutItemIconSymbolName: barcode.viewfinder
+    entitlements:
+      path: Onigiri/Onigiri.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        # Wakes the app for HealthKit changes so widgets refresh when a
+        # log arrives from the watch (or any other app).
+        com.apple.developer.healthkit.background-delivery: true
+        com.apple.security.application-groups:
+          - group.com.ecliptik.Onigiri
+
+  OnigiriWidgets:
+    type: app-extension
+    platform: iOS
+    # Just the water intent — the Control Center button runs it in this
+    # process. Meal/food/status intents stay app-only (no widget uses
+    # them; a second copy would double them in Shortcuts).
+    sources: [OnigiriWidgets, SharedIntents/LogWaterIntent.swift]
+    dependencies:
+      - package: OnigiriKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ecliptik.Onigiri.widgets
+    info:
+      path: OnigiriWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Onigiri
+        # Must track the app's version: xcodegen defaults to a literal
+        # "1.0" and xcodebuild warns on the mismatch.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: OnigiriWidgets/OnigiriWidgets.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.security.application-groups:
+          - group.com.ecliptik.Onigiri
+
+  # The share-sheet door for menu import (plans/PLAN-menu-import.md).
+  # A share EXTENSION is required and CFBundleDocumentTypes is not enough:
+  # document types put the app in the Files app's "Open With", while
+  # Safari's share sheet is populated by extensions — verified on device
+  # 2026-08-16, where a correctly-declared PDF handler never appeared.
+  OnigiriShare:
+    type: app-extension
+    platform: iOS
+    # The app's cascade is COMPILED IN rather than moved to the kit — the
+    # SharedIntents precedent. FoodIntelligence must not go in the kit
+    # (linkd rejects SPM-delivered App Shortcuts metadata, and the kit
+    # never imports FoundationModels by rule), and a share extension that
+    # finishes the job needs the same reading it does.
+    sources:
+      - OnigiriShare
+      - Onigiri/Models/FoodIntelligence.swift
+      - Onigiri/Models/FoodIntelligenceRemote.swift
+      - Onigiri/Models/FoodImageReader.swift
+      - Onigiri/Models/MenuLinkLoader.swift
+      - Onigiri/Models/SharedPageReader.swift
+      - Onigiri/Views/MenuPicker.swift
+      # The pick→confirm→log→pick loop and its receipt, shared with the
+      # app so a menu reads the same way in both processes
+      # (plans/PLAN-multi-item-import.md).
+      - Onigiri/Views/MenuPickerFlow.swift
+      - Onigiri/Views/LogConfirmSheet.swift
+      # Correcting a read before it is logged. The extension needs this
+      # most: it has no food form, so without it a misread name or a
+      # figure the parser put in the wrong column could only be accepted
+      # or abandoned (2026-09-20).
+      - Onigiri/Views/LogEntryEditor.swift
+      # The check-the-estimate step, shared for the same reason: a
+      # correction that behaves differently by process is one nobody can
+      # predict (plans/PLAN-refine-with-context.md). The extension has no
+      # food form, so this is its only chance to correct an estimate.
+      - Onigiri/Views/EstimateRefineStep.swift
+    dependencies:
+      - package: OnigiriKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ecliptik.Onigiri.share
+    info:
+      path: OnigiriShare/Info.plist
+      properties:
+        CFBundleDisplayName: Onigiri
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        # Each BINARY that touches Health needs its own usage strings —
+        # an extension does not inherit the app's.
+        NSHealthShareUsageDescription: Onigiri reads your energy burn, weight, and nutrition history to show your daily calorie balance and goal progress.
+        NSHealthUpdateUsageDescription: Onigiri saves the food, sodium, and water you log to Apple Health.
+        # Same reason: a local AI server configured in Settings is
+        # reached from here too when a dish has to be estimated.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: Onigiri connects to your own local AI server, if you configure one in Settings, to estimate nutrition.
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          # The DICTIONARY form, not a predicate. A PDF-only predicate
+          # shipped first and was wrong twice over: Safari hands a share
+          # sheet a URL for a remote PDF (so Onigiri never appeared for
+          # the very document it was built for), and a web page could
+          # only reach it via Share → Options → PDF, which is a gesture
+          # nobody finds. Web URL + image + file covers all three doors,
+          # and the user manages the clutter in Edit Actions (their call,
+          # 2026-08-16).
+          #
+          # SupportsFile matches ANY file, so Onigiri also appears for,
+          # say, a .zip. Accepted: the extension answers "Nothing here
+          # Onigiri can read" rather than pretending.
+          # NESTED UNDER NSExtensionAttributes, which is not optional
+          # decoration: put NSExtensionActivationRule directly under
+          # NSExtension and it is ignored entirely, the extension matches
+          # NOTHING, and it never appears in any share sheet — with no
+          # error anywhere to say so (2026-08-16, cost a deploy round).
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsImageWithMaxCount: 1
+              NSExtensionActivationSupportsFileWithMaxCount: 1
+    entitlements:
+      path: OnigiriShare/OnigiriShare.entitlements
+      properties:
+        # The extension logs the food itself rather than handing back to
+        # the app, so it writes to Health directly.
+        com.apple.developer.healthkit: true
+        com.apple.security.application-groups:
+          - group.com.ecliptik.Onigiri
+
+  OnigiriWatch:
+    type: application
+    platform: watchOS
+    # Water/meal/food/status intents for watch Siri — same per-target
+    # rule as the phone (see the Onigiri target's note).
+    sources: [OnigiriWatch, SharedIntents]
+    dependencies:
+      - package: OnigiriKit
+      - target: OnigiriWatchWidgets
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ecliptik.Onigiri.watchkitapp
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: OnigiriWatch/Info.plist
+      properties:
+        CFBundleDisplayName: Onigiri
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        ITSAppUsesNonExemptEncryption: false
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: com.ecliptik.Onigiri
+        WKRunsIndependentlyOfCompanionApp: true
+        NSHealthShareUsageDescription: Onigiri reads your energy burn and nutrition history to show your daily calorie balance.
+        NSHealthUpdateUsageDescription: Onigiri saves the food, sodium, and water you log to Apple Health.
+    entitlements:
+      path: OnigiriWatch/OnigiriWatch.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.background-delivery: true
+        com.apple.security.application-groups:
+          - group.com.ecliptik.Onigiri
+
+  OnigiriWatchWidgets:
+    type: app-extension
+    platform: watchOS
+    sources: [OnigiriWatchWidgets]
+    dependencies:
+      - package: OnigiriKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ecliptik.Onigiri.watchkitapp.widgets
+    info:
+      path: OnigiriWatchWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Onigiri
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: OnigiriWatchWidgets/OnigiriWatchWidgets.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.security.application-groups:
+          - group.com.ecliptik.Onigiri
+
+  OnigiriUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [OnigiriUITests]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+    dependencies:
+      - target: Onigiri
+
+  # App-hosted unit tests — today the Foundation Models eval suite
+  # (FoodIntelligence lives in the app target, which the kit's pure
+  # swift-test suite can't reach). The evals are opt-in via
+  # TEST_RUNNER_ONIGIRI_AI_EVALS=1 and skip without it, so this target
+  # costs a normal test run nothing.
+  OnigiriTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [OnigiriTests]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        # Same as OnigiriUITests: a MainActor default isolates the whole
+        # XCTestCase subclass and collides with its nonisolated ObjC
+        # inits. Tests opt into @MainActor explicitly.
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+    dependencies:
+      - target: Onigiri
+
+schemes:
+  Onigiri:
+    build:
+      targets:
+        Onigiri: all
+        OnigiriUITests: [test]
+        OnigiriTests: [test]
+    run:
+      config: Debug
+    test:
+      targets:
+        - OnigiriUITests
+        - OnigiriTests
+  OnigiriWatch:
+    build:
+      targets:
+        OnigiriWatch: all
+    run:
+      config: Debug

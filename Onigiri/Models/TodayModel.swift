@@ -1,0 +1,503 @@
+import Foundation
+import OnigiriKit
+
+@Observable
+final class TodayModel {
+    private(set) var summary: DailyEnergySummary = .zero
+    private(set) var foodLog: [FoodLogEntry] = []
+    /// The food log pre-grouped by meal slot, computed once per refresh so
+    /// the Today view never re-filters the whole day on a re-render (the
+    /// per-category `.filter` in the body used to rerun on every unrelated
+    /// state change — see the scroll-perf pass).
+    private(set) var foodByCategory: [FoodCategory: [FoodLogEntry]] = [:]
+    private(set) var waterLog: [WaterLogEntry] = []
+    /// Day totals for the two configurable tracked-metric slots, in each
+    /// nutrient's label unit (sodium/water reuse the summary's numbers).
+    private(set) var trackedTotals: [Double] = [0, 0]
+    private(set) var currentWeightLb: Double?
+    private(set) var averageBurnKcal: Double?
+    /// Full-day resting energy from body metrics — the floor under the
+    /// day's resting credit, so resting is available UP FRONT instead of
+    /// dripping in hourly (2026-08-02). nil when Health lacks height or
+    /// date of birth, in which case measured resting stands alone.
+    private(set) var estimatedRestingKcal: Double?
+    /// The burn the whole screen judges this day by (`DayBudget.dayBurn`,
+    /// day-ratcheted for today) — the budget, the Net row, the goal
+    /// card. Health's raw `summary.totalBurnKcal` stays what the Burned
+    /// flank and the Active/Resting rows report: those state a
+    /// measurement, this one reaches a verdict.
+    private(set) var dayBurnKcal: Double = 0
+    /// How much of `dayBurnKcal` is the accepted burn correction, as
+    /// actually applied today (after its cap and the resting floor) —
+    /// Details prints it as its OWN row so the card still adds up
+    /// (`plans/PLAN-burn-correction.md`). 0 without one.
+    private(set) var burnCorrectionKcal: Double = 0
+    /// The day's deficit on that figure, positive for a deficit.
+    var deficitKcal: Double {
+        DayBudget.deficit(intakeKcal: summary.intakeKcal, dayBurnKcal: dayBurnKcal)
+    }
+    /// The resting the day was CREDITED — measured, floored by the
+    /// body-metric estimate. This is the number inside the budget, and
+    /// printing the measured one beside it was what made Details
+    /// impossible to reconcile: a budget sitting over a resting row a few
+    /// hundred kcal below the credit it was actually built on, which
+    /// appeared nowhere on the screen (the user, 2026-08-02).
+    var creditedRestingKcal: Double {
+        max(summary.restingBurnKcal, estimatedRestingKcal ?? 0)
+    }
+    /// The active half of the same figure, so the credited rows (with
+    /// the correction's, when there is one) sum to `dayBurnKcal` exactly. `TodayBurnFloor` ratchets the TOTAL, so
+    /// on a day Health has revised down there is a remainder belonging
+    /// to neither channel, and Details printed raw active beneath a
+    /// budget cut from the higher number, the two rows falling a few
+    /// kcal short of the total (the user, 2026-08-24). See `DayBudget.creditedActive` for why it
+    /// lands on active.
+    var creditedActiveKcal: Double {
+        DayBudget.creditedActive(
+            // The MEASURED burn: the correction is a row of its own,
+            // never a share of active.
+            dayBurnKcal: dayBurnKcal - burnCorrectionKcal,
+            creditedRestingKcal: creditedRestingKcal,
+            measuredActiveKcal: summary.activeBurnKcal
+        )
+    }
+    /// Smoothed scale movement over the past 7 days (negative = down);
+    /// nil until Health holds enough weigh-ins to say.
+    private(set) var weeklyTrendLb: Double?
+    /// Weigh-ins behind that trend, kept rather than discarded so the
+    /// goal-reached card can ask `GoalCompletion` whether the target has
+    /// actually been reached. The read was already happening; only the
+    /// window widened (to `GoalCompletion.maximumWindowDays`, since the
+    /// criterion reaches that far back for a sparse weigher), and
+    /// `Change.actualLb` windows to its own 7 days regardless.
+    private(set) var weightHistory: [WeightTrend.Point] = []
+    private(set) var errorMessage: String?
+    /// Health write access explicitly denied — every log would fail
+    /// with an opaque toast, so Today shows a recovery hint instead.
+    private(set) var healthWriteDenied = false
+    private(set) var selectedDate = Calendar.current.startOfDay(for: .now)
+    /// The first frame's numbers came from `TodayPrimeStore` — last
+    /// night's or this morning's real values, not yet confirmed by
+    /// Health. The view treats primed and loaded alike; only a screen
+    /// with NEITHER shows placeholders (`TodayView.awaitingFirstLoad`).
+    private(set) var isPrimed = false
+    /// Health has answered at least once this launch.
+    private(set) var hasLoaded = false
+    /// `loadStatic` has completed once — the prime is written only from
+    /// a state that has the weight, trend and resting estimate, or the
+    /// next launch would open on the add-a-weigh-in hint.
+    private var staticLoaded = false
+
+    private let health = HealthKitService()
+    private var started = false
+
+    init() {
+        // Before the first frame: a few KB from Caches, valid only for
+        // today. Nothing here is a fact until `refresh()` says so.
+        if let prime = TodayPrimeStore.load() {
+            apply(prime)
+        }
+    }
+    /// Refreshes fire concurrently (task/appear/foreground/day swipes); only
+    /// the newest may publish, or a slow old day overwrites the current one.
+    private var refreshGeneration = 0
+    /// Completed-load gates for the foreground refresh: quick app
+    /// switches used to replay the full query set on every activation.
+    private var refreshGate = RefreshGate()
+    private var staticGate = RefreshGate()
+    /// The ToastCenter.healthWriteVersion this model last refreshed
+    /// against — a bump while backgrounded (widget button, watch log)
+    /// must beat the staleness gate.
+    private var seenHealthWriteVersion = 0
+
+    var isToday: Bool { Calendar.current.isDateInToday(selectedDate) }
+
+    /// Tracks intent, not the date: once midnight passes, `isToday` is
+    /// already false for the day the user was pinned to, so only this
+    /// flag can tell "left on today overnight" (roll forward) apart from
+    /// "deliberately browsing yesterday" (stay put).
+    private var followsToday = true
+
+    func goToPreviousDay() async {
+        guard let previous = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate) else { return }
+        selectedDate = previous
+        followsToday = false
+        await refresh()
+    }
+
+    func goToNextDay() async {
+        guard !isToday,
+              let next = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate) else { return }
+        selectedDate = min(next, Calendar.current.startOfDay(for: .now))
+        followsToday = isToday
+        await refresh()
+    }
+
+    /// Jump straight to a day (date picker, Calendar's "View day").
+    ///
+    /// Also the destination of every TAB TAP on Today, not just a real
+    /// day jump — `ContentView`'s tab binding stamps a fresh
+    /// `dayRequest` on every activation of the Today tab — so an
+    /// unconditional `refresh()` here fired the same HealthKit storm
+    /// `start()`'s repeat-visit branch did, from a trigger that gate
+    /// didn't cover. And `@Observable` (unlike SwiftUI's own `@State`)
+    /// does NOT skip a write that equals the current value, so writing
+    /// `selectedDate`/`followsToday` unconditionally re-evaluated
+    /// TodayView's whole body on every tap. Only write (and only
+    /// reload) when the day actually changed or the data is genuinely
+    /// stale — the equality-guarded commit of `16088cc`.
+    ///
+    /// Real waste, worth removing; NOT what made the tab bar stick on
+    /// 2026-09-15 — that was Style.swift's idle recede blur, found only
+    /// after this and four sibling gates changed nothing on the phone
+    /// (plans/PLAN-tab-bar-jank.md). Don't read this gate as the fix
+    /// for a tab-bar animation problem.
+    func select(day: Date) async {
+        let newDate = min(
+            Calendar.current.startOfDay(for: day),
+            Calendar.current.startOfDay(for: .now)
+        )
+        let dayChanged = newDate != selectedDate
+        if dayChanged {
+            selectedDate = newDate
+            followsToday = isToday
+        }
+        guard dayChanged || refreshGate.isStale(maxAge: 30) else { return }
+        await refresh()
+    }
+
+
+    private func apply(_ prime: TodayPrime) {
+        summary = prime.summary
+        foodLog = prime.foodLog
+        foodByCategory = Dictionary(grouping: prime.foodLog, by: \.category)
+        waterLog = prime.waterLog
+        trackedTotals = prime.trackedTotals
+        currentWeightLb = prime.currentWeightLb
+        averageBurnKcal = prime.averageBurnKcal
+        estimatedRestingKcal = prime.estimatedRestingKcal
+        dayBurnKcal = prime.dayBurnKcal
+        burnCorrectionKcal = prime.burnCorrectionKcal ?? 0
+        weeklyTrendLb = prime.weeklyTrendLb
+        weightHistory = prime.weightHistory
+        isPrimed = true
+    }
+
+    /// Today's last-good frame for the next cold launch. Only today
+    /// (a browsed day is not tomorrow's first frame), only once Health
+    /// has actually answered AND the static reads are in, and the store
+    /// itself refuses an untrustworthy zero day (`TodayPrime`).
+    private func storePrime() {
+        guard isToday, hasLoaded, staticLoaded else { return }
+        TodayPrimeStore.store(TodayPrime(
+            day: selectedDate, summary: summary, dayBurnKcal: dayBurnKcal,
+            burnCorrectionKcal: burnCorrectionKcal,
+            estimatedRestingKcal: estimatedRestingKcal, currentWeightLb: currentWeightLb,
+            averageBurnKcal: averageBurnKcal, weeklyTrendLb: weeklyTrendLb,
+            weightHistory: weightHistory, trackedTotals: trackedTotals,
+            foodLog: foodLog, waterLog: waterLog
+        ))
+    }
+
+    /// When the day read behind `summary` BEGAN. A read that started
+    /// before midnight and landed after it carries the finished day's
+    /// burn, and ratcheting that into today's floor is the 2026-09-20
+    /// bug — see `TodayBurnFloor.ratcheted(readAt:)`. nil until a read
+    /// has run, which leaves the guard standing down over a primed or
+    /// zero summary that stores nothing anyway.
+    private var summaryReadAt: Date?
+
+    /// ONE burn figure for the whole screen, computed here rather than
+    /// per view body: TodayBurnFloor WRITES as it reads, and a body
+    /// re-runs on every unrelated state change. Called after the day's
+    /// read lands and again once `loadStatic` delivers the resting
+    /// estimate, since the two now run side by side on a cold launch.
+    private func rederiveDayBurn() {
+        let measured = DayBudget.uncorrectedDayBurn(
+            activeKcal: summary.activeBurnKcal,
+            restingKcal: summary.restingBurnKcal,
+            estimatedRestingKcal: estimatedRestingKcal
+        )
+        // Ratcheted for TODAY only: Health revising burn down
+        // (watch↔phone sample reconciliation) must not move the
+        // budget against the user mid-day, and the floor's mark is
+        // keyed to today — feeding it a browsed day's burn wrote
+        // that day's number into today's floor (2026-07-30).
+        let floored = isToday
+            ? TodayBurnFloor.ratcheted(measured, readAt: summaryReadAt)
+            : measured
+        // The correction AFTER the ratchet, the same order
+        // `DailyPlanLoader.makeState` uses: the floor guards Health's
+        // measurement, and a correction accepted mid-day must land now,
+        // not under a high mark set before it existed. Read here, at the
+        // one composition point, and passed down explicitly.
+        let corrected = BurnCorrection.apply(
+            toBurnKcal: floored,
+            estimatedRestingKcal: estimatedRestingKcal,
+            correctionKcal: SharedStore.burnCorrectionKcal
+        )
+        dayBurnKcal = corrected
+        burnCorrectionKcal = corrected - floored
+    }
+
+    /// The stored correction changed (accepted or cleared on Goal): the
+    /// day's figures re-derive at once from what is already loaded —
+    /// the correction is not a Health read.
+    func burnCorrectionChanged() {
+        rederiveDayBurn()
+        storePrime()
+    }
+
+    /// One-time startup: prompt for HealthKit access if never asked, then load.
+    /// The view's .task can re-fire on tab switches — only run once.
+    ///
+    /// The repeat-visit branch is gated the same way `foregrounded` already
+    /// is: an ungated `refresh()` here fired the full 5-query HealthKit
+    /// storm and its MainActor property assignments on every bounce back to
+    /// Today. Goal and Calendar's equivalents were already gated; this one
+    /// wasn't (2026-09-15). It was suspected of the tab-bar stutter of
+    /// that day and was not it — see `select(day:)` below.
+    func start() async {
+        guard !started else {
+            if refreshGate.isStale(maxAge: 30) {
+                await refresh()
+            }
+            return
+        }
+        started = true
+        #if DEBUG
+        // Before ANY load: after one, the stale mark is already back in
+        // the rendered budget. See `TodayBurnFloor.clearToday()`.
+        if TodayBurnFloor.clearTodayIfRequested() {
+            print("[onigiri] cleared today's burn floor")
+        }
+        // plans/PLAN-tab-bar-jank.md: the tab-bar animation probe runs the
+        // REAL TabView on a simulator whose Health sheet XCUITest cannot
+        // get past on iOS 27.0 (its Allow is an unscrollable StaticText).
+        // The probe measures the tab bar, not the data — skip the
+        // authorization request and the first load so no sheet appears.
+        if ProcessInfo.processInfo.arguments.contains("--tab-probe-no-health") {
+            return
+        }
+        #endif
+        guard HealthKitService.isAvailable else {
+            errorMessage = "Health data isn't available on this device."
+            return
+        }
+        var seeding = false
+        #if DEBUG
+        seeding = ProcessInfo.processInfo.arguments.contains("--seed-sample-data")
+        #if targetEnvironment(simulator)
+        // A seeded sim starts with NO burn correction: it lives in
+        // app-group defaults, which outlive the store and every test, and
+        // a correction left by an earlier run re-grades every figure the
+        // seeded tests assert. Simulator only, like the Health reset.
+        if seeding { SharedStore.setBurnCorrection(kcal: 0) }
+        #endif
+        #endif
+        do {
+            #if DEBUG
+            if seeding {
+                // One combined sheet covering the seeder's extra types too.
+                try await health.requestDebugSeedAuthorization()
+            }
+            #endif
+            if !seeding, try await health.shouldRequestAuthorization() {
+                try await health.requestAuthorization()
+            }
+        } catch {
+            errorMessage = "Health authorization failed: \(error.localizedDescription)"
+        }
+        #if DEBUG
+        if seeding {
+            do {
+                // `--seed-long-history` extends the seeded past to 28
+                // days so Goal's "Burn, from the scale" row has the
+                // tracked days it needs to say anything. Absent, the
+                // seed is the unchanged three-day one every other test
+                // asserts exact totals against.
+                try await health.seedSampleData(
+                    longHistory: ProcessInfo.processInfo.arguments
+                        .contains("--seed-long-history"))
+                print("[onigiri] seed: saved OK")
+            } catch {
+                errorMessage = "Seeding failed: \(error.localizedDescription)"
+                print("[onigiri] seed FAILED: \(error)")
+            }
+        }
+        #endif
+        // Side by side, not in sequence: the day's five reads used to
+        // queue behind the static four, so the kcal and the log waited
+        // on weight history they don't need — and the resting estimate
+        // then landed alone, a beat before everything else, a second
+        // staged jump on the same cold launch (frame-counted on the
+        // 26.5 sim, 2026-09-16). MainActor default isolation: both run
+        // on the main actor and interleave only at their awaits.
+        async let staticLoad: () = loadStatic()
+        await refresh()
+        await staticLoad
+        // The day landed first (or with a primed estimate): fold the
+        // estimate in now, then the frame is worth keeping for next time.
+        if hasLoaded {
+            rederiveDayBurn()
+            storePrime()
+        }
+        #if DEBUG
+        // One line per launch per day: merged vs per-source vs plain
+        // samples vs correlations, with timings. Yesterday comes along
+        // because a fresh morning has nothing logged yet, and the
+        // discrepancy this exists to measure only shows on a day that
+        // actually has a watch-logged entry.
+        // -2 keeps Aug 4 in view while it is still the only day with a
+        // reproducible gap; drop back to [0, -1] once that is settled.
+        var lines: [String] = []
+        for offset in [0, -1, -2] {
+            let day = Calendar.current.date(byAdding: .day, value: offset, to: .now) ?? .now
+            lines.append("day\(offset) \(await health.diagnoseIntake(for: day))")
+        }
+        lines.append(await DailyPlanLoader.diagnose(
+            goal: WatchSync.loadGoal(), burnCorrectionKcal: SharedStore.burnCorrectionKcal))
+        // Durable, unlike os_log — see WidgetBurnGate.note.
+        lines.append(contentsOf: WidgetBurnGate.planJournal().map { "plan \($0)" })
+        lines.append(contentsOf: WidgetBurnGate.journal().map { "burn \($0)" })
+        for line in lines { print("[onigiri] \(line)") }
+        // …and to a file, because `print` never reaches an agent shell
+        // (DebugDiagnosticsLog). The watch writes its own twin, and the
+        // pair is what answers a phone/watch budget disagreement.
+        DebugDiagnosticsLog.append(lines.map { "phone \($0)" })
+        #endif
+    }
+
+    /// Foreground (scenePhase) entry point: skip the query storm when the
+    /// data is fresh — unless the calendar day rolled over (which must
+    /// always re-anchor the view) or Health data changed while away
+    /// (widget button, watch log — `healthWriteVersion` moved). The
+    /// write-denied hint re-checks every time (a local status read).
+    func foregrounded(healthWriteVersion: Int) async {
+        healthWriteDenied = health.sharingDenied()
+        let healthChanged = healthWriteVersion != seenHealthWriteVersion
+        if staticGate.isStale(maxAge: 300) {
+            await loadStatic()
+        }
+        if healthChanged || refreshGate.isStale(maxAge: 30) {
+            seenHealthWriteVersion = healthWriteVersion
+            await refresh()
+        }
+    }
+
+    /// Weight and average burn don't depend on the browsed day — loading
+    /// them per chevron tap made day switching feel laggy. Fetched on
+    /// start and on foregrounding instead.
+    func loadStatic() async {
+        // Independent reads — run them concurrently.
+        // The deficit-target BASIS, not the raw last weigh-in — Today's
+        // deficit has to match the widget's, and both ride this. The
+        // resting estimate below uses the same value so one screen never
+        // mixes two "current weights" (PLAN-target-weight-basis).
+        async let weightRead = health.targetBasisWeightLb()
+        async let burnRead = health.averageDailyBurnKcal()
+        async let historyRead = health.bodyMassHistory(days: GoalCompletion.maximumWindowDays)
+        currentWeightLb = (await weightRead) ?? currentWeightLb
+        averageBurnKcal = (try? await burnRead) ?? averageBurnKcal
+        let body = await health.bodyProfile()
+        estimatedRestingKcal = {
+            guard let heightCm = body.heightCm, let age = body.ageYears,
+                  let weightLb = currentWeightLb else { return nil }
+            return BasalEstimate.restingKcal(
+                weightLb: weightLb, heightCm: heightCm,
+                ageYears: age, sex: body.sex)
+        }()
+        // The week's change comes from a linear fit over the raw
+        // weigh-ins in the window — no smoothing, so no extra runway.
+        if let history = try? await historyRead {
+            weightHistory = history
+            weeklyTrendLb = WeightTrend.Change.actualLb(
+                history: history,
+                from: Date.now.addingTimeInterval(-7 * 86400),
+                to: .now
+            )
+        }
+        // Re-checked on every foreground: the user may have just flipped
+        // access in the Health app.
+        healthWriteDenied = health.sharingDenied()
+        staticGate.markRefreshed()
+        staticLoaded = true
+    }
+
+    /// Day data only — fast enough that browsing feels immediate.
+    func refresh() async {
+        // A new calendar day rolls the view forward to the new "today" —
+        // unless the user deliberately navigated to a past day.
+        if followsToday {
+            selectedDate = Calendar.current.startOfDay(for: .now)
+        }
+        refreshGeneration += 1
+        let generation = refreshGeneration
+        do {
+            // Aligned: burn read from the same day-bucketed source the
+            // calendar and badges use, so the two screens can't disagree
+            // about the same day.
+            // Before the reads begin — see `TodayBurnFloor.ratcheted(readAt:)`
+            // and the matching capture in `DailyPlanLoader.computeState`.
+            // This model ratchets from its OWN summary, so it needs its
+            // own stamp; the loader's says nothing about this read.
+            summaryReadAt = Date()
+            async let summary = health.alignedDaySummary(for: selectedDate)
+            async let foodLog = health.foodEntries(on: selectedDate)
+            async let waterLog = health.waterEntries(on: selectedDate)
+            async let tracked1 = trackedTotal(slot: 1)
+            async let tracked2 = trackedTotal(slot: 2)
+            // Cost of this read set, measured on device 2026-08-04 after
+            // the totals moved to correlations: ~40 ms warm (~450 ms on
+            // the first read of a launch, which is HealthKit waking up,
+            // not us). `daySummary` traded THREE statistics queries for
+            // one correlation query, so the refresh went from six queries
+            // to five — the duplicated correlation fetch (one for this
+            // list, one for the summary) rides along concurrently and a
+            // correlation query measured 34 ms against 15 ms for a
+            // statistics one. Not worth coalescing; don't "optimize" it
+            // without measuring again.
+            let (loadedSummary, loadedFood, loadedWater, loaded1, loaded2) =
+                try await (summary, foodLog, waterLog, tracked1, tracked2)
+            guard generation == refreshGeneration else { return }
+            self.summary = loadedSummary
+            self.foodLog = loadedFood
+            self.foodByCategory = Dictionary(grouping: loadedFood, by: \.category)
+            self.waterLog = loadedWater
+            // Sodium/water ride the summary — no second query, and the
+            // numbers can't disagree with the rest of the screen.
+            self.trackedTotals = [
+                loaded1 ?? slotSummaryValue(slot: 1, from: loadedSummary),
+                loaded2 ?? slotSummaryValue(slot: 2, from: loadedSummary),
+            ]
+            rederiveDayBurn()
+            refreshGate.markRefreshed()
+            hasLoaded = true
+            storePrime()
+        } catch {
+            guard generation == refreshGeneration else { return }
+            // Transient read failures toast like every other transient
+            // failure; errorMessage stays for the persistent start()
+            // states (Health unavailable, authorization failed).
+            ToastCenter.shared.show("Couldn't read Health data: \(error.localizedDescription)")
+            print("[onigiri] refresh FAILED: \(error)")
+        }
+    }
+
+    /// Nil for sodium/water — the caller reuses the day summary's values.
+    private func trackedTotal(slot: Int) async throws -> Double? {
+        switch SharedStore.trackedNutrient(slot: slot) {
+        case nil: return 0 // slot is off — nothing to fetch
+        case .sodium?, .water?: return nil
+        case .some(let nutrient): return try await health.dayTotal(of: nutrient, for: selectedDate)
+        }
+    }
+
+    private func slotSummaryValue(slot: Int, from summary: DailyEnergySummary) -> Double {
+        switch SharedStore.trackedNutrient(slot: slot) {
+        case .sodium?: summary.sodiumMg
+        case .water?: summary.waterOz
+        default: 0
+        }
+    }
+}

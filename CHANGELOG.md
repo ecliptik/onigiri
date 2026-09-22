@@ -1,0 +1,1408 @@
+# Changelog
+
+Every released version of Onigiri, newest first.
+
+Generated from the annotated git tags by `scripts/generate-changelog.sh`.
+**Do not edit by hand** — the tag message is the source of truth, and it is
+also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) publishes. Versions before
+v2.16.0 were not all tagged with notes; those show the version and its
+comparison link alone.
+
+## v2.28.2 — the day card opens filled
+
+_2026-09-17_ · [changes since v2.28.1](https://github.com/ecliptik/onigiri/compare/v2.28.1...v2.28.2)
+
+v2.28.1 taught the Calendar to open on its last month instead of an empty one.
+One corner was left out, and said so: the day card's tracked slots — sodium and
+water, or whatever you track — still sat on "—" for a beat after everything
+else had filled. Two causes, one symptom.
+
+**The card's read was waiting in the wrong queue.** The Calendar's refresh
+fetches today's plan, 92 days of totals and a year of weigh-ins. The day card
+needs none of that, but its own read only *started* once all of it had come
+back. The two run side by side now.
+
+**And the cold-open picture had no day card in it.** It does now: today's
+sodium, water and tracked-slot totals ride the same saved picture as the month,
+under stricter rules, because the card belongs to a day and the month doesn't.
+
+- It lasts until midnight, where the month lasts a week. The tab opens on
+  today, and yesterday's sodium under today's heading is a wrong number, not a
+  stale one.
+- A slot's total applies only if the slot still tracks what it tracked when it
+  was saved — 82 g of protein is not 82 g of fiber.
+- An all-zero day, which is what a locked phone returns, is never kept.
+
+The test that guards the cold open now holds the card's read open as well, and
+fails on exactly this when the card's picture is switched off.
+
+## v2.28.1 — the first half second of Goal and Calendar
+
+_2026-09-17_ · [changes since v2.28.0](https://github.com/ecliptik/onigiri/compare/v2.28.0...v2.28.1)
+
+Open the app, tap over to Goal, and for an instant a **Cancel** button stood
+beside Save — then vanished. Nothing had been edited, and no sequence of taps
+would bring it back, because it needed no sequence: it needed a *first visit*.
+
+Goal filled its form from your saved goal only after its Health load came
+back. Until then the form held its built-in defaults — no target, a date 90
+days out — beside a saved goal it didn't match, so it counted as edited and
+offered to cancel. When Health answered, the saved goal went in and the button
+left. Once per launch, first visit only, for as long as HealthKit's first read
+takes: about half a second on a phone, six frames on a simulator, which is
+where a screen recording finally caught it. The form now takes the saved goal
+before its first frame; nothing it copies needs Health at all.
+
+**The same half second was making false claims.** Before Health had answered,
+Goal printed *"No weight in Apple Health yet — enter it here."* over a field to
+type one into, and the Calendar opened on a month with no badges, "🍙 0" and a
+"0 days" streak — then both filled in at once. Not asked yet is not the same as
+none.
+
+**So Goal and Calendar now open the way Today does.** Each keeps a picture of
+its last Health read and paints it on a cold open: your chart, progress and
+weight on Goal; the month's badges, streak and day totals on Calendar. When
+Health answers, the picture is replaced — usually by the same numbers. With no
+picture to show (a first launch, or the system cleared the cache), the rows
+hold quiet placeholders instead of claims.
+
+The rules that keep a picture from becoming a second source of truth:
+
+- It is written only from a Health answer, and an empty answer — what a locked
+  phone returns — is never kept.
+- Only raw readings are stored. Badges and the streak are *verdicts*, so they
+  are re-judged on open, against today — a picture saved yesterday cannot claim
+  a streak that ended overnight.
+- Nothing saves from one. Goal's Save stays shut until Health has answered.
+
+Foods needed none of this: its list comes from the library on the phone and is
+complete on its first frame.
+
+**Tests that can see half a second.** A 100 ms flash sits far inside a UI
+test's own reaction time, so a test of it would pass on any build. The new
+ones hold each screen's load open for four seconds with debug-only launch
+flags, and each was run against the old behaviour first to prove it fails
+there.
+
+## v2.28.0 — at home on iOS 27
+
+_2026-09-17_ · [changes since v2.27.5](https://github.com/ecliptik/onigiri/compare/v2.27.5...v2.28.0)
+
+A month of work, and most of it is about how the app *feels*: what is on screen
+in the first half second, how quickly a button answers, where a title sits.
+iOS 27 moved several of those things, and this release moves with it.
+
+**Today opens on real numbers.** A cold launch used to paint "0 kcal balance",
+three zero meters and "Nothing logged yet." as though they were facts, then
+jump to the day's figures when Health woke up about half a second later. Today
+now opens on a picture of its last refresh and replaces every field when Health
+answers; with no picture to show, the summary is greyed placeholders rather
+than confident zeros. Health is still the only store — the picture is never
+written by a log and never read after the first frame.
+
+**Cancel and Done answer when you tap them.** In the Log sheet and the Add Food
+form they "didn't register, then did". Neither button does anything slow. The
+screen *behind* the sheet was being torn down and rebuilt at the moment of
+dismissal — a side effect of how it blurred itself out of the way. It recedes
+with a plain dim now and no blur, which is what Apple's own apps do, made just
+dark enough in dark mode that the card in front reads as the one live surface.
+
+**The tab bar slides without sticking.** On iOS 27 a jump from Calendar to
+Today parked the glass highlight on Foods for a fifth of a second. Two causes,
+found a day apart: an idle blur filter that the Liquid Glass bar sampled on
+every frame of the slide, and a tab-tap handler that redrew the whole tab view
+just as the slide began. Both are gone.
+
+**One header shape everywhere.** Every tab's title shares a row with its
+controls, and all four titles sit on the same top-left corner, which a test
+now measures rather than trusts. The Log sheet is a
+standard sheet again: Cancel on the left, "Log" centered, Sort and Done on the
+right, search pinned at the top.
+
+**Two doors at the bottom of the Log sheet, and the same two in Add Food.** A
+camera button — barcode, label, menu, or the food itself — beside a "Describe
+food or meal" field. Type into it and you are offered an AI estimate and the
+online database together, each one tap away and never run per keystroke. The
+doors appear on Favorites, Foods and Meals alike. With AI and online lookups
+both off, the field disappears and the camera becomes one full-width labeled
+button. The search field at the top now searches only what you have saved, on
+the Foods tab too; the clipboard paste row is retired, since the share sheet
+covers it end to end.
+
+**New for iOS 27: an extra-large widget, and Visual Intelligence.** The
+extra-large widget — now placeable on iPhone, with a portrait shape on iOS 27 —
+spends its room on the Active and Resting split behind the day's budget and on
+what you have logged today. And pointing Camera Control or a screenshot at a
+food offers *Identify from Photo*, which hands the picture to the same reader
+the camera button uses. Matching Visual Intelligence's own labels against your
+library was the first design, abandoned on a real device: a branded can came
+back labelled "food".
+
+---
+
+**An estimate can be corrected in your own words.** The on-device model never
+sees your photo — Vision names the dish and the text model assumes a typical
+serving, so the salad comes back dressed, whole and average. Anything
+*estimated* now stops on a step that shows what was found and takes a note:
+"no dressing", "I only ate half", "it's tofu, not chicken". A refine that
+fails keeps the first estimate on screen and says so. Printed nutrition panels
+are never refined; those are measurements.
+
+**A menu is read once and ordered from several times.** Picking a second dish
+used to cost a second photograph, a second OCR pass and a second run at the
+model, because every door closed itself after the first pick. Every list now
+loops — pick, confirm, back to the same list, with a mark on the rows already
+taken. The confirm has two buttons, **Save** and **Log**, because not
+everything on a menu is being eaten now. Menus themselves read better:
+nutrition tables that are really pictures, column names printed sideways or
+diagonally, and headers that arrive as one run of text.
+
+**Goal shows one budget.** It carried two for three weeks, hundreds of kcal
+apart at lunchtime, and three rounds of relabelling never stopped that reading as a
+contradiction. Goal now shows what an average day allows and nothing that moves
+during a day; "How your budget is calculated" is the recipe and only the recipe
+— to lose ÷ days left = deficit, average burn − deficit = budget — with the
+days left finally on screen so the figure can be checked. On Today, the Active
+and Resting rows now add up to the burn above them, to the digit.
+
+**Log it Friday, save it Sunday.** Edit any logged food that isn't in your
+library and the sheet offers *Save to Library* and *Save to Library & Log
+Today*. The original entry is never moved.
+
+**Smaller things**
+
+- A delete on the watch can be undone — tap the flash. A swipe on a 41 mm
+  screen used to remove a Health sample for good.
+- A library store that will not open is set aside and replaced with an empty
+  one, with a pointer to Import, instead of crashing on every launch.
+- Two menus shared before the app is opened both survive, and an app killed
+  mid-import offers the share again instead of losing it.
+- The Calendar's month card is tappable again.
+- Settings → Appearance is regrouped, gains a switch to hide Today's Daily
+  Goal card, takes in the water icon picker, and changes theme live.
+- A link that never finishes loading can no longer hang a menu import, and
+  reading a menu document no longer blocks the screen while it works.
+
+## v2.27.5 — when a key stops working, you'll hear about it
+
+_2026-08-17_ · [changes since v2.27.4](https://github.com/ecliptik/onigiri/compare/v2.27.4...v2.27.5)
+
+If you bring your own AI provider — an Anthropic or OpenAI key, or a local
+server — this release is for you. If you don't, nothing here changes anything
+you'll see.
+
+**A rejected key used to fail in silence.** Revoke a key, mistype one, let it
+expire, and Onigiri went on quietly doing without: every estimate, every photo
+read, every menu name fell back to the plain path exactly as though the model
+had simply had nothing useful to say. Nothing ever mentioned the key. The only
+way to discover it was opening Settings and tapping Test.
+
+Now the first time a provider turns your key away, Onigiri says so and points
+you at Settings. Once per launch, and again if you edit the key — a new key
+deserves a fresh warning if it's wrong too. Everything else still fails
+quietly, deliberately: a model declining to answer isn't news, but a credential
+that will refuse everything until you change it is.
+
+**And Apple Intelligence now covers for a bad key.** This is the part you'd
+have felt without knowing why. If you had the on-device fallback switched on —
+for exactly the case where your provider can't be reached — a rejected key
+switched it off too, because the app had filed the rejection as "the model
+answered." It hadn't: nothing was ever asked. So a stale key gave you nothing
+at all, with a perfectly good engine sitting idle in your hand. It falls back
+properly now.
+
+Under the surface: a shared menu no longer leaves a copy of itself behind in
+storage, a slow website can't hold the import spinner past its promised limit,
+and the share sheet can't reclaim a document it just handed over.
+
+## v2.27.4 — bigger text, and room to put it
+
+_2026-08-17_ · [changes since v2.27.3](https://github.com/ecliptik/onigiri/compare/v2.27.3...v2.27.4)
+
+A small release, for anyone who turns text size up.
+
+At the larger accessibility sizes, icons grew with the text around them but the
+space reserved for them didn't — so they simply rendered over their own labels.
+On the day-detail screen behind "Details ›" the knife and fork landed on the
+word "Eaten", the pie chart sat across "Calories", and because each icon is
+centred in its slot they also spilled leftwards past the edge of the card. The
+same thing was waiting on the Calendar tab's day card, where three of those
+columns share one row, and on the watch's metrics page, which has the least
+room of anywhere in the app.
+
+Those slots now grow with the text they sit beside — which is what the calendar
+grid already did, after the same thing happened to the onigiri marks a few
+weeks ago. Checked at the largest accessibility size before and after, on a
+screen where it was plainly wrong and is now plainly right.
+
+Also: the custom-emoji field in the icon picker grows sideways as well as
+downwards now.
+
+## v2.27.3 — sharing a menu, all the way through
+
+_2026-08-17_ · [changes since v2.27.2](https://github.com/ecliptik/onigiri/compare/v2.27.2...v2.27.3)
+
+Most of this release is one journey: share a restaurant's nutrition PDF into
+Onigiri and log something off it. Three separate things could go wrong along
+that path, and each failed quietly.
+
+**A scanned menu read as an empty one.** Plenty of restaurants publish their
+nutrition guide as pictures of tables rather than as text. Opened from inside
+Onigiri those read fine — it falls back to reading the page visually. Shared in
+from Safari or Files, they didn't: that door used the plain reader, found no
+text, and suggested you photograph the nutrition instead, which was neither the
+cause nor the cure. Both doors read the same way now.
+
+**Picking an item could land on nothing.** Choosing a dish from a shared menu
+asked one panel to close and another to open in the same instant, and sometimes
+the second one lost — leaving a blank screen with no way on but backing out and
+sharing the file again.
+
+**A long menu could open twice.** Onigiri deliberately keeps a shared guide open
+so you can order several things off it. After two minutes it stopped treating
+that session as live, so switching to the app opened a second copy of the same
+import beside the first — and cancelling one left the other behind. It now
+holds the session for as long as you are in it.
+
+**And the month-stats widget lands on the calendar.** If you had left a month's
+detail screen open, tapping the widget put you back on that instead of on the
+calendar it promises.
+
+Underneath, four rules that a single screen had been keeping to itself moved to
+where they can be tested: how a goal's start date is decided when you change a
+target, which milestone counts as reached, which meals would lose a food you're
+deleting, and how the library sorts. Every one of them had already caused a bug
+worth remembering. 25 new tests, 608 in total.
+
+## v2.27.2 — the things that quietly did nothing
+
+_2026-08-17_ · [changes since v2.27.1](https://github.com/ecliptik/onigiri/compare/v2.27.1...v2.27.2)
+
+Three fixes for failures that gave you no sign they had happened. Two you
+could have run into today; the third only shows up if you ever went looking
+in a device log.
+
+**A pasted screenshot that read as a shrug.** Tap the search field, then tap
+Paste Nutrition Screenshot, and the read could die on the spot — no figures,
+no error, nothing to distinguish it from a row that simply didn't respond.
+Tapping the row is what puts the search keyboard away, and iOS briefly tears
+down and rebuilds a list section when that happens. The app took that blink
+for you leaving the screen and cancelled the work you had just started.
+
+The same blink was cancelling an AI meal-name suggestion mid-flight, which
+mattered rather more if you bring your own API key: the request had already
+been billed, and the answer was thrown away on arrival. Both now stop only
+when you actually leave.
+
+**Cancel in Settings gives your API key back.** Clearing the USDA key and
+tapping Cancel used to keep the change. Keys are stored where the app can
+write them but never read them back, so there was nothing to retype from and
+no way to undo it. Cancel now restores it, as it always claimed to.
+
+Three settings had slipped out of that safety net entirely — the two
+Appearance pickers ("Food logged is called", "Foods tab opens on") and the AI
+screen's Estimate nutrition switch. Cancel didn't undo them and Reset Settings
+didn't clear them. They're covered now.
+
+And a smaller one: the AI screen asked for "an API key" when it could name
+the provider you had picked.
+
+**Your figures are out of the device log.** Onigiri has never sent Health data
+anywhere, and that hasn't changed. But it was writing calorie and sodium
+readings — and your measured energy burn, on every widget refresh — into the
+system log in plain text, where a diagnostic report handed to a support agent
+would carry them off the device. The diagnostics that made those lines useful
+are still there; the numbers are not.
+
+## v2.27.1 — the failures that were keeping quiet
+
+_2026-08-17_ · [changes since v2.27.0](https://github.com/ecliptik/onigiri/compare/v2.27.0...v2.27.1)
+
+A maintenance release, from a run of audits over the data layer. Most of it
+you will never see, which is the point. One part you might.
+
+**A save that fails now says so.** Adding a food, editing a meal, saving or
+removing a goal, deleting either — all of these wrote to the store, threw the
+result away, and then showed you a checkmark. If the write had been rejected,
+the toast still said it worked, the sheet still closed, and the change was
+simply gone. Nothing logged it and nothing surfaced it, which made it the one
+kind of failure you could not find out about.
+
+Those writes now report. The everyday bookkeeping — a recency stamp, a
+favorite star — deliberately stays quiet and only leaves a trace in the log:
+interrupting you about a write you never asked for would be worse than the
+failure it announces.
+
+**Two foods with the same name should be one food.** The rule the app uses to
+recognise a name it already has trims spaces and ignores capitals. Two other
+places had quietly grown their own version — restoring a backup only ignored
+capitals, and saving a dish from a shared menu matched the name exactly. So a
+backup holding " Oats" restored a second *Oats*, and sharing the same item
+twice with different capitalisation made a twin. There is one rule now, in two
+forms that cannot disagree.
+
+**A restored meal keeps its identity only if it is still free.** Meal widgets
+and Shortcuts find a meal by a hidden identifier, so restoring a backup
+preserves it. If you had renamed that meal since the backup was written, the
+restore created a second meal and handed it the same identifier — and a widget
+pointed at it would log whichever one it found first. The identifier is now
+only reused when nothing else holds it.
+
+**Your watch's logs reach your phone more reliably.** The channel added in
+2.27.0 — the watch telling the phone it logged something, so reminders can
+catch up in seconds rather than an hour — could be cut short when the phone was
+woken in the background with nothing holding it awake. It now asks iOS for the
+time to finish.
+
+Under all of it: the launch-time store repair, meal syncing, and a handful of
+globals were tightened so that assumptions the code relied on are now checked
+by the compiler instead of by convention. Seven new tests, 583 in total.
+
+## v2.27.0 — a reminder that can't be wrong
+
+_2026-08-17_ · [changes since v2.26.0](https://github.com/ecliptik/onigiri/compare/v2.26.0...v2.27.0)
+
+Log water on your watch in the morning, and the 11 AM check-in would still
+tell you **"You're at 0 of N oz."** It had done this before — the same
+sentence, off by the same morning, in July. Both times the fix went to the
+machinery that keeps a reminder fresh. Both times the machinery lost, because
+it cannot win: a notification's text is written when it is *scheduled*, and iOS
+delivers those words verbatim hours later, whatever has happened since.
+
+So the words stopped making claims that can go stale.
+
+**Water check-ins no longer count.** The nudge is now just a nudge — *"Time for
+a glass of water."* Nothing in it can be contradicted by a glass you already
+drank. The streak warning drops its day count for the same reason: it said
+"Your 3-day streak" from a number decided hours earlier.
+
+**And they only fire on a day with no water logged at all.** They used to fire
+whenever you were behind an even pace toward your goal, which is a claim any
+sip in the meantime disproves. "You haven't logged any water" is a much harder
+thing to be wrong about. The trade is deliberate and worth stating plainly: log
+one glass and stop, and Onigiri won't nudge you again that day. Three check-in
+times still stand for the days that are genuinely dry.
+
+**Your watch now tells your phone when you log.** This was the actual distance
+between a 7 AM glass of water and an 11 AM reminder — nothing travelled that
+way. Health syncs the sample eventually, but watchOS holds those deliveries to
+roughly hourly. Water, meals, edits and deletions logged on the wrist now send
+word directly, waking the phone to hear it, so reminders and widgets can catch
+up in seconds instead of an hour.
+
+---
+
+**Elsewhere, a pass over the words.** Settings had labels that named a category
+rather than the control under them. "Source" governed typed searches only,
+which made the barcode note beneath it read as a contradiction — it's "Text
+search" now. "Energy stats / Beside balance" asked you to guess at both halves;
+it's "Burn and intake / Compact". A reset alert titled "Reset all?" now matches
+the "Reset All" button you tapped to reach it.
+
+Captions that repeated the rows above them are gone rather than reworded — Goal
+had a budget explainer restating the two figures beside it, both empty Food
+Library screens explained the Import button rendered directly below, and the AI
+provider descriptions each ran to three sentences to say what the line under
+them already said. Goal's almost-there message no longer says your target is
+"judged"; it measures, and now it says so.
+
+## v2.26.0 — when a database already knows
+
+_2026-08-17_ · [changes since v2.25.0](https://github.com/ecliptik/onigiri/compare/v2.25.0...v2.26.0)
+
+The last three releases stopped wrong numbers reaching your log. None of them
+made an estimate any *better*. This one does, by asking a question the app
+wasn't asking: **does a database already hold this food?**
+
+**Published values, offered beside an estimate.** Ask Onigiri to estimate "a
+Big Mac" and Apple Intelligence answers 550 kcal and 2,400 mg of sodium.
+McDonald's publishes about 1,010. No amount of prompt-writing fixes a number
+the model doesn't know — a lookup does. So when a database plainly holds the
+food an estimate just named, the food form now shows it:
+
+> **Published values**
+> Big Mac (McDonald's) · 232 g — 530 kcal · 920 mg Na
+> _A database has this name. Tap to use its figures and serving instead of the estimate._
+
+It offers and never substitutes. The estimate stays exactly as it was until you
+tap; a name match isn't proof. Taking the offer brings the whole row across —
+nine macros, minerals and vitamins in the case above — and the ✨ mark becomes
+"Source: OpenFoodFacts", because those numbers are no longer a guess.
+
+The matching is deliberately strict, since a published figure carries more
+authority than an estimate and a wrong offer is worse than none. A brand prefix
+matches ("Big Mac" → "McDonald's Big Mac"); "Big Mac Sauce" doesn't, and
+neither does a dish reaching for an ingredient — "two large scrambled eggs" is
+never "Eggs". It only runs when your online lookups are already on: an estimate
+is otherwise answered entirely on your phone, and this is the only part of it
+that leaves.
+
+**Macros that contradict their own calorie count are dropped.** Asked for
+protein, carbs and fat beside its calories, the model sometimes returns numbers
+that add up to something else entirely. Now they're checked against the calorie
+figure it gave, and dropped when they disagree — one number you can trust beats
+four that argue. Measured across the golden set, 18 of 19 estimates keep their
+macros; the one that doesn't is a composed dish, which is exactly where they go
+wrong.
+
+**And the sodium yardstick got harder.** The test set that grades estimates grew
+by half, weighted toward foods whose right answer is a *small* number — because
+over-estimation was the known failure and the old set couldn't see it. The pass
+mark went up with it.
+
+## v2.25.0 — it checks the number before you do
+
+_2026-08-17_ · [changes since v2.24.0](https://github.com/ecliptik/onigiri/compare/v2.24.0...v2.25.0)
+
+2.24.0 closed one way a shared page could invent a sodium figure. This is the
+general case: **every nutrition figure now passes one check on its way in**, no
+matter which door it came through — a web page, a menu PDF, a photographed
+label, an online database, or an AI estimate.
+
+**A figure that isn't food gets left out, and Onigiri says which and why.** Not
+the whole reading — the Salt & Straw dessert's 300 calories were correct, and
+throwing them away would have punished you for the parser's mistake. Only the
+field that can't be:
+
+> Sodium was left out — 810,400 mg is beyond any real food.
+
+**A figure that's unusual but real is kept, and marked.** Shake Shack's Triple
+SmokeShack™ genuinely carries 3,930 mg of sodium; a Chick-fil-A catering tray
+genuinely carries 13,030. Those are yours to log, so they're logged — with a
+note beside them, in the share sheet and in the food form:
+
+> ⚠ 3,930 mg in one serving is unusually high.
+
+Macros that don't add up to the calories get the same treatment, which is how
+CAVA's Pita Crisps turn out to print figures working out to 127 kcal beside a
+stated 70.
+
+**The limits were set against real food, then tested against it.** Every
+threshold sits deliberately above the saltiest things people actually eat — a
+bouillon cube is about 200 mg of sodium per calorie, soy sauce 90, a dill
+pickle 60 — so the check can only ever catch arithmetic, never a cuisine. Run
+across 297 items from six real chain nutrition guides, it drops nothing at all,
+and flags seven items that deserve it.
+
+**Read figures and estimated ones are treated differently, on purpose.** A read
+loses just the field that's impossible, because the rest of the page was
+probably printed correctly. An estimate has no page — every number came out of
+the same guess — so one impossible figure discards the whole estimate and
+Onigiri falls back to what it can read.
+
+## v2.24.0 — nothing logged that you didn't see
+
+_2026-08-17_ · [changes since v2.23.0](https://github.com/ecliptik/onigiri/compare/v2.23.0...v2.24.0)
+
+Sharing a Salt & Straw product page logged a 300 kcal dessert carrying
+**810,400 mg of sodium** — 810 grams of it, about two kilos of table salt, 352x
+the daily limit — and no screen in that flow ever showed the number. Three
+things had to fail for that, and all three are fixed here.
+
+**A page's words are now read as words.** The number came from the page's last
+line, `Salt & Straw © 2026 All Rights Reserved`:
+
+    810,400 = 2026 × 0.4 × 1000
+              ^^^^   ^^^^^^^^^^
+              the    salt → sodium, by mass
+              copyright year
+
+The nutrition parser is built for the panel on the back of a package, where
+geometry ties a name to its amount. A web page has no such geometry, so a
+keyword anywhere could claim any number below it — the same page's sibling
+flavour turned a `$15` price into 6,000 mg. Reading prose now requires each
+amount to state its own unit, which a footer, a price and a copyright line
+never do. Nothing published changes: `Calories per serving: 300` still reads,
+and so does a label that spells out `Sodium 105mg`.
+
+**The share sheet shows every figure before it logs one.** Its confirm step used
+to show the name, the calories and the serving while writing sodium and five
+macros to Health beside them. It now lists all of them, scaled to the portion
+and in your sodium unit — and says so plainly when a menu published calories
+alone. A value that isn't shown there is a value nobody agreed to.
+
+**A logged item can be moved to yesterday.** Editing an entry's date opened a
+calendar with no way to confirm it: the only dismissal was a tap outside, which
+on a half-height sheet is the gesture that throws the whole edit away. The date
+and time pickers now open with **Cancel** and **Done**, and the entry changes
+only when you tap Done.
+
+Under the hood, the regression tests read the real text of real pages — both
+Salt & Straw flavours, a recipe page that must yield nothing, and two prose
+panels that must still read — so what the tests parse is what the app parses.
+
+## v2.23.0 — order the second thing too
+
+_2026-08-16_ · [changes since v2.22.0](https://github.com/ecliptik/onigiri/compare/v2.22.0...v2.23.0)
+
+Sharing a menu into Onigiri landed in 2.22. Using it revealed how much of the job
+was still left on the table: logging a burger meant re-sharing the whole document
+to add the fries, half the restaurants on the internet don't publish a PDF at all,
+and — quietly, on the largest chain in the country — every calorie was wrong.
+
+**Log as many items as you like from one menu.** Pick, log, and the list is still
+there, restaurant filled in, ready for the next one. Done closes it when you're
+finished.
+
+> ✓ Logged Single ShackBurger®. Choose another, or tap Done.
+
+**The share sheet does the whole job now**, rather than handing off to the app: read
+the document, choose an item, log it to Health, without Onigiri ever opening.
+
+**And the menu reader is a door inside the app** — Scan Barcode, Label, Menu, or
+Food — so a PDF you already have doesn't require leaving to share it back in.
+
+Eight real chain menus were run through the parser rather than reasoned about.
+"CALCIUM" contains "cal", so the micronutrient column matched the calorie
+keyword, and sitting to the right of the real one, it overwrote it. **A Bacon
+Clubhouse Burger read 740 kcal as 25** — 3% of the truth, and completely
+plausible on screen.
+
+That is the failure this release is most concerned with. A wrong column mapping
+doesn't fail loudly; it returns confident nonsense. One booklet produced 171 rows
+of letter-soup names with 10 kcal beside them, all ready to log. Three gates now
+stand in the way: a name must contain a real word, a page must declare at least
+three columns, and rows must fill what the header promised. A parse that has gone
+wrong returns nothing, and nothing is honest.
+
+Also from the sweep: section headings turn out to be a matter of type size rather
+than capitals (Title-Case sections were being glued onto the row above), and a
+guide that prints an item's name, allergens and calories as a single run — 27
+rows on one Shake Shack page — now parses.
+
+- **A viewer link** that ends in `.pdf` but serves a JavaScript page: Onigiri
+  follows the document the page names.
+- **A product page** whose figures sit inside a collapsed accordion, present in
+  the text and absent from anything drawn on screen. Read as one food.
+- **A scanned PDF** with no text layer at all is read with OCR instead of refused.
+- **A CAPTCHA page** pretending to be a nutrition guide is not mistaken for one.
+
+Menus also name themselves now, from the web address or from the document's own
+small print, so the restaurant is usually filled in before you're asked.
+
+- **Today's "Aggressive pace" warning could never appear.** The card read a plan
+  that hardcodes the flag false — correct for a past day, and it silenced today
+  too. The same sentence on Goal worked, which is why it went unnoticed.
+- **A budget below your own resting energy passed silently.** The guardrail was a
+  flat 1,500 for every body; it now also tests the body's own resting estimate.
+  For a 200 lb body that's around 1,742, so a 1,600 kcal budget sat under the
+  baseline and said nothing.
+- **An evening weigh-in no longer moves the budget.** Two places floored the
+  resting estimate off the raw last reading while Today used the sustained basis,
+  so Goal and the calendar drifted from Today by the very reading the basis exists
+  to discard.
+
+- **A missing key no longer switches AI off entirely.** With a provider selected
+  but unconfigured, availability said no before the "Fall back to Apple
+  Intelligence" setting was ever consulted, leaving every AI feature dark with
+  nothing to explain it.
+- **Settings → AI → Estimate nutrition**, on by default. It governs guessing only:
+  reading a label, a screenshot, or a menu's printed calories is transcription and
+  keeps working with it off.
+- **Menu calorie estimates are calibrated and repeatable.** The instructions used
+  to forbid estimating nutrition while the schema demanded a number, and the same
+  dish came back 352, 2210 and 1200 kcal across three reads of one photo.
+- **A keychain fix**: a saved API key could be deleted during an upgrade and read
+  afterwards as "not set up".
+
+## v2.22.0 — the whole menu
+
+_2026-08-16_ · [changes since v2.21.0](https://github.com/ecliptik/onigiri/compare/v2.21.0...v2.22.0)
+
+Eating out, the restaurant has already done the work: every item, every
+number, published. Getting one row of it into Onigiri meant screenshotting a
+slice of the table and watching the app pick some arbitrary food out of it.
+
+**Share the menu to Onigiri instead.** A nutrition PDF, a nutrition page, or a
+photo — Safari, Files, Photos, anywhere the share sheet reaches. What comes
+back is the whole menu, searchable:
+
+> **Search 113 items**
+> CURATED BOWLS
+> Spicy Lamb + Avocado Bowl — 800 kcal
+> Steak + Harissa Bowl — 620 kcal
+
+Tap one and the food form opens filled in. Nothing else is kept: the document
+is read once and discarded, and the only thing that survives is a food you
+actually saved.
+
+The old screenshot path asked a language model to read the table, and a table
+is the one thing that survives least well as flat text — the column headers end
+up dozens of lines above their numbers with nothing left to say which is which.
+It could also only ever return six items, and quietly returned none at all past
+6,000 characters. Hence "it just picks the first one".
+
+This reads the document's own geometry instead: rows, columns, header cells
+matched whole. **No AI is involved at any point** — it works with every AI
+setting off, there is no six-item cap, and the numbers are the printed ones
+rather than an estimate of them.
+
+A shared *page* is rendered the way a browser would draw it and then read the
+same way, so a restaurant that publishes HTML rather than a PDF works too, with
+no site-specific knowledge that could rot.
+
+Menus rarely say. The guide this was built against names its restaurant nowhere
+at all — its title is the design department's job code. So Onigiri asks once,
+and what you type goes in front of each item: **Kwik Trip — Greek Chicken**, so
+that six months later it still means something.
+
+A photo shared into Onigiri reads exactly the way a pasted one does — same
+label reading, same "which item?" question when a picture shows several.
+
+This release raises the minimum to **iOS 18.6**. Rendering a shared page needs a
+system library that does not exist before 18.6, and cannot be shipped inside the
+app.
+
+## v2.21.0 — the last pound
+
+_2026-08-15_ · [changes since v2.20.8](https://github.com/ecliptik/onigiri/compare/v2.20.8...v2.21.0)
+
+A morning weigh-in a fraction under the target made the Goal screen say four
+things at once: a full progress bar reading **more than the whole journey**, a projection
+promising the target in five days, an orange **Target must be below your current
+weight.**, and no congratulations anywhere.
+
+None of them was wrong on its own. Each was reading a *different weight*, and
+nothing on screen said which. Three notions of "now" were in play — the raw last
+weigh-in, the seven-day average of your daily lows, and a fitted trend — and the
+only one your budget is actually built from was visible solely inside a
+collapsed disclosure.
+
+Now anything that reaches a **verdict** — the progress bar, the celebration,
+whether a target is even valid — runs on that same seven-day average. The raw
+weigh-in is left to the one row that reports a measurement: **Current weight**.
+
+The app knew "under way" and "reached" and nothing in between, which is why an
+arrival rendered as a form error. There is a third state now:
+
+> ⚑ **Almost there — 0.8 lb to go.**
+> Your target is judged on the 7-day average of your daily lows, now N lb.
+> A few more mornings at this weight finishes it.
+
+The **Keep going** chips appear there too, not just after the celebration. They
+are the only route that keeps your journey intact, and needing to hand-edit
+instead re-stamped the start and re-zeroed a bar with most of a journey behind
+it. Editing a target by hand now keeps the journey as well, as long as you are
+moving it *down* — same journey, further destination.
+
+Its blue line averaged raw weigh-ins, the last weight series in the app that
+did. So it ended about two pounds above the figure your budget is built from,
+and a day you weighed twice pulled it up more than a day you weighed once —
+which measures weighing habits more than body mass. It follows your **daily
+lows** now, and its right-hand end equals the weight under *How budget is set*,
+to the digit.
+
+Evening weigh-ins fade into the background of the scatter, and the vertical
+scale is set by the lows, so one late-night reading can no longer decide how
+tall the chart is.
+
+Inside a pound of your target the required deficit is simply **0**. It works out
+to 3,500 ÷ days-remaining calories per pound — about 194 kcal/day at eighteen
+days out — so the final pound used to swing the day's allowance on water weight
+and then fall off a cliff. And when there is no deficit left to hit, the Today
+section says so, including the part that was always true and never stated: any
+deficit earns the day.
+
+Tapping a food to look at it marked it **recent** and floated it to the top of
+the list, so backing out without logging left everything reordered underneath
+you. Recent means logged now — not looked at.
+
+A meal drew its mark in Favorites, in search results and in the Log sheet, but
+not in Foods → Meals, so the same meal looked like two different things
+depending on where you found it. It is marked everywhere.
+
+**The watch could not tell meals from foods at all** — nothing in the sync
+payload said which — so its rows now carry the mark too, drawn with whichever
+icon you have chosen on the phone.
+
+**Tapping Today goes to today.** Paging back through the week used to leave the
+navigation bar as the only way home.
+
+**Moving a log to another day is findable.** That has worked for several
+releases, but the row sat at the very bottom of the edit sheet, below a meal's
+entire ingredient list, and read as a feature the app did not have. It is
+directly under **Will log** now, beside the meal slot.
+
+## v2.20.8 — call it what you like
+
+_2026-08-13_ · [changes since v2.20.7](https://github.com/ecliptik/onigiri/compare/v2.20.7...v2.20.8)
+
+The app had four names for one quantity. Today's meter said **Intake**, the
+budget card below it said **eaten**, Details said **logged**, and a caption on
+Goal had just started saying **consumed**. All four meant the food energy you
+have taken in.
+
+Rather than pick one and impose it, it is now yours to choose:
+**Settings → Appearance → Call it**, offering Eaten, Intake, or Consumed. Eaten
+is the default. Whatever you pick is what every one of those surfaces says.
+
+The three words are not grammatically interchangeable, which shaped the
+implementation more than the setting did: "1,100 of 2,128 kcal eaten" reads
+fine and "…kcal intake" does not. So the word is handed out as a noun and every
+sentence puts it in a noun slot — the budget card reads "Intake 1,100 of 2,128
+kcal" now — where no choice can break the sentence around it.
+
+One thing that deliberately did not move: the Calorie display option still
+stores itself as "eaten" whatever it is called on screen. That raw value is a
+preference people already have, and renaming it would silently reset it.
+
+## v2.20.7 — Goal reads shorter
+
+_2026-08-13_ · [changes since v2.20.6](https://github.com/ecliptik/onigiri/compare/v2.20.6...v2.20.7)
+
+Two captions on the Goal screen were explaining the same thing, which is most of
+why each one was long. They have separate jobs now. The Today footer says what
+the number is — *Eaten of today's budget, which grows as you move* — and the
+disclosure, the one place the mechanism belongs, says how it is built.
+
+That disclosure is **How budget is set**, a word lighter than it was.
+
+Its own caption went through two drafts. The short version gapped a noun —
+"Resting energy is credited at midnight, active as you earn it" — which reads as
+though resting energy becomes active rather than naming a second kind of it.
+Both halves keep the noun.
+
+Underneath, names that had outlived the sections they described: a function
+called `dailyPlanSection` that renders no "Daily plan", another called
+`startSection` that renders Progress, and a doc comment describing an "An
+average day" section that moved into the disclosure two releases ago —
+contradicting the code directly beneath it.
+
+The maintenance UI test came with them. It still asserted a section header
+deleted three releases back, and being opt-in it had never run to notice. Its
+companion assertion had rotted more quietly: "no deficit row in maintenance"
+passed whether or not the app was correct, because that row moved inside a
+collapsed group and absence is free while the group is shut. It now proves the
+group open before asserting anything is missing from it.
+
+## v2.20.6 — a milestone is a line, not a card
+
+_2026-08-11_ · [changes since v2.20.5](https://github.com/ecliptik/onigiri/compare/v2.20.5...v2.20.6)
+
+v2.20.5 gave every 5 lb rung a card of its own on Today. That made a rung look
+like an arrival, stacked a ✕ directly above a chevron so two controls read as
+one crowded control, and promised seven cards over a long journey.
+
+A rung is a line in the **Daily goal** card now, under the scale movement that
+earned it: *5 lb down · 10 lb to your target*. Only hitting the target still
+gets a card — and that card loses its chevron, since its own text already says
+where the tap goes and nothing should sit under the ✕.
+
+The line lasts the day and then goes quietly. That deletes the whole dismissal
+apparatus with it: no ✕, no count, no re-arm, nothing to keep in step. What is
+recorded is the deepest rung and the day it was first SEEN rather than first
+crossed — a rung passed while the app was closed is still news the next time it
+opens.
+
+## v2.20.5 — View Food
+
+_2026-08-11_ · [changes since v2.20.4](https://github.com/ecliptik/onigiri/compare/v2.20.4...v2.20.5)
+
+The door a logged food gained in v2.20.4 is called **View Food** now. "Edit
+food" promised more than the row does: it opens the food, and what happens
+there is your business — most of the time a look rather than a change.
+
+The caption underneath follows. It described editing, which contradicted a row
+that no longer says edit; it now describes changes, which is true whichever you
+came to do: changes to the food apply to future logs, not to the entry you're
+looking at.
+
+Nothing else in the app moved. The rest of this tag is housekeeping in the
+project's own notes — a watch-install chronology that the deploy script and a
+watchOS update between them made unnecessary, and a description of the Goal
+screen that stopped matching the Goal screen two releases ago.
+
+## v2.20.4 — a logged food can open the food it came from
+
+_2026-08-11_ · [changes since v2.20.3](https://github.com/ecliptik/onigiri/compare/v2.20.3...v2.20.4)
+
+Tap a logged meal in the log and you get its components, each one a door into
+that food's editor. Tap a logged food and you got nothing: the portion sheet's
+only route to a food was through a meal's Contains rows, and a plain food has no
+Contains section.
+
+It now offers **Edit food**, with the same treatment a Contains row gets — a real
+button with a chevron, and only when the food is still findable. A food logged
+from an online search and never saved, or one since renamed, simply has no row;
+nothing to tap beats a tap that opens nothing.
+
+Meals are deliberately left out of that match. A meal's name belongs to a meal,
+and a food that happened to share it would open the wrong thing. The match
+itself is exact on the normalized name rather than a substring, so "Chicken
+burrito" cannot reach "Chicken breast".
+
+While you're editing an entry that already exists, the section now says what the
+door does and doesn't do: the food changes for future logs, and this entry keeps
+the numbers it was logged with. A logged meal's breakdown already carried that
+caveat; the single-food case needed it too — otherwise the obvious move is to
+"fix" an entry's calories there and watch nothing happen.
+
+## v2.20.3 — the way down marked, the way back up noticed
+
+_2026-08-11_ · [changes since v2.20.2](https://github.com/ecliptik/onigiri/compare/v2.20.2...v2.20.3)
+
+The chart has drawn 5 lb rungs since the progress bar landed, and passing one
+never got a word. Today's card now marks it — quieter than the target's: shown
+once, dismissible, no re-arm. A 40 lb journey posts seven of these, and if each
+nagged like the target's card the target would stop feeling like an arrival.
+
+They are judged on the same sustained basis as the target rather than on the
+latest weigh-in, so a rung reached by one light morning isn't reached. The
+acknowledgement is a single number — the deepest mark announced — so dismissing
+"15 lb down" settles everything at or below it while a later 20 lb mark still
+shows. Starting a new goal clears it, because a new journey re-derives its
+rungs; continuing past a target you reached does not, because those rungs are
+the same ones.
+
+**Maintenance has always had an anchor and never looked at it.** If your 7-day
+weight settles 5 lb above the weight you're holding near, the Goal screen now
+says so once, in plain text, with "Set a new goal" attached. No card on the
+screen you open every morning, no badge, no colour, nothing to dismiss. It is
+the only notice in this app carrying bad news, and it is built as an offer.
+
+**A meal shows everything it contains.** The builder had kcal and whichever
+single nutrient your first tracked slot names; the rest were sitting in the
+foods, unsummed. A collapsed Nutrition breakdown now adds them up through the
+same rows the day's detail screen uses — scaled by each member's quantity, and
+silent about nutrients none of the foods recorded. Estimated components count,
+and it says so, because leaving them out would have made the breakdown disagree
+with the total right above it.
+
+Smaller, on Goal: Progress leads with Starting weight, then Starting date. And
+the unit moved out of the label on every field that takes one — "Weight (lb)"
+sat directly under "From Apple Health  200.2 lb", the same fact in two places
+depending on whether you could type in it. Three fields did that, all editable;
+they now read like the rows around them.
+
+## v2.20.2 — one budget on the Goal screen
+
+_2026-08-10_ · [changes since v2.20.1](https://github.com/ecliptik/onigiri/compare/v2.20.1...v2.20.2)
+
+v2.20.1 sorted Goal's numbers into sections, and left two of them a screen apart
+both labelled "Budget" — "which makes me think they should be the same". They
+never could be. One is a forecast from your recent burn; the other is a live
+count of what today has earned. Same arithmetic, different spans.
+
+Only one of them is on the visible screen now. **Today** reads
+`Budget 1,100 / 1,532 kcal` — eaten of what today allows — over the burn that
+produces it. The average-day pair moved into **How the budget is set**, where a
+projection belongs beside the rest of the derivation and its label has the
+context to mean something.
+
+The fraction is deliberately not today's budget over the average day's. Those
+are different quantities, and on an active day the first exceeds the second, so
+that fraction would render past 100% and break its own metaphor. Eaten over
+today's budget cannot.
+
+**Progress since** and **Progress** were one question split across a screen —
+since when, and how far. They are one section now: the start date and weight,
+then the banked total and the 30-day comparison. Its explainer moved from the
+section footer to a caption under the rows it explains, since a footer there
+would now trail the totals and read as describing those instead.
+
+Smaller: "Weight then" and "Weight used" are both just **Weight** — the sections
+they sit in already say which weight — and the disclosure is **How the budget is
+set**.
+
+One thing that did NOT change, on purpose: the burn row does not say "so far".
+The day's burn is active energy earned to now PLUS the whole day's resting,
+credited from midnight. Calling it "so far" would contradict the Details screen,
+which shows what Health has actually recorded — a collision this app has already
+made once. The caption carries the distinction instead.
+
+## v2.20.1 — Goal's numbers, sorted by the question they answer
+
+_2026-08-10_ · [changes since v2.20.0](https://github.com/ecliptik/onigiri/compare/v2.20.0...v2.20.1)
+
+Nine rows sat under one "Daily plan" header answering four unrelated
+questions — the controls, the derivation, today's live figure, and what the
+scale has done — with nothing marking where one ended and the next began. The
+word "budget" meant three things on that screen at once: the average-day
+forecast, today's number, and a section header that named no budget at all.
+
+Worst of it, the two budgets sat adjacent, similarly labelled, differently
+united and hundreds of kcal apart. They were never in conflict — one is a forecast from
+your recent burn, the other a live count of what today has earned, and they
+converge by bedtime — but nothing on screen said so.
+
+Four sections now, each a plain question. **Today** leads, because it is the
+only number here you act on and it used to be seventh. **An average day**
+follows, with the burn directly above the budget it feeds so the subtraction
+still reads off the screen. **How your budget is set** collapses the
+derivation — the weight it comes from, the deficit that implies, the resting
+estimate the day is floored by — taking the screen from nine rows to five
+without hiding a single figure, and the weight-basis picker stays one tap from
+the numbers it governs. **Progress** goes last, being the question you ask after
+the fact rather than one you act on now.
+
+The headers now carry the distinction the row labels used to spell out, so
+neither budget needs a qualifier. A Budget under Today and a Budget under An
+average day cannot be read as competing answers, where two "Budget, …" rows a
+thumb apart always could.
+
+No arithmetic moved, and nothing was removed. The old "Calorie budget" section
+is gone as a header — its resting row is an input to the math and its caption is
+that math's explanation, so both moved into the collapsed group, which still
+appears when no plan can be computed. The aggressive-pace warning stays outside
+it: a warning you have to open something to see is not a warning.
+
+## v2.20.0 — what's in the meal, and what comes after the goal
+
+_2026-08-10_ · [changes since v2.19.4](https://github.com/ecliptik/onigiri/compare/v2.19.4...v2.20.0)
+
+Building a meal showed you the library and moved your picks to the top of it.
+That was the only sign a food was in the meal — that, and its portion no longer
+reading as a dash. Search for the next food and the ones already chosen were
+filtered out of sight, while the running Total still counted them.
+
+There is now one section that IS the meal, above the library it draws from. It
+never filters and never re-sorts: a search filters the LIBRARY, so the meal
+stays on screen while you hunt. Each row reports what it CONTRIBUTES rather
+than what one serving costs — 380 kcal · 190 each — so the Total reads as a sum
+of the rows above it, and swiping removes any of them. Components an estimate
+minted sit in that same list, because "what is in this meal" should have one
+answer in one place.
+
+Hitting your goal was a single line on a screen you had to go looking for, and
+it fired off the wrong number: it compared the raw last weigh-in while the
+budget beside it planned from the smoothed 7-day basis, so one light morning
+could congratulate you on a week nowhere near target.
+
+Reaching it is now a sustained result — the 7-day basis at or below target
+across at least three weigh-in days, the same window the budget plans from. Three
+days inside seven is impossible for anyone who weighs weekly, so the window
+widens until it finds three, capped at thirty days; past that there is nothing
+recent enough to call current.
+
+Today carries the moment: a card wearing your reward badge, reporting the arc
+rather than the finish line — "10 lb down" — and opening Goal for the decision.
+It appears once per target, dismisses, and returns once after two weeks if
+nothing was chosen. That last part is not politeness. Sitting at target
+undecided grades days more permissively than either real mode, and nothing else
+on screen says so.
+
+Goal offers the two moves that actually exist. "5 lb more" measures from the
+target you just hit, so it lands on a round number, with a date that can be met
+— a fresh target against a stale date divides by the days remaining and asks for
+17,500 kcal a day. And continuing keeps the journey: the bar still measures the
+whole arc instead of re-zeroing at the moment you earned it.
+
+Smaller: the meal builder's serving field is a plain number again, since that is
+what a serving looks like everywhere else in the app, and Settings now says once
+that your first tracked metric is the one riding alongside calories on food,
+meal, and log rows.
+
+## v2.19.4 — a read you can trust, instead of a lock you can't detect
+
+_2026-08-09_ · [changes since v2.19.3](https://github.com/ecliptik/onigiri/compare/v2.19.3...v2.19.4)
+
+The widgets kept a guard against rendering a sealed Health store as a confident
+zero day. The guard asked the wrong question: it probed one sample type and
+called the store locked only if the query THREW. Apple does not promise a
+throw — a locked device is allowed to answer empty, and an empty answer is
+indistinguishable from "no samples" through that API. The probe came back
+empty too, and said "open".
+
+The phone's own journal caught three of them in one day, one in the same minute
+as a healthy read either side:
+
+    plan 08-08 08:39 act=51 restM=677 restE=1824 wt=212   <- good
+    plan 08-08 08:39 act=0  restM=0   restE=NIL  wt=NIL   <- sealed
+
+So the question changed. Rather than interrogate the store, validate the result
+against something a good read must produce: a nil weight standing beside a
+weight cached today or yesterday is a bad read, while the same nil with nothing
+cached recently is a user who has no weigh-ins and must be believed. One sample
+query, the same cost as the probe it replaces.
+
+Three quieter faults went with it: the weight cache cleared itself on a nil, so
+the first bad read destroyed the evidence the next one is judged against; both
+widget paths wrote their computed state as "last good" unconditionally, so a
+device locking mid-read cached a zero day and served it back as stale-but-true;
+and the burn observer wrote that same zero as its rendered baseline, making the
+next fire measure a jump that never happened.
+
+## v2.19.3 — one weight, both wrists
+
+_2026-08-08_ · [changes since v2.19.2](https://github.com/ecliptik/onigiri/compare/v2.19.2...v2.19.3)
+
+The wrist and the phone quoted budgets more than a hundred kcal apart, twice in
+one evening. The banked figure always matched, because both
+devices read the same Health samples. Only the deficit TARGET diverged — the
+one number derived from a weight.
+
+The phone pushed its RAW last weigh-in to the watch, and the watch prefers
+whatever arrives over its own Health read. So from the day v2.19.0 moved the
+target onto the 7-day mean of daily lows, the two devices planned from two
+different weights about a pound apart, which at 3500/daysRemaining kcal per
+pound is exactly the gap seen twice in one night.
+Neither device was wrong about its own arithmetic.
+
+The write-through cache now holds the basis rather than the raw reading, and
+the basis SETTING rides the context too — the watch computes its own whenever
+the synced weight ages out, and cannot match a phone whose basis it does not
+know.
+
+No watch build is needed to collect this: v2.16.4 already prefers the synced
+plan weight, so the phone alone closes the gap.
+
+## v2.19.2 — room for the confirm buttons, without losing VoiceOver
+
+_2026-08-08_ · [changes since v2.19.1](https://github.com/ecliptik/onigiri/compare/v2.19.1...v2.19.2)
+
+The new-food form's bar held Cancel, a title, and two confirm buttons, and read
+as crowded. The title yields — only there, and only because the pair needs the
+room; editing and the meal form keep theirs.
+
+A nav-bar title is also what VoiceOver announces when a sheet appears, so the
+form keeps a heading with no visual weight. Dropping the title without it would
+have opened the form onto a text field with no statement of where you are.
+
+## v2.19.1 — clearer weight rows, honest 30-day prediction
+
+_2026-08-08_ · [changes since v2.19.0](https://github.com/ecliptik/onigiri/compare/v2.19.0...v2.19.1)
+
+The Daily plan's weight row was doing two jobs at once — showing the period and
+the weight it produced. It is two rows now, "Based on" and "Weight used", and
+the caption that existed to explain the crowding is gone.
+
+"Last 30 days · predicted" now excludes untracked days, the same way Total
+deficit always has. A day with burn and nothing logged reads as a ~2,500 kcal
+deficit that was never earned, and on a row whose whole job is to be compared
+against the scale, that phantom loss read as the scale lagging.
+
+## v2.19.0 — a deficit target that doesn't follow the clock
+
+_2026-08-08_ · [changes since v2.18.0](https://github.com/ecliptik/onigiri/compare/v2.18.0...v2.19.0)
+
+The daily target is derived from your weight, and the raw last weigh-in made
+that a coin flip: evening weight runs 2–3 lb above the next morning, and near a
+target date each pound is worth 150–700 kcal of allowance. Stepping on the
+scale could move the day's budget by more than a meal.
+
+Each day now collapses to its lowest reading — the morning one — and those are
+averaged over seven days. Goal → Weight used switches back to the last weigh-in
+if you prefer it.
+
+The Goal tab also shows its own arithmetic now: Weight used → To lose → Deficit
+needed → Average daily burn → Budget, average day → Budget, today, each row
+derived from the two above it.
+
+## v2.18.0 — answer on device when the provider can't be reached
+
+_2026-08-08_ · [changes since v2.17.0](https://github.com/ecliptik/onigiri/compare/v2.17.0...v2.18.0)
+
+Estimating and identifying food with a bring-your-own AI provider failed
+outright in an area with no cell coverage, while the phone's own model sat
+idle. When the chosen provider cannot be reached — no signal, a DNS failure, a
+rate limit, an outage — Apple Intelligence answers instead, across every AI
+feature: estimates, label refinement, screenshot and sign reading, and photo
+identification.
+
+A provider that ANSWERS is never second-guessed, so a rejected API key still
+surfaces as a failure rather than being masked forever. Settings → AI → Fall
+back to Apple Intelligence, on by default. Nothing leaves the device when it
+fires; the caption names the engine that actually answered.
+
+## v2.17.0 — log without saving, search that crosses the scopes
+
+_2026-08-08_ · [changes since v2.16.4](https://github.com/ecliptik/onigiri/compare/v2.16.4...v2.17.0)
+
+Logging a one-off no longer means enlarging your food library: reached from
+Today's Log button, the food form offers Log and Log & Save, and plain Log
+writes the entry with no library row at all.
+
+Search now looks at the whole library instead of the selected scope. Searching
+a food while the Meals tab was up used to find nothing, with the food sitting
+right there; results come back grouped as Favorites, Foods, Meals, and
+Recently Logged.
+
+## v2.16.4 — durable plan trail, guarded burn baseline
+
+_2026-08-07_ · [changes since v2.16.3](https://github.com/ecliptik/onigiri/compare/v2.16.3...v2.16.4)
+
+Every plan computation records the budget's inputs to a bounded App Group
+trail, so a budget that moves without visible cause can be explained
+after the fact instead of requiring someone to be watching.
+
+Fixes a real defect it found on its first day: isStoreLocked() probes a
+single HealthKit type and can report 'open' while weight, height and the
+day summary all read empty. Such a read wrote a burn-gate baseline of
+zero. Baselines now come only from a read that produced a real plan.
+
+Also: v2.16.0's burn-driven widget refresh is verified on real workouts.
+
+## v2.16.3 — the cause, named
+
+_2026-08-06_ · [changes since v2.16.2](https://github.com/ecliptik/onigiri/compare/v2.16.2...v2.16.3)
+
+HKStatisticsQuery drops a watch-written sample when an iPhone-written
+sample of the same type lands close to it in time: the cross-device
+de-duplication that stops the two double-counting steps, misfiring on
+food and water where every log is a distinct event. Confirmed on device
+for both food (17 s apart) and water (2 s apart); isolated watch logs
+and same-device clusters are unaffected.
+
+No behaviour change — the sample-sum fix in v2.16.2 already reads the
+truth. This release carries the diagnosis, a diagnostic that prints
+sourceRevision.productType (the only field that names the writing
+device), and a durable burn journal for verifying widget refresh after
+the fact.
+
+## v2.16.2 — logged totals read the samples
+
+_2026-08-05_ · [changes since v2.16.1](https://github.com/ecliptik/onigiri/compare/v2.16.1...v2.16.2)
+
+Intake, sodium, water, the tracked slots and the per-day intake behind
+the calendar and streak are summed from plain sample queries. A
+statistics query sometimes omits food samples that a sample query
+returns from the same store, predicate and window; measured, not
+theorised — five explanations for it have been refuted and the cause is
+still open, which is precisely why the totals no longer depend on one.
+
+Supersedes v2.16.1's correlation sums: same fix, but other apps' food
+counts again and it measured faster. Burn deliberately keeps the
+statistics collection — it is measured by both devices at once, so the
+cross-source merge is correct there.
+
+## v2.16.1 — food totals agree with the log
+
+_2026-08-04_ · [changes since v2.16.0](https://github.com/ecliptik/onigiri/compare/v2.16.0...v2.16.1)
+
+Intake, sodium and water are summed from the same correlations and
+samples the day's list renders, not from a merged statistics query.
+HealthKit merges cumulative types across sources by priority rather than
+adding them, so food logged on the watch could be dropped against food
+logged on the phone in the same window: a day read at well under half of what
+was logged.
+
+The calendar, badges and streak were judged on the same undercount, which
+could mark a fully logged day untracked. Burn keeps the statistics
+collection — there the cross-source merge is correct.
+
+## v2.16.0 — widgets follow burn
+
+_2026-08-04_ · [changes since v2.15.0](https://github.com/ecliptik/onigiri/compare/v2.15.0...v2.16.0)
+
+The home-screen widget and watch complications now update as activity
+raises the day's budget, instead of holding their morning number until
+the app was opened. Adds a gated active-energy observer on both
+devices, an explicit foreground reload, a waking-hours poll cadence,
+a scheduled wake chain on the watch, and a last-good snapshot so a
+sealed Health store can never render as a zero day.
+
+Also fixes three launch crashes found on device: reminder taps
+abort()ing the app from a nonisolated delegate callback, the
+notification delegate registering after launch, and the watch app
+failing to launch from a WatchKit call in App.init.
+
+## v2.15.0 — one budget figure a day: resting up front, active earned
+
+_2026-08-03_ · [changes since v2.13.1](https://github.com/ecliptik/onigiri/compare/v2.13.1...v2.15.0)
+
+## v2.13.1 — widget midnight rollover, scanner freeze
+
+_2026-07-26_ · [changes since v2.13.0](https://github.com/ecliptik/onigiri/compare/v2.13.0...v2.13.1)
+
+## v2.13.0 — nutrition from a screenshot
+
+_2026-07-24_ · [changes since v2.12.0](https://github.com/ecliptik/onigiri/compare/v2.12.0...v2.13.0)
+
+## v2.12.0
+
+_2026-07-23_ · [changes since v2.11.1](https://github.com/ecliptik/onigiri/compare/v2.11.1...v2.12.0)
+
+## v2.11.1
+
+_2026-07-22_ · [changes since v2.11.0](https://github.com/ecliptik/onigiri/compare/v2.11.0...v2.11.1)
+
+The streak warning fires only when nothing is logged (it gated on a
+burn-so-far goal check and fired every evening on logged days).
+
+## v2.11.0
+
+_2026-07-22_ · [changes since v2.10.1](https://github.com/ecliptik/onigiri/compare/v2.10.1...v2.11.0)
+
+Unit preferences (kg / mL / salt-gram display, Automatic by region)
+and the Settings restructure (rows-based main screen, seven subscreens,
+discard gating, truthful summaries, the four-lens audit round).
+
+## v2.10.1
+
+_2026-07-20_ · [changes since v2.10.0](https://github.com/ecliptik/onigiri/compare/v2.10.0...v2.10.1)
+
+Bug fix (93b176b): editing a logged entry kept normalizing the portion
+to 1 serving — the count now rides the log as OnigiriQuantity metadata,
+so 3 logged hot dogs edit as Serving 3 and reducing to 2 means two hot
+dogs, not 0.66 of a triple. Edits and undo re-logs also stop dropping
+the ✨ AI-provenance mark.
+
+## v2.10.0
+
+_2026-07-20_ · [changes since v2.9.0](https://github.com/ecliptik/onigiri/compare/v2.9.0...v2.10.0)
+
+The notifications round (a22f684): every reminder time is now a
+Settings picker (defaults unchanged), water pacing re-paces over the
+chosen check-ins, and Preview Reminders works — the replan sweep was
+cancelling its own preview samples.
+
+## v2.9.0
+
+_2026-07-20_ · [changes since v2.8.2](https://github.com/ecliptik/onigiri/compare/v2.8.2...v2.9.0)
+
+The maintenance round (44f17c8): Maintain gains a hold-near anchor,
+a drift readout, and a ±100 kcal band badge; window-change reads
+drop the moving-average lag; reaching a lose target celebrates and
+offers the switch; the Goal form joins the Cancel ↔ Save pattern
+with select-on-focus weight fields.
+
+## v2.8.2
+
+_2026-07-20_ · [changes since v2.8.1](https://github.com/ecliptik/onigiri/compare/v2.8.1...v2.8.2)
+
+The goal-projection fix (808c4a9): the Goal tab's finish date now
+comes from a recency-weighted fit of raw weigh-ins, so a fresh diet
+projects at its real rate instead of weeks conservative.
+
+## v2.8.1
+
+_2026-07-20_ · [changes since v2.8.0](https://github.com/ecliptik/onigiri/compare/v2.8.0...v2.8.1)
+
+The watch parity round (7bf4f8b): the phone's plan inputs sync to the
+watch so both devices derive the same calorie budget, and a phone log's
+context push now wakes the watch complications instead of leaving them
+to the hourly poll.
+
+## v2.8.0
+
+_2026-07-20_ · [changes since v2.7.1](https://github.com/ecliptik/onigiri/compare/v2.7.1...v2.8.0)
+
+The 2026-07-20 quality day: accessibility round (a409c5a),
+performance round (aa7dd5e), security round (2ab202e), and the
+six-lens pre-submission round (717042d). The 2026-07-16 health check
+is fully closed and the store schema is versioned ahead of App Store
+distribution.
+
+## v2.7.1
+
+_2026-07-20_ · [changes since v2.7.0](https://github.com/ecliptik/onigiri/compare/v2.7.0...v2.7.1)
+
+## v2.7.0
+
+_2026-07-20_ · [changes since v2.6.1](https://github.com/ecliptik/onigiri/compare/v2.6.1...v2.7.0)
+
+## v2.6.1
+
+_2026-07-19_ · [changes since v2.6.0](https://github.com/ecliptik/onigiri/compare/v2.6.0...v2.6.1)
+
+## v2.6.0
+
+_2026-07-19_ · [changes since v2.5.15](https://github.com/ecliptik/onigiri/compare/v2.5.15...v2.6.0)
+
+## v2.5.15
+
+_2026-07-19_ · [changes since v2.5.14](https://github.com/ecliptik/onigiri/compare/v2.5.14...v2.5.15)
+
+## v2.5.14
+
+_2026-07-19_ · [changes since v2.5.13](https://github.com/ecliptik/onigiri/compare/v2.5.13...v2.5.14)
+
+## v2.5.13
+
+_2026-07-19_ · [changes since v2.5.12](https://github.com/ecliptik/onigiri/compare/v2.5.12...v2.5.13)
+
+## v2.5.12
+
+_2026-07-18_ · [changes since v2.5.11](https://github.com/ecliptik/onigiri/compare/v2.5.11...v2.5.12)
+
+## v2.5.11
+
+_2026-07-18_ · [changes since v2.5.10](https://github.com/ecliptik/onigiri/compare/v2.5.10...v2.5.11)
+
+## v2.5.10
+
+_2026-07-18_ · [changes since v2.5.9](https://github.com/ecliptik/onigiri/compare/v2.5.9...v2.5.10)
+
+## v2.5.9
+
+_2026-07-18_ · [changes since v2.5.8](https://github.com/ecliptik/onigiri/compare/v2.5.8...v2.5.9)
+
+## v2.5.8
+
+_2026-07-18_ · [changes since v2.5.7](https://github.com/ecliptik/onigiri/compare/v2.5.7...v2.5.8)
+
+## v2.5.7
+
+_2026-07-17_ · [changes since v2.5.6](https://github.com/ecliptik/onigiri/compare/v2.5.6...v2.5.7)
+
+## v2.5.6
+
+_2026-07-17_ · [changes since v2.5.5](https://github.com/ecliptik/onigiri/compare/v2.5.5...v2.5.6)
+
+## v2.5.5
+
+_2026-07-17_ · [changes since v2.5.2](https://github.com/ecliptik/onigiri/compare/v2.5.2...v2.5.5)
+
+## v2.5.2
+
+_2026-07-16_ · [changes since v2.5.1](https://github.com/ecliptik/onigiri/compare/v2.5.1...v2.5.2)
+
+Backup files now use .complete file protection: encrypted and
+unreadable while the device is locked, past the iOS default that
+already encrypts them at rest. Backup I/O is foreground-only, so the
+lock restriction never bites. The library store and widget mirror stay
+at the default (they need background access); the FDC key stays in the
+Keychain; HealthKit protects the logs itself.
+
+## v2.5.1
+
+_2026-07-16_ · [changes since v2.5.0](https://github.com/ecliptik/onigiri/compare/v2.5.0...v2.5.1)
+
+Ask Siri about any macro ("How much protein have I had in Onigiri?") —
+tracked nutrients answer against their Today target. The calorie
+headline now shows "kcal left" by default (positive, no minus; the
+signed balance is one tap away in Settings). Backups can never
+overwrite each other and never snapshot an empty library. And the
+Today tab bar no longer gets stuck minimized — the day-paging swipe
+that caused it is gone (nav-bar chevrons page days).
+
+## v2.5.0
+
+_2026-07-16_ · [changes since v2.4.0](https://github.com/ecliptik/onigiri/compare/v2.4.0...v2.5.0)
+
+Say "Log water in Onigiri," "Log chicken and rice in Onigiri," or ask
+"How many calories do I have left in Onigiri?" — Siri logs and answers
+on the phone and the watch, no setup. With Apple Intelligence,
+"Describe a food in Onigiri" estimates whatever you ate and logs it
+after you confirm. Under the hood: the App Shortcuts registration fix
+(intents now compile into each target — on-device indexing rejects
+SPM-package metadata, broken invisibly since 2.1), Siri pronunciation
+hints, ounces parameter for water automations, and backup files that
+can never overwrite each other.
+
+## v2.4.0
+
+_2026-07-16_ · [changes since v2.3.0](https://github.com/ecliptik/onigiri/compare/v2.3.0...v2.4.0)
+
+Point the scan camera at the food itself on Apple Intelligence
+devices: Onigiri names the dish, lists its typical components, and
+estimates calories and sodium for review — on-device, review-first,
+and the same camera still does barcodes and labels. Say "Log water in
+Onigiri" or "Log chicken and rice in Onigiri" and Siri logs it; the
+same shortcuts ride Spotlight and the Action button. Under the hood: a
+golden-set eval suite for every Foundation Models affordance, audit
+round 2 (WatchSync wire format pinned, scene-restored tabs, stale-sim
+test guards), and reminders that replan when logs arrive from the
+watch, widgets, Control Center, or Siri.
+
+## v2.3.0
+
+_2026-07-16_ · [changes since v2.2.0](https://github.com/ecliptik/onigiri/compare/v2.2.0...v2.3.0)
+
+No code changes since 2.2.0 beyond the relicense: everything through
+v2.2.0 remains MIT; v2.3.0 and later are PolyForm Noncommercial 1.0.0.
+
+## v2.2.0
+
+_2026-07-16_
+

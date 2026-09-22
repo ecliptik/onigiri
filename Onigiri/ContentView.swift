@@ -1,0 +1,704 @@
+import SwiftUI
+import SwiftData
+import UIKit
+import OnigiriKit
+
+/// String-backed so @SceneStorage can persist the selection across
+/// scene teardowns.
+enum AppTab: String, Hashable {
+    case today, foods, goal, calendar
+    /// The detached corner "+" (the system search-tab slot, Music-style).
+    /// Never stays selected — ContentView bounces it and routes.
+    case log
+}
+
+struct ContentView: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.scenePhase) private var scenePhase
+    /// Restored across scene teardowns (iPad multitasking, memory
+    /// pressure) so the app reopens on the tab it was left on; a fresh
+    /// launch still lands on Today, the app's home.
+    @SceneStorage("selectedTab") private var selectedTab: AppTab = .today
+    @State private var quickActions = QuickActions.shared
+    @AppStorage(SharedStore.hasOnboardedKey, store: SharedStore.defaults) private var hasOnboarded = false
+    /// Latched in the task below: once onboarding is showing, saving a
+    /// goal mid-flow must NOT dismiss it (only finish/skip does, via
+    /// hasOnboarded) — gating live on goals.isEmpty cut the flow short
+    /// the moment the goal page saved.
+    @State private var showingOnboarding = false
+    /// The add-to-library chooser (Add Food / Add Meal), hosted HERE rather
+    /// than on FoodsView so it survives the +'s search-tab bounce (see the
+    /// .onChange below). Add Meal needs at least one saved food to build from.
+    @State private var showAddChooser = false
+    /// Set by the "+" tap interceptor when it routes; the bounce fallback
+    /// skips routing inside this window so a tap that somehow ALSO selected
+    /// the tab can't open the add flow twice.
+    @State private var lastInterceptedAdd: Date?
+    /// A nutrition document shared into the app, awaiting its picker.
+    /// An Optional request rather than a Bool, the same consumable
+    /// pattern the quick actions use.
+    @State private var sharedImport: SharedImport?
+    /// Set once, the one time the store wouldn't open at all and
+    /// OnigiriApp had to fall back to a fresh one — by the time this
+    /// checks, that already happened silently at launch, so this is the
+    /// only chance to tell the user their library was reset.
+    @State private var showStoreRecoveredAlert = false
+    /// Held so the working copy can be deleted on dismiss — by then the
+    /// binding itself is already nil.
+    @State private var lastSharedImport: SharedImport?
+    @Query private var foods: [Food]
+
+    var body: some View {
+        // The Group keeps the launch tasks alive in BOTH branches —
+        // rendering onboarding INSTEAD of the tabs (not over them) also
+        // keeps TodayView from firing the Health prompt contextlessly.
+        Group {
+            if showingOnboarding && !hasOnboarded {
+                OnboardingView()
+            } else {
+                #if DEBUG
+                // plans/PLAN-tab-bar-jank.md Phase 3/4: a stock TabView of
+                // the same shape, variants by launch argument, so the
+                // Liquid Glass stick can be bisected on a simulator with
+                // ONE build. Never reachable outside DEBUG.
+                if ProcessInfo.processInfo.arguments.contains("--tab-probe-stock") {
+                    StockTabProbe()
+                } else {
+                    mainTabs
+                }
+                #else
+                mainTabs
+                #endif
+            }
+        }
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            // The app-switcher snapshot otherwise shows the day's health
+            // numbers to anyone flipping through cards. Covered from
+            // .inactive on — the snapshot is taken before .background
+            // settles. (Also flashes during Control Center pulls; the
+            // standard trade for a health app.) WINDOW level, not an
+            // .overlay on this view tree: sheets present in UIKit layers
+            // ABOVE ContentView, so the old in-tree overlay left every
+            // sheet — the log, the forms, Settings with a revealed key —
+            // uncovered in the snapshot (2026-07-20 security audit).
+            PrivacyShieldWindow.setCovered(phase != .active)
+        }
+        .task {
+            // Scene restoration can hand back .log (the bounce-only "+"
+            // slot) if the snapshot landed mid-bounce; restoring INTO it
+            // renders Color.clear and the bounce onChange never fires
+            // for an initial value. Land on home instead.
+            if selectedTab == .log { selectedTab = .today }
+            if SharedStore.defaults.bool(forKey: SharedStore.recoveredFromCorruptStoreKey) {
+                SharedStore.defaults.removeObject(forKey: SharedStore.recoveredFromCorruptStoreKey)
+                showStoreRecoveredAlert = true
+            }
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--seed-sample-data") {
+                DebugSeeder.seedLibraryIfEmpty(context: context)
+            }
+            // The reset-roundtrip UI test's import path: the system file
+            // picker is unscriptable enough that the test restores the
+            // newest Documents/Backups file at launch instead. Runs
+            // before the onboarding check below, so a restored goal
+            // latches hasOnboarded exactly like an existing install.
+            if ProcessInfo.processInfo.arguments.contains("--import-latest-backup"),
+               let url = BackupService.latestBackup(),
+               let data = try? Data(contentsOf: url) {
+                _ = try? LibraryTransfer.importData(data, into: context)
+            }
+            #endif
+            PhoneSyncService.shared.activate {
+                PhoneSyncService.shared.push(from: context)
+            }
+            BackupService.backupIfDue(context: context)
+            ReminderScheduler.shared.activate()
+            // The app half of the refused-credential notice. Installed
+            // here rather than called from FoodIntelligenceRemote
+            // directly: that file also compiles into the share
+            // extension, which has no toast of its own and leaves this
+            // nil.
+            FoodIntelligence.onCredentialRejected = { provider in
+                ToastCenter.shared.show("\(provider) rejected your API key — check Settings")
+            }
+            // (The HealthKit log observer lives in OnigiriApp.init now —
+            // a background relaunch never runs this .task.)
+            // Existing installs never see onboarding: a goal means the
+            // app is already set up. Fresh installs latch it on. The
+            // context is asked directly — the seeder just ran in this
+            // same task, ahead of any @Query refresh.
+            if !hasOnboarded {
+                let goalCount = (try? context.fetchCount(FetchDescriptor<GoalSettings>())) ?? 0
+                if goalCount > 0 {
+                    hasOnboarded = true
+                } else {
+                    showingOnboarding = true
+                }
+            }
+            // A quick action may have launched the app before this view existed.
+            if let action = quickActions.pending {
+                quickActions.pending = nil
+                handle(action)
+            }
+            drainMenuInbox()
+        }
+        .alert("Library Reset", isPresented: $showStoreRecoveredAlert) {
+            Button("OK") {}
+        } message: {
+            Text("Onigiri's food library couldn't be opened and had to be reset. "
+                + "If you have a backup, restore it from Settings → Import Food Library.")
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                PhoneSyncService.shared.push(from: context)
+                // Explicitly, not as a side effect of the push above:
+                // that path reloads only when the sync payload's
+                // fingerprint moved, and the fingerprints are per-process
+                // (PhoneSyncService), so a COLD launch reloaded the
+                // widgets and a warm foreground reloaded nothing. "Just
+                // open the app" — the user's only workaround for a stale
+                // widget — therefore worked or didn't depending on
+                // whether iOS had kept the process alive. Throttled
+                // inside WidgetReloader; a tab flip must not spend the
+                // reload budget.
+                WidgetReloader.requestForegroundReload(kinds: WidgetKinds.phoneLogAffected)
+                BackupService.backupIfDue(context: context)
+                // Reminders replan from fresh state on every foreground —
+                // logging elsewhere (watch, Health) can't notify us.
+                ReminderScheduler.shared.replan()
+                // Belt and braces: consume any shortcut that arrived while no
+                // onChange observer was installed yet (cold-launch timing).
+                if let action = quickActions.pending {
+                    quickActions.pending = nil
+                    handle(action)
+                }
+                // A menu shared while the app was away. The share
+                // extension cannot open us, so the foreground IS the
+                // delivery — and this is the ordinary path, not the
+                // fallback.
+                drainMenuInbox()
+            } else {
+                // Leaving the foreground: run pending debounced work now —
+                // a suspended process never runs its sleeping flush tasks.
+                PhoneSyncService.shared.flushNow()
+                WidgetReloader.flushNow()
+            }
+        }
+        .onChange(of: quickActions.pending) { _, action in
+            guard let action else { return }
+            quickActions.pending = nil
+            handle(action)
+        }
+        .onChange(of: quickActions.dayRequest) { _, day in
+            // Calendar's "View day": land on Today, which consumes the
+            // date. Guarded on `selectedTab != .today`: a write of the
+            // value already in place is not free for a TabView (a
+            // selection re-commit re-runs the tab bar's transition —
+            // that was the "flashes twice" of 2026-09-15, when this
+            // fired a tick after the tap handler's own write). The case
+            // this exists for (View Day, a widget deep link) is exactly
+            // the one where selectedTab ISN'T already .today.
+            if day != nil, selectedTab != .today { selectedTab = .today }
+        }
+        .onChange(of: quickActions.goalRequest) { _, request in
+            // Today's Daily Goal card: open the Goal tab, then consume.
+            guard request != nil else { return }
+            quickActions.goalRequest = nil
+            selectedTab = .goal
+        }
+        // The Today-card widget's + button: the Log sheet for the day
+        // the widget was showing (backfill included). No day parameter
+        // means today.
+        .onOpenURL { url in
+            // A FILE arriving from elsewhere — Safari's share sheet, the
+            // Files app — is a nutrition document to import
+            // (plans/PLAN-menu-import.md). It comes through the same
+            // callback as the widget deep links because the app declares
+            // the PDF document type rather than shipping a share
+            // extension: no new target, no app-group hand-off, and the
+            // parse runs in the foreground app with its full memory.
+            if url.isFileURL {
+                // Not over a live import. Swapping a `.sheet(item:)`
+                // binding out from under a presented sheet is the
+                // dismissal race this file already documents, and the
+                // replaced request's `cleanUp` never runs because
+                // onDismiss doesn't fire on a swap. Dropping is the safe
+                // side HERE specifically: a Files URL is the user's own
+                // file and still sitting in Files, so re-opening it
+                // costs one tap — unlike an inbox deposit, which is why
+                // `drainMenuInbox` leaves its extras queued instead.
+                guard sharedImport == nil else { return }
+                // Opened in place from Files — the user's own file, so
+                // isOurs stays false and it survives being read.
+                sharedImport = SharedImport(
+                    item: url.pathExtension.lowercased() == "pdf"
+                        ? .document(url) : .image(url))
+                return
+            }
+            guard url.scheme == "onigiri" else { return }
+            switch url.host() {
+            case "log":
+                selectedTab = .today
+                if let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                    .queryItems?.first(where: { $0.name == "day" })?.value,
+                   let day = Self.deepLinkDay.date(from: raw) {
+                    QuickActions.shared.dayRequest = day
+                }
+                QuickActions.shared.quickLogRequest = .all
+            case "calendar":
+                // The month-stats widget: land on the Calendar tab, not
+                // wherever the app happened to be — and on the calendar
+                // itself, not on a month-detail screen left pushed from
+                // last time.
+                QuickActions.shared.calendarRootRequest = true
+                selectedTab = .calendar
+            default:
+                break
+            }
+        }
+        // On the outer Group, deliberately NOT on `mainTabs` — that view
+        // already carries the add-to-library sheet, and two .sheet
+        // modifiers on one view compete.
+        .sheet(item: $sharedImport, onDismiss: { lastSharedImport?.cleanUp(); lastSharedImport = nil }) { request in
+            Group {
+                switch request.item {
+                case .document, .link:
+                    MenuImportSheet(shared: request.item)
+                case .image(let url):
+                    SharedImageSheet(url: url)
+                }
+            }
+            .onAppear { lastSharedImport = request }
+        }
+    }
+
+    /// Take one waiting document from the share extension, if any. Only
+    /// one: a second sheet cannot present over the first, and `take()`
+    /// leaves the rest in place for the next foreground rather than
+    /// dropping them.
+    private func drainMenuInbox() {
+        #if DEBUG
+        viDebugLog("drainMenuInbox called: isClaimed=\(ShareInbox.isClaimed) sharedImportAlreadySet=\(sharedImport != nil)")
+        #endif
+        // Not while the share sheet still has it. The deposit is a net
+        // for an extension that DIED, and draining it under a live one
+        // put the same import on screen twice, where cancelling either
+        // left the other (the user, 2026-08-16). The claim expires on
+        // its own, so a killed extension still hands over.
+        guard !ShareInbox.isClaimed else { return }
+        guard sharedImport == nil, let taken = ShareInbox.take() else {
+            #if DEBUG
+            viDebugLog("drainMenuInbox: nothing to take")
+            #endif
+            return
+        }
+        #if DEBUG
+        viDebugLog("drainMenuInbox: took an item, presenting")
+        #endif
+        sharedImport = SharedImport(
+            item: taken.item, isOurs: true, inboxOriginal: taken.inboxFile)
+    }
+
+    private static let deepLinkDay: DateFormatter = {
+        let formatter = DateFormatter()
+        // Fixed format, fixed locale — matching BackupService's own
+        // stamp formatter, and the same "yyyy-MM-dd" DeficitTargetHistory
+        // uses everywhere else. Without an explicit locale, a device set
+        // to a non-Gregorian calendar could misparse the numeric fields
+        // (health-check audit, 2026-09-14; no deep-link producer sends a
+        // `day` today, so currently unreachable — hardening for when
+        // one does).
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    /// The TabView's selection, proxied so tapping Today can do more
+    /// than select it.
+    ///
+    /// The tab is called Today, so it goes to today — the way home from
+    /// a day you browsed back to. Re-tapping the tab you are already on
+    /// still writes this binding, which is the case that prompted it:
+    /// paging back through the week left the only route home being the
+    /// nav bar's own control (the user, 2026-08-14).
+    ///
+    /// Deliberately only the USER's taps. Every programmatic selection
+    /// assigns `selectedTab` directly and so skips this — the Add pill's
+    /// bounce restores the tab you came from (and the Log sheet it opens
+    /// backfills into the day you were browsing, which a reset would
+    /// silently redirect to today), and the widget deep links set a day
+    /// of their own immediately after.
+    private var tabSelection: Binding<AppTab> {
+        Binding(
+            get: { selectedTab },
+            set: { tapped in
+                if tapped == .today {
+                    // The tab is called Today, so it goes to today. HOW it
+                    // says so depends on whether a slide is under way.
+                    //
+                    // A RE-TAP (already on Today) raises the same observed
+                    // `dayRequest` Calendar's "View day" raises, so it
+                    // shares that consumer — pops any pushed detail and
+                    // browses. Nothing is animating, so the body re-runs
+                    // the write costs are free.
+                    //
+                    // A SWITCH from another tab leaves an UNOBSERVED note
+                    // instead (`todayTabTapped`), read by Today on appear
+                    // — which a tab switch always fires. Writing the
+                    // observed request here re-ran ContentView's body, the
+                    // whole TabView, during the tab bar's own slide, and
+                    // Today's consumer writing it back to nil re-ran it
+                    // again. Measured on the 27.0 sim (`testTabBarAnimationProbe`
+                    // + `scripts/analyze-tab-probe.py`): the glass
+                    // highlight parked on Foods for 6–10 frames on the way
+                    // to Today, ~300 ms tap-to-settle, against 2–3 frames
+                    // and ~140 ms with this stamp off — the stall the user
+                    // saw on the phone, back after the 2026-09-15 blur fix
+                    // because that fix was verified with this stamp
+                    // DISABLED and shipped with it restored
+                    // (plans/PLAN-tab-bar-jank.md, second cause,
+                    // 2026-09-16). Deferring the observed write a runloop
+                    // turn is NOT the answer either: tried 2026-09-15, it
+                    // produced a second selection commit ("flashes twice").
+                    if selectedTab == .today {
+                        quickActions.dayRequest = Calendar.current.startOfDay(for: .now)
+                    } else {
+                        quickActions.todayTabTapped = true
+                    }
+                }
+                selectedTab = tapped
+            }
+        )
+    }
+
+    private var mainTabs: some View {
+        // iPad: the top tab bar can become a sidebar at the user's
+        // choice (no effect on iPhone's bottom bar).
+        TabView(selection: tabSelection) {
+            // Today sits first and is the app's home; water lives inside it
+            // (hydration row + a Water group in the log).
+            Tab("Today", systemImage: "gauge.with.needle", value: .today) {
+                TodayView()
+            }
+            Tab("Foods", systemImage: "fork.knife", value: .foods) {
+                FoodsView()
+            }
+            Tab("Goal", systemImage: "chart.line.downtrend.xyaxis", value: .goal) {
+                GoalView()
+            }
+            Tab("Calendar", systemImage: "calendar", value: .calendar) {
+                CalendarView()
+            }
+            // The Music-style detached corner circle (the search-tab
+            // slot is the only public API that renders there). It acts
+            // as a button: AddPillGestures intercepts the tap at the
+            // window level and routes via openAddFlow() WITHOUT letting
+            // the selection change — selecting this tab cross-fades the
+            // whole screen to its empty content (the "+" flash; frame
+            // capture 2026-07-18). The onChange bounce below stays as
+            // the fallback for non-touch activation (VoiceOver,
+            // keyboard). "Add", not "Log" — the portion sheet's confirm
+            // is "Log" and two same-named buttons make tests (and
+            // VoiceOver) ambiguous. See
+            // plans/2026-07-18-plus-flash-fix-plan.md.
+            Tab("Add", systemImage: "plus", value: .log, role: .search) {
+                Color.clear
+            }
+        }
+        // iPad: the tab bar can become a sidebar at the user's choice
+        // (top-bar toggle); no effect on iPhone's bottom bar.
+        .tabViewStyle(.sidebarAdaptable)
+        .tint(.riceToast)
+        .onChange(of: selectedTab) { old, new in
+            // Fallback only: touches are intercepted by AddPillGestures
+            // before the tab can select, so this fires for non-touch
+            // activation (VoiceOver, keyboard) or a touch the hit test
+            // missed. Deferred one turn: bouncing synchronously
+            // mid-transition aborts the search-role slot's own activation
+            // halfway and leaves the ORIGIN tab's search drawer wedged —
+            // dead taps on Foods' search after using the pill (the user;
+            // pinned by testFoodsSearchAfterSave).
+            guard new == .log else { return }
+            Task {
+                selectedTab = old == .log ? .today : old
+                // If the interceptor just routed this same gesture, don't
+                // open the add flow a second time — bounce only.
+                if let tapped = lastInterceptedAdd,
+                   Date.now.timeIntervalSince(tapped) < 0.3 { return }
+                openAddFlow(from: old == .log ? .today : old)
+            }
+        }
+        // A bottom sheet (like Today's Log window) for the Food Library
+        // chooser, matching the logging UX (the user).
+        .sheet(isPresented: $showAddChooser) {
+            AddToLibrarySheet(canAddMeal: !foods.isEmpty) { kind in
+                quickActions.addFoodKind = kind
+            }
+        }
+        // The tab bar stays FULL while scrolling (the user, 2026-07-30):
+        // iOS 26's Liquid Glass bar shrank to a lone "Today" pill on
+        // scroll-down and re-expanded on scroll-up, and the shrinking
+        // wasn't wanted — the tabs should always be readable and one tap
+        // away.
+        //
+        // A CONSTANT .never, which is not the thing the 2026-07-16 note
+        // warned about: that was FLIPPING between .never and .onScrollDown
+        // by scroll position, which broke the first scroll-down minimize
+        // (it can't retroactively minimize a scroll already underway) and
+        // went sticky on the List/Form tabs. A value that never changes
+        // can't get stuck mid-gesture. iOS 18 bars never minimize anyway;
+        // the modifier is a no-op there.
+        .modifier(TabBarMinimizePin())
+        // VoiceOver twin of the pill's hold-to-log-water shortcut: the
+        // window-level long-press below never reaches assistive tech,
+        // and TabContent has no accessibilityAction to hang it on
+        // (checked the iOS SDK interface — label/value/hint only). An
+        // invisible 1 pt element carries the same call instead: no
+        // layout, no touch (hit testing off), VoiceOver-only.
+        .overlay(alignment: .bottomTrailing) {
+            if SharedStore.holdToLogWater {
+                Color.clear
+                    .frame(width: 1, height: 1)
+                    .allowsHitTesting(false)
+                    .accessibilityElement()
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityLabel("Log a serving of water")
+                    .accessibilityHint("Logs one water serving without opening the add sheet.")
+                    .accessibilityAction {
+                        guard SharedStore.holdToLogWater else { return }
+                        Task { await LogActions.logWater(oz: SharedStore.waterServingOz) }
+                    }
+            }
+        }
+        // The corner +'s real activation path: tap intercepted at the
+        // window level (the tab never selects — no cross-fade flash) and
+        // routed for the tab the user is on; hold logs a water serving
+        // without the sheet. holdToLogWater is checked at fire time so
+        // the Settings toggle applies without a relaunch.
+        .background(AddPillGestures(
+            onTap: {
+                lastInterceptedAdd = .now
+                openAddFlow(from: selectedTab)
+            },
+            onLongPress: {
+                guard SharedStore.holdToLogWater else { return }
+                Task { await LogActions.logWater(oz: SharedStore.waterServingOz) }
+            }
+        ))
+        .toastHost()
+    }
+
+    private struct TabBarMinimizePin: ViewModifier {
+        func body(content: Content) -> some View {
+            if #available(iOS 26.0, *) {
+                content.tabBarMinimizeBehavior(.never)
+            } else {
+                content
+            }
+        }
+    }
+
+    /// Routes the corner "+" to the right add flow for the tab the user
+    /// was on: Foods → the add-to-Food-Library chooser (bottom sheet,
+    /// hosted here so no bounce can dismiss it); everywhere else → Today +
+    /// the Log sheet (search-first, scanner and favorites inside). Called
+    /// by the tap interceptor (selection untouched) and the bounce
+    /// fallback (selection already reverted).
+    private func openAddFlow(from tab: AppTab) {
+        if tab == .foods {
+            showAddChooser = true
+        } else {
+            selectedTab = .today
+            QuickActions.shared.quickLogRequest = .all
+        }
+    }
+
+    private func handle(_ action: QuickActions.Action) {
+        switch action {
+        case .logWater:
+            // Water lives on Today now; LogActions handles the feedback
+            // and Today refreshes via the mutation counter.
+            selectedTab = .today
+            Task {
+                await LogActions.logWater(oz: SharedStore.waterServingOz)
+            }
+        case .logMeal:
+            // Land on Today with the quick-log sheet up: one tap to log.
+            selectedTab = .today
+            QuickActions.shared.quickLogRequest = .meals
+        case .logFood:
+            selectedTab = .today
+            QuickActions.shared.quickLogRequest = .foods
+        case .scanBarcode:
+            // The Log sheet's scanner (library fast path + logging),
+            // not the Foods-tab new-food form.
+            selectedTab = .today
+            QuickActions.shared.quickLogRequest = .scan
+        }
+    }
+}
+
+/// The "+"-on-Foods chooser: a compact bottom sheet (Add Food / Add Meal),
+/// presented from ContentView so it slides up over — and hides — the
+/// search-tab bounce (a centered alert's dim let the morph flash through).
+/// The pick routes to FoodsView via QuickActions.addFoodKind.
+#if DEBUG
+/// The OS baseline for the tab-bar stick (plans/PLAN-tab-bar-jank.md):
+/// five stock `Tab`s of empty content in Onigiri's exact shape, with the
+/// suspects switchable by launch argument so each variant is one probe
+/// run, not one build:
+///   --tab-probe-stock       use this instead of mainTabs
+///   --tab-probe-no-search   drop the search-role "+" tab
+///   --tab-probe-automatic   .tabViewStyle(.automatic) instead of .sidebarAdaptable
+///   --tab-probe-no-tint     no .tint(.riceToast)
+/// If the stock shape sticks on a Calendar→Today jump too, the stall is
+/// the system's, and the app-side hunt stops.
+private struct StockTabProbe: View {
+    @State private var selection = 0
+    private var args: [String] { ProcessInfo.processInfo.arguments }
+
+    var body: some View {
+        TabView(selection: $selection) {
+            Tab("Today", systemImage: "gauge.with.needle", value: 0) { Color.clear }
+            Tab("Foods", systemImage: "fork.knife", value: 1) { Color.clear }
+            Tab("Goal", systemImage: "chart.line.downtrend.xyaxis", value: 2) { Color.clear }
+            Tab("Calendar", systemImage: "calendar", value: 3) { Color.clear }
+            if !args.contains("--tab-probe-no-search") {
+                Tab("Add", systemImage: "plus", value: 4, role: .search) { Color.clear }
+            }
+        }
+        .modifier(ProbeStyle(
+            sidebar: !args.contains("--tab-probe-automatic"),
+            tinted: !args.contains("--tab-probe-no-tint")))
+    }
+
+    private struct ProbeStyle: ViewModifier {
+        let sidebar: Bool
+        let tinted: Bool
+        func body(content: Content) -> some View {
+            let styled = Group {
+                if sidebar { content.tabViewStyle(.sidebarAdaptable) } else { content }
+            }
+            if tinted { styled.tint(.riceToast) } else { styled }
+        }
+    }
+}
+#endif
+
+private struct AddToLibrarySheet: View {
+    let canAddMeal: Bool
+    let onPick: (QuickActions.AddFoodKind) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("Add to your Food Library")
+                .font(.headline)
+                .padding(.top, 28)
+            Button {
+                onPick(.food); dismiss()
+            } label: {
+                Label("Add Food", systemImage: "carrot")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
+                    // Dark-on-fill like every other prominent button
+                    // (onboarding, Done, Import): the default white label
+                    // on riceToast is ~1.9:1 in dark mode.
+                    .foregroundStyle(Color.onRicePaper)
+            }
+            .buttonStyle(.borderedProminent)
+            // ricePaper, not the inherited riceToast — every other
+            // prominent/filled button in the app (onboarding, Done,
+            // Import, Save) overrides to this same pale cream fill, and
+            // this pair had drifted from it (design audit, 2026-08-31:
+            // "every button reads as one riceToast family" made this
+            // sheet's fill visibly darker than the rest of the app's
+            // filled buttons — a real inconsistency, not a deliberate
+            // second look). The outlined Cancel below keeps the
+            // inherited riceToast accent; only the FILL needed this.
+            .tint(.ricePaper)
+            if canAddMeal {
+                Button {
+                    onPick(.meal); dismiss()
+                } label: {
+                    Label("Add Meal", systemImage: "fork.knife")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
+                        .foregroundStyle(Color.onRicePaper)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.ricePaper)
+            }
+            Button {
+                dismiss()
+            } label: {
+                Text("Cancel")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
+            }
+            .buttonStyle(.bordered)
+            Spacer(minLength: 0)
+        }
+        // App accent for the OUTLINED Cancel — not the system blue.
+        // The two filled buttons above override to .ricePaper instead
+        // (see their own comment). riceToastStatus, not the plain
+        // riceToast every other .tint in the app uses — text-on-page at
+        // body size is ~3.3:1 with the plain color, failing WCAG AA;
+        // riceToastStatus is the deepened token the app already keeps
+        // for exactly this case (health-check audit, 2026-09-14).
+        .tint(.riceToastStatus)
+        .padding(.horizontal, 24)
+        .presentationDetents([.height(canAddMeal ? 324 : 256)])
+        .presentationDragIndicator(.visible)
+    }
+}
+
+/// Full-screen cover for the app-switcher snapshot — the rice canvas
+/// and the mascot, none of the numbers.
+private struct PrivacyShield: View {
+    var body: some View {
+        ZStack {
+            Color.riceCanvas.ignoresSafeArea()
+            Text("🍙")
+                .font(.system(size: 64))
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+/// The shield's own UIWindow, floated above .alert so it composites
+/// over every presentation layer — sheets included — in the snapshot.
+/// Torn down (not just hidden) on return so it can't linger over a
+/// live scene.
+@MainActor
+private enum PrivacyShieldWindow {
+    private static var window: UIWindow?
+
+    static func setCovered(_ covered: Bool) {
+        guard covered else {
+            window?.isHidden = true
+            window = nil
+            return
+        }
+        guard window == nil,
+              let scene = UIApplication.shared.connectedScenes
+                  .compactMap({ $0 as? UIWindowScene })
+                  .first(where: { $0.activationState != .unattached })
+        else { return }
+        let cover = UIWindow(windowScene: scene)
+        cover.windowLevel = .alert + 1
+        cover.isUserInteractionEnabled = false
+        // Its own window means its own appearance — without this the
+        // shield would snapshot in the system look while the app is
+        // themed the other way.
+        AppearanceWindow.apply(to: cover)
+        cover.rootViewController = UIHostingController(rootView: PrivacyShield())
+        cover.isHidden = false
+        window = cover
+    }
+}
+
+#Preview {
+    ContentView()
+        .modelContainer(for: [Food.self, Meal.self, GoalSettings.self], inMemory: true)
+}

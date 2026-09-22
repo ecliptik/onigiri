@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Onigiri — calories, nutrition & water, saved to Apple Health</title>
+<meta name="description" content="A personal calorie, nutrition, and water tracker for iPhone, iPad, and Apple Watch. No accounts, no servers — everything lives in Apple Health.">
+<meta property="og:title" content="Onigiri 🍙">
+<meta property="og:description" content="Your calories. Your data. Your health.">
+<meta property="og:image" content="https://ecliptik.github.io/onigiri/media/social-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="https://ecliptik.github.io/onigiri/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Onigiri">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Onigiri 🍙">
+<meta name="twitter:description" content="Your calories. Your data. Your health.">
+<meta name="twitter:image" content="https://ecliptik.github.io/onigiri/media/social-card.png">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍙</text></svg>">
+<style>
+  /* Light is the base — the app's light palette (rice canvas). The
+     resolved theme follows the system via the boot script; light is
+     the fallback when nothing can be determined. */
+  :root, :root[data-theme="light"] {
+    --bg: #fcf5eb;          /* riceCanvas */
+    --bg-raise: #f4e9d6;
+    --card: #ffffff;
+    --line: rgba(150, 104, 47, 0.18);
+    --text: #2b2416;
+    --muted: #6f6654;
+    --toast: #b8823f;       /* riceToast, light-mode depth */
+    --toast-deep: #96682f;
+    --nori: #334d36;        /* deep nori */
+    --paper: #f5d49e;
+    --radius: 20px;
+    --nav-bg: rgba(252, 245, 235, 0.85);
+    --glow-toast: rgba(184, 130, 63, 0.12);
+    --glow-nori: rgba(51, 77, 54, 0.08);
+    --ghost-bg: rgba(184, 130, 63, 0.06);
+    --toggle-bg: #334d36;
+    --device-shadow: 0 24px 70px rgba(96, 72, 38, .3), 0 0 100px rgba(184, 130, 63, .08);
+    --shot-shadow: 0 20px 60px rgba(96, 72, 38, .28);
+  }
+  :root[data-theme="dark"] {
+    --bg: #131510;          /* warm near-black, a whisper of nori */
+    --bg-raise: #1b1e17;
+    --card: #20241b;
+    --line: rgba(227, 179, 107, 0.14);
+    --text: #f3ead9;        /* warm rice cream */
+    --muted: #b5ac9a;
+    --toast: #e3b36b;       /* riceToast, dark-mode brightness */
+    --toast-deep: #b8823f;
+    --nori: #8ca88c;        /* lifted nori */
+    --paper: #f5d49e;
+    --nav-bg: rgba(19, 21, 16, 0.82);
+    --glow-toast: rgba(227, 179, 107, 0.13);
+    --glow-nori: rgba(140, 168, 140, 0.10);
+    --ghost-bg: rgba(227, 179, 107, 0.05);
+    --toggle-bg: #26302a;
+    --device-shadow: 0 24px 80px rgba(0, 0, 0, .55), 0 0 120px rgba(227, 179, 107, .06);
+    --shot-shadow: 0 20px 70px rgba(0, 0, 0, .5);
+  }
+  /* No-JS fallback: honor the system. With JS, the boot script always
+     sets an explicit data-theme, so this never fights the toggle. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131510; --bg-raise: #1b1e17; --card: #20241b;
+      --line: rgba(227, 179, 107, 0.14);
+      --text: #f3ead9; --muted: #b5ac9a;
+      --toast: #e3b36b; --toast-deep: #b8823f; --nori: #8ca88c;
+      --nav-bg: rgba(19, 21, 16, 0.82);
+      --glow-toast: rgba(227, 179, 107, 0.13);
+      --glow-nori: rgba(140, 168, 140, 0.10);
+      --ghost-bg: rgba(227, 179, 107, 0.05);
+      --toggle-bg: #26302a;
+      --device-shadow: 0 24px 80px rgba(0, 0, 0, .55), 0 0 120px rgba(227, 179, 107, .06);
+      --shot-shadow: 0 20px 70px rgba(0, 0, 0, .5);
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  /* overflow-x on BOTH html and body, and clip not hidden: iOS Safari
+     still pans horizontally past a body-only overflow-x: hidden. */
+  html { scroll-behavior: smooth; overflow-x: hidden; overflow-x: clip; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    transition: background .3s ease, color .3s ease;
+    font: 17px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    overflow-x: clip;
+  }
+  a { color: var(--toast); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  img { max-width: 100%; display: block; }
+
+  /* ---- nav ---- */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; gap: 24px;
+    padding: 14px clamp(20px, 5vw, 56px);
+    background: var(--nav-bg);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid transparent;
+    transition: border-color .3s;
+  }
+  nav.scrolled { border-bottom-color: var(--line); }
+  nav .brand { font-weight: 700; font-size: 19px; color: var(--text); margin-right: auto; }
+  nav .brand:hover { text-decoration: none; }
+  nav a.link { color: var(--muted); font-size: 15px; font-weight: 500; }
+  nav a.link:hover { color: var(--toast); text-decoration: none; }
+  nav .cta {
+    background: var(--paper); color: #131510; font-weight: 650; font-size: 15px;
+    padding: 8px 18px; border-radius: 999px;
+  }
+  nav .cta:hover { text-decoration: none; filter: brightness(1.06); }
+  .theme-toggle {
+    background: var(--toggle-bg); border: 1px solid var(--line); color: var(--text);
+    width: 38px; height: 38px; border-radius: 999px; font-size: 17px;
+    cursor: pointer; display: grid; place-items: center; line-height: 1;
+  }
+  .theme-toggle:hover { border-color: var(--toast-deep); }
+  /* 820, not 640: six links plus the brand, toggle and CTA need ~726px
+     and the nav neither wraps nor scrolls, so below this they spill out
+     of it. Reuses the breakpoint the rows already turn at. */
+  @media (max-width: 820px) { nav a.link { display: none; } }
+
+  /* ---- hero ---- */
+  header {
+    position: relative;
+    padding: clamp(56px, 10vh, 120px) 24px 0;
+    text-align: center;
+  }
+  header::before {
+    /* No horizontal overhang — the old -20% sides were the page's one
+       element wider than the viewport (the iOS side-pan gutter). */
+    content: ""; position: absolute; inset: -40% 0 auto;
+    height: 130%;
+    background:
+      radial-gradient(42% 45% at 50% 30%, var(--glow-toast), transparent 70%),
+      radial-gradient(30% 35% at 68% 20%, var(--glow-nori), transparent 70%);
+    pointer-events: none;
+  }
+  .hero-emoji { font-size: clamp(56px, 9vw, 84px); line-height: 1; }
+  h1 {
+    font-size: clamp(38px, 6.5vw, 68px); line-height: 1.06; letter-spacing: -0.02em;
+    margin: 18px auto 0; max-width: 15ch; font-weight: 800;
+  }
+  h1 .accent { color: var(--toast); }
+  .sub {
+    margin: 22px auto 0; max-width: 56ch; color: var(--muted);
+    font-size: clamp(17px, 2.2vw, 21px);
+  }
+  .hero-ctas { margin-top: 34px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    padding: 13px 28px; border-radius: 999px; font-weight: 650; font-size: 16px;
+  }
+  .btn.primary { background: var(--paper); color: #131510; }
+  .btn.primary:hover { text-decoration: none; filter: brightness(1.06); }
+  .btn.ghost { border: 1px solid var(--line); color: var(--text); background: var(--ghost-bg); }
+  .btn.ghost:hover { text-decoration: none; border-color: var(--toast-deep); }
+  .hero-note { margin-top: 16px; color: var(--muted); font-size: 14px; }
+  .hero-shot { margin: 56px auto -8px; width: min(320px, 78vw); position: relative; }
+
+  /* ---- device frames ---- */
+  .device {
+    border-radius: 44px; padding: 12px; background: #090a07;
+    border: 1px solid rgba(227,179,107,.22);
+    box-shadow: var(--device-shadow);
+  }
+  .device img, .device video { border-radius: 34px; display: block; width: 100%; }
+  .device.pad { border-radius: 30px; padding: 12px; }
+  .device.pad img { border-radius: 20px; }
+  .device.watch { border-radius: 38px; padding: 10px; width: min(230px, 60vw); margin: 0 auto; }
+  .device.watch img { border-radius: 30px; }
+  .plain-shot img { border-radius: 24px; border: 1px solid var(--line); box-shadow: var(--shot-shadow); }
+
+  /* ---- sections ---- */
+  section { padding: clamp(64px, 11vh, 130px) clamp(20px, 5vw, 56px); }
+  section.raise { background: var(--bg-raise); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  section[id] { scroll-margin-top: 64px; } /* land anchors below the sticky nav */
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  .kicker {
+    color: var(--nori); font-weight: 700; font-size: 14px; letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  h2 { font-size: clamp(28px, 4.4vw, 44px); line-height: 1.12; letter-spacing: -0.015em; margin-top: 10px; font-weight: 750; }
+  .lead { color: var(--muted); margin-top: 16px; font-size: 18px; }
+
+  .row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: clamp(36px, 6vw, 80px);
+    align-items: center; max-width: 1080px; margin: 0 auto;
+  }
+  .row + .row { margin-top: clamp(72px, 12vh, 140px); }
+  .row .shot { width: min(300px, 80vw); margin: 0 auto; }
+  .row.flip .copy { order: 2; }
+  .row.flip .media { order: 1; }
+  @media (max-width: 820px) {
+    .row { grid-template-columns: 1fr; }
+    .row.flip .copy { order: 1; }
+    .row .copy { text-align: center; }
+    .feature-list li { text-align: left; }
+  }
+  .feature-list { list-style: none; margin-top: 22px; display: grid; gap: 12px; }
+  .feature-list li { padding-left: 30px; position: relative; color: var(--muted); }
+  .feature-list li::before { content: "🍙"; position: absolute; left: 0; top: 1px; font-size: 15px; }
+  .feature-list li strong { color: var(--text); font-weight: 640; }
+
+  /* ---- icon grid ---- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin-top: 48px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 26px 24px;
+  }
+  .card .ico { font-size: 30px; }
+  .card h3 { margin-top: 14px; font-size: 18px; font-weight: 700; }
+  .card p { margin-top: 8px; color: var(--muted); font-size: 15.5px; }
+
+  /* ---- goal strip ---- */
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin-top: 48px; counter-reset: step; }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px 24px; }
+  .step::before {
+    counter-increment: step; content: counter(step);
+    display: inline-grid; place-items: center; width: 34px; height: 34px;
+    border-radius: 999px; background: var(--toast); color: #131510; font-weight: 800;
+  }
+  .step h3 { margin-top: 14px; font-size: 18px; }
+  .step p { margin-top: 8px; color: var(--muted); font-size: 15.5px; }
+  .example {
+    margin: 44px auto 0; max-width: 720px; background: var(--card);
+    border: 1px solid rgba(140,168,140,.25); border-radius: var(--radius); padding: 26px 28px;
+    color: var(--muted); font-size: 16px;
+  }
+  .example strong { color: var(--toast); }
+
+  /* ---- privacy ---- */
+  .privacy-panel {
+    max-width: 860px; margin: 0 auto; text-align: center;
+  }
+  .privacy-panel .badges { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 30px; }
+  .badge {
+    border: 1px solid rgba(140,168,140,.35); color: var(--nori); border-radius: 999px;
+    padding: 8px 18px; font-size: 14.5px; font-weight: 600; background: rgba(140,168,140,.07);
+  }
+
+  /* ---- surface blocks (watch → widget → iPad) ---- */
+  .surface { margin: clamp(56px, 9vh, 96px) auto 0; }
+  .surface h3 { font-size: clamp(20px, 2.8vw, 27px); font-weight: 720; letter-spacing: -0.01em; }
+  .surface .media { margin-top: 30px; }
+  .surface .plain-shot { max-width: min(430px, 86vw); margin: 0 auto; }
+  .surface .wide { max-width: 900px; margin: 0 auto; }
+  .caption { text-align: center; color: var(--muted); font-size: 14.5px; margin-top: 16px; max-width: 56ch; margin-left: auto; margin-right: auto; }
+
+  /* ---- footer ---- */
+  footer {
+    border-top: 1px solid var(--line); padding: 48px clamp(20px, 5vw, 56px) 64px;
+    color: var(--muted); font-size: 14.5px;
+  }
+  footer .wrap { display: grid; gap: 10px; text-align: center; }
+  footer .links { display: flex; gap: 22px; justify-content: center; flex-wrap: wrap; margin-bottom: 10px; }
+  footer .links a { color: var(--text); font-weight: 550; }
+  footer .links a:hover { color: var(--toast); }
+
+  /* ---- scroll reveal ---- */
+  .reveal { opacity: 0; transform: translateY(26px); transition: opacity .7s ease, transform .7s cubic-bezier(.2,.7,.2,1); }
+  .reveal.in { opacity: 1; transform: none; }
+  .reveal.d1 { transition-delay: .08s; } .reveal.d2 { transition-delay: .16s; } .reveal.d3 { transition-delay: .24s; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+  }
+</style>
+<script>
+  // Resolve the theme before first paint: stored choice > system > light.
+  (function () {
+    let theme = "light";
+    try {
+      const stored = localStorage.getItem("theme");
+      if (stored === "dark" || stored === "light") theme = stored;
+      else if (matchMedia("(prefers-color-scheme: dark)").matches) theme = "dark";
+    } catch (e) {}
+    document.documentElement.dataset.theme = theme;
+  })();
+</script>
+</head>
+<body>
+
+<nav id="nav">
+  <a class="brand" href="#">🍙 Onigiri</a>
+  <a class="link" href="#features">Features</a>
+  <a class="link" href="#ai">Optional AI</a>
+  <a class="link" href="#goal">Your goal</a>
+  <a class="link" href="#privacy">Privacy</a>
+  <a class="link" href="https://github.com/ecliptik/onigiri/wiki/User-Guide">Guide</a>
+  <a class="link" href="https://github.com/ecliptik/onigiri/wiki">Wiki</a>
+  <button id="themeToggle" class="theme-toggle" aria-label="Switch between light and dark theme">🌙</button>
+  <a class="cta" href="https://github.com/ecliptik/onigiri">GitHub</a>
+</nav>
+
+<header>
+  <div class="hero-emoji reveal in">🍙</div>
+  <h1 class="reveal in">Your calories.<br>Your data.<br><span class="accent">Your health.</span></h1>
+  <p class="sub reveal in d1">Onigiri tracks calories, nutrition, and water on iPhone, iPad, and Apple Watch —
+  and saves every log straight to Apple Health. No account. No ads.
+  No subscriptions. Nothing to lose other than weight.</p>
+  <div class="hero-ctas reveal in d2">
+    <a class="btn primary" href="https://github.com/ecliptik/onigiri/wiki/User-Guide">Read the guide</a>
+    <a class="btn ghost" href="https://github.com/ecliptik/onigiri#development-setup">Build it yourself</a>
+  </div>
+  <p class="hero-note reveal in d3"><a href="#source">Source-available</a> · iOS 18 / watchOS 10+ · Built 100% agentically with <a href="https://claude.com/claude-code">Claude Code</a></p>
+  <div class="hero-shot reveal in d3">
+    <div class="device"><img src="showcase/dark/today.png" data-app-light="showcase/light/today.png" data-app-dark="showcase/dark/today.png" alt="The Today screen: calorie balance headline, sodium and water, the daily goal gauge, energy meters, and the log" loading="eager"></div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="row">
+    <div class="copy reveal">
+      <div class="kicker">The day at a glance</div>
+      <h2>One number that means something</h2>
+      <p class="lead">What you ate minus what you burned — active and resting energy, straight
+      from Apple Health — and the calories you have left. It turns amber within a snack of
+      your budget, and orange once you're past it.</p>
+      <ul class="feature-list">
+        <li><strong>Log it on the day it happened</strong> — swipe back to yesterday, or jump to any date, and what you add stays on that day.</li>
+        <li><strong>Sodium, water, or any nutrient</strong> you choose, tracked right on the home screen.</li>
+        <li><strong>Every entry editable</strong> — swipe to adjust or delete, one-tap undo.</li>
+      </ul>
+    </div>
+    <div class="media reveal d1"><div class="shot device"><video autoplay muted loop playsinline preload="metadata" src="media/day-swipe-dark.mp4" poster="media/day-swipe-dark-poster.jpg" data-app-light-src="media/day-swipe.mp4" data-app-light-poster="media/day-swipe-poster.jpg" data-app-dark-src="media/day-swipe-dark.mp4" data-app-dark-poster="media/day-swipe-dark-poster.jpg" aria-label="Stepping back two days with the chevrons on the Today screen and back to today"></video></div></div>
+  </div>
+
+  <div class="row flip">
+    <div class="copy reveal">
+      <div class="kicker">Your own food library</div>
+      <h2>Log in a tap or two</h2>
+      <p class="lead">Favorites first, recents next, and custom meals that log a whole plate at
+      once. Search what you've saved, or describe what you ate.</p>
+      <ul class="feature-list">
+        <li><strong>Scan a barcode</strong> — or photograph the nutrition label, a menu board, or the food itself, and Onigiri reads what it is looking at.</li>
+        <li><strong>Share a menu, nutrition guide, or website</strong> to Onigiri to create a list of items to log.</li>
+        <li><strong>Describe it</strong> — type what you ate for an AI estimate, matches from two public food databases, or both. Each is one tap, and neither runs until you ask.</li>
+        <li><strong>Visual Intelligence</strong> — point Camera Control at a plate, a label or a menu, pick <em>Identify from Photo</em>, and Onigiri reads it like its own camera would.</li>
+      </ul>
+    </div>
+    <div class="media reveal d1"><div class="shot device"><video autoplay muted loop playsinline preload="metadata" src="media/add-food-dark.mp4" poster="media/add-food-dark-poster.jpg" data-app-light-src="media/add-food.mp4" data-app-light-poster="media/add-food-poster.jpg" data-app-dark-src="media/add-food-dark.mp4" data-app-dark-poster="media/add-food-dark-poster.jpg" aria-label="Tapping the add button, then logging a saved meal — the portion sheet lists the foods it contains and their calories"></video></div></div>
+  </div>
+
+  <div class="row" id="ai">
+    <div class="copy reveal">
+      <div class="kicker">Optional AI</div>
+      <h2>Off by default. On your terms.</h2>
+      <p class="lead">AI features are off by default — Onigiri logs food and tracks your goal
+      without them. Turn on AI to estimate food by describing it and enable
+      vision recognition.</p>
+      <ul class="feature-list">
+        <li><strong>Off by default</strong> — nothing AI-related runs until you enable it, offered once at onboarding, changeable anytime in Settings.</li>
+        <li><strong>Local if you like</strong> — with Apple Intelligence, estimates, label reading, and photo identification all happen on your iPhone. No data is sent to third parties — everything remains on your device.</li>
+        <li><strong>Or bring your own AI</strong> — your Anthropic or OpenAI account, or a local OpenAI-compatible server (Ollama, LM Studio — Gemma, Qwen, and more).</li>
+        <li><strong>Always reviewed</strong> — every estimate is labeled with where it came from and nothing is logged until you say so. Foods and logs created with AI keep a small ✨ by their name.</li>
+        <li><strong>Say what the photo can't</strong> — "no dressing", "I only ate half", "it's tofu, not chicken". A note in your own words re-works the estimate; the first one stays a tap away.</li>
+      </ul>
+    </div>
+    <div class="media reveal d1"><div class="shot device"><video autoplay muted loop playsinline preload="metadata" src="media/ai-estimate-dark.mp4" poster="media/ai-estimate-dark-poster.jpg" data-app-light-src="media/ai-estimate.mp4" data-app-light-poster="media/ai-estimate-poster.jpg" data-app-dark-src="media/ai-estimate-dark.mp4" data-app-dark-poster="media/ai-estimate-dark-poster.jpg" aria-label="Typing a food description in search, tapping Estimate with Apple Intelligence, and reviewing the estimated values in the food form"></video></div></div>
+  </div>
+
+  <div class="row">
+    <div class="copy reveal">
+      <div class="kicker">A plan for your goal</div>
+      <h2>Set a target.<br>Eat your budget.<br>Watch the trend.</h2>
+      <p class="lead">Pick a weight and a date — Onigiri computes the daily deficit, turns it into
+      a calorie budget, and projects your finish date from your real weigh-ins.</p>
+      <ul class="feature-list">
+        <li><strong>Honest budgets</strong> that grow with an active day — never less than what you've actually burned.</li>
+        <li><strong>Predicted vs. the scale</strong> over the last 30 days, side by side.</li>
+      </ul>
+    </div>
+    <div class="media reveal d1"><div class="shot device"><img src="showcase/dark/goal.png" data-app-light="showcase/light/goal.png" data-app-dark="showcase/dark/goal.png" alt="The Goal tab with weight trend and projection" loading="lazy"></div></div>
+  </div>
+
+  <div class="row flip">
+    <div class="copy reveal">
+      <div class="kicker">Streaks that keep you honest</div>
+      <h2>Earn the onigiri, every day</h2>
+      <p class="lead">Days that hit their goal earn your badge — the month grid and streak counter
+      make consistency visible.</p>
+      <ul class="feature-list">
+        <li><strong>Pick your badge</strong> — onigiri, trophy, or any emoji you like.</li>
+        <li><strong>Forgot to log?</strong> Light days count as untracked, not as fasting.</li>
+        <li><strong>Month stats</strong>: goal-met rate, total deficit, and what the scale did.</li>
+      </ul>
+    </div>
+    <div class="media reveal d1"><div class="shot device"><img src="showcase/dark/calendar.png" data-app-light="showcase/light/calendar.png" data-app-dark="showcase/dark/calendar.png" alt="Calendar with earned onigiri badges and streak" loading="lazy"></div></div>
+  </div>
+</section>
+
+<section class="raise">
+  <div class="wrap" style="text-align:center">
+    <div class="kicker reveal">Everywhere you are</div>
+    <h2 class="reveal">Phone, Tablet, Watch, Widgets</h2>
+    <p class="lead reveal d1" style="max-width:60ch;margin-left:auto;margin-right:auto">Log from the watch without touching your phone. Glance at widgets that
+    refresh within seconds of any log — even when made on other devices.
+    Or just say it: &ldquo;Log water in Onigiri&rdquo; logs by voice — saved meals and
+    favorite foods by name — and &ldquo;How many calories do I have left in
+    Onigiri?&rdquo; gets a spoken answer, on the phone or the watch.</p>
+
+    <div class="surface reveal">
+      <h3>On your wrist</h3>
+      <div class="media">
+        <div class="device watch"><img src="showcase/watch/home.png" alt="Apple Watch app: balance headline and log buttons" loading="lazy"></div>
+      </div>
+      <p class="caption">The watch app works on its own: log foods and water right from your wrist, turn the crown to adjust an entry, and put your calorie balance on the watch face as a complication.</p>
+    </div>
+
+    <div class="surface reveal">
+      <h3>On your Home and Lock Screens</h3>
+      <div class="media">
+        <div class="plain-shot"><img src="showcase/widget/home-screen-dark.png" data-app-light="showcase/widget/home-screen.png" data-app-dark="showcase/widget/home-screen-dark.png" alt="The Today widget on the Home Screen" loading="lazy"></div>
+      </div>
+      <p class="caption">Widgets show today's balance, your water progress, and your streak at a glance — the extra-large one adds the Active and Resting split and what you've logged today — and a Control Center button logs a serving of water without opening the app.</p>
+    </div>
+
+    <div class="surface reveal">
+      <h3>On your iPad</h3>
+      <div class="media">
+        <div class="wide"><div class="device pad"><img src="showcase/dark/ipad-landscape.png" data-app-light="showcase/light/ipad-landscape.png" data-app-dark="showcase/dark/ipad-landscape.png" alt="Today on iPad: sidebar navigation with the summary beside the log" loading="lazy"></div></div>
+      </div>
+      <p class="caption">On iPad, the day's summary and its log sit side by side with a sidebar for navigation — and it all works in Split View, Slide Over, and Stage Manager.</p>
+    </div>
+  </div>
+</section>
+
+<section id="goal">
+  <div class="wrap" style="text-align:center">
+    <div class="kicker reveal">How the daily goal works</div>
+    <h2 class="reveal">No mystery numbers</h2>
+    <div class="steps">
+      <div class="step reveal"><h3>Set a goal</h3><p>A target weight and date. Onigiri works out the daily calorie
+        deficit needed to get there — burning more than you eat.</p></div>
+      <div class="step reveal d1"><h3>Eat within your budget</h3><p>Budget = what you burn in a day minus that deficit. The ring
+        shows how much you can still eat today and stay on pace.</p></div>
+      <div class="step reveal d2"><h3>Watch the scale follow</h3><p>Finish at or under budget and the deficit counts. Do it
+        consistently and the trend line does the rest.</p></div>
+    </div>
+    <div class="example reveal">
+      <strong>Example.</strong> You burn ~2,500 kcal/day on average and your goal needs a
+      <strong>500 kcal/day</strong> deficit — a <strong>2,000 kcal budget</strong>. You've eaten 1,850,
+      so the ring reads <strong>150 kcal left</strong>: room for 150 more and you still land the
+      deficit by bedtime.
+    </div>
+  </div>
+</section>
+
+<section class="raise" id="privacy">
+  <div class="privacy-panel">
+    <div class="kicker reveal">Private by design</div>
+    <h2 class="reveal">Your data stays yours.</h2>
+    <p class="lead reveal d1">Your logs live in Apple Health on your device, under Apple's
+    protections. By default, no data is sent to third parties — everything remains on
+    your device.</p>
+    <ul class="feature-list reveal d2" style="text-align:left; max-width:680px; margin:28px auto 0;">
+      <li><strong>Private by default</strong> — online food lookups and every AI feature ship
+        turned off; nothing network-touching runs until you turn it on.</li>
+      <li><strong>Your data lives in Apple Health</strong> — logs are HealthKit samples on
+        your device, not rows in a datacenter.</li>
+      <li><strong>AI can stay local</strong> — with Apple Intelligence, estimates,
+        label reading, and photo identification all run on the iPhone itself. Prefer your
+        own provider? Requests go only to the service you configure.</li>
+      <li><strong>Lookups only when you ask</strong> — with online lookups on, the only
+        thing sent is the search text or barcode you look up against public food
+        databases.</li>
+    </ul>
+    <div class="badges reveal d2">
+      <span class="badge">No analytics</span>
+      <span class="badge">No servers</span>
+      <span class="badge">No tracking</span>
+      <span class="badge">Optional AI</span>
+      <span class="badge">Data Not Collected</span>
+      <span class="badge">Works offline</span>
+    </div>
+    <p style="margin-top:30px" class="reveal d3"><a href="privacy/">Read the full privacy policy →</a></p>
+  </div>
+</section>
+
+
+<section id="source">
+  <div class="wrap" style="text-align:center">
+    <div class="kicker reveal">Source-available</div>
+    <h2 class="reveal">Read it. Build it. Make it yours.</h2>
+    <p class="lead reveal d1" style="max-width:58ch;margin-left:auto;margin-right:auto">The whole app is on GitHub under the
+    <a href="https://github.com/ecliptik/onigiri/blob/main/LICENSE">PolyForm Noncommercial license</a> —
+    free to build, run, and modify for any noncommercial purpose.</p>
+    <div class="hero-ctas reveal d2">
+      <a class="btn primary" href="https://github.com/ecliptik/onigiri">View the source</a>
+      <a class="btn ghost" href="https://github.com/ecliptik/onigiri/wiki">Browse the wiki</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="links">
+      <a href="https://github.com/ecliptik/onigiri/wiki/User-Guide">User Guide</a>
+      <a href="privacy/">Privacy Policy</a>
+      <a href="https://github.com/ecliptik/onigiri/wiki">Wiki</a>
+      <a href="https://github.com/ecliptik/onigiri">GitHub</a>
+      <a href="https://github.com/ecliptik/onigiri/blob/main/LICENSE">License</a>
+    </div>
+    <div>© 2026 Micheal Waltz · Onigiri 🍙</div>
+    <div>Food data from <a href="https://world.openfoodfacts.org">Open Food Facts</a> (ODbL)
+      and <a href="https://fdc.nal.usda.gov">USDA FoodData Central</a>.</div>
+    <div>Calorie budgets and projections are informational estimates, not medical advice.</div>
+  </div>
+</footer>
+
+<script>
+  // Scroll reveals — skipped entirely under reduced motion (CSS shows all).
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+  }, { threshold: 0.12, rootMargin: "0px 0px -40px" });
+  document.querySelectorAll(".reveal:not(.in)").forEach(el => io.observe(el));
+  // Reduced motion: no auto-playing videos — the posters stand in.
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduceMotion) {
+    document.querySelectorAll("video[autoplay]").forEach(v => { v.removeAttribute("autoplay"); v.pause(); });
+  }
+
+  // Theme: stored choice > system > light. The site inverts the app
+  // assets — dark site shows the light app, light site the dark app.
+  const themeQuery = matchMedia("(prefers-color-scheme: dark)");
+  const toggle = document.getElementById("themeToggle");
+  function storedTheme() {
+    try { const t = localStorage.getItem("theme"); if (t === "dark" || t === "light") return t; } catch (e) {}
+    return null;
+  }
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    toggle.textContent = theme === "dark" ? "☀️" : "🌙";
+    const appMode = theme === "dark" ? "light" : "dark";
+    document.querySelectorAll("img[data-app-light]").forEach(el => {
+      const src = el.getAttribute("data-app-" + appMode);
+      if (src && el.getAttribute("src") !== src) el.setAttribute("src", src);
+    });
+    document.querySelectorAll("video[data-app-light-src]").forEach(v => {
+      const src = v.getAttribute("data-app-" + appMode + "-src");
+      if (src && v.getAttribute("src") !== src) {
+        v.setAttribute("poster", v.getAttribute("data-app-" + appMode + "-poster"));
+        v.setAttribute("src", src);
+        v.load();
+        if (!reduceMotion) v.play().catch(() => {});
+      }
+    });
+  }
+  toggle.addEventListener("click", () => {
+    const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    try { localStorage.setItem("theme", next); } catch (e) {}
+    applyTheme(next);
+  });
+  // Follow live system changes unless the user chose explicitly.
+  themeQuery.addEventListener("change", e => {
+    if (!storedTheme()) applyTheme(e.matches ? "dark" : "light");
+  });
+  applyTheme(storedTheme() || (themeQuery.matches ? "dark" : "light"));
+  // Nav hairline once the page moves.
+  const nav = document.getElementById("nav");
+  addEventListener("scroll", () => nav.classList.toggle("scrolled", scrollY > 8), { passive: true });
+</script>
+</body>
+</html>

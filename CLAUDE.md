@@ -42,6 +42,15 @@ here. Roadmap: `plans/PLAN.md`.
   wiki's push quirks, and the full capture recipe for the stills and clips —
   including the probes for the two faults above, which device the committed
   assets come from, and why the calendar shot must be taken mid-month.
+- **Never commit personal health data** — the user's weight, height, age,
+  sex, or any burn/intake/deficit/weight-change figure from their devices,
+  screenshots or diagnostics — in code, comments, fixtures, plans or
+  commit/tag messages. This repo is public. Quote the SHAPE ("a few hundred
+  kcal apart") or synthetic values; the seeder's reference body is the
+  synthetic one. History was reset to a single commit on 2026-09-22 to purge
+  exactly this, so commit hashes cited here and in `plans/` no longer
+  resolve, and every tag before then is gone: their notes live in
+  `CHANGELOG.archive.md`, which `generate-changelog.sh` appends.
 - License: PolyForm Noncommercial 1.0.0 since the commit after the v2.2.0
   tag (≤ v2.2.0 remains MIT, irrevocably). Say "source-available, free for
   noncommercial use", never "open source". LICENSE is verbatim PolyForm text —

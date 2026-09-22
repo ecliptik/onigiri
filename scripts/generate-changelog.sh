@@ -31,9 +31,9 @@ TAGS=$(git tag --sort=-creatordate)
   echo
   echo "Generated from the annotated git tags by \`scripts/generate-changelog.sh\`."
   echo "**Do not edit by hand** — the tag message is the source of truth, and it is"
-  echo "also what each [GitHub Release]($REPO/releases) publishes. Versions before"
-  echo "v2.16.0 were not all tagged with notes; those show the version and its"
-  echo "comparison link alone."
+  echo "also what each [GitHub Release]($REPO/releases) publishes. Versions through"
+  echo "v2.28.2 predate the repository's fresh start on 2026-09-22: their notes are"
+  echo "kept below from \`CHANGELOG.archive.md\`, but their tags are gone."
   echo
 
   for tag in $TAGS; do
@@ -68,6 +68,9 @@ TAGS=$(git tag --sort=-creatordate)
       echo
     fi
   done
+  # Releases before the 2026-09-22 history reset have no tags left to
+  # render from; their notes are frozen in the archive and always follow.
+  cat CHANGELOG.archive.md
 } > "$OUT"
 
 echo "Wrote $OUT ($(grep -c '^## ' "$OUT") versions)"

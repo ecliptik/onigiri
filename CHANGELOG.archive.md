@@ -1,13 +1,3 @@
-# Changelog
-
-Every released version of Onigiri, newest first.
-
-Generated from the annotated git tags by `scripts/generate-changelog.sh`.
-**Do not edit by hand** — the tag message is the source of truth, and it is
-also what each [GitHub Release](https://github.com/ecliptik/onigiri/releases) publishes. Versions through
-v2.28.2 predate the repository's fresh start on 2026-09-22: their notes are
-kept below from `CHANGELOG.archive.md`, but their tags are gone.
-
 ## v2.28.2 — the day card opens filled
 
 _2026-09-17_

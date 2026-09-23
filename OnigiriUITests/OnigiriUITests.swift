@@ -2323,9 +2323,13 @@ final class OnigiriUITests: XCTestCase {
         attachShot(named: "meal-builder-typed-quantity")
 
         // TextField(value:format:) commits on focus RESIGNATION, so the
-        // food doesn't join the meal until the decimal pad is dismissed.
-        let done = app.buttons["Done"].firstMatch
-        if done.waitForExistence(timeout: 3) { done.tap() }
+        // food doesn't join the meal until focus moves. There is no keypad
+        // Done any more (2026-09-22); moving to the name field commits it.
+        let nameField = app.textFields["Meal name"].firstMatch
+        nameField.tap()
+        // ...and its keyboard has a Return, which closes it again so the
+        // rows below are on screen.
+        nameField.typeText("\n")
 
         // What's in the meal has its own section (2026-08-09) — the
         // grouped list owns the header's case, hence BEGINSWITH[c].
@@ -2385,12 +2389,11 @@ final class OnigiriUITests: XCTestCase {
         // the Add Food form made for a release.
         let search = app.searchFields["Search foods or describe a meal"].firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5), "Meal-builder search prompt names both jobs")
-        // The decimal pad covers the bottom-placed search field, so taps
-        // land on the keyboard; the form's own principal Done button is
-        // the way out (decimal pads have no return key). Already tapped
-        // after the quantity above — re-check in case focus came back.
-        if done.exists {
-            done.tap()
+        // A keyboard covers the bottom-placed search field, so taps land
+        // on it. Focus sits in the name field (moved there to commit the
+        // quantity above), whose keyboard has a Return that closes it.
+        if app.keyboards.firstMatch.exists {
+            app.textFields["Meal name"].firstMatch.typeText("\n")
         }
         // Settle, then tap-and-retap: the iOS 26 search drawer regularly
         // ignores the first tap right after another control dismissed

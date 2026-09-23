@@ -156,6 +156,26 @@ struct FoodFormView: View {
         !name.trimmingCharacters(in: .whitespaces).isEmpty && kcal != nil
     }
 
+    /// The number fields are `TextField(value:format:)`, which commit only
+    /// when focus leaves them — so while the keypad is up a just-typed
+    /// calorie figure is still nil and `canSave` is false. With no keypad
+    /// Done (removed 2026-09-22), the bar buttons stay live while a number
+    /// is being edited and commit it themselves (`afterNumberCommit`).
+    private var canSaveOrCommit: Bool {
+        canSave || (numberFieldFocused && !name.trimmingCharacters(in: .whitespaces).isEmpty)
+    }
+
+    /// Resign the number field, then act a runloop later once its value
+    /// has committed — and only if the form is then actually savable.
+    private func afterNumberCommit(_ action: @escaping () -> Void) {
+        guard numberFieldFocused else { action(); return }
+        numberFieldFocused = false
+        DispatchQueue.main.async {
+            guard canSave else { return }
+            action()
+        }
+    }
+
     /// Everything the form edits, for the dirty check.
     private struct FieldsSnapshot: Equatable {
         var name: String
@@ -441,35 +461,26 @@ struct FoodFormView: View {
                 ToolbarItemGroup(placement: .confirmationAction) {
                     if food == nil {
                         Button(purpose == .logging ? "Log" : "Save") {
-                            if purpose == .logging { logOnly() } else { saveOnly() }
+                            afterNumberCommit { if purpose == .logging { logOnly() } else { saveOnly() } }
                         }
                         .keyboardShortcut("s", modifiers: .command)
-                        .disabled(!canSave)
+                        .disabled(!canSaveOrCommit)
                         .recedesWithSheet(activeSheet != nil)
-                        Button(purpose == .logging ? "Log & Save" : "Save & Log") { saveAndLog() }
+                        Button(purpose == .logging ? "Log & Save" : "Save & Log") { afterNumberCommit(saveAndLog) }
                             .fontWeight(.semibold)
                             .keyboardShortcut("s", modifiers: [.command, .shift])
-                            .disabled(!canSave)
+                            .disabled(!canSaveOrCommit)
                             .recedesWithSheet(activeSheet != nil)
                     } else {
-                        Button("Save") { save() }
+                        Button("Save") { afterNumberCommit(save) }
                             .keyboardShortcut("s", modifiers: .command)
-                            .disabled(!canSave)
+                            .disabled(!canSaveOrCommit)
                             .recedesWithSheet(activeSheet != nil)
                     }
                 }
-                // Decimal pads have no return key; surface a Done while
-                // editing (keyboard-accessory placement is unreliable on
-                // iOS 26). The sheet's Cancel/Save stay reachable regardless.
-                if numberFieldFocused {
-                    ToolbarItem(placement: .principal) {
-                        // Plain, like every other bar button: a styled fill
-                        // does not render in the bar, and the dark label
-                        // then reads as dead text (2026-09-22).
-                        Button("Done") { numberFieldFocused = false }
-                            .fontWeight(.semibold)
-                    }
-                }
+                // No keypad "Done" (removed 2026-09-22): in the nav bar,
+                // Done reads as "commit this sheet" beside Log/Save. Swipe
+                // down dismisses the keypad, as in Apple's own sheets.
             }
             .scrollDismissesKeyboard(.interactively)
             // Pre-filled values are usually replaced, not appended to:

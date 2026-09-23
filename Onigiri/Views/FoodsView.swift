@@ -1174,6 +1174,8 @@ struct PortionSheet: View {
                 guard let field = note.object as? UITextField else { return }
                 DispatchQueue.main.async { field.selectAll(nil) }
             }
+            // The keypad's only way out now that its Done is gone.
+            .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -1198,17 +1200,9 @@ struct PortionSheet: View {
                     .disabled(quantity <= 0)
                     .recedesWithSheet(openFood != nil)
                 }
-                // Decimal pads have no return key; surface a Done while
-                // editing, like the food form.
-                if quantityFocused {
-                    ToolbarItem(placement: .principal) {
-                        // Plain, like every other bar button: a styled fill
-                        // does not render in the bar, and the dark label
-                        // then reads as dead text (2026-09-22).
-                        Button("Done") { quantityFocused = false }
-                            .fontWeight(.semibold)
-                    }
-                }
+                // No keypad "Done" (removed 2026-09-22): in the nav bar,
+                // Done reads as "commit this sheet" beside Log/Save. Swipe
+                // down dismisses the keypad, as in Apple's own sheets.
             }
             .recedesBehindSheet(openFood != nil)
         }

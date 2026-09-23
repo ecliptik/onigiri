@@ -419,21 +419,21 @@ struct MealFormView: View {
                     .keyboardShortcut(.cancelAction)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
-                        .keyboardShortcut("s", modifiers: .command)
-                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || !hasItems)
-                }
-                // Decimal pads have no return key; surface a Done while a
-                // quantity field is editing (the food form's pattern).
-                if quantityFocused {
-                    ToolbarItem(placement: .principal) {
-                        // Plain, like every other bar button: a styled fill
-                        // does not render in the bar, and the dark label
-                        // then reads as dead text (2026-09-22).
-                        Button("Done") { quantityFocused = false }
-                            .fontWeight(.semibold)
+                    // A typed quantity commits only when its field loses
+                    // focus, so while the keypad is up Save stays live and
+                    // commits it first (no keypad Done since 2026-09-22).
+                    Button("Save") {
+                        guard quantityFocused else { save(); return }
+                        quantityFocused = false
+                        DispatchQueue.main.async { if hasItems { save() } }
                     }
+                        .keyboardShortcut("s", modifiers: .command)
+                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty
+                                  || (!hasItems && !quantityFocused))
                 }
+                // No keypad "Done" (removed 2026-09-22): in the nav bar,
+                // Done reads as "commit this sheet" beside Log/Save. Swipe
+                // down dismisses the keypad, as in Apple's own sheets.
             }
             // .immediately, not .interactively: after typing a portion
             // the pad stays up, and the very next gesture is a scroll to

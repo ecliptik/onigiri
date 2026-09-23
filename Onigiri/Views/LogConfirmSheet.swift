@@ -125,6 +125,12 @@ struct LogConfirmSheet: View {
                             .monospacedDigit()
                     }
                 }
+                // Right under the kcal it scales, so the total stays in
+                // view while adjusting — below a long AI serving it sat
+                // off screen (2026-09-22, the portion sheet's fix).
+                Stepper(
+                    "Quantity \(quantity.formatted(.number.precision(.fractionLength(0...2))))",
+                    value: $quantity, in: 0.25...20, step: 0.25)
                 if let serving = label.servingDescription {
                     LabeledContent("Serving", value: serving)
                 }
@@ -147,21 +153,16 @@ struct LogConfirmSheet: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            // ABOVE the receipt, because it is what the receipt is
-            // COUNTING: every figure below is scaled by the portion, and
-            // the two controls that decide the log sat under a list long
-            // enough to push them off the screen — easy to miss, and
-            // read as settings rather than as part of the confirm (the
-            // user, 2026-08-24).
+            // ABOVE the receipt: the controls that decide the log sat
+            // under a list long enough to push them off the screen (the
+            // user, 2026-08-24). The quantity now sits in the card above,
+            // beside the kcal it scales.
             Section {
                 Picker("Meal", selection: $category) {
                     ForEach(FoodCategory.allCases) { slot in
                         Text(slot.rawValue).tag(slot)
                     }
                 }
-                Stepper(
-                    "Quantity \(quantity.formatted(.number.precision(.fractionLength(0...2))))",
-                    value: $quantity, in: 0.25...20, step: 0.25)
             }
             Section {
                 if written.isEmpty {

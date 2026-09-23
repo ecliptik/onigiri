@@ -3726,6 +3726,16 @@ final class OnigiriUITests: XCTestCase {
         // test uses for stacked Cancels).
         XCTAssertTrue(app.staticTexts["Will log"].waitForExistence(timeout: 10),
                       "Portion sheet should follow Log")
+        // The total sits right under the stepper that moves it, so it
+        // stays in view while adjusting (2026-09-22).
+        // The LAST "Serving": the food form's own row is still in the
+        // tree behind the sheet.
+        let servings = app.staticTexts.matching(identifier: "Serving").allElementsBoundByIndex
+        let serving = try XCTUnwrap(servings.last)
+        let willLog = app.staticTexts["Will log"].firstMatch
+        XCTAssertLessThan(willLog.frame.minY - serving.frame.minY, 80,
+                          "Will log belongs directly under Serving")
+        attachShot(named: "portion-sheet")
         app.buttons.matching(identifier: "Log").allElementsBoundByIndex.last?.tap()
 
         // It logged: the entry is on Today. The log's meal groups render

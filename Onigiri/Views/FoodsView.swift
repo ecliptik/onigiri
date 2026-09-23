@@ -1035,6 +1035,13 @@ struct PortionSheet: View {
                         }
                         .padding(.trailing, 8)
                     }
+                    // Right under the stepper that moves it, so the total
+                    // stays in view while adjusting — below a long AI
+                    // serving description it was off screen (2026-09-22).
+                    LabeledContent("Will log") {
+                        Text("\(target.kcal * quantity, format: .number.precision(.fractionLength(0))) kcal • \(portionMetric.captionText((portionMetric.itemAmount(sodiumMg: target.sodiumMg, nutrients: target.nutrients) ?? 0) * quantity, sodium: SharedStore.sodiumUnit))")
+                            .monospacedDigit()
+                    }
                     if !target.serving.isEmpty {
                         LabeledContent("One serving") {
                             Text(target.serving)
@@ -1119,16 +1126,12 @@ struct PortionSheet: View {
                         }
                         .pickerStyle(.segmented)
                     }
-                    LabeledContent("Will log") {
-                        Text("\(target.kcal * quantity, format: .number.precision(.fractionLength(0))) kcal • \(portionMetric.captionText((portionMetric.itemAmount(sodiumMg: target.sodiumMg, nutrients: target.nutrients) ?? 0) * quantity, sodium: SharedStore.sodiumUnit))")
-                            .monospacedDigit()
-                    }
                     // Edit mode only: move the entry in time ("logged at
                     // 11 pm but it was yesterday's dinner" used to mean
                     // delete + re-log).
                     //
-                    // Directly under Will log, beside the meal slot — the
-                    // other two things an edit changes. It sat in its own
+                    // Beside the meal slot — the other thing an edit
+                    // changes. It sat in its own
                     // section at the very BOTTOM, below a meal's Contains
                     // list, where it was missed entirely: the day was
                     // movable for releases and read as a feature the app

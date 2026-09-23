@@ -1202,15 +1202,11 @@ struct PortionSheet: View {
                 // editing, like the food form.
                 if quantityFocused {
                     ToolbarItem(placement: .principal) {
-                        Button {
-                            quantityFocused = false
-                        } label: {
-                            Text("Done")
-                                .fontWeight(.semibold)
-                                .foregroundStyle(Color.onRicePaper)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.ricePaper)
+                        // Plain, like every other bar button: a styled fill
+                        // does not render in the bar, and the dark label
+                        // then reads as dead text (2026-09-22).
+                        Button("Done") { quantityFocused = false }
+                            .fontWeight(.semibold)
                     }
                 }
             }

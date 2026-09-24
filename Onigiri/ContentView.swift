@@ -241,7 +241,7 @@ struct ContentView: View {
                 selectedTab = .today
                 if let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?
                     .queryItems?.first(where: { $0.name == "day" })?.value,
-                   let day = Self.deepLinkDay.date(from: raw) {
+                   let day = try? Date(raw, strategy: Self.deepLinkDay) {
                     QuickActions.shared.dayRequest = day
                 }
                 QuickActions.shared.quickLogRequest = .all
@@ -299,19 +299,19 @@ struct ContentView: View {
             item: taken.item, isOurs: true, inboxOriginal: taken.inboxFile)
     }
 
-    private static let deepLinkDay: DateFormatter = {
-        let formatter = DateFormatter()
-        // Fixed format, fixed locale — matching BackupService's own
-        // stamp formatter, and the same "yyyy-MM-dd" DeficitTargetHistory
-        // uses everywhere else. Without an explicit locale, a device set
-        // to a non-Gregorian calendar could misparse the numeric fields
-        // (health-check audit, 2026-09-14; no deep-link producer sends a
-        // `day` today, so currently unreachable — hardening for when
-        // one does).
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
+    // Fixed format, fixed locale — matching BackupService's own stamp
+    // format, and the same "yyyy-MM-dd" DeficitTargetHistory uses
+    // everywhere else. Without an explicit locale, a device set to a
+    // non-Gregorian calendar could misparse the numeric fields
+    // (health-check audit, 2026-09-14; no deep-link producer sends a
+    // `day` today, so currently unreachable — hardening for when one
+    // does). Strict, as the DateFormatter it replaced was.
+    nonisolated static let deepLinkDay = Date.ParseStrategy(
+        format: "\(year: .padded(4))-\(month: .twoDigits)-\(day: .twoDigits)",
+        locale: Locale(identifier: "en_US_POSIX"),
+        timeZone: .current,
+        isLenient: false
+    )
 
     /// The TabView's selection, proxied so tapping Today can do more
     /// than select it.

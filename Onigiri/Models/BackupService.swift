@@ -59,7 +59,7 @@ enum BackupService {
         // Date AND time: two backups can never claim the same name, so
         // a write can never destroy an earlier file (the second half of
         // the 2026-07-16 lesson). Fixed-locale, filename-safe.
-        let url = directory.appendingPathComponent("onigiri-backup-\(Self.stampFormatter.string(from: now)).json")
+        let url = directory.appendingPathComponent("onigiri-backup-\(Self.stampFormat.format(now)).json")
         do {
             // .complete: encrypted and unreadable while the device is
             // locked (see backupsDirectory). Written only from the
@@ -73,12 +73,17 @@ enum BackupService {
         return url
     }
 
-    private static let stampFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd-HHmmss"
-        return formatter
-    }()
+    /// `yyyy-MM-dd-HHmmss`, Gregorian whatever the device calendar — the
+    /// names already on disk, byte for byte (`DateStampFormatTests`).
+    nonisolated static let stampFormat = Date.VerbatimFormatStyle(
+        format: """
+            \(year: .padded(4))-\(month: .twoDigits)-\(day: .twoDigits)-\
+            \(hour: .twoDigits(clock: .twentyFourHour, hourCycle: .zeroBased))\
+            \(minute: .twoDigits)\(second: .twoDigits)
+            """,
+        timeZone: .current,
+        calendar: Calendar(identifier: .gregorian)
+    )
 
     /// The newest backup on disk, by modification date (covers legacy
     /// day-stamped names and the timestamped ones alike).

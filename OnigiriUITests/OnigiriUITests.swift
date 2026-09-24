@@ -323,6 +323,50 @@ final class OnigiriUITests: XCTestCase {
         }
     }
 
+    /// The Foods tab's leading Edit swipe, revealed on a food and on a
+    /// meal in BOTH appearances — opt-in via `TEST_RUNNER_EDIT_SWIPE_SHOT=1`.
+    /// The pill is white text on `riceToastStatus`, and its contrast is
+    /// the whole reason for the tint, so the shots are the evidence; the
+    /// assertion only proves each one caught the swipe open.
+    @MainActor
+    func testEditSwipeTintShots() throws {
+        guard ProcessInfo.processInfo.environment["EDIT_SWIPE_SHOT"] == "1" else {
+            throw XCTSkip("Set TEST_RUNNER_EDIT_SWIPE_SHOT=1 to capture the Edit swipe")
+        }
+        let app = XCUIApplication()
+        app.launchArguments = ["--seed-sample-data"]
+        XCUIDevice.shared.orientation = .portrait
+        defer { XCUIDevice.shared.appearance = .light }
+        app.launch()
+        skipOnboardingIfPresent(in: app)
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+        switchTab(in: app, to: "Foods")
+
+        for (appearance, suffix) in [(XCUIDevice.Appearance.light, "light"), (.dark, "dark")] {
+            XCUIDevice.shared.appearance = appearance
+            for (scope, row) in [("Foods", "Protein shake"), ("Meals", "Chicken & rice")] {
+                scopeTap(in: app, scope)
+                let text = app.buttons[row].firstMatch
+                XCTAssertTrue(text.waitForExistence(timeout: 10), "\(row) should be listed under \(scope)")
+                // A slow press-drag, as the log rows need: 150pt opens the
+                // reveal without committing the full swipe.
+                let start = text.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 150, dy: 0)))
+                XCTAssertTrue(app.buttons["Edit"].waitForExistence(timeout: 5),
+                              "The Edit swipe never opened on \(row)")
+                Thread.sleep(forTimeInterval: 0.6)
+                let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+                shot.name = "edit-swipe-\(scope.lowercased())-\(suffix)"
+                shot.lifetime = .keepAlways
+                add(shot)
+                // Close it the way it opened, so the next row starts shut.
+                start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: -150, dy: 0)))
+                Thread.sleep(forTimeInterval: 0.4)
+            }
+        }
+    }
+
     /// Goal's "Burn, from the scale" — the `ObservedBurn` cross-check
     /// that explains the predicted-vs-scale gap, returned to Progress on
     /// 2026-09-22 after six days in the budget explainer (2026-08-18 to

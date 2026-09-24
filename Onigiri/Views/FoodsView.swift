@@ -544,7 +544,13 @@ struct FoodsView: View {
             } label: {
                 Label("Edit", systemImage: "pencil")
             }
-            .tint(.riceToast)
+            // The status shade, not the plain tint: the swipe draws a WHITE
+            // pencil on this fill (its "Edit" caption sits below, off the
+            // fill), and in light mode the plain tint left that glyph near
+            // the 3:1 line where riceToastStatus gives ≈5.4:1. Dark mode is
+            // unchanged — the two tokens match there, pale tan under white —
+            // and still reads weakly; that needs a new token, not a reuse.
+            .tint(.riceToastStatus)
             Button {
                 meal.isFavorite.toggle()
                 context.saveOrLog("meal favorite")
@@ -624,7 +630,8 @@ struct FoodsView: View {
             } label: {
                 Label("Edit", systemImage: "pencil")
             }
-            .tint(.riceToast)
+            // riceToastStatus for AA contrast — see the meal row's Edit above.
+            .tint(.riceToastStatus)
             Button {
                 food.isFavorite.toggle()
                 context.saveOrLog("food favorite")

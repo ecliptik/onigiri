@@ -164,6 +164,73 @@ public nonisolated enum MenuDocumentReader {
             debugScanned: scannedPages.isEmpty ? nil : scannedPages)
     }
 
+    /// A shared SCREENSHOT of a nutrition table, read as a one-page
+    /// scanned guide. A picture of a table is exactly what `readOCR`
+    /// already reads when a PDF turns out to be artwork, so the image is
+    /// wrapped as a PDF page and goes down the same `observations` path
+    /// — the document-table model first, which reads turned column
+    /// headings the plain recognizer cannot, then strips and the flipped
+    /// pass. No second parser.
+    ///
+    /// Until 2026-09-23 a screenshot went only to `LabelParser`, which
+    /// is built for ONE food's panel: a menu table came back as its first
+    /// row with calories, and the rest of the menu was gone (the user,
+    /// a JOLLIBEE guide screenshot).
+    public static func readImage(_ image: CGImage) async -> MenuDocument {
+        guard let page = pdfPage(wrapping: image) else {
+            return MenuDocument(pages: [], suggestedSource: nil)
+        }
+        var budget = ocrImageLimit
+        var stages: [String] = []
+        let paged = await observations(on: page, existing: [], budget: &budget, stages: &stages)
+        // The plain recognizer on the ORIGINAL pixels, too, and the
+        // better reading wins. `observations` stops at the document-table
+        // model whenever that parses at all, and on a screenshot it can
+        // parse WRONG: the Jollibee guide's Peach Mango Pie row came back
+        // stacked down the name column and was glued onto the row above,
+        // where the plain reading had every row right. On a real PDF the
+        // text layer makes this moot; a picture has no text layer, so
+        // there are two honest readings and the parse decides.
+        let plain = (try? await LabelScan.observations(from: image)) ?? []
+        let runs = better(plain, paged)
+        #if DEBUG
+        let note: String? = "img:" + stages.joined(separator: ",")
+            + ",plain=\(plain.count),\(runs == plain ? "plain" : "paged")"
+        #else
+        let note: String? = nil
+        #endif
+        return MenuDocument(pages: [runs], suggestedSource: nil, scanNote: note)
+    }
+
+    /// The transcript that parses into more rows, then more filled
+    /// fields; the first on a tie.
+    static func better(
+        _ first: [LabelObservation], _ second: [LabelObservation]
+    ) -> [LabelObservation] {
+        func score(_ runs: [LabelObservation]) -> (Int, Int) {
+            let rows = MenuTableParser.parse(runs)
+            return (rows.count, rows.reduce(0) { $0 + $1.filledFieldCount })
+        }
+        return score(second) > score(first) ? second : first
+    }
+
+    /// The image as the only page of an in-memory PDF, one point per
+    /// pixel. Drawn through Core Graphics rather than `PDFPage(image:)`,
+    /// whose image type differs between UIKit and AppKit.
+    static func pdfPage(wrapping image: CGImage) -> PDFPage? {
+        let data = NSMutableData()
+        var box = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        guard box.width > 0, box.height > 0,
+              let consumer = CGDataConsumer(data: data as CFMutableData),
+              let context = CGContext(consumer: consumer, mediaBox: &box, nil)
+        else { return nil }
+        context.beginPDFPage(nil)
+        context.draw(image, in: box)
+        context.endPDFPage()
+        context.closePDF()
+        return PDFDocument(data: data as Data)?.page(at: 0)
+    }
+
     /// One page read by Vision, in page-normalized coordinates.
     ///
     /// Two things a single `LabelScan.observations` call cannot do:

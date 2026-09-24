@@ -455,4 +455,26 @@ struct MenuTableParserTests {
         let label = LabelParser.parse(runs)
         expectEqual(label.kcal, 300)
     }
+
+    /// A SCREENSHOT of a published guide, shared from Photos — turned
+    /// column headings, a section heading mid-table, a last row cut off
+    /// by the crop. Before 2026-09-23 a shared image never reached this
+    /// parser, and the whole guide came back as one cheeseburger.
+    /// (Plain-recognizer transcript, macOS Vision; see
+    /// `MenuDocumentReader.readImage` for why both readings are tried.)
+    @Test func aScreenshotOfAGuideReadsEveryRow() throws {
+        let rows = MenuTableParser.parse(try fixture("menu-jollibee-screenshot"))
+        #expect(rows.map(\.name) == [
+            "Angus Cheeseburger", "Angus Deluxe Cheeseburger", "Angus Aloha Burger",
+            "Bacon Angus Deluxe Burger", "Ultimate Bacon Bacon Angus Cheeseburger",
+            "Extra Sliced Cheese", "Extra Bacon", "Peach Mango Pie", "Ube Pie",
+        ])
+        let burger = try #require(rows.first)
+        expectEqual(burger.kcal, 667)
+        expectEqual(burger.sodiumMg, 1700)
+        expectEqual(burger.nutrients.proteinG, 26)
+        let pie = try #require(rows.first { $0.name == "Peach Mango Pie" })
+        expectEqual(pie.kcal, 270)
+        #expect(pie.section?.uppercased() == "DESSERTS")
+    }
 }

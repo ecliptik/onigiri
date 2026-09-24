@@ -163,6 +163,22 @@ enum FoodImageReader {
             let result = try await LabelScan.scan(cgImage, orientation: orientation)
             transcript = result.transcript
             guard !Task.isCancelled else { return .cancelled }
+            // A screenshot of a published nutrition TABLE is a menu, not
+            // a panel: read it the way a pictured PDF guide is read, and
+            // ask which row before anything else runs. LabelParser takes
+            // exactly one food, so without this a whole guide came back
+            // as its first row with calories (the user, 2026-09-23).
+            // Deterministic, so ahead of both model reads below — the
+            // printed figures are right there. Imported only: a camera
+            // still of a panel keeps its old cost and latency.
+            if source == .imported, mentionsNutrition(result.transcript) {
+                status("Reading table…")
+                let document = await MenuDocumentReader.readImage(cgImage)
+                guard !Task.isCancelled else { return .cancelled }
+                let rows = MenuTableParser.parse(pages: document.pages)
+                imageLog.notice("Screenshot table: \(rows.count) row(s) \(document.scanNote ?? "", privacy: .public)")
+                if rows.count > 1 { return .menu(rows, source: nil) }
+            }
             // iOS 26 + Apple Intelligence: the model fills whatever the
             // deterministic parse left blank — invisible, and every
             // model failure keeps the deterministic result.

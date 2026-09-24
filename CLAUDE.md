@@ -1555,6 +1555,14 @@ Each cost a debugging session.
     populated by EXTENSIONS, and the "Open in …" rows next to it are other
     apps' action extensions. `OnigiriShare` (share-services) is the door. The
     declaration is kept anyway — it is free and covers Files.
+  - **"Onigiri needs two taps in the share sheet" is iOS, not the
+    extension** (2026-09-24). Seen sharing from the screenshot editor
+    after a crop. A DEBUG trail logged from the extension's `init`
+    showed exactly ONE construction per share, including the shares that
+    took two taps, and a warm process that appeared in ~0.5 s still
+    needed them — the first tap never created the extension at all.
+    Don't chase launch time or activation rules for it; the logging was
+    removed once it had answered.
   - **The share extension does not open the app, by design.**
     `extensionContext.open` is unsupported from this extension point and the
     responder-chain walk to `UIApplication` is the rejection trick, so the

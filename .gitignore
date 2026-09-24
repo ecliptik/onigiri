@@ -22,3 +22,6 @@ build/
 # Local, per-developer configuration (never committed)
 local.yml
 scripts/local-devices.env
+
+# Personal terms for scripts/check-personal-data.sh (never committed)
+scripts/personal-terms.local

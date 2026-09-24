@@ -1,0 +1,8 @@
+# Copy to scripts/personal-terms.local (gitignored) and list anything
+# personal that must never be pushed: names (yours, family's), email
+# addresses, device names, device identifiers. One per line,
+# case-insensitive, matched literally. '#' starts a comment.
+Your Name
+you@example.com
+Your iPhone
+00000000-0000000000000000

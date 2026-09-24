@@ -1208,7 +1208,7 @@ struct TodayView: View {
         // per-section Equatable views below, not by laziness.
         VStack(alignment: .leading, spacing: 10) {
             // ALL logging lives behind the corner + pill now — water is
-            // the sheet's pinned top row (Micheal's final water home;
+            // the sheet's pinned top row (the user's final water home;
             // widget/watch/app icon keep the 1-tap paths).
             HStack {
                 // The title is the master toggle: any group open →

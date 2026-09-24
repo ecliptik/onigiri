@@ -24,7 +24,7 @@ struct WatchHomeView: View {
                 VStack(spacing: 4) {
                     headlineNumber
 
-                    // Micheal's scheme: meal = rice-paper cream with
+                    // The user's scheme: meal = rice-paper cream with
                     // dark content (the phone's prominent-Done recipe —
                     // riceToast tan made the fork unreadable), water =
                     // blue, as it always was.

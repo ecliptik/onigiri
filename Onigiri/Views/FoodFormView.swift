@@ -634,7 +634,7 @@ struct FoodFormView: View {
 
 
     /// Duplicate-food guard: fires only for NEW foods whose prefill is
-    /// already in the library (Micheal's manual-entry-then-scan case).
+    /// already in the library (the user's manual-entry-then-scan case).
     /// Barcode beats name — a product saved under a different name used
     /// to sail past and mint a twin. Manual typing is not guarded —
     /// that's deliberate.

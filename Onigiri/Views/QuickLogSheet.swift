@@ -330,7 +330,7 @@ struct QuickLogSheet: View {
                         }
                     }
                 }
-                // Water leads the library in every scope (Micheal moved
+                // Water leads the library in every scope (the user moved
                 // it off Today's header — one + button, one place to
                 // log; widget/watch/app icon keep the 1-tap paths). Tap
                 // logs the default serving into the browsed day;

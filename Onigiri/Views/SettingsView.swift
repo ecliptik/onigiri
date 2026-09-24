@@ -702,7 +702,7 @@ struct SettingsView: View {
         }
     }
 
-    /// Empty input is a cancellation, per Micheal — the previous choice
+    /// Empty input is a cancellation, per the user — the previous choice
     /// simply stays. Only a non-empty non-emoji earns the toast.
     private func commitCustomEmoji(for slot: IconSlot) {
         let value = customEmojiInput.trimmingCharacters(in: .whitespaces)

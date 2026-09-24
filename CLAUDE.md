@@ -42,15 +42,41 @@ here. Roadmap: `plans/PLAN.md`.
   wiki's push quirks, and the full capture recipe for the stills and clips —
   including the probes for the two faults above, which device the committed
   assets come from, and why the calendar shot must be taken mid-month.
-- **Never commit personal health data** — the user's weight, height, age,
-  sex, or any burn/intake/deficit/weight-change figure from their devices,
-  screenshots or diagnostics — in code, comments, fixtures, plans or
-  commit/tag messages. This repo is public. Quote the SHAPE ("a few hundred
-  kcal apart") or synthetic values; the seeder's reference body is the
-  synthetic one. History was reset to a single commit on 2026-09-22 to purge
-  exactly this, so commit hashes cited here and in `plans/` no longer
-  resolve, and every tag before then is gone: their notes live in
-  `CHANGELOG.archive.md`, which `generate-changelog.sh` appends.
+- **Never commit personal information. This repo is public.** That means:
+  - **Health data:** the user's weight, height, age, sex, or any
+    burn/intake/deficit/weight-change figure from their devices,
+    screenshots or diagnostics.
+  - **Identity:** names (theirs or family's) and gendered pronouns — say
+    "the user". The copyright/Required Notice lines and git authorship are
+    the only deliberate exceptions.
+  - **Devices and contact:** device names, UDIDs and CoreDevice IDs (they
+    live in gitignored `scripts/local-devices.env`), email addresses,
+    locations.
+
+  It applies to code, comments, fixtures, plans, commit messages and tag
+  messages alike. Quote the SHAPE ("a few hundred kcal apart") or synthetic
+  values; the seeder's reference body is the synthetic one.
+
+  History was reset to a single commit on 2026-09-22 to purge exactly this,
+  so commit hashes cited here and in `plans/` no longer resolve, and every
+  tag before then is gone: their notes live in `CHANGELOG.archive.md`, which
+  `generate-changelog.sh` appends.
+
+  **A pre-push hook enforces it** (`scripts/check-personal-data.sh`, run
+  from `.githooks/pre-push`). It checks the pushed range's added lines and
+  commit messages for:
+  - Apple device UDIDs;
+  - the `field=value` lines of the budget diagnostics;
+  - realistic weights and heights;
+  - the literal terms in `scripts/personal-terms.local`, which is
+    gitignored (a committed list would publish them) and started from the
+    `.example`.
+
+  Install it once per clone with `scripts/install-hooks.sh`: git never runs
+  hooks that arrive with a clone. A blocked push is fixed, not overridden.
+  `PERSONAL_DATA_OK=1` is only for a value you have confirmed is
+  synthetic. `--all` audits the whole tree; its hits are the seeder's body
+  and synthetic fixtures, and each one needs a judgment.
 - License: PolyForm Noncommercial 1.0.0 since the commit after the v2.2.0
   tag (≤ v2.2.0 remains MIT, irrevocably). Say "source-available, free for
   noncommercial use", never "open source". LICENSE is verbatim PolyForm text —

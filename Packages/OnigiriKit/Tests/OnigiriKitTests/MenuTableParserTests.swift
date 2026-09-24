@@ -477,4 +477,38 @@ struct MenuTableParserTests {
         expectEqual(pie.kcal, 270)
         #expect(pie.section?.uppercased() == "DESSERTS")
     }
+
+    /// The same guide's next page, read by Vision's TABLE model — which
+    /// left the turned "Serving Size" heading empty. With no column to
+    /// hold them, every serving was read into the name ("Jollibee
+    /// Spaghetti 14.5 oz (411 g)") and a weight read upside down became
+    /// a section called "(6ELS)" (the user, 2026-09-23). The column is
+    /// now found by what its cells say, and a serving's second line
+    /// joins its first.
+    @Test func aServingColumnWithNoHeadingIsFoundByItsCells() throws {
+        let rows = MenuTableParser.parse(try fixture("menu-jollibee-tablemodel"))
+        #expect(rows.count == 19)
+        #expect(!rows.contains { $0.name.contains(" oz") || $0.name.contains("(") && $0.name.contains(" g)") },
+                "no serving left in a name")
+        #expect(Set(rows.compactMap(\.section)) == ["JOLLY SPAGHETTI", "PALABOK FIESTA"])
+        let spaghetti = try #require(rows.first)
+        #expect(spaghetti.name == "Jollibee Spaghetti")
+        #expect(spaghetti.serving == "14.5 oz (411 g)")
+        expectEqual(spaghetti.kcal, 610)
+        let fiesta = try #require(rows.first { $0.name == "Palabok Fiesta" })
+        #expect(fiesta.serving == "12.3 oz (351 g)")
+        #expect(rows.last?.serving == "1 packet")
+    }
+
+    @Test func aServingCellKeepsItsMeasuresAndDropsWreckage() {
+        #expect(MenuTableParser.cleanedServing("OZ 20.2 （573g）") == "(573g)")
+        #expect(MenuTableParser.cleanedServing("14.5 oz") == "14.5 oz")
+        #expect(MenuTableParser.cleanedServing("153g") == "153g")
+        #expect(MenuTableParser.cleanedServing("1 sandwich") == "1 sandwich")
+        #expect(MenuTableParser.cleanedServing("(6ELS)") == nil)
+        #expect(MenuTableParser.cleanedServing("Z09°W") == nil)
+        // Two halves once, never the same half twice.
+        #expect(MenuTableParser.joinedServing("8.8 oz", "(248 g)") == "8.8 oz (248 g)")
+        #expect(MenuTableParser.joinedServing("0.7 oz (19 g)", "(19 g)") == "0.7 oz (19 g)")
+    }
 }

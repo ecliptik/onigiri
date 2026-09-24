@@ -507,15 +507,31 @@ public enum MenuTableParser {
         // table. Without this the tail of a long menu is silently
         // dropped — the Chick-fil-A render puts its drinks on a second,
         // header-less page.
-        guard let columns = header?.columns ?? inherited, !columns.isEmpty else { return [] }
+        guard var columns = header?.columns ?? inherited, !columns.isEmpty else { return [] }
         inherited = columns
-        guard let firstValueX = columns.first(where: { $0.field != nil })?.minX else { return [] }
+        guard var firstValueX = columns.first(where: { $0.field != nil })?.minX else { return [] }
         // A table with no calorie column is not a nutrition table. The
         // allergen pages reach here and stop.
         guard columns.contains(where: { $0.field == .energy }) else { return [] }
 
         let body = Array(bands[(header?.bodyStart ?? 0)...])
         let nameStart = nameColumnStart(in: body, before: firstValueX)
+        // A serving column whose HEADER was never read. Vision's table
+        // model left Jollibee's turned "Serving Size" cell empty, and
+        // with no column to hold them every serving was read as part of
+        // the name ("Jollibee Spaghetti 14.5 oz (411 g)") and a garbled
+        // weight became a section heading (2026-09-23). The cells say
+        // what they are, so the column is found by them.
+        if !columns.contains(where: { $0.field == .serving }),
+           let serving = inferredServingColumn(in: body, nameStart: nameStart, before: firstValueX) {
+            columns.insert(serving, at: 0)
+            firstValueX = serving.minX
+        }
+        let servingColumn = columns.first { $0.field == .serving }
+        func inServingColumn(_ run: LabelObservation) -> Bool {
+            guard let servingColumn else { return false }
+            return run.x >= servingColumn.minX - 0.001 && run.maxX <= servingColumn.maxX + 0.01
+        }
         // The table's own type size, for telling a section heading from
         // a wrapped name below.
         let dataHeights = body.filter(\.isData).compactMap { $0.runs.map(\.h).max() }.sorted()
@@ -526,6 +542,10 @@ public enum MenuTableParser {
         // leans — see `carriesDown` below.
         let dataMidYs = body.filter(\.isData).map(\.midY)
         var carried: String?
+        // The second line of a two-line serving cell ("(411 g)" under
+        // "14.5 oz") arrives as a band of its own, holding nothing but
+        // that cell. Leaning down, it waits here for the next row.
+        var carriedServing: String?
         // From just below the header, NOT from the first data row: the
         // first section heading ("CURATED BOWLS") sits between the two,
         // and starting at the data would drop it and leave every row in
@@ -560,7 +580,7 @@ public enum MenuTableParser {
                 return wide ? run.x < firstValueX : run.maxX <= firstValueX
             }
             let nameRuns = band.runs.filter(isNameRun)
-            let valueRuns = band.runs.filter { !isNameRun($0) && $0.maxX > firstValueX }
+            var valueRuns = band.runs.filter { !isNameRun($0) && $0.maxX > firstValueX }
             // Reading order, not x order: a wrapped name continues on
             // the line BELOW, and both halves sit at the same x.
             var name = nameRuns
@@ -568,6 +588,35 @@ public enum MenuTableParser {
                 .map(\.text)
                 .joined(separator: " ")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // A band whose only figures sit in the serving column is a
+            // serving cell's second line, never a row: without this it
+            // had no name and was dropped, taking "(248 g)" with it. It
+            // joins whichever row it sits nearer, the rule a wrapped
+            // name follows; any name text beside it still continues the
+            // row as before.
+            if servingColumn != nil, !valueRuns.isEmpty, valueRuns.allSatisfy(inServingColumn) {
+                let text = valueRuns.sorted { $0.x < $1.x }.map(\.text).joined(separator: " ")
+                if let piece = cleanedServing(text) {
+                    // A weight in parentheses is the SECOND line of the
+                    // cell above it ("14.5 oz" / "(411 g)"), whatever the
+                    // spacing says: on a table-model grid the gap to
+                    // each neighbour is identical, and nearness sent
+                    // half of them to the wrong row.
+                    let continuesAbove = piece.hasPrefix("(") && rows.last.map {
+                        !($0.serving ?? "").hasSuffix(")")
+                    } ?? false
+                    if !continuesAbove, carriesDown(band.midY, among: dataMidYs) {
+                        carriedServing = joinedServing(carriedServing, piece)
+                    } else if let last = rows.last {
+                        rows[rows.count - 1] = MenuRow(
+                            id: last.id, name: last.name, section: last.section,
+                            serving: joinedServing(last.serving, piece),
+                            kcal: last.kcal, sodiumMg: last.sodiumMg, nutrients: last.nutrients)
+                    }
+                }
+                valueRuns = []
+            }
 
             guard !valueRuns.isEmpty, valueRuns.contains(where: { !numbers(in: $0.text).isEmpty })
             else {
@@ -607,10 +656,17 @@ public enum MenuTableParser {
             // something: nothing prompts a screenshot, and something
             // gets logged.
             guard !name.isEmpty, looksLikeProse(name) else { continue }
-            guard let row = row(
+            guard var row = row(
                 name: name, section: section, valueRuns: valueRuns,
                 columns: columns, id: offset + rows.count)
             else { continue }
+            if let pending = carriedServing {
+                row = MenuRow(
+                    id: row.id, name: row.name, section: row.section,
+                    serving: joinedServing(pending, row.serving),
+                    kcal: row.kcal, sodiumMg: row.sodiumMg, nutrients: row.nutrients)
+                carriedServing = nil
+            }
             rows.append(row)
         }
         // DID THE ROWS KEEP THE HEADER'S PROMISE?
@@ -710,6 +766,79 @@ public enum MenuTableParser {
         // A shade of slack: a wrapped line or an italic variant can start
         // a hair left of the column.
         return Double(mode) / 200 - 0.01
+    }
+
+    /// A measure, whole: "14.5 oz", "(411 g)", "1 packet", "8 fl oz".
+    private static let measurePattern =
+        #"\(?\s*\d+(?:[.,]\d+)?\s*(?:fl\.?\s*oz|oz|g|mg|ml|l|lb|kg|pc|pcs|pieces?|packets?|each|slices?|cups?)\.?\s*\)?"#
+
+    /// A serving column where no header named one: runs between the
+    /// name and the first value column that are MEASURES, on most rows,
+    /// all starting clear of where the names end. nil unless the table
+    /// plainly has one — a guess here moves text out of names.
+    static func inferredServingColumn(
+        in body: [Band], nameStart: Double, before firstValueX: Double
+    ) -> Column? {
+        let dataRows = body.filter(\.isData).count
+        guard dataRows >= 3 else { return nil }
+        let area = body.flatMap(\.runs).filter { $0.x > nameStart + 0.02 && $0.maxX <= firstValueX }
+        let measures = area.filter { isMeasure($0.text) }
+        guard measures.count >= 3, Double(measures.count) >= 0.3 * Double(dataRows),
+              let minX = measures.map(\.x).min() else { return nil }
+        // Names must END before it, or a long name would lose its tail.
+        let nameEnds = body.filter(\.isData).flatMap(\.runs)
+            .filter { $0.x <= nameStart + 0.02 && $0.maxX <= firstValueX }
+            .map(\.maxX).sorted()
+        if let typical = nameEnds.dropFirst(nameEnds.count * 9 / 10).first, typical > minX {
+            return nil
+        }
+        // Hard against the measures: a table-model grid butts the name
+        // cell right up to this one, and any slack cuts the NAME column
+        // short — section headings, which have no row to fall back on,
+        // vanished with it.
+        return Column(minX: minX - 0.001, maxX: firstValueX, text: "Serving Size", field: .serving)
+    }
+
+    static func isMeasure(_ text: String) -> Bool {
+        normalizedParens(text).range(
+            of: "^" + measurePattern + "$", options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    /// What a serving cell SAYS, with OCR wreckage taken out: the
+    /// measures in it, in order ("OZ 20.2 (573g)" keeps "(573g)"), or
+    /// the cell verbatim when it is words ("1 sandwich"), or nil when it
+    /// is neither — "Z09°W" is not a serving anyone could use.
+    static func cleanedServing(_ cell: String) -> String? {
+        let text = normalizedParens(cell).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        guard let regex = try? NSRegularExpression(pattern: measurePattern, options: [.caseInsensitive])
+        else { return text }
+        let found = regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+            .compactMap { Range($0.range, in: text).map { String(text[$0]).trimmingCharacters(in: .whitespaces) } }
+            .filter { $0.contains(where: \.isNumber) }
+        if !found.isEmpty { return found.joined(separator: " ") }
+        // Words only when there IS a word — a token of letters alone
+        // ("1 sandwich"). "(6ELS)" has three letters in a row and is a
+        // weight read upside down.
+        let hasWord = text.split(whereSeparator: \.isWhitespace).contains { token in
+            token.count >= 3 && token.allSatisfy(\.isLetter)
+        }
+        return hasWord ? text : nil
+    }
+
+    /// Two halves of one serving, never the same half twice.
+    static func joinedServing(_ first: String?, _ second: String?) -> String? {
+        switch (first, second) {
+        case let (a?, b?): return a.contains(b) ? a : b.contains(a) ? b : "\(a) \(b)"
+        case let (a?, nil): return a
+        case let (nil, b?): return b
+        case (nil, nil): return nil
+        }
+    }
+
+    /// Vision reads the parentheses of some fonts as full-width ones.
+    private static func normalizedParens(_ text: String) -> String {
+        text.replacingOccurrences(of: "（", with: "(").replacingOccurrences(of: "）", with: ")")
     }
 
     /// ≥3 numbers on one line, with something non-numeric to its left.
@@ -1090,7 +1219,7 @@ public enum MenuTableParser {
                 .map(\.text)
                 .joined(separator: " ")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            serving = cell.isEmpty ? nil : cell
+            serving = cleanedServing(cell)
         }
         let servingColumn = columns.first { $0.field == .serving }
         let numberRuns = valueRuns.filter { run in

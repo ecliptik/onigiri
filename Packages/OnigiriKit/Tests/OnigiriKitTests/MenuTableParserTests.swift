@@ -511,4 +511,25 @@ struct MenuTableParserTests {
         #expect(MenuTableParser.joinedServing("8.8 oz", "(248 g)") == "8.8 oz (248 g)")
         #expect(MenuTableParser.joinedServing("0.7 oz (19 g)", "(19 g)") == "0.7 oz (19 g)")
     }
+
+    /// The same guide as read by an iPhone's Vision (pulled off the
+    /// device, 2026-09-23). Its "Serving Size" heading is TURNED, so the
+    /// column it declares is a sliver, and every "(248 g)" line starts
+    /// left of it — they were dropped as nameless rows, and a two-line
+    /// cell read in x order came out "(318 g) 11 oz". Three names Vision
+    /// never read (Ultimate Bacon Bacon Angus Cheeseburger among them)
+    /// are, correctly, not rows.
+    @Test func aDeviceReadingKeepsBothLinesOfEveryServing() throws {
+        let rows = MenuTableParser.parse(try fixture("menu-jollibee-device"))
+        #expect(rows.count == 24)
+        let incomplete = rows.filter { row in
+            guard let serving = row.serving else { return true }
+            return !(serving.contains("oz") && serving.hasSuffix(")"))
+        }
+        #expect(incomplete.isEmpty, "every serving has its oz AND its grams: \(incomplete.map(\.name))")
+        #expect(rows.first?.serving == "8.8 oz (248 g)")
+        #expect(rows.first { $0.name == "Bacon Angus Deluxe Burger" }?.serving == "11 oz (318 g)")
+        // The lost row's weight is not handed to the row below it.
+        #expect(rows.first { $0.name == "Extra Sliced Cheese" }?.serving == "0.7 oz (19 g)")
+    }
 }

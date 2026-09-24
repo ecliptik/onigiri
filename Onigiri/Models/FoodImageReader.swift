@@ -177,6 +177,23 @@ enum FoodImageReader {
                 guard !Task.isCancelled else { return .cancelled }
                 let rows = MenuTableParser.parse(pages: document.pages)
                 imageLog.notice("Screenshot table: \(rows.count) row(s) \(document.scanNote ?? "", privacy: .public)")
+                #if DEBUG
+                // Both readings, into the APP GROUP container — the share
+                // extension's own Documents is not reachable from a Mac,
+                // the group's is: `xcrun devicectl device copy from
+                // --domain-type appGroupDataContainer --domain-identifier
+                // group.com.ecliptik.Onigiri --source Library/image-menu-debug.json`.
+                struct Dump: Encodable {
+                    let note: String?; let plain: [LabelObservation]; let paged: [LabelObservation]
+                }
+                if let scanned = document.debugScanned, scanned.count == 2,
+                   let dir = FileManager.default.containerURL(
+                       forSecurityApplicationGroupIdentifier: SharedStore.appGroupID),
+                   let out = try? JSONEncoder().encode(
+                       Dump(note: document.scanNote, plain: scanned[0], paged: scanned[1])) {
+                    try? out.write(to: dir.appending(path: "Library/image-menu-debug.json"))
+                }
+                #endif
                 if rows.count > 1 { return .menu(rows, source: nil) }
             }
             // iOS 26 + Apple Intelligence: the model fills whatever the

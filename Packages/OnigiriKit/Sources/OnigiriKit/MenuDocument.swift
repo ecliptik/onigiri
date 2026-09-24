@@ -196,10 +196,15 @@ public nonisolated enum MenuDocumentReader {
         #if DEBUG
         let note: String? = "img:" + stages.joined(separator: ",")
             + ",plain=\(plain.count),\(runs == plain ? "plain" : "paged")"
+        // BOTH readings, for pulling off the device: the phone's Vision
+        // and the Mac's disagree, and only the phone's can explain what
+        // the phone showed (CLAUDE.md, menu landmines).
+        let scanned: [[LabelObservation]]? = [plain, paged]
         #else
         let note: String? = nil
+        let scanned: [[LabelObservation]]? = nil
         #endif
-        return MenuDocument(pages: [runs], suggestedSource: nil, scanNote: note)
+        return MenuDocument(pages: [runs], suggestedSource: nil, scanNote: note, debugScanned: scanned)
     }
 
     /// The transcript that parses into more rows, then more filled

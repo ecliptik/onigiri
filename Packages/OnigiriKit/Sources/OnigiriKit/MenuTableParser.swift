@@ -528,9 +528,19 @@ public enum MenuTableParser {
             firstValueX = serving.minX
         }
         let servingColumn = columns.first { $0.field == .serving }
+        // Where the next column starts: a serving line may overhang its
+        // heading (a TURNED "Serving Size" is a sliver of the column it
+        // names, and "(248 g)" starts left of it), but never reaches
+        // the calories.
+        let afterServing = servingColumn.flatMap { serving in
+            columns.filter { $0.field != nil && $0.field != .serving && $0.minX > serving.minX }
+                .map(\.minX).min()
+        }
         func inServingColumn(_ run: LabelObservation) -> Bool {
             guard let servingColumn else { return false }
-            return run.x >= servingColumn.minX - 0.001 && run.maxX <= servingColumn.maxX + 0.01
+            let limit = afterServing ?? servingColumn.maxX + 0.01
+            return run.x < servingColumn.maxX && run.maxX > servingColumn.minX - 0.001
+                && run.maxX <= limit
         }
         // The table's own type size, for telling a section heading from
         // a wrapped name below.
@@ -603,10 +613,18 @@ public enum MenuTableParser {
                     // spacing says: on a table-model grid the gap to
                     // each neighbour is identical, and nearness sent
                     // half of them to the wrong row.
-                    let continuesAbove = piece.hasPrefix("(") && rows.last.map {
+                    // …and never of the cell BELOW: when the row above
+                    // already has its weight, this one belonged to a row
+                    // that was lost (a name Vision never read), and
+                    // handing it down would give the next item a stranger's
+                    // serving.
+                    let isWeight = piece.hasPrefix("(")
+                    let continuesAbove = isWeight && rows.last.map {
                         !($0.serving ?? "").hasSuffix(")")
                     } ?? false
-                    if !continuesAbove, carriesDown(band.midY, among: dataMidYs) {
+                    if isWeight, !continuesAbove {
+                        // Orphaned; dropped.
+                    } else if !continuesAbove, carriesDown(band.midY, among: dataMidYs) {
                         carriedServing = joinedServing(carriedServing, piece)
                     } else if let last = rows.last {
                         rows[rows.count - 1] = MenuRow(
@@ -1213,9 +1231,12 @@ public enum MenuTableParser {
         // nutrient, and running it through the numeric path would file
         // 153 under whatever column it happened to land near.
         if let column = columns.first(where: { $0.field == .serving }) {
+            // Reading order, like a name: a two-line cell's lines share
+            // an x within a hair, and x order put "(318 g)" before
+            // "11 oz" whenever the weight's parenthesis stuck out left.
             let cell = valueRuns
                 .filter { $0.x < column.maxX && $0.maxX > column.minX }
-                .sorted { $0.x < $1.x }
+                .sorted { abs($0.midY - $1.midY) < min($0.h, $1.h) / 2 ? $0.x < $1.x : $0.midY > $1.midY }
                 .map(\.text)
                 .joined(separator: " ")
                 .trimmingCharacters(in: .whitespacesAndNewlines)

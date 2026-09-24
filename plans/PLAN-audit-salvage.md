@@ -239,12 +239,12 @@ All five built and tested on the sim; nothing committed yet.
    `-only-testing:`, or the filter matches nothing and the run is green
    having run zero tests. Deploy to the watch still pending.
 
-Found while porting, NOT fixed here (behaviour kept exactly):
+Found while porting, kept exactly in the port, FIXED in its own commit
+the same day (`editEntryKeepsAMealsComposition`, red before the fix):
 `WatchModel.editEntry` re-logs with `mealItems: []`, so resizing a
 logged MEAL on the watch strips its composition — the phone's
 `LogActions.editFoodEntry` carries `entry.mealItems` through. That is
-the three-keys rule in CLAUDE.md, broken on the watch. A one-line fix
-plus a test in `WatchModelTests`, as its own commit.
+the three-keys rule in CLAUDE.md, broken on the watch.
 
 ## Done when
 

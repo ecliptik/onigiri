@@ -111,6 +111,24 @@ struct WatchModelTests {
         #expect(health.loggedFoods.first?.sodiumMg == 280)
     }
 
+    @Test func editEntryKeepsAMealsComposition() async throws {
+        let health = FakeWatchHealth()
+        let model = WatchModel(health: health)
+        // A logged MEAL resized on the wrist must still be a meal on the
+        // phone: its items are the per-portion basis, so they ride
+        // through unscaled while the quantity carries the resize — the
+        // phone's own edit (LogActions.editFoodEntry) does exactly this.
+        let items = [LoggedMealItem(name: "Rice", kcal: 200), LoggedMealItem(name: "Beans", kcal: 110)]
+        let meal = FoodLogEntry(
+            id: UUID(), name: "Burrito bowl", kcal: 310, sodiumMg: 400, date: .now,
+            category: .lunch, quantity: 1, mealItems: items)
+        let ok = await model.editEntry(meal, kcal: 620)
+        #expect(ok)
+        let logged = try #require(health.loggedFoods.first)
+        #expect(logged.mealItems == items)
+        #expect(logged.quantity == 2)
+    }
+
     @Test func editEntryRollsBackTheNewWriteWhenTheOldDeleteFails() async {
         let health = FakeWatchHealth()
         let model = WatchModel(health: health)

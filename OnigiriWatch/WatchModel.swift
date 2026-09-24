@@ -214,7 +214,10 @@ final class WatchModel {
                 // Totals scaled by s = s× the portions too — keep the
                 // phone's per-portion basis intact for its edit sheet.
                 quantity: entry.quantity * scale,
-                mealItems: []
+                // Unscaled, as on the phone: a meal's items are that same
+                // per-portion basis, and dropping them turned a resized
+                // meal into a plain food.
+                mealItems: entry.mealItems
             )
             do {
                 try await health.deleteFoodEntry(id: entry.id)

@@ -115,12 +115,24 @@ public enum ShareInbox {
     /// link marker likewise stays until `cleanUp`; only a malformed one
     /// is deleted here, or it would be retried on every foreground
     /// forever.
-    public static func take() -> Taken? {
+    public static func take(now: Date = .now) -> Taken? {
         guard let directory else { return nil }
-        let files = (try? FileManager.default.contentsOfDirectory(
+        var files = (try? FileManager.default.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.contentModificationDateKey],
             options: [.skipsHiddenFiles])) ?? []
+        // A deposit left from long ago is not a share anyone is waiting
+        // on — it is a sheet swiped away last night, and it opened
+        // "Analyzing photo…" over breakfast, once per foreground, until
+        // every one had been cancelled (the user, 2026-09-24). Gone,
+        // unopened.
+        files.removeAll { file in
+            let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?
+                .contentModificationDate
+            guard isStale(modified: modified, now: now) else { return false }
+            try? FileManager.default.removeItem(at: file)
+            return true
+        }
         let oldest = files
             .sorted { a, b in
                 let da = (try? a.resourceValues(forKeys: [.contentModificationDateKey]))?
@@ -161,6 +173,17 @@ public enum ShareInbox {
                 : .image(destination),
             inboxFile: oldest
         )
+    }
+
+    /// How long a deposit waits for the app. The net is for an extension
+    /// killed MID-share, and someone whose share just vanished opens
+    /// Onigiri within minutes; an hour is generous for that and far
+    /// short of "the next morning". A deposit with no date is stale.
+    static let staleAfter: TimeInterval = 60 * 60
+
+    static func isStale(modified: Date?, now: Date) -> Bool {
+        guard let modified else { return true }
+        return now.timeIntervalSince(modified) > staleAfter
     }
 
     // MARK: Who owns the work

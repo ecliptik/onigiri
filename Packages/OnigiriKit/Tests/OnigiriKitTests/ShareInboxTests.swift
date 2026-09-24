@@ -33,4 +33,13 @@ struct ShareInboxTests {
         let long = String(repeating: "a", count: 500)
         #expect(ShareInbox.safe(long).count <= 48)
     }
+
+    /// Last night's swiped-away share is not this morning's import.
+    @Test func aDepositFromLongAgoIsNotOffered() {
+        let now = Date(timeIntervalSince1970: 1_790_000_000)
+        #expect(!ShareInbox.isStale(modified: now.addingTimeInterval(-60), now: now))
+        #expect(!ShareInbox.isStale(modified: now.addingTimeInterval(-59 * 60), now: now))
+        #expect(ShareInbox.isStale(modified: now.addingTimeInterval(-11 * 3600), now: now))
+        #expect(ShareInbox.isStale(modified: nil, now: now))
+    }
 }

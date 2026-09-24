@@ -49,6 +49,10 @@ final class ShareViewController: UIViewController {
     /// 2026-08-17).
     private var depositedFiles: [String] = []
 
+    /// Set only on the hand-off path, where what was deposited is
+    /// exactly what the app must pick up.
+    private var handedOff = false
+
     override func viewDidLoad() {
         super.viewDidLoad()
         buildCard()
@@ -58,6 +62,21 @@ final class ShareViewController: UIViewController {
         ShareInbox.claim()
         renewClaim()
         Task { await handleShare() }
+    }
+
+    /// The sheet went away without handing anything to the app — swiped
+    /// down, most often. That is a cancel, so this session's deposits go
+    /// with it. Only the explicit buttons used to clear them, and every
+    /// swiped-away share stayed in the inbox for the app to open later:
+    /// a row of old screenshots, one per foreground, the next morning
+    /// (the user, 2026-09-24). A KILLED extension never reaches here,
+    /// which is the case the deposit exists for.
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        guard !handedOff else { return }
+        ShareInbox.clear(files: depositedFiles)
+        depositedFiles = []
+        stopClaiming()
     }
 
     /// Re-stamp the claim while the sheet is still up.
@@ -301,6 +320,7 @@ final class ShareViewController: UIViewController {
         spinner.isHidden = true
         label.text = message
         guard !ok else {
+            handedOff = true
             // RELEASE, but do NOT clear: this is the hand-off path, and
             // what was deposited is exactly what the app must pick up.
             // Without this the claim taken at launch stays live for two

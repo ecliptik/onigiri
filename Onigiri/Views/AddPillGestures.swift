@@ -32,6 +32,23 @@ import UIKit
 /// label. Hold-release today does NOT activate the tab — proof that
 /// `cancelsTouchesInView` beats the tab button on hardware; the tap
 /// recognizer rides the same mechanism.
+///
+/// PRESS FEEDBACK: `cancelsTouchesInView` is a trade — it also stops the
+/// system's own press highlight and haptic from ever reaching the pill
+/// (the user, 2026-09-15: it used to look "pressed" and give haptic
+/// feedback, and now "feels/looks flat"). `tapFired` plays an impact
+/// tick itself to close the haptic half. The long press needs none: its
+/// water log plays a success haptic once the write lands, and a tick at
+/// the press would double it. The VISUAL half has no fix here: three
+/// on-device attempts — animating the found button's own transform and
+/// alpha, a translucent scrim added as a window subview, and a fully
+/// opaque `bringSubviewToFront` overlay to rule out "too subtle" — were
+/// each verified live (touchesBegan fires, the button is found at a sane
+/// frame, the overlay IS the window's topmost subview) and none
+/// rendered. The window holds exactly one subview, the SwiftUI hosting
+/// view, which appears to re-assert its content over anything added
+/// beside it every frame. The untried route is a SEPARATE always-on-top
+/// `UIWindow` — bigger and riskier than the hacks in this file.
 struct AddPillGestures: UIViewRepresentable {
     let onTap: () -> Void
     let onLongPress: () -> Void
@@ -60,6 +77,7 @@ struct AddPillGestures: UIViewRepresentable {
         private let onTap: () -> Void
         private let onLongPress: () -> Void
         private var recognizers: [UIGestureRecognizer] = []
+        private let impact = UIImpactFeedbackGenerator(style: .medium)
 
         init(onTap: @escaping () -> Void, onLongPress: @escaping () -> Void) {
             self.onTap = onTap
@@ -84,6 +102,7 @@ struct AddPillGestures: UIViewRepresentable {
                 window.addGestureRecognizer(tap)
                 recognizers.append(tap)
             }
+            impact.prepare()
         }
 
         func removeAll() {
@@ -205,6 +224,9 @@ struct AddPillGestures: UIViewRepresentable {
 
         @objc private func tapFired(_ gesture: UITapGestureRecognizer) {
             guard gesture.state == .ended else { return }
+            // At the touch, not after the sheet it opens starts to
+            // present: the tick has to land with the tap to read as one.
+            impact.impactOccurred()
             onTap()
         }
     }

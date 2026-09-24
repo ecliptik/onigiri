@@ -266,12 +266,12 @@ struct BurnCorrectionTests {
     }
 }
 
-/// The stored value, which is shared defaults state — serialized for the
-/// same reason `PlanWeightSyncTests` is.
-@Suite(.serialized)
-@MainActor
-struct BurnCorrectionStorageTests {
-    private func restore(_ kcal: Double, _ at: Double) {
+/// The stored value, which is shared defaults state. An EXTENSION of
+/// `PlanWeightSyncTests`, not a suite of its own: that suite round-trips
+/// these same keys through the watch sync, and `.serialized` only orders
+/// tests within one suite — two suites raced on the stamp.
+extension PlanWeightSyncTests {
+    private func restoreCorrection(_ kcal: Double, _ at: Double) {
         SharedStore.defaults.set(kcal, forKey: SharedStore.burnCorrectionKcalKey)
         SharedStore.defaults.set(at, forKey: SharedStore.burnCorrectionSetAtKey)
     }
@@ -279,10 +279,11 @@ struct BurnCorrectionStorageTests {
     /// It never recomputes itself. A derive that moves the SUGGESTION —
     /// here a new month of logging that changes what the scale implies —
     /// must leave the stored correction exactly where a person put it.
+    @MainActor
     @Test func theStoredCorrectionSurvivesARefreshThatMovesTheSuggestion() throws {
         let savedKcal = SharedStore.defaults.double(forKey: SharedStore.burnCorrectionKcalKey)
         let savedAt = SharedStore.defaults.double(forKey: SharedStore.burnCorrectionSetAtKey)
-        defer { restore(savedKcal, savedAt) }
+        defer { restoreCorrection(savedKcal, savedAt) }
         let stamp = Date(timeIntervalSince1970: 1_790_000_000)
         SharedStore.setBurnCorrection(kcal: -300, now: stamp)
 
@@ -313,7 +314,7 @@ struct BurnCorrectionStorageTests {
     @Test func clearingDropsTheStamp() {
         let savedKcal = SharedStore.defaults.double(forKey: SharedStore.burnCorrectionKcalKey)
         let savedAt = SharedStore.defaults.double(forKey: SharedStore.burnCorrectionSetAtKey)
-        defer { restore(savedKcal, savedAt) }
+        defer { restoreCorrection(savedKcal, savedAt) }
         SharedStore.setBurnCorrection(kcal: -300)
         #expect(SharedStore.burnCorrectionSetAt != nil)
         SharedStore.setBurnCorrection(kcal: 0)
@@ -327,7 +328,7 @@ struct BurnCorrectionStorageTests {
     @Test func bothKeysRideTheWatchSyncExplicitly() {
         let savedKcal = SharedStore.defaults.double(forKey: SharedStore.burnCorrectionKcalKey)
         let savedAt = SharedStore.defaults.double(forKey: SharedStore.burnCorrectionSetAtKey)
-        defer { restore(savedKcal, savedAt) }
+        defer { restoreCorrection(savedKcal, savedAt) }
 
         // Off: still sent, as an explicit zero, so a watch holding an
         // old correction is told to drop it.

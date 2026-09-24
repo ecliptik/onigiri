@@ -248,12 +248,24 @@ public nonisolated enum MenuDocumentReader {
         var cropped = 0
         if let image {
             for orphan in orphans.prefix(orphanCropLimit) {
-                guard let crop = nameCell(of: orphan, in: image),
+                // The name cell ends where the next ink begins, not where
+                // the next column's HEADING does: a turned "Serving Size"
+                // starts right of its own cells, and a crop to the heading
+                // came back "Ultimate Bacon Bacon Angus Cheeseburger (2"
+                // (the device, 2026-09-23).
+                let inkRight = runs.filter {
+                    $0.x > orphan.nameMinX + 0.05 && $0.y < orphan.maxY && $0.y + $0.h > orphan.minY
+                }.map(\.x).min()
+                let bounded = inkRight.map { right in
+                    MenuTableParser.Orphan(
+                        row: orphan.row, minY: orphan.minY, maxY: orphan.maxY, midY: orphan.midY,
+                        nameMinX: orphan.nameMinX, nameMaxX: min(orphan.nameMaxX, right - 0.002))
+                } ?? orphan
+                guard let crop = nameCell(of: bounded, in: image),
                       let read = try? await LabelScan.observations(from: crop) else { continue }
-                let name = read
+                let name = trimmedCropName(read
                     .sorted { abs($0.midY - $1.midY) < min($0.h, $1.h) / 2 ? $0.x < $1.x : $0.midY > $1.midY }
-                    .map(\.text).joined(separator: " ")
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .map(\.text).joined(separator: " "))
                 guard MenuTableParser.looksLikeProse(name), !taken.contains(name),
                       // A name, not a stray reading of the figures.
                       name.filter(\.isNumber).count * 3 < name.count else { continue }
@@ -266,6 +278,18 @@ public nonisolated enum MenuDocumentReader {
     }
 
     static let orphanCropLimit = 6
+
+    /// A re-read name without a fragment of the neighbouring cell on its
+    /// end: a trailing token that opens a parenthesis it never closes
+    /// ("… Cheeseburger (2") is the next column's edge, not the name.
+    static func trimmedCropName(_ text: String) -> String {
+        var tokens = text.split(whereSeparator: \.isWhitespace).map(String.init)
+        while let last = tokens.last,
+              last.filter({ $0 == "(" || $0 == "（" }).count > last.filter({ $0 == ")" || $0 == "）" }).count {
+            tokens.removeLast()
+        }
+        return tokens.joined(separator: " ")
+    }
 
     /// Same row, read twice: the calories agree, at least three more
     /// figures agree, and at most one disagrees (a misread digit).

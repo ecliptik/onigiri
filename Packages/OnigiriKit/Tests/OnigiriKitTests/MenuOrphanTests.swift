@@ -63,6 +63,14 @@ struct MenuOrphanTests {
     }
     #endif
 
+    /// What the device's crop actually returned for that row.
+    @Test func aCropDropsTheNextCellsEdge() {
+        #expect(MenuDocumentReader.trimmedCropName("Ultimate Bacon Bacon Angus Cheeseburger (2")
+            == "Ultimate Bacon Bacon Angus Cheeseburger")
+        #expect(MenuDocumentReader.trimmedCropName("Spaghetti Family Pack (Serves 3-4)")
+            == "Spaghetti Family Pack (Serves 3-4)")
+    }
+
     @Test func figuresMustAgreeToBorrow() {
         func row(_ kcal: Double, sodium: Double, fat: Double, carbs: Double, protein: Double) -> MenuRow {
             MenuRow(id: 0, name: "x", kcal: kcal, sodiumMg: sodium,

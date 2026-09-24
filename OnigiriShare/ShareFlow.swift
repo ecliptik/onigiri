@@ -326,23 +326,3 @@ struct ShareFlow: View {
             ? nil : "Couldn't save that to your library."
     }
 }
-
-
-/// An estimate, in the shape the confirm sheet reads. The extension has
-/// no food form, so `ParsedLabel` is the only currency it deals in —
-/// this is the inline conversion `readImage` used to do, named and
-/// carrying the plausibility findings through so `LogConfirmSheet` can
-/// still say what was left out and why.
-private extension ScannedProduct {
-    var parsedLabel: ParsedLabel {
-        var label = ParsedLabel()
-        label.name = name.isEmpty ? nil : name
-        label.kcal = kcal
-        label.sodiumMg = sodiumMg
-        label.nutrients = nutrients
-        label.servingDescription = servingDescription.isEmpty ? nil : servingDescription
-        label.aiGenerated = aiGenerated
-        label.warnings = warnings
-        return label
-    }
-}

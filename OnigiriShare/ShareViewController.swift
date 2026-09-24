@@ -152,16 +152,15 @@ final class ShareViewController: UIViewController {
 
     /// A Photos share vends `public.heic` or `public.jpeg`; a screenshot
     /// vends `public.png`. Any of them CONFORMS to `public.image`, but
-    /// only the concrete one can be loaded.
+    /// only the concrete one can be loaded. The choice itself is pure and
+    /// lives in the kit (`ShareAttachmentPicking`), where it is tested —
+    /// this extension has no test target, and a test can't build an
+    /// `NSItemProvider` anyway.
     private func imageAttachment(in providers: [NSItemProvider]) -> (NSItemProvider, UTType)? {
-        for provider in providers {
-            for identifier in provider.registeredTypeIdentifiers {
-                guard let type = UTType(identifier), type.conforms(to: .image),
-                      type != .image else { continue }
-                return (provider, type)
-            }
-        }
-        return nil
+        guard let (index, identifier) = ShareAttachmentPicking.imageAttachmentIndex(
+            registeredTypeIdentifiers: providers.map(\.registeredTypeIdentifiers)
+        ), let type = UTType(identifier) else { return nil }
+        return (providers[index], type)
     }
 
     private func attachments() -> [NSItemProvider] {

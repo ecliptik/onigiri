@@ -192,10 +192,12 @@ public nonisolated enum MenuDocumentReader {
         // text layer makes this moot; a picture has no text layer, so
         // there are two honest readings and the parse decides.
         let plain = (try? await LabelScan.observations(from: image)) ?? []
-        let runs = better(plain, paged)
+        let chosen = better(plain, paged)
+        let (runs, recovered) = await resolvingOrphans(
+            chosen, other: chosen == plain ? paged : plain, image: image)
         #if DEBUG
         let note: String? = "img:" + stages.joined(separator: ",")
-            + ",plain=\(plain.count),\(runs == plain ? "plain" : "paged")"
+            + ",plain=\(plain.count),\(chosen == plain ? "plain" : "paged"),orphans:\(recovered)"
         // BOTH readings, for pulling off the device: the phone's Vision
         // and the Mac's disagree, and only the phone's can explain what
         // the phone showed (CLAUDE.md, menu landmines).
@@ -205,6 +207,115 @@ public nonisolated enum MenuDocumentReader {
         let scanned: [[LabelObservation]]? = nil
         #endif
         return MenuDocument(pages: [runs], suggestedSource: nil, scanNote: note, debugScanned: scanned)
+    }
+
+    /// Rows whose figures were read and whose NAME was not
+    /// (`MenuTableParser.Orphan`), named after all where the picture
+    /// allows — deterministically, and without ever guessing:
+    ///
+    /// 1. The OTHER reading of the same image, when it has a row with the
+    ///    same figures. Two independent readings agreeing on a whole row
+    ///    of numbers is the same row; its name is borrowed, once.
+    /// 2. A close look at the name cell alone. Vision downsamples what
+    ///    it is handed, so a line of small type lost in a whole
+    ///    screenshot reads cleanly in a crop — the lesson of the turned
+    ///    headings (`readingHeader`). Capped at `orphanCropLimit`.
+    ///
+    /// A name either route finds must read as words and must not already
+    /// belong to another row. An orphan neither can name stays unlisted:
+    /// a parse that goes wrong returns nothing rather than something.
+    /// `recovered` is "borrowed/cropped/of" for the debug note.
+    static func resolvingOrphans(
+        _ runs: [LabelObservation], other: [LabelObservation], image: CGImage?
+    ) async -> (runs: [LabelObservation], recovered: String) {
+        var orphans = MenuTableParser.orphans(in: runs)
+        guard !orphans.isEmpty else { return (runs, "0") }
+        let total = orphans.count
+        var result = runs
+        var taken = Set(MenuTableParser.parse(runs).map(\.name))
+        var borrowed = 0
+        let otherRows = MenuTableParser.parse(other)
+        orphans = orphans.filter { orphan in
+            let matches = otherRows.filter {
+                !taken.contains($0.name) && sameFigures($0, orphan.row)
+            }
+            guard matches.count == 1, let name = matches.first?.name else { return true }
+            taken.insert(name)
+            result.append(namePlaced(name, for: orphan))
+            borrowed += 1
+            return false
+        }
+        var cropped = 0
+        if let image {
+            for orphan in orphans.prefix(orphanCropLimit) {
+                guard let crop = nameCell(of: orphan, in: image),
+                      let read = try? await LabelScan.observations(from: crop) else { continue }
+                let name = read
+                    .sorted { abs($0.midY - $1.midY) < min($0.h, $1.h) / 2 ? $0.x < $1.x : $0.midY > $1.midY }
+                    .map(\.text).joined(separator: " ")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard MenuTableParser.looksLikeProse(name), !taken.contains(name),
+                      // A name, not a stray reading of the figures.
+                      name.filter(\.isNumber).count * 3 < name.count else { continue }
+                taken.insert(name)
+                result.append(namePlaced(name, for: orphan))
+                cropped += 1
+            }
+        }
+        return (result, "\(borrowed)b/\(cropped)c/\(total)")
+    }
+
+    static let orphanCropLimit = 6
+
+    /// Same row, read twice: the calories agree, at least three more
+    /// figures agree, and at most one disagrees (a misread digit).
+    static func sameFigures(_ a: MenuRow, _ b: MenuRow) -> Bool {
+        guard let kcal = a.kcal, kcal == b.kcal else { return false }
+        let pairs: [(Double?, Double?)] = [
+            (a.sodiumMg, b.sodiumMg), (a.nutrients.fatG, b.nutrients.fatG),
+            (a.nutrients.saturatedFatG, b.nutrients.saturatedFatG),
+            (a.nutrients.transFatG, b.nutrients.transFatG),
+            (a.nutrients.cholesterolMg, b.nutrients.cholesterolMg),
+            (a.nutrients.carbsG, b.nutrients.carbsG), (a.nutrients.fiberG, b.nutrients.fiberG),
+            (a.nutrients.sugarG, b.nutrients.sugarG), (a.nutrients.proteinG, b.nutrients.proteinG),
+        ]
+        var agree = 0, disagree = 0
+        for case let (x?, y?) in pairs { if x == y { agree += 1 } else { disagree += 1 } }
+        return agree >= 3 && disagree <= 1
+    }
+
+    /// A run carrying `name`, set in the orphan's own band at the name
+    /// column, so the ordinary parse picks it up as that row's name.
+    static func namePlaced(_ name: String, for orphan: MenuTableParser.Orphan) -> LabelObservation {
+        let height = max(0.001, orphan.maxY - orphan.minY)
+        let x = orphan.nameMinX + 0.01
+        return LabelObservation(
+            text: name, x: x, y: orphan.midY - height / 2,
+            w: max(0.001, min(0.2, orphan.nameMaxX - x - 0.01)), h: height)
+    }
+
+    /// The orphan's name cell as pixels, doubled, for Vision to read on
+    /// its own. Padded vertically by a fraction of the row, not a whole
+    /// pitch, so a neighbouring name cannot come along.
+    static func nameCell(of orphan: MenuTableParser.Orphan, in image: CGImage) -> CGImage? {
+        let width = Double(image.width), height = Double(image.height)
+        let pad = (orphan.maxY - orphan.minY) * 0.3
+        let top = min(1, orphan.maxY + pad), bottom = max(0, orphan.minY - pad)
+        let rect = CGRect(
+            x: orphan.nameMinX * width, y: (1 - top) * height,
+            width: max(1, (orphan.nameMaxX - orphan.nameMinX) * width),
+            height: max(1, (top - bottom) * height)).integral
+        guard let cell = image.cropping(to: rect) else { return nil }
+        let scale = 2
+        guard let context = CGContext(
+            data: nil, width: cell.width * scale, height: cell.height * scale,
+            bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        context.interpolationQuality = .high
+        context.setFillColor(gray: 1, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: cell.width * scale, height: cell.height * scale))
+        context.draw(cell, in: CGRect(x: 0, y: 0, width: cell.width * scale, height: cell.height * scale))
+        return context.makeImage()
     }
 
     /// The transcript that parses into more rows, then more filled

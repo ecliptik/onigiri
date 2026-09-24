@@ -470,18 +470,52 @@ public enum MenuTableParser {
         // always wins; this only fills in when there is none.)
         var section: String?
         var inherited: [Column]?
+        var orphans: [Orphan] = []
         for page in pages {
             rows.append(contentsOf: parsePage(
-                page, section: &section, columns: &inherited, startingAt: rows.count))
+                page, section: &section, columns: &inherited, startingAt: rows.count,
+                orphans: &orphans))
         }
         return rows
+    }
+
+    /// A row the table plainly has — a full set of figures under the
+    /// value columns — whose NAME was never read. Vision drops whole
+    /// lines on a small-type screenshot: an iPhone read every number of
+    /// "Ultimate Bacon Bacon Angus Cheeseburger" and not one letter of
+    /// its name (2026-09-23). Such a row cannot be offered, and is not;
+    /// this is where it IS, so a reader can look again
+    /// (`MenuDocumentReader.resolvingOrphans`).
+    public struct Orphan: Sendable, Equatable {
+        /// The figures, parsed exactly as a named row's would be; the
+        /// name is empty.
+        public let row: MenuRow
+        /// The band's vertical extent and centre, page-normalized
+        /// (Vision's frame: origin bottom-left).
+        public let minY: Double
+        public let maxY: Double
+        public let midY: Double
+        /// Where the name column runs across the page.
+        public let nameMinX: Double
+        public let nameMaxX: Double
+    }
+
+    /// Every orphan on one page, in reading order.
+    public static func orphans(in observations: [LabelObservation]) -> [Orphan] {
+        var section: String?
+        var inherited: [Column]?
+        var orphans: [Orphan] = []
+        _ = parsePage(observations, section: &section, columns: &inherited, startingAt: 0,
+                      orphans: &orphans)
+        return orphans
     }
 
     private static func parsePage(
         _ observations: [LabelObservation],
         section: inout String?,
         columns inherited: inout [Column]?,
-        startingAt offset: Int
+        startingAt offset: Int,
+        orphans: inout [Orphan]
     ) -> [MenuRow] {
         let bands = bands(observations)
         guard let dataStart = bands.firstIndex(where: { isDataBand($0) }) else { return [] }
@@ -673,7 +707,20 @@ public enum MenuTableParser {
             // A parse that has gone wrong should return nothing, not
             // something: nothing prompts a screenshot, and something
             // gets logged.
-            guard !name.isEmpty, looksLikeProse(name) else { continue }
+            guard !name.isEmpty, looksLikeProse(name) else {
+                // Figures under at least three value columns, no name:
+                // an orphan, reported rather than guessed at.
+                if name.isEmpty,
+                   let unnamed = row(name: "", section: section, valueRuns: valueRuns,
+                                     columns: columns, id: -1),
+                   unnamed.kcal != nil, unnamed.filledFieldCount >= 3 {
+                    let ys = band.runs.map(\.y), tops = band.runs.map { $0.y + $0.h }
+                    orphans.append(Orphan(
+                        row: unnamed, minY: ys.min() ?? band.midY, maxY: tops.max() ?? band.midY,
+                        midY: band.midY, nameMinX: nameStart, nameMaxX: firstValueX))
+                }
+                continue
+            }
             guard var row = row(
                 name: name, section: section, valueRuns: valueRuns,
                 columns: columns, id: offset + rows.count)

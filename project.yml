@@ -343,6 +343,20 @@ targets:
     dependencies:
       - target: Onigiri
 
+  # The watch app's own tests — WatchModel's write paths against a fake
+  # Health store (WatchHealthWriting in the kit). App-hosted, like
+  # OnigiriTests, and nonisolated for the same reason.
+  OnigiriWatchTests:
+    type: bundle.unit-test
+    platform: watchOS
+    sources: [OnigiriWatchTests]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+    dependencies:
+      - target: OnigiriWatch
+
 schemes:
   Onigiri:
     build:
@@ -360,5 +374,9 @@ schemes:
     build:
       targets:
         OnigiriWatch: all
+        OnigiriWatchTests: [test]
     run:
       config: Debug
+    test:
+      targets:
+        - OnigiriWatchTests

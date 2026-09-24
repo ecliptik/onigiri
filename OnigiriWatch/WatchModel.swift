@@ -13,7 +13,9 @@ final class WatchModel {
     private(set) var foodLog: [FoodLogEntry] = []
     let sync = WatchSyncReceiver()
 
-    private let health = HealthKitService()
+    /// Injectable so `OnigiriWatchTests` can drive the model against a
+    /// fake instead of real HealthKit (`WatchHealthWriting`).
+    private let health: WatchHealthWriting
     private var started = false
     /// Double-taps on a slow HealthKit write must not log twice.
     private var isLogging = false
@@ -43,6 +45,10 @@ final class WatchModel {
     var waterServingOz: Double { SharedStore.waterServingOz }
     var waterGoalOz: Double { SharedStore.waterGoalOz }
 
+    init(health: WatchHealthWriting = HealthKitService()) {
+        self.health = health
+    }
+
     func start() async {
         guard !started else {
             await refresh()
@@ -68,10 +74,16 @@ final class WatchModel {
         // intake=0.
         if ProcessInfo.processInfo.arguments.contains("--seed-sample-data") {
             try? await health.requestAuthorization()
-            _ = try? await health.logFood(name: "Avocado toast", kcal: 420, sodiumMg: 620, category: .breakfast)
-            _ = try? await health.logFood(name: "Chicken bowl", kcal: 610, sodiumMg: 880, category: .lunch)
-            _ = try? await health.logFood(name: "Trail mix", kcal: 205, sodiumMg: 120, category: .snack)
-            _ = try? await health.logWater(oz: 24)
+            _ = try? await health.logFood(
+                name: "Avocado toast", kcal: 420, sodiumMg: 620, nutrients: NutrientValues(),
+                category: .breakfast, date: .now, aiGenerated: false, quantity: 1, mealItems: [])
+            _ = try? await health.logFood(
+                name: "Chicken bowl", kcal: 610, sodiumMg: 880, nutrients: NutrientValues(),
+                category: .lunch, date: .now, aiGenerated: false, quantity: 1, mealItems: [])
+            _ = try? await health.logFood(
+                name: "Trail mix", kcal: 205, sodiumMg: 120, nutrients: NutrientValues(),
+                category: .snack, date: .now, aiGenerated: false, quantity: 1, mealItems: [])
+            _ = try? await health.logWater(oz: 24, date: .now)
             await refresh()
             return
         }
@@ -112,7 +124,10 @@ final class WatchModel {
         // belong to the day that just rolled over.
         for offset in [0, -1] {
             let day = Calendar.current.date(byAdding: .day, value: offset, to: .now) ?? .now
-            lines.append("day\(offset) \(await health.diagnoseIntake(for: day))")
+            // A DEBUG probe, kept off the test seam: only the real
+            // service has it, and a fake has nothing to diagnose.
+            guard let service = health as? HealthKitService else { continue }
+            lines.append("day\(offset) \(await service.diagnoseIntake(for: day))")
         }
         // `sync.goal`, not `WatchSync.loadGoal()`: this is the goal the
         // headline actually rendered, including a push applied since
@@ -156,7 +171,7 @@ final class WatchModel {
         // The reads are independent — run them all concurrently.
         async let planRead = DailyPlanLoader.load(
             goal: sync.goal, burnCorrectionKcal: SharedStore.burnCorrectionKcal)
-        async let entriesRead = health.todayFoodEntries()
+        async let entriesRead = health.todayFoodEntries(now: .now)
         async let slot1 = slotTotal(slot: 1)
         async let slot2 = slotTotal(slot: 2)
         let totals = await [slot1, slot2]
@@ -175,7 +190,7 @@ final class WatchModel {
 
     private func slotTotal(slot: Int) async -> Double {
         guard let nutrient = SharedStore.trackedNutrient(slot: slot) else { return 0 }
-        return (try? await health.dayTotal(of: nutrient)) ?? 0
+        return (try? await health.dayTotal(of: nutrient, for: .now, now: .now)) ?? 0
     }
 
     /// Rescale a logged entry to a new calorie count — sodium and the
@@ -198,7 +213,8 @@ final class WatchModel {
                 aiGenerated: entry.aiGenerated,
                 // Totals scaled by s = s× the portions too — keep the
                 // phone's per-portion basis intact for its edit sheet.
-                quantity: entry.quantity * scale
+                quantity: entry.quantity * scale,
+                mealItems: []
             )
             do {
                 try await health.deleteFoodEntry(id: entry.id)
@@ -287,7 +303,7 @@ final class WatchModel {
         isLogging = true
         defer { isLogging = false }
         do {
-            try await health.logWater(oz: waterServingOz)
+            try await health.logWater(oz: waterServingOz, date: .now)
             WKInterfaceDevice.current().play(.success)
             showFlash(
                 "+\(SharedStore.waterUnit.text(fromOz: waterServingOz)) ✓",
@@ -316,6 +332,7 @@ final class WatchModel {
                 name: meal.name, kcal: meal.kcal, sodiumMg: meal.sodiumMg,
                 nutrients: meal.nutrients ?? NutrientValues(),
                 category: meal.category.flatMap(FoodCategory.init(rawValue:)),
+                date: .now, aiGenerated: false, quantity: 1,
                 mealItems: meal.items ?? []
             )
             WKInterfaceDevice.current().play(.success)

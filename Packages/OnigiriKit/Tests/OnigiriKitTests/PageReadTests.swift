@@ -160,6 +160,25 @@ struct PageReadTests {
         #expect(label.nutrients.proteinG == 5)
     }
 
+    /// A US page groups its thousands. Read as a decimal comma, a
+    /// sandwich's 1,460 mg of sodium became 1.46 mg — small, believable,
+    /// and wrong by a factor of a thousand in the direction a sodium
+    /// tracker can least afford.
+    @Test(arguments: [false, true])
+    func thousandsSeparatorsReadAsThousands(prose: Bool) {
+        let runs = PageText.observations(from: """
+            Spicy Deluxe Sandwich
+            Calories 1,020
+            Total Fat 50g
+            Sodium 1,460mg
+            Total Carbohydrates 45g
+            """)
+        let label = LabelParser.parse(runs, prose: prose)
+        #expect(label.kcal == 1020)
+        #expect(label.sodiumMg == 1460)
+        #expect(label.nutrients.carbsG == 45)
+    }
+
     /// Salt is not banned in prose — a STATED MASS still converts. The
     /// rule is "say the unit", which every real panel does and no
     /// footer, price or copyright line ever will.

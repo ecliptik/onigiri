@@ -160,7 +160,8 @@ public enum LabelParser {
     }
 
     /// OCR fixups that only apply inside numeric contexts: letter O misread
-    /// for zero ("Og", "16Omg", "O.5g"), comma decimals ("30,9").
+    /// for zero ("Og", "16Omg", "O.5g"), thousands separators ("1,460mg"),
+    /// comma decimals ("30,9").
     static func normalizedNumericText(_ text: String) -> String {
         // Every rule below rewrites an O/o or a comma. A cell that has
         // neither — "450", "1570", most of a nutrition table — cannot be
@@ -172,9 +173,44 @@ public enum LabelParser {
         s = s.replacing(/(\d)[Oo](?=(?:g|mg|mcg|ug|µg|kg|ml)\b)/.ignoresCase()) { "\($0.output.1)0" }
         s = s.replacing(/\b[Oo](?=\d)/) { _ in "0" }
         s = s.replacing(/\b[Oo](?=\s?(?:g|mg|mcg|ug|µg|kg|ml)\b)/) { _ in "0" }
+        s = withoutThousandsSeparators(s)
         s = s.replacing(/(\d),(?=\d)/) { "\($0.output.1)." }
         return s
     }
+
+    /// "1,460mg" is one thousand four hundred and sixty milligrams on a
+    /// US page, and the comma-decimal rule after this read it as 1.46 —
+    /// "2,000 calories a day" logged a side of fries at 2 kcal the same
+    /// way (2026-09-24). A comma is a THOUSANDS separator only in the
+    /// shape one uses: a leading group of one to three digits that is not
+    /// zero, then groups of exactly three, and nothing numeric either
+    /// side. Everything else stays a decimal comma, which is what an EU
+    /// panel means by it: "30,9", "0,107" (a leading zero is never a
+    /// thousands group), "12,50", "1,5".
+    ///
+    /// The ambiguous case is a EU figure with three decimals and a
+    /// nonzero whole part — "1,250 g" — which no panel prints: they give
+    /// one or two decimals, and three only below one ("0,107 g" of salt).
+    private static func withoutThousandsSeparators(_ text: String) -> String {
+        guard text.contains(",") else { return text }
+        let ns = text as NSString
+        let matches = thousandsPattern.matches(
+            in: text, range: NSRange(location: 0, length: ns.length))
+        guard !matches.isEmpty else { return text }
+        let result = NSMutableString(string: text)
+        for match in matches.reversed() {
+            let grouped = ns.substring(with: match.range)
+            result.replaceCharacters(
+                in: match.range, with: grouped.replacingOccurrences(of: ",", with: ""))
+        }
+        return result as String
+    }
+
+    // ICU, not a Swift Regex literal: the rule needs a lookbehind (no
+    // digit, point or comma before the number), which Swift's Regex
+    // doesn't take. NSRegularExpression is thread-safe once built.
+    private nonisolated(unsafe) static let thousandsPattern = try! NSRegularExpression(
+        pattern: #"(?<![\d.,])[1-9]\d{0,2}(?:,\d{3})+(?!\d|,\d)"#)
 
     // Locale is Sendable (unlike Regex below) so it can be a stored
     // static — building one per fold() call was pure waste.

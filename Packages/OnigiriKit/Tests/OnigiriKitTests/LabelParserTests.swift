@@ -259,6 +259,20 @@ struct LabelParserTests {
         #expect(LabelParser.normalizedNumericText("16Omg") == "160mg")
         #expect(LabelParser.normalizedNumericText("1O2g") == "102g")
         #expect(LabelParser.normalizedNumericText("30,9") == "30.9")
+        // Thousands separators, as a US page prints them — the comma-
+        // decimal rule alone read "1,460mg" as 1.46 (2026-09-24).
+        #expect(LabelParser.normalizedNumericText("1,460mg") == "1460mg")
+        #expect(LabelParser.normalizedNumericText("2,000 calories") == "2000 calories")
+        #expect(LabelParser.normalizedNumericText("1,234,567") == "1234567")
+        #expect(LabelParser.normalizedNumericText("1,234.5") == "1234.5")
+        // …and every EU decimal stays one: a leading zero, one or two
+        // decimals, or a group that isn't exactly three digits.
+        #expect(LabelParser.normalizedNumericText("0,107 g") == "0.107 g")
+        #expect(LabelParser.normalizedNumericText("12,50") == "12.50")
+        #expect(LabelParser.normalizedNumericText("1,5") == "1.5")
+        #expect(LabelParser.normalizedNumericText("1,2345") == "1.2345")
+        #expect(LabelParser.normalizedNumericText("12345,678") == "12345.678",
+                "a leading group over three digits is not a thousands group")
         #expect(LabelParser.normalizedNumericText("Only") == "Only", "words keep their Os")
         #expect(LabelParser.normalizedNumericText("Omega") == "Omega")
     }

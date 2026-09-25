@@ -163,14 +163,22 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
     hour it cost is the reason the rule above is "find the foreign pid
     FIRST".
 
-- Commits are GPG-signed: run `git commit` with the sandbox disabled (gpg needs
-  `~/.gnupg`). If it fails with "Operation cancelled", the passphrase cache
-  expired and pinentry can't prompt from the agent shell — ask the user to run
-  `! gpg --clearsign -o /dev/null <<< test` to prime gpg-agent, then retry.
+- **Agent commits are UNSIGNED, on purpose** (the user, 2026-09-25). The
+  owner's YubiKey now needs a physical TAP for every OpenPGP signature, and
+  an agent may be working with nobody at the keyboard: a signing commit waits
+  for the tap and fails after ~15 s, forwarded gpg-agent included. The
+  machine's Claude Code settings set `commit.gpgsign=false` (dotfiles `env`
+  block); where they don't yet, commit with `git -c commit.gpgsign=false
+  commit`. Never pass `-S` or `-c commit.gpgsign=true` unless the user asks
+  in that session, and never retry a failed signature in a loop. The
+  user's OWN commits stay signed, and every commit before this date is.
 - Releases: `scripts/release.sh <version> -F notes.md` (the version bump is a
   separate commit first, and `-F` is required — `$EDITOR` can't open from an
   agent shell). It signs the tag, pushes both remotes, publishes the GitHub
-  Release, and regenerates CHANGELOG.md from the tag message.
+  Release, and regenerates CHANGELOG.md from the tag message. **The tag
+  signature needs the user's tap, so a release is never cut unattended**:
+  prepare the notes and the bump commit, then leave the `release.sh` run for
+  when the user is present. Don't make the tag unsigned to get round it.
 
 ## Deploying to devices
 

@@ -51,15 +51,26 @@ enum MenuLinkLoader {
         return URLSession(configuration: configuration)
     }()
 
-    /// Returns a local PDF file the caller owns and must delete.
-    static func pdf(for url: URL) async throws -> URL {
+    /// A read link: the local PDF (the caller owns it and must delete
+    /// it), and the page's TITLE when it was a page. The title is where
+    /// a product page names its dish and its restaurant (`PageTitle`);
+    /// a downloaded PDF has none here — its metadata is read later, by
+    /// `MenuDocumentReader`.
+    struct Rendered {
+        let file: URL
+        let title: String?
+    }
+
+    static func pdf(for url: URL) async throws -> Rendered {
         let data: Data
+        var title: String?
         if let downloaded = try? await downloadPDF(from: url) {
             linkLog.notice("Shared link was a PDF (\(downloaded.count) bytes)")
             data = downloaded
         } else {
             linkLog.notice("Shared link is a page — rendering it")
-            let rendered = try await render(url)
+            let (rendered, pageTitle) = try await render(url)
+            title = pageTitle
             // A VIEWER page renders to a document with no table in it.
             // Shake Shack's guide is served through a JavaScript PDF
             // viewer, which paints each page into a canvas: the render
@@ -87,7 +98,7 @@ enum MenuLinkLoader {
         let file = FileManager.default.temporaryDirectory
             .appending(path: "shared-\(UUID().uuidString).pdf")
         try data.write(to: file, options: .atomic)
-        return file
+        return Rendered(file: file, title: title)
     }
 
     /// The page's TEXT, tags stripped.
@@ -172,7 +183,7 @@ enum MenuLinkLoader {
         return data
     }
 
-    private static func render(_ url: URL) async throws -> Data {
+    private static func render(_ url: URL) async throws -> (Data, String?) {
         let configuration = WKWebViewConfiguration()
         // Ephemeral: a shared page must not deposit cookies or storage in
         // the app. Nothing here should outlive this render.
@@ -200,7 +211,8 @@ enum MenuLinkLoader {
         // Layout settles after didFinish — a table sized by late CSS or
         // web fonts is still mid-reflow at that instant.
         try? await Task.sleep(for: .seconds(1))
-        return try await webView.pdf()
+        let title = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (try await webView.pdf(), title?.isEmpty == false ? title : nil)
     }
 }
 

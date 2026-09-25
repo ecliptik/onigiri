@@ -25,6 +25,16 @@ public enum MenuSourceName {
         guard !name.isEmpty else { return source }
         let suffix = "(\(source))"
         guard !name.hasSuffix(suffix, caseInsensitive: true) else { return name }
+        // A name that already says where it is from needs no bracket:
+        // "Chick-fil-A Chicken Sandwich (Chick-fil-A)" is the page title
+        // and the restaurant saying the same thing twice (2026-09-24).
+        // Whole words only, so "CAVA" never matches "Cavatappi".
+        let pattern = #"(?<![\p{L}\p{N}])"#
+            + NSRegularExpression.escapedPattern(for: source)
+            + #"(?![\p{L}\p{N}])"#
+        guard name.range(of: pattern,
+                         options: [.regularExpression, .caseInsensitive, .diacriticInsensitive]) == nil
+        else { return name }
         return "\(name) \(suffix)"
     }
 }

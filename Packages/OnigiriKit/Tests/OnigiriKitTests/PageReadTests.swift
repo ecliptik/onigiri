@@ -74,6 +74,63 @@ struct PageReadTests {
         #expect(LabelParser.parse(runs, prose: true).kcal == nil, "the figure is inside the accordion")
     }
 
+    // MARK: A restaurant's product page, rendered
+
+    private func rendered(_ name: String) throws -> [LabelObservation] {
+        let url = try #require(Bundle.module.url(
+            forResource: name, withExtension: "json", subdirectory: "Fixtures"))
+        struct Dump: Decodable { let observations: [LabelObservation] }
+        return try JSONDecoder().decode(Dump.self, from: Data(contentsOf: url)).observations
+    }
+
+    /// 2026-09-24: shared from Safari, this page logged a side of fries
+    /// at **2 kcal**. The page sets its panel BESIDE the ingredients, and
+    /// "Calories 420" shares a line with "…sodium acid pyrophosphate…" —
+    /// so the row read as sodium, and the only calorie row left was the
+    /// FDA footnote, "2,000 calories a day", its comma taken as a decimal
+    /// point. Captured with the extension's own render (a 1280-wide
+    /// WKWebView's `createPDF`) through `scripts/dump-pdf-text.swift`.
+    ///
+    /// Read both ways because `SharedPageReader` reads a render as a
+    /// panel first and page TEXT as prose second; neither may say 2.
+    @Test(arguments: [false, true])
+    func caloriesBesideTheIngredientsStillRead(prose: Bool) throws {
+        let label = LabelParser.parse(try rendered("page-rendered-chickfila-fries"), prose: prose)
+        #expect(label.kcal == 420, "not the footnote's 2,000 read as 2")
+        #expect(label.sodiumMg == 240)
+        #expect(label.nutrients.fatG == 24)
+        #expect(label.nutrients.saturatedFatG == 4)
+        #expect(label.nutrients.transFatG == 0)
+        #expect(label.nutrients.cholesterolMg == 0)
+        #expect(label.nutrients.carbsG == 45)
+        #expect(label.nutrients.fiberG == 5)
+        #expect(label.nutrients.sugarG == 1)
+        #expect(label.nutrients.proteinG == 5)
+    }
+
+    /// The sibling page read its calories — this layout's line fell the
+    /// other way — but lost its carbs, as every US restaurant page did:
+    /// "Total Carbohydrates" is PLURAL, and whole-word matching knew only
+    /// "carbohydrate" and "carb".
+    @Test func pluralCarbohydratesRead() throws {
+        let label = LabelParser.parse(try rendered("page-rendered-chickfila-sandwich"))
+        #expect(label.kcal == 420)
+        #expect(label.nutrients.carbsG == 41)
+        #expect(label.sodiumMg == 1460)
+        #expect(label.nutrients.cholesterolMg == 70)
+        #expect(label.nutrients.proteinG == 29)
+    }
+
+    /// The footnote on its own, with no panel to lose to: it states a
+    /// diet, never a food, and must yield no calories at all.
+    @Test func theDailyValueFootnoteIsNotAFood() {
+        let runs = PageText.observations(from: """
+            2,000 calories a day is used for general nutrition advice, but calorie needs vary.
+            """)
+        #expect(LabelParser.parse(runs).kcal == nil)
+        #expect(LabelParser.parse(runs, prose: true).kcal == nil)
+    }
+
     // MARK: Prose that really is a panel
 
     /// Prose mode must not go blind: a page that prints its panel as

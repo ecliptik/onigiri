@@ -103,7 +103,12 @@ public enum LabelParser {
         (.mono, ["monounsaturated", "monoinsatures"]),
         (.sugars, ["sugars", "sugar", "sucres", "zucker", "suikers", "azucares"]),
         (.fiber, ["fiber", "fibre", "fibres", "ballaststoffe", "vezels"]),
-        (.carbs, ["carbohydrate", "carb", "glucides", "kohlenhydrate", "koolhydraten", "hidratos"]),
+        // The PLURALS too: matching is whole-word, so "Total
+        // Carbohydrates" — how US restaurant pages print it — matched
+        // neither "carbohydrate" nor "carb", and every such page logged
+        // with no carbs at all (Chick-fil-A, 2026-09-24).
+        (.carbs, ["carbohydrate", "carbohydrates", "carb", "carbs",
+                  "glucides", "kohlenhydrate", "koolhydraten", "hidratos"]),
         (.cholesterol, ["cholesterol"]),
         (.sodium, ["sodium", "natrium"]),
         (.salt, ["salt", "sel", "salz", "zout", "sal"]),
@@ -269,6 +274,23 @@ public enum LabelParser {
         return nil
     }
 
+    /// Which nutrient a ROW is, read from its LEFTMOST cell that names
+    /// one. A row can hold two columns' worth of text: a rendered web
+    /// page sets its nutrition panel beside its ingredients, and on the
+    /// Chick-fil-A fries page "Calories 420" shares a line with
+    /// "…sodium acid pyrophosphate…". Asked of the whole row, the
+    /// keyword table's order made that the SODIUM row, the calories were
+    /// never read, and the next calorie row down — the FDA footnote,
+    /// "2,000 calories a day" — logged the fries at 2 kcal (2026-09-24).
+    /// The label column is on the left; the whole row is the fallback
+    /// for a name split across cells.
+    private static func rowField(_ row: Row) -> Field? {
+        for cell in row.cells {
+            if let field = keywordMatch(in: fold(cell.text)) { return field }
+        }
+        return keywordMatch(in: row.folded)
+    }
+
     private static func matches(_ folded: String, keyword: String) -> Bool {
         guard folded.contains(keyword) else { return false }
         if keyword.contains(" ") { return true }
@@ -411,6 +433,15 @@ public enum LabelParser {
             guard let first = row.cells.first else { return true }
             return first.text.hasPrefix("*") || first.text.hasPrefix("•") || first.text.hasPrefix("†")
         }
+        // The FDA footnote without its asterisk — how a web page sets it.
+        // "2,000 calories a day is used for general nutrition advice" is
+        // a CALORIE row to the keyword table, and its figure, read with
+        // the comma as a decimal point, logged a side of fries at 2 kcal
+        // (2026-09-24). It states a diet, never a food.
+        rows.removeAll { row in
+            row.folded.contains("calories a day") || row.folded.contains("calorie diet")
+                || row.folded.contains("general nutrition advice")
+        }
 
         // %DV column boundary: the leftmost header that *starts* with %.
         // Amount candidates at or right of it, on rows below it, are %DV
@@ -424,7 +455,7 @@ public enum LabelParser {
         // The topmost nutrient row separates the header region (title,
         // serving line, column captions) from the table body.
         var firstNutrientRowY = -Double.infinity
-        for row in rows where keywordMatch(in: row.folded) != nil {
+        for row in rows where rowField(row) != nil {
             firstNutrientRowY = max(firstNutrientRowY, row.midY)
         }
 
@@ -517,7 +548,7 @@ public enum LabelParser {
             if folded.contains("added") || folded.contains("includes") { continue }
             if folded.contains("serving size") || folded.contains("servings per") { continue }
 
-            guard let field = keywordMatch(in: folded), values[field] == nil else {
+            guard let field = rowField(row), values[field] == nil else {
                 // No new keyword: a pending wrapped name may own this row's
                 // value.
                 if let p = pending {
@@ -556,7 +587,7 @@ public enum LabelParser {
         // column whose two values ratio ≈4.184 is kJ over kcal, else the
         // leftmost single value wins (bare = kcal, the US convention).
         if let energyRowIndex = rows.firstIndex(where: { row in
-            if case .energy = keywordMatch(in: row.folded) { return true }
+            if case .energy = rowField(row) { return true }
             return false
         }) {
             let row = rows[energyRowIndex]
@@ -575,7 +606,7 @@ public enum LabelParser {
             if kcal == nil {
                 var cells = row.cells
                 if energyRowIndex + 1 < rows.count,
-                   keywordMatch(in: rows[energyRowIndex + 1].folded) == nil {
+                   rowField(rows[energyRowIndex + 1]) == nil {
                     cells += rows[energyRowIndex + 1].cells
                 }
                 var columns: [(x: Double, amounts: [Amount], foldedText: String)] = []

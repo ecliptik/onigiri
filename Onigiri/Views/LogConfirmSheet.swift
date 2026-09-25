@@ -29,20 +29,17 @@ struct LogConfirmSheet: View {
     @Binding var label: ParsedLabel
     @Binding var category: FoodCategory
     @Binding var quantity: Double
-    /// The app's optional library save. `nil` where the host saves
-    /// unconditionally and there is nothing to ask — the share
-    /// extension, which has no other way to keep the dish.
-    ///
-    /// The app's rule is the opposite and the user wrote it: saving to
-    /// the library is the option, not the price of admission
-    /// (`QuickLogSheet`, `purpose: .logging`). So the toggle exists, and
-    /// it starts OFF.
-    var saveToLibrary: Binding<Bool>?
-    /// Which of the confirm's two actions is running, if either — `nil`
-    /// while idle. The two share this one flag because only one can ever
-    /// be in flight (both buttons disable together), and the reader only
+    /// Which of the confirm's three actions is running, if either — `nil`
+    /// while idle. They share this one flag because only one can ever be
+    /// in flight (every button disables together), and the reader only
     /// needs to know which verb to show.
-    enum Busy { case logging, saving }
+    ///
+    /// There is no library toggle any more. Whether a log also saves was
+    /// the app's toggle (default off) and the extension's silent rule
+    /// (always) — two answers to one question, neither on screen as a
+    /// choice where it was made. It is a BUTTON now, Save & Log, in every
+    /// host (the user, 2026-09-24).
+    enum Busy { case logging, saving, savingAndLogging }
     var busy: Busy?
     /// Why the last attempt didn't take. Shown HERE rather than as a
     /// toast: this sheet is the top of the stack, and a toast raised by
@@ -191,14 +188,11 @@ struct LogConfirmSheet: View {
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
                     // Not "will write to Health": Save never does, and
-                    // even Log only reaches the library when the toggle
-                    // below is on — a claim this footer can't make for
-                    // every button on the screen (2026-08-29).
-                    // Not "found": a figure corrected in the editor was
-                    // typed, not read, and this list has to stay true of
-                    // both. Still no destination claim — Save never
-                    // reaches Health, and Log only reaches the library
-                    // when the toggle below is on (2026-08-29).
+                    // only Save & Log reaches both — a claim this footer
+                    // can't make for every button on the screen
+                    // (2026-08-29). Not "found": a figure corrected in
+                    // the editor was typed, not read, and this list has
+                    // to stay true of both.
                     Text("Everything on this entry, for this portion.")
                     // What was REMOVED has to be said too: a figure
                     // silently dropped and a figure never read look
@@ -209,20 +203,9 @@ struct LogConfirmSheet: View {
                     }
                 }
             }
-            if let saveToLibrary {
-                Section {
-                    Toggle("Save to Food Library", isOn: saveToLibrary)
-                } footer: {
-                    // What NOT saving costs, so the default reads as a
-                    // choice rather than an oversight: the log itself is
-                    // never at stake, and a logged food comes back through
-                    // the Log sheet's history rows either way.
-                    Text("Saved foods are one tap next time. Either way this log is kept.")
-                }
-            }
             if let busy {
                 Section {
-                    HStack { ProgressView(); Text(busy == .logging ? "Logging…" : "Saving…") }
+                    HStack { ProgressView(); Text(busyText(busy)) }
                 }
             }
             if let failure {
@@ -233,5 +216,13 @@ struct LogConfirmSheet: View {
             }
         }
         .disabled(busy != nil)
+    }
+
+    private func busyText(_ busy: Busy) -> String {
+        switch busy {
+        case .logging: "Logging…"
+        case .saving: "Saving…"
+        case .savingAndLogging: "Saving and logging…"
+        }
     }
 }

@@ -51,6 +51,16 @@ struct MenuSourceNameTests {
         #expect(MenuSourceName.applied(to: "", source: "") == "")
     }
 
+    /// A name that already says where it is from — a restaurant's own
+    /// page titles its dish with its brand — gets no bracket repeating
+    /// it. Whole words only: a restaurant called CAVA must still bracket
+    /// a dish called Cavatappi.
+    @Test func aNameThatAlreadyNamesTheSourceIsLeftAlone() {
+        #expect(MenuSourceName.applied(to: "Chick-fil-A Chicken Sandwich", source: "Chick-fil-A")
+            == "Chick-fil-A Chicken Sandwich")
+        #expect(MenuSourceName.applied(to: "Cavatappi", source: "CAVA") == "Cavatappi (CAVA)")
+    }
+
     /// A different restaurant is a different suffix — the check is for
     /// THIS source, not for any bracket.
     @Test func aDifferentSourceStillApplies() {

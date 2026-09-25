@@ -3653,7 +3653,7 @@ final class OnigiriUITests: XCTestCase {
     }
 
     /// Log without saving (opt-in via LOG_WITHOUT_SAVING=1, seeded sims):
-    /// reached from the LOG sheet the food form offers Log / Log & Save,
+    /// reached from the LOG sheet the food form offers Log / Save & Log,
     /// and plain Log writes the entry without minting a library food.
     /// The library assertion at the end is the whole point of the
     /// feature — a one-off should not permanently enlarge the library.
@@ -3743,8 +3743,8 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(nameField.waitForExistence(timeout: 5), "Form name field")
         XCTAssertEqual(nameField.value as? String, oneOff, "Form prefilled with the query")
         // The logging route's pair — and NOT the library route's.
-        XCTAssertTrue(app.buttons["Log & Save"].waitForExistence(timeout: 5),
-                      "Log sheet route should offer Log & Save")
+        XCTAssertTrue(app.buttons["Save & Log"].waitForExistence(timeout: 5),
+                      "Log sheet route should offer Save & Log")
         XCTAssertTrue(app.buttons["Log"].exists, "Log sheet route should offer a plain Log")
         XCTAssertFalse(app.buttons["Save"].exists,
                        "Log sheet route should not offer a library-only Save")
@@ -4357,7 +4357,7 @@ final class OnigiriUITests: XCTestCase {
 
         // Use hands over exactly as the read used to, into the same form.
         // Asserted on the NAME field, not on a navigation title: the form
-        // wears the Log sheet's chrome here (Cancel / Log / Log & Save),
+        // wears the Log sheet's chrome here (Cancel / Log / Save & Log),
         // not "Add Food".
         app.buttons["refineUse"].tap()
         XCTAssertTrue(
@@ -4414,6 +4414,10 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertTrue(picker.waitForExistence(timeout: 10), "The menu picker should be up")
         attachShot(named: "menu-picker-first")
 
+        /// The confirm is found by its Edit Item button, not a bar title:
+        /// the bar is untitled since it gained a third action (Save & Log,
+        /// 2026-09-24), and Edit Item is the one control only it carries.
+        ///
         /// Correct the entry from the confirm, which is what the share
         /// extension has instead of a food form (2026-09-20). Types a
         /// token into the editor's Name and checks it comes back with
@@ -4435,7 +4439,7 @@ final class OnigiriUITests: XCTestCase {
             field.typeText(token)
             attachShot(named: "menu-editor")
             editor.buttons.firstMatch.tap()      // Back, to the confirm
-            XCTAssertTrue(app.navigationBars["Log Food"].waitForExistence(timeout: 10),
+            XCTAssertTrue(app.buttons["Edit Item"].waitForExistence(timeout: 10),
                           "Back should land on the confirm, not on the list")
             // A static text, not a button: the item row stopped being
             // the way into the editor when the Edit Item button landed
@@ -4461,7 +4465,7 @@ final class OnigiriUITests: XCTestCase {
             ).firstMatch
             XCTAssertTrue(row.waitForExistence(timeout: 10), "\(name) row in the picker")
             row.tap()
-            let confirm = app.navigationBars["Log Food"]
+            let confirm = app.buttons["Edit Item"]
             XCTAssertTrue(confirm.waitForExistence(timeout: 15), "Confirm step for \(name)")
             if let token { edit(name, adding: token) }
             attachShot(named: "menu-confirm-\(name.lowercased().replacingOccurrences(of: " ", with: "-"))")
@@ -4485,7 +4489,7 @@ final class OnigiriUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(backOut.waitForExistence(timeout: 10), "Sample Bowl row")
         backOut.tap()
-        XCTAssertTrue(app.navigationBars["Log Food"].waitForExistence(timeout: 15),
+        XCTAssertTrue(app.buttons["Edit Item"].waitForExistence(timeout: 15),
                       "Confirm step before backing out")
         app.buttons["Back"].firstMatch.tap()
         XCTAssertTrue(picker.waitForExistence(timeout: 10),
@@ -4557,7 +4561,7 @@ final class OnigiriUITests: XCTestCase {
         let nameField = app.textFields["Name"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 15),
                       "A pick in the form's door should fill the form")
-        XCTAssertFalse(app.navigationBars["Log Food"].exists,
+        XCTAssertFalse(app.buttons["Edit Item"].exists,
                        "Filling a form must not raise the confirm step")
         let named = expectation(
             for: NSPredicate(format: "value CONTAINS[c] 'sample shake'"),

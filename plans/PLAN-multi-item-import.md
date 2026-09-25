@@ -70,6 +70,11 @@ Two smaller faults fall out of the same gap:
   its unconditional save. A dish logged without saving is still
   re-loggable from the Log sheet's history rows, which is the app's
   existing answer for this.
+  **Superseded 2026-09-24:** the toggle and the extension's silent save
+  are both gone. The confirm offers **Save · Log · Save & Log** in every
+  host and Log never saves (the user chose the third button over a
+  follow-up "log it too?" prompt, after a shared page's Save closed the
+  sheet without offering to log and its Log never offered to save).
 - **No "Edit details…" escape from the confirm.** Considered and
   dropped — the receipt already shows every value that will be written,
   and a door into `FoodFormView` from inside the loop reintroduces the
@@ -122,8 +127,10 @@ findings footer: that section exists because a shared page logged
 app without the receipt would re-open that hole on three more doors —
 the receipt is the *reason* a quick confirm is acceptable here at all.
 
-The extension passes `saveToLibrary: .always`; the app passes
-`.optional(default: false)` so the toggle renders.
+~~The extension passes `saveToLibrary: .always`; the app passes
+`.optional(default: false)` so the toggle renders.~~ Gone 2026-09-24 —
+`Completion.logging` carries only `write`/`saveOnly`, and the button
+tapped sets `MenuLogRequest.saveToLibrary`.
 
 **Meal and Quantity sit ABOVE the receipt** (the user, 2026-08-24). They
 began under it, where a long "Also logged" list — a menu row can carry a

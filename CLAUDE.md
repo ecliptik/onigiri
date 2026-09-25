@@ -1520,14 +1520,31 @@ Each cost a debugging session.
     confirm is already up and every keystroke re-applies it; the flow
     re-applies only to a name nobody has edited, which needs no flag —
     an edited name simply no longer equals what the rule last produced.
-  - **Library saving is a toggle in the app, default OFF, and
-    unconditional in the extension** — "saving to the library is the
-    option, not the price of admission" (the user), and an extension has
-    no second visit. Both go through `MenuLibrarySave`, which stays
-    `Food`-only: give it a `Meal` fetch and it manufactures the
-    dangling-reference process kill it is immune to.
-  - **The confirm's committing action is TWO buttons, Save and Log, not
-    one** (the user, 2026-08-29: "not necessarily log it"). A menu is
+    A read with NO name is applied to as "" (the restaurant becomes the
+    name); treating nil as "nothing to apply to" logged a shared page as
+    "Menu item" with the typed restaurant discarded (2026-09-24).
+  - **A shared PAGE is named by its `<title>` first** (`PageTitle`, kit;
+    `MenuLinkLoader.Rendered.title`). A product page's panel carries no
+    name, so the name came only from the model — present one share in
+    three on the same page (the user, 2026-09-24). The title's dish
+    beats the read's name; its restaurant segment is the suggested
+    source, ahead of the model's guess, for single items AND menus.
+    `MenuSourceName` skips the bracket when the name already says the
+    restaurant as whole words ("Chick-fil-A Chicken Sandwich").
+  - **Saving is a BUTTON, never a side effect of logging: Save · Log ·
+    Save & Log, in every host** (the user, 2026-09-24, choosing it over
+    a follow-up prompt). It replaced two answers to one question — the
+    app's "Save to Food Library" toggle (default OFF) and the
+    extension's silent save on every Log — neither of which read as a
+    choice where it was made. Log never saves anywhere. All saving goes
+    through `MenuLibrarySave`, which stays `Food`-only: give it a `Meal`
+    fetch and it manufactures the dangling-reference process kill it is
+    immune to. The bar's title is blank on the confirm to make room
+    (the food form's precedent), with a zero-opacity header for
+    VoiceOver. "Save & Log" is the combined action's ONE name app-wide:
+    the Log-sheet food form said "Log & Save" until the same day.
+  - **Save and Log are separate buttons, not one** (the user,
+    2026-08-29: "not necessarily log it"). A menu is
     read once and not everything on it is being eaten now — Save runs
     `MenuLibrarySave` alone, with no HealthKit write and (in the
     extension) no `requestAuthorization`/`logFood`/widget reload, any of

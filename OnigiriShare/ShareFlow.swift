@@ -41,6 +41,9 @@ struct ShareFlow: View {
     @State private var suggestedSource: String?
     @State private var linkHost: String?
     @State private var linkURL: URL?
+    /// The shared page's `<title>` — the dish and the restaurant, on a
+    /// product page (`PageTitle`).
+    @State private var linkTitle: String?
     /// An ESTIMATE waiting to be checked. This is the host that gains
     /// the most from the step: an extension has no food form, so before
     /// it the numbers a photo estimated could only be accepted or
@@ -108,17 +111,17 @@ struct ShareFlow: View {
                     })
             }
         case .ready:
-            // `.always`: an extension has no form to save from and no
-            // second visit, so a dish LOGGED here is kept unconditionally.
-            // `saveOnly` is the extension's answer to "not necessarily
-            // log it" (the user, 2026-08-29) — the one door here that has
-            // no form and no second visit still needs a way to keep a
-            // dish without claiming you ate it.
+            // Save, Log, or Save & Log — the confirm's three buttons. An
+            // extension has no form and no second visit, so a dish was
+            // once saved on EVERY log here, silently; keeping it is now
+            // the Save & Log button, on screen where the choice is made
+            // (the user, 2026-09-24). `saveOnly` keeps a dish without
+            // claiming you ate it (2026-08-29).
             MenuPickerFlow(
                 rows: rows,
                 suggestedSource: suggestedSource,
                 initialPick: single,
-                completion: .logging(saving: .always, write: log, saveOnly: saveOnly),
+                completion: .logging(write: log, saveOnly: saveOnly),
                 onFinish: onFinish)
         }
     }
@@ -154,7 +157,8 @@ struct ShareFlow: View {
                 linkHost = remote.host()
                 linkURL = remote
                 let rendered = try await MenuLinkLoader.pdf(for: remote)
-                await readMenu(at: rendered, temporary: rendered)
+                linkTitle = rendered.title
+                await readMenu(at: rendered.file, temporary: rendered.file)
             } catch {
                 phase = .failed("Couldn't open that link. Try sharing the page again, or share the PDF.")
             }
@@ -197,7 +201,19 @@ struct ShareFlow: View {
             // No TABLE — but a product page states one food in a
             // sentence, and that is still something to log.
             if let found = await singleFoodFromShare(document) {
-                single = found
+                let title = linkTitle.map { PageTitle.read($0, host: linkHost) }
+                single = SharedPageReader.named(found, by: title)
+                // Where it is from, asked of the page before the user:
+                // the title's own restaurant segment, then the address
+                // and the text. A single item never asked for this at
+                // all, so the prompt stood over every shared product
+                // page — and its answer was then thrown away whenever
+                // the read had found no name (2026-09-24).
+                suggestedSource = title?.site
+                if suggestedSource == nil {
+                    suggestedSource = await FoodIntelligence.readMenuSource(
+                        pages: document.pages, host: linkHost)
+                }
                 phase = .ready
                 return
             }
@@ -218,6 +234,7 @@ struct ShareFlow: View {
         }
         rows = parsed
         suggestedSource = document.suggestedSource
+            ?? linkTitle.flatMap { PageTitle.read($0, host: linkHost).site }
         // Before the picker appears — see MenuImportSheet: it asks on
         // appear, so the answer has to be there by then.
         if suggestedSource == nil {

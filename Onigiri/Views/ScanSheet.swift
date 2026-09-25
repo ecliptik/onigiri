@@ -558,7 +558,7 @@ struct ScanSheet: View {
     private var flowCompletion: MenuPickerFlow.Completion {
         switch purpose {
         case .logging:
-            .logging(saving: .optional, write: log, saveOnly: saveOnly)
+            .logging(write: log, saveOnly: saveOnly)
         case .filling:
             .filling { picked in
                 listing = nil

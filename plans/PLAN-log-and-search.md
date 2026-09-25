@@ -30,6 +30,12 @@ larger one and carries the only new kit code.
 
 ## Part 1 — "Log" and "Log & Save" on the logging route
 
+> **Renamed 2026-09-24:** the combined button is "Save & Log" on BOTH
+> routes now. One action had two names, and the share/menu confirm
+> (Save · Log · Save & Log) made a third surface that had to pick one
+> (the user: "keep it consistent"). The route rule below is unchanged —
+> only the label.
+
 ### The complaint
 
 Scanning a barcode, label, or food from **Today → Log** ends at the food

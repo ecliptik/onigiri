@@ -40,8 +40,13 @@ struct MenuPickerFlow: View {
         /// menu is read once and not everything on it is being eaten now
         /// (the user, 2026-08-29). The Log sheet, the shared-image sheet,
         /// the menu import sheet, the share extension.
+        ///
+        /// `write` logs, and ALSO saves when the request says so — that
+        /// is Save & Log. Whether it does is the button's to say, never
+        /// the host's: the extension used to save every Log silently,
+        /// the app offered a toggle, and neither read as a choice (the
+        /// user, 2026-09-24).
         case logging(
-            saving: LibrarySaving,
             write: (MenuLogRequest) async -> String?,
             saveOnly: (MenuLogRequest) async -> String?
         )
@@ -50,17 +55,6 @@ struct MenuPickerFlow: View {
         /// starts writing to Health from inside a form nobody asked to
         /// submit is a different feature.
         case filling((ParsedLabel) -> Void)
-    }
-
-    /// Whether the dish also lands in the library, and whether that is
-    /// the user's call.
-    enum LibrarySaving {
-        /// The share extension: no other way to keep the dish, and no
-        /// form to keep it from.
-        case always
-        /// The app: "saving to the library is the option, not the price
-        /// of admission" (the user, `QuickLogSheet`). Starts off.
-        case optional
     }
 
     @State private var phase = Phase.picking
@@ -87,6 +81,11 @@ struct MenuPickerFlow: View {
     /// a single shared item confirms itself while the prompt is still
     /// standing over it (2026-09-20) — and applied to the dish rather
     /// than to the last thing that was applied to the dish.
+    /// Empty, not nil, for a read that found no name: the restaurant is
+    /// still worth applying to it (`MenuSourceName` turns "" into the
+    /// restaurant alone). Treating nil as "nothing to apply to" is how a
+    /// shared product page logged as "Menu item" with the restaurant
+    /// the user had just typed thrown away (2026-09-24).
     @State private var pickedName: String?
     /// The row `chosen` came from, so the list can mark what already
     /// went in. Nil for `initialPick`, which came from no row.
@@ -103,9 +102,8 @@ struct MenuPickerFlow: View {
     /// one meal, and re-picking "Dinner" each time is the busywork this
     /// screen exists to remove.
     @State private var category = FoodCategory.slot(for: .now)
-    @State private var saveToLibrary = false
-    /// Which of the confirm's two actions is in flight, if either — this
-    /// is what disables both buttons and picks the spinner's word
+    /// Which of the confirm's three actions is in flight, if either — this
+    /// is what disables every button and picks the spinner's word
     /// (`LogConfirmSheet.Busy`).
     @State private var busy: LogConfirmSheet.Busy?
     /// Why the last write didn't take. Shown IN the confirm — a toast
@@ -131,7 +129,11 @@ struct MenuPickerFlow: View {
 
     var body: some View {
         content
-            .navigationTitle(phase == .confirming ? "Log Food" : "Choose an Item")
+            // Blank on the confirm, for the reason the food form blanks
+            // its own: three actions beside Cancel leave no room a title
+            // can use (`FoodFormView.navigationTitleText`). The screen
+            // still names itself to VoiceOver.
+            .navigationTitle(phase == .confirming ? "" : "Choose an Item")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { leadingButton }
@@ -140,13 +142,18 @@ struct MenuPickerFlow: View {
                         // Top-right, matching every sheet in the app,
                         // where the committing action is never a row at
                         // the bottom of a form (the user, 2026-08-16).
-                        // TWO actions, not one: a menu is read once, and
-                        // not everything on it is being eaten right now
-                        // — Save keeps the dish without telling Health
-                        // you ate it (the user, 2026-08-29).
+                        // THREE actions: a menu is read once and not
+                        // everything on it is being eaten right now —
+                        // Save keeps the dish without telling Health you
+                        // ate it (the user, 2026-08-29) — and Save & Log
+                        // does both in one tap, so Log itself never saves
+                        // behind your back (the user, 2026-09-24).
                         Button("Save") { commitSave(chosen) }
                             .disabled(busy != nil)
-                        Button("Log") { commit(chosen) }
+                        Button("Log") { commit(chosen, saving: false) }
+                            .disabled(busy != nil)
+                        Button("Save & Log") { commit(chosen, saving: true) }
+                            .fontWeight(.semibold)
                             .disabled(busy != nil)
                     }
                 } else if case .picking = phase, !logged.isEmpty {
@@ -178,9 +185,9 @@ struct MenuPickerFlow: View {
             // it. That is the whole test, and it needs no flag.
             .onChange(of: source) { previous, current in
                 guard var label = chosen, let base = pickedName else { return }
-                guard label.name == MenuSourceName.applied(to: base, source: previous)
+                guard (label.name ?? "") == MenuSourceName.applied(to: base, source: previous)
                 else { return }
-                label.name = MenuSourceName.applied(to: base, source: current)
+                label.name = Self.nameOrNil(MenuSourceName.applied(to: base, source: current))
                 chosen = label
             }
             .task {
@@ -248,9 +255,19 @@ struct MenuPickerFlow: View {
                     label: confirmBinding(chosen),
                     category: $category,
                     quantity: $quantity,
-                    saveToLibrary: savingBinding,
                     busy: busy,
                     failure: failure)
+                    // The bar's title is blank here; this keeps the
+                    // screen's name for VoiceOver, the way the food form
+                    // does (a zero-opacity header, not `.hidden()`,
+                    // which would drop it from the tree too).
+                    .overlay(alignment: .top) {
+                        Text("Log Food")
+                            .font(.caption)
+                            .opacity(0)
+                            .allowsHitTesting(false)
+                            .accessibilityAddTraits(.isHeader)
+                    }
             }
         }
     }
@@ -308,9 +325,10 @@ struct MenuPickerFlow: View {
         Binding(get: { chosen ?? current }, set: { chosen = $0 })
     }
 
-    private var savingBinding: Binding<Bool>? {
-        guard case .logging(let saving, _, _) = completion, saving == .optional else { return nil }
-        return $saveToLibrary
+    /// A name that trims to nothing is no name — the confirm then says
+    /// "Menu item" rather than drawing a blank row.
+    private static func nameOrNil(_ name: String) -> String? {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : name
     }
 
     // MARK: Choosing
@@ -325,10 +343,8 @@ struct MenuPickerFlow: View {
         // `initialPick` never passes through the picker and used to
         // reach the confirm with the restaurant missing even when one
         // had been typed (2026-09-20).
-        pickedName = label.name
-        if let name = label.name {
-            label.name = MenuSourceName.applied(to: name, source: source)
-        }
+        pickedName = label.name ?? ""
+        label.name = Self.nameOrNil(MenuSourceName.applied(to: label.name ?? "", source: source))
         if label.kcal == nil, let name = label.name, FoodIntelligence.isAvailable {
             phase = .estimating(name)
             if let described = await FoodIntelligence.describeFood(name) {
@@ -363,15 +379,17 @@ struct MenuPickerFlow: View {
 
     // MARK: Logging
 
-    private func commit(_ label: ParsedLabel) {
-        guard case .logging(let saving, let write, _) = completion, busy == nil else { return }
-        busy = .logging
+    /// Log, or Save & Log when `saving` — the one difference is whether
+    /// the host also puts the dish in the library.
+    private func commit(_ label: ParsedLabel, saving: Bool) {
+        guard case .logging(let write, _) = completion, busy == nil else { return }
+        busy = saving ? .savingAndLogging : .logging
         Task {
             let problem = await write(MenuLogRequest(
                 label: label,
                 category: category,
                 quantity: quantity,
-                saveToLibrary: saving == .always || saveToLibrary))
+                saveToLibrary: saving))
             busy = nil
             guard problem == nil else {
                 failure = problem
@@ -393,7 +411,7 @@ struct MenuPickerFlow: View {
     /// shape as `commit`, on purpose — the two differ only in which
     /// closure runs and which `Kind` the row remembers.
     private func commitSave(_ label: ParsedLabel) {
-        guard case .logging(_, _, let saveOnly) = completion, busy == nil else { return }
+        guard case .logging(_, let saveOnly) = completion, busy == nil else { return }
         busy = .saving
         Task {
             let problem = await saveOnly(MenuLogRequest(

@@ -79,6 +79,8 @@ struct MenuImportSheet: View {
     /// address names the business more reliably than a PDF's metadata.
     @State private var linkHost: String?
     @State private var linkURL: URL?
+    /// The shared page's `<title>` (`PageTitle`) — see ShareFlow.
+    @State private var linkTitle: String?
     @State private var readingStatus = "Looking for nutrition…"
 
     private enum Phase: Equatable {
@@ -121,14 +123,12 @@ struct MenuImportSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { cancelButton }
         case .ready:
-            // `.optional`: in the app, saving to the library is the
-            // option and not the price of admission (the user) — the
-            // extension is the one that always saves, because it has no
-            // second visit.
+            // Save, Log, or Save & Log — saving is always a button,
+            // never a side effect of logging (the user, 2026-09-24).
             MenuPickerFlow(
                 rows: rows,
                 suggestedSource: detectedSource,
-                completion: .logging(saving: .optional, write: log, saveOnly: saveOnly),
+                completion: .logging(write: log, saveOnly: saveOnly),
                 onFinish: { _ in dismiss() })
         case .handedOff:
             // Briefly visible behind the form; never a dead end, because
@@ -186,8 +186,9 @@ struct MenuImportSheet: View {
                 linkHost = remote.host()
                 linkURL = remote
                 let rendered = try await MenuLinkLoader.pdf(for: remote)
-                temporary = rendered
-                url = rendered
+                linkTitle = rendered.title
+                temporary = rendered.file
+                url = rendered.file
             } catch {
                 phase = .failed("Couldn't open that link. Onigiri needs the page itself — try Share again from the page, or share the PDF.")
                 return
@@ -214,7 +215,16 @@ struct MenuImportSheet: View {
                    let text = await MenuLinkLoader.pageText(for: linkURL) {
                     stated = await SharedPageReader.singleFood(fromPageText: text)
                 }
-                if let stated {
+                if var stated {
+                    // Named the way the share sheet names it — the
+                    // title's dish, and its restaurant after it — so
+                    // one page does not save under two names depending
+                    // on which door it came through.
+                    let title = linkTitle.map { PageTitle.read($0, host: linkHost) }
+                    stated = SharedPageReader.named(stated, by: title)
+                    if let site = title?.site {
+                        stated.name = MenuSourceName.applied(to: stated.name ?? "", source: site)
+                    }
                     // A one-row list is a question with one answer — the
                     // form takes it directly, as it always has.
                     phase = .handedOff
@@ -249,6 +259,7 @@ struct MenuImportSheet: View {
             // the document SPEAKING. Only when that says nothing does
             // the model read the name out of the text.
             detectedSource = document.suggestedSource
+                ?? linkTitle.flatMap { PageTitle.read($0, host: linkHost).site }
             // BEFORE the picker appears, not after. MenuPicker raises
             // the "Where is this menu from?" dialog from its own
             // .task, so a name that arrives later cannot stop it — the

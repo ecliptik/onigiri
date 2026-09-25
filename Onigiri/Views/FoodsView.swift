@@ -1095,7 +1095,7 @@ struct PortionSheet: View {
                         .buttonStyle(.plain)
                         .disabled(isSavingToLibrary)
                         Button(action: saveAndLogToday) {
-                            Text("Save to Library & Log Today").foregroundStyle(Color.riceToastStatus)
+                            Text("Save & Log Today").foregroundStyle(Color.riceToastStatus)
                         }
                         .buttonStyle(.plain)
                         .disabled(isSavingToLibrary)

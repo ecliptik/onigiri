@@ -99,7 +99,7 @@ struct SharedImageSheet: View {
             MenuPickerFlow(
                 rows: menuItems,
                 suggestedSource: menuSource,
-                completion: .logging(saving: .optional, write: log, saveOnly: saveOnly),
+                completion: .logging(write: log, saveOnly: saveOnly),
                 onFinish: { _ in dismiss() })
         case .checking:
             if let estimate {

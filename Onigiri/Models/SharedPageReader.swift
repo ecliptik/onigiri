@@ -18,6 +18,19 @@ private nonisolated let pageLog = Logger(subsystem: "com.ecliptik.Onigiri", cate
 /// first, the model only where prose defeats it. Nothing here is new
 /// machinery — it is the paste door's path, pointed at a rendered page.
 enum SharedPageReader {
+    /// The name a shared page's TITLE gives its one food, over whatever
+    /// the read found. The title is deterministic and the model's name
+    /// is not — the same page logged as "Chick-fil-A Chicken Sandwich"
+    /// once and "Menu item" twice (the user, 2026-09-24) — so the title
+    /// wins where it names a dish, and the read's name stands where it
+    /// doesn't ("Nutrition | CAVA" names a page, not a food).
+    static func named(_ food: ParsedLabel, by title: PageTitle.Reading?) -> ParsedLabel {
+        guard let item = title?.item else { return food }
+        var named = food
+        named.name = item
+        return named
+    }
+
     /// The same read, from a page's TEXT rather than its rendering —
     /// which is the only way to reach a figure inside a collapsed
     /// accordion. Lines become observations stacked top to bottom;

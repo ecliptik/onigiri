@@ -20,7 +20,7 @@ struct FoodFormView: View {
     enum Purpose {
         /// Foods tab: Save (library only) / Save & Log.
         case library
-        /// Log sheet: Log (no library row at all) / Log & Save.
+        /// Log sheet: Log (no library row at all) / Save & Log.
         case logging
     }
 
@@ -454,8 +454,12 @@ struct FoodFormView: View {
                 // New foods get a PAIR, and which pair follows the route
                 // (Purpose): from the library you Save, optionally
                 // logging too; from a logging flow you Log, optionally
-                // saving too. Both pairs put the "…& …" combined action
-                // second and emphasized, on ⇧⌘S; the plain one is ⌘S.
+                // saving too. Both pairs put the combined action second
+                // and emphasized, on ⇧⌘S; the plain one is ⌘S. The
+                // combined action is "Save & Log" on BOTH routes — it was
+                // "Log & Save" from the Log sheet, one action under two
+                // names, and the share/menu confirm now offers it too
+                // (the user, 2026-09-24: "keep it consistent").
                 // (Two toolbar buttons replaced the old post-save
                 // "Log it?" alert — a whole modal for a yes/no.)
                 ToolbarItemGroup(placement: .confirmationAction) {
@@ -466,7 +470,7 @@ struct FoodFormView: View {
                         .keyboardShortcut("s", modifiers: .command)
                         .disabled(!canSaveOrCommit)
                         .recedesWithSheet(activeSheet != nil)
-                        Button(purpose == .logging ? "Log & Save" : "Save & Log") { afterNumberCommit(saveAndLog) }
+                        Button("Save & Log") { afterNumberCommit(saveAndLog) }
                             .fontWeight(.semibold)
                             .keyboardShortcut("s", modifiers: [.command, .shift])
                             .disabled(!canSaveOrCommit)
@@ -928,7 +932,7 @@ struct FoodFormView: View {
         dismiss()
     }
 
-    /// "Save & Log" / "Log & Save": persist first (the food survives
+    /// "Save & Log": persist first (the food survives
     /// every later choice), then straight to the portion sheet.
     private func saveAndLog() {
         persist()

@@ -737,7 +737,7 @@ struct QuickLogSheet: View {
                 // complete. Its Log action returns here (the sheet stays
                 // open for the next item). AI-estimate prefills carry
                 // their provenance caption in. `.logging`: you came here
-                // to log, so the form offers Log / Log & Save — saving to
+                // to log, so the form offers Log / Save & Log — saving to
                 // the library is the option, not the price of admission.
                 FoodFormView(
                     food: nil, prefill: prefill.product,

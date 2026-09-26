@@ -82,6 +82,23 @@ struct OpenFoodFactsNetworkTests {
         }
     }
 
+    /// A filtered first page that comes back EMPTY is how a filter the
+    /// service stopped understanding would fail — a clean 200 with no
+    /// hits. The search must go to the legacy leg rather than report
+    /// that nothing exists.
+    @Test func anEmptyFilteredPageFallsBackToLegacy() async throws {
+        let client = client(status: 200)
+        StubURLProtocol.handler = { request in
+            if request.url?.host() == "search.openfoodfacts.org" {
+                return (200, Data(#"{"hits":[]}"#.utf8))
+            }
+            return (200, Data(#"{"products":[{"code":"9","product_name":"Hotdog","brands":"Costco"}]}"#.utf8))
+        }
+        let results = try await client.search(query: "costco hotdog")
+        #expect(results.map(\.barcode) == ["9"])
+        #expect(StubURLProtocol.requestCount == 2)
+    }
+
     @Test func throttledSearchFailsFastWithoutRetries() async {
         // A 429 can't clear inside the backoff window — search must
         // stop after one pass (primary + legacy leg), not retry into

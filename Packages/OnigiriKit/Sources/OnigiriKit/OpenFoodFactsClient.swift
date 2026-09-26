@@ -40,7 +40,10 @@ public struct ScannedProduct: Sendable, Equatable {
         self.name = name
         self.kcal = kcal
         self.sodiumMg = sodiumMg
-        self.servingDescription = servingDescription
+        // Every door builds one of these — a database row, a model's
+        // estimate, a read label — so a serving is cleaned HERE once,
+        // not at each door (`EmojiText`: a serving is a measure).
+        self.servingDescription = EmojiText.stripped(servingDescription)
         self.nutrients = nutrients
         self.aiGenerated = aiGenerated
         self.aiEngine = aiEngine
@@ -158,18 +161,29 @@ public struct OpenFoodFactsClient: Sendable {
         return product
     }
 
-    /// A lightweight text-search hit; full nutrition comes from a follow-up
-    /// product(barcode:) call when the user picks one.
+    /// A text-search hit. The primary endpoint returns the product's
+    /// nutrition with the hit — but PER 100 G ONLY: its index carries no
+    /// serving size and no per-serving figures (probed 2026-09-25 —
+    /// Nutella's product record says 260 kcal for 52 g, its search hit
+    /// says nothing of servings). So `product` is a PREVIEW: enough to
+    /// weed a row with no nutrition or impossible values, and to show a
+    /// figure while the full product (which knows the serving) loads,
+    /// or if it never does. It is never cached as the product. The
+    /// legacy fallback returns names only; `product` is nil there.
     public struct SearchResult: Sendable, Equatable, Identifiable {
         public var id: String { barcode }
         public let barcode: String
         public let name: String
         public let brand: String?
+        /// The per-100 g preview, already through `plausible()` — nil
+        /// when the hit carried no nutrition to build it from.
+        public let product: ScannedProduct?
 
-        public init(barcode: String, name: String, brand: String?) {
+        public init(barcode: String, name: String, brand: String?, product: ScannedProduct? = nil) {
             self.barcode = barcode
             self.name = name
             self.brand = brand
+            self.product = product
         }
     }
 
@@ -323,30 +337,53 @@ public struct OpenFoodFactsClient: Sendable {
     }
 
     private func searchALicious(query: String, limit: Int, page: Int) async throws -> [SearchResult] {
+        guard let url = Self.searchALiciousURL(query: query, limit: limit, page: page) else {
+            throw OpenFoodFactsError.badResponse
+        }
+        let data = try await fetch(url)
+        let results = try Self.parseSearch(data: data)
+        // Zero hits on a first page is the one way this filter can fail
+        // SILENTLY: a query clause the service rejects comes back as a
+        // clean 200 with nothing in it (probed 2026-09-25 — the same
+        // filter joined with `AND` does exactly that). Hand the search
+        // to the legacy leg, which filters the same way by a different
+        // mechanism, rather than tell the user nothing exists.
+        if results.isEmpty, page == 1 { throw OpenFoodFactsError.badResponse }
+        // NOT stored in `ProductCache`: these previews are per 100 g, and
+        // caching one as the product would hand a pick the per-100 g
+        // figures when the product itself knows its serving.
+        return results
+    }
+
+    /// The primary search request.
+    ///
+    /// **The nutrition-complete filter is appended to `q` as a bare
+    /// clause** — `states_tags:"en:nutrition-facts-completed"`. Probed
+    /// live 2026-09-25: it drops every entry with no nutrition ("Costco:
+    /// Hotdog" and friends, which rendered as rows with no calories). The
+    /// same clause joined with `AND` returns ZERO hits for every query,
+    /// so the spelling here is load-bearing; `searchALicious` falls back
+    /// to the legacy leg on an empty first page in case the service's
+    /// parser ever moves under it.
+    ///
+    /// `fields` names what `parseSearch` reads, nutrition included — the
+    /// service returns the whole product document otherwise, and the
+    /// nutrition in it was thrown away.
+    static func searchALiciousURL(query: String, limit: Int, page: Int) -> URL? {
         var components = URLComponents(string: "https://search.openfoodfacts.org/search")!
         components.queryItems = [
-            .init(name: "q", value: query),
+            .init(name: "q", value: "\(query) \(nutritionCompleteClause)"),
             .init(name: "page_size", value: String(limit)),
             .init(name: "page", value: String(page)),
             // Rank/return fields in the user's language, not whichever
             // language edited the database last.
             .init(name: "langs", value: Self.languageCode),
-            // DEFERRED to the backlog (2.1, 2026-07-14): the legacy leg
-            // filters to nutrition-facts-completed products (unfilled
-            // entries are unloggable and crowd the page); this leg should
-            // match via search-a-licious's query DSL, likely appending
-            // `states_tags:en:nutrition-facts-completed` to `q`. NOT added
-            // yet — a wrong filter here fails as a clean 200-with-zero-
-            // hits that never trips the legacy fallback and would break
-            // search outright, so it lands ONLY after a live probe of the
-            // exact syntax during a STABLE window. Probed 2026-07-14:
-            // search-a-licious 502, legacy 503 — service mid-outage,
-            // syntax unverifiable. Re-probe before shipping.
+            .init(name: "fields", value: "code,product_name,generic_name,brands,serving_size,nutriments"),
         ]
-        guard let url = components.url else { throw OpenFoodFactsError.badResponse }
-        let data = try await fetch(url)
-        return try Self.parseSearch(data: data)
+        return components.url
     }
+
+    static let nutritionCompleteClause = #"states_tags:"en:nutrition-facts-completed""#
 
     private func legacySearch(query: String, limit: Int, page: Int) async throws -> [SearchResult] {
         var components = URLComponents(
@@ -425,7 +462,17 @@ public struct OpenFoodFactsClient: Sendable {
             guard let code = hit.code, !code.isEmpty,
                   let name = hit.productName ?? hit.genericName,
                   !name.isEmpty else { return nil }
-            return SearchResult(barcode: code, name: name, brand: hit.brands?.first)
+            // The same conversion — and the same plausibility gate — a
+            // barcode lookup runs, so a row reads exactly what picking it
+            // would log.
+            let product = hit.nutriments.map { nutriments in
+                convert(OFFProduct(
+                    productName: hit.productName ?? hit.genericName,
+                    brands: hit.brands?.joined(separator: ","),
+                    servingSize: hit.servingSize,
+                    nutriments: nutriments), barcode: code)
+            }
+            return SearchResult(barcode: code, name: name, brand: hit.brands?.first, product: product)
         }
     }
 
@@ -556,12 +603,16 @@ private struct SearchHit: Decodable {
     let productName: String?
     let genericName: String?
     let brands: [String]?
+    let servingSize: String?
+    let nutriments: OFFNutriments?
 
     enum CodingKeys: String, CodingKey {
         case code
         case productName = "product_name"
         case genericName = "generic_name"
         case brands
+        case servingSize = "serving_size"
+        case nutriments
     }
 
     init(from decoder: Decoder) throws {
@@ -576,6 +627,8 @@ private struct SearchHit: Decodable {
         }
         productName = try? container.decode(String.self, forKey: .productName)
         genericName = try? container.decode(String.self, forKey: .genericName)
+        servingSize = try? container.decode(String.self, forKey: .servingSize)
+        nutriments = try? container.decode(OFFNutriments.self, forKey: .nutriments)
         // brands is an array in search-a-licious, a string in v2.
         if let list = try? container.decode([String].self, forKey: .brands) {
             brands = list

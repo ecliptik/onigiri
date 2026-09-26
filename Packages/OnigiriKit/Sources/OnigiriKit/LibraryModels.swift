@@ -639,11 +639,8 @@ public enum SharedStore {
     /// digits out of the icon slots while allowing any real emoji
     /// (multi-scalar sequences like flags and ZWJ families included).
     public static func isCustomEmoji(_ value: String) -> Bool {
-        guard value.count == 1, let first = value.unicodeScalars.first else { return false }
-        return first.properties.isEmoji
-            && (first.properties.isEmojiPresentation
-                || value.unicodeScalars.contains { $0.properties.isVariationSelector }
-                || value.unicodeScalars.count > 1)
+        guard value.count == 1, let character = value.first else { return false }
+        return EmojiText.isEmoji(character)
     }
 
     /// An icon slot's raw value that isn't a preset tag: the user's own

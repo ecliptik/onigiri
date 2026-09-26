@@ -1217,13 +1217,19 @@ private struct OnlineDatabaseSettingsScreen: View {
                         // The empty-field placeholder names WHOSE key it
                         // wants — this screen can hold two sources and a
                         // bare "API key" said neither.
+                        // A visible LABEL, not only a placeholder: once a
+                        // key is saved the placeholder is gone, and a
+                        // masked field beside an eye read as an empty,
+                        // unnamed row (the user, 2026-09-25).
+                        Text("USDA API key")
                         Group {
                             if showFDCKey {
-                                TextField("USDA FoodData API key", text: $fdcAPIKeyDraft)
+                                TextField("Paste key", text: $fdcAPIKeyDraft)
                             } else {
-                                SecureField("USDA FoodData API key", text: $fdcAPIKeyDraft)
+                                SecureField("Paste key", text: $fdcAPIKeyDraft)
                             }
                         }
+                        .multilineTextAlignment(.trailing)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .keyboardType(.asciiCapable)
@@ -1286,7 +1292,17 @@ private struct OnlineDatabaseSettingsScreen: View {
                 }
             } footer: {
                 if onlineLookups {
-                    Text("Barcode scans always use [OpenFoodFacts](https://world.openfoodfacts.org).")
+                    // What the picker's choice MEANS, for the choice on
+                    // screen — three database names said nothing about
+                    // which one to pick (the user, 2026-09-25: "a bit
+                    // obtuse"). Neither database lists restaurant food,
+                    // which is what sent the user here looking; the last
+                    // line says where that lives instead.
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(textSearchExplanation)
+                        Text("Neither lists restaurant meals — for those, use Estimate with AI or share the restaurant's nutrition page to Onigiri.")
+                        Text("Barcode scans always use [OpenFoodFacts](https://world.openfoodfacts.org).")
+                    }
                 } else {
                     // "on-device" already IS the promise — a trailing
                     // "nothing leaves your iPhone" only said it twice.
@@ -1302,6 +1318,17 @@ private struct OnlineDatabaseSettingsScreen: View {
             if phase != .active {
                 showFDCKey = false
             }
+        }
+    }
+
+    private var textSearchExplanation: LocalizedStringKey {
+        switch textSearchSource {
+        case SharedStore.textSearchSourceFDC:
+            "USDA FoodData Central is the US government's database: plain foods like \"banana\" or \"cooked rice\", and US-branded groceries. Its figures are carefully measured, mostly per 100 g. It needs a free API key."
+        case SharedStore.textSearchSourceBoth:
+            "Searches both and merges the results, each row tagged USDA or OFF: USDA for plain foods, OpenFoodFacts for packaged products from anywhere. Needs a USDA key; without one, only OpenFoodFacts is searched."
+        default:
+            "OpenFoodFacts is a free, crowd-sourced database of packaged foods from around the world, entered by volunteers — good for branded products, but check the numbers before you log."
         }
     }
 
@@ -1591,6 +1618,9 @@ private struct AISettingsScreen: View {
             TextField("Model", text: binding, prompt: Text(prompt))
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
+                // A model id is ASCII ("llama3.1:8b"); the plain keyboard
+                // has no emoji key to reach into it, like the key fields.
+                .keyboardType(.asciiCapable)
                 .font(.callout.monospaced())
                 .multilineTextAlignment(.trailing)
         }

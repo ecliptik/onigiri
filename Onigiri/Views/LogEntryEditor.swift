@@ -39,6 +39,11 @@ struct LogEntryEditor: View {
     @State private var mineralsExpanded = false
     @State private var vitaminsExpanded = false
     @FocusState private var numberFieldFocused: Bool
+    /// The serving the entry's numbers describe, so a retyped serving can
+    /// say what it comes to and offer to rescale — the food form's rule
+    /// (`ServingRescale`, 2026-09-25). Anchored on first appearance and
+    /// whenever calories are set.
+    @State private var servingBasis: String?
 
     var body: some View {
         Form {
@@ -51,6 +56,10 @@ struct LogEntryEditor: View {
                 LabeledContent("Serving") {
                     TextField("1 serving", text: servingText)
                         .multilineTextAlignment(.trailing)
+                }
+                if let basis = servingBasis, let kcal = label.kcal,
+                   let factor = ServingRescale.factor(from: basis, to: label.servingDescription ?? "") {
+                    rescaleRow(factor: factor, kcal: kcal, basis: basis)
                 }
                 numberRow("Calories", value: number(\.kcal, clearing: .energy))
             } footer: {
@@ -109,6 +118,10 @@ struct LogEntryEditor: View {
         }
         .navigationTitle("Edit Item")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            if servingBasis == nil { servingBasis = label.servingDescription ?? "" }
+        }
+        .onChange(of: label.kcal) { _, _ in servingBasis = label.servingDescription ?? "" }
         .scrollDismissesKeyboard(.interactively)
         .toolbar {
             // Decimal pads have no return key; surface a Done while
@@ -167,10 +180,39 @@ struct LogEntryEditor: View {
         )
     }
 
+    /// The food form's rescale row, for this screen's entry.
+    private func rescaleRow(factor: Double, kcal: Double, basis: String) -> some View {
+        let target = ServingRescale.completed(label.servingDescription ?? "", after: basis)
+        return Button {
+            label.kcal = kcal * factor
+            label.sodiumMg = label.sodiumMg.map { $0 * factor }
+            label.nutrients = label.nutrients.scaled(by: factor)
+            label.servingDescription = target
+            servingBasis = target
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Rescale to \(target)")
+                    Text("\(kcal.formatted(.number.precision(.fractionLength(0...1)))) kcal is for \(basis)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text("\((kcal * factor).formatted(.number.precision(.fractionLength(0)))) kcal")
+                    .monospacedDigit()
+            }
+        }
+        .accessibilityHint("Multiplies every nutrient by the change in serving")
+        .accessibilityIdentifier("servingRescale")
+    }
+
     private var servingText: Binding<String> {
         Binding(
             get: { label.servingDescription ?? "" },
-            set: { typed in
+            set: { raw in
+                // A measure, never an emoji — the suggestion bar offers
+                // 💯 for "100" (`EmojiText`).
+                let typed = EmojiText.stripped(raw)
                 label.servingDescription = typed
                     .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : typed
             }

@@ -97,6 +97,43 @@ struct OpenFoodFactsTests {
         #expect(results[1].brand == "Bakery")
     }
 
+    /// search-a-licious sends nutrition with each hit, per 100 g only.
+    /// It becomes the row's PREVIEW, through the same conversion and
+    /// plausibility gate a barcode lookup uses (2026-09-25).
+    @Test func searchHitsCarryAPer100gPreview() throws {
+        let json = """
+        {"hits":[
+          {"code":"1","product_name":"Hotdog","brands":["Pure foods"],
+           "nutriments":{"energy-kcal_100g":265,"sodium_100g":0.9,"fat_100g":20}},
+          {"code":"2","product_name":"Vienna beef","nutriments":{"energy-kcal_100g":14000}},
+          {"code":"3","product_name":"Costco: Hotdog","nutriments":{}},
+          {"code":"4","product_name":"No nutrition"}
+        ]}
+        """
+        let results = try OpenFoodFactsClient.parseSearch(data: data(json))
+        let preview = try #require(results[0].product)
+        #expect(preview.kcal == 265)
+        #expect(preview.sodiumMg == 900)
+        #expect(preview.nutrients.fatG == 20)
+        #expect(preview.servingDescription == "per 100 g")
+        #expect(results[1].product?.kcal == nil, "14,000 kcal per 100 g is impossible and dropped")
+        #expect(results[2].product?.kcal == nil, "empty nutrition: a preview with no calories")
+        #expect(results[3].product == nil, "no nutrition field: no preview")
+    }
+
+    /// The filter's SPELLING is load-bearing: appended as a bare clause
+    /// it filters, joined with AND it returns nothing for every query
+    /// (probed live 2026-09-25).
+    @Test func primarySearchFiltersToCompleteNutrition() throws {
+        let url = try #require(OpenFoodFactsClient.searchALiciousURL(query: "costco hotdog", limit: 30, page: 1))
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let q = try #require(items.first { $0.name == "q" }?.value)
+        #expect(q == #"costco hotdog states_tags:"en:nutrition-facts-completed""#)
+        #expect(!q.contains("AND"))
+        let fields = try #require(items.first { $0.name == "fields" }?.value)
+        #expect(fields.contains("nutriments"))
+    }
+
     @Test func parsesLegacySearchResults() throws {
         // The cgi fallback: comma-joined brands, product_name key.
         let json = """

@@ -1429,8 +1429,25 @@ Each cost a debugging session.
       field appearing means "ran out of online rows to page through
       here," not a bug) — both are legitimate passing outcomes now,
       alongside real growth and the pre-existing throttle case.
-- OpenFoodFacts: the search index has NO nutrition fields — search rows lazily
-  fetch the full product per barcode to show kcal/serving.
+- OpenFoodFacts: the search index carries nutrition PER 100 G ONLY — no
+  serving size, no per-serving figures (probed 2026-09-25; Nutella's product
+  says 260 kcal for 52 g, its hit says nothing of servings). So a hit's
+  `product` is a PREVIEW: it weeds rows with no nutrition or impossible values
+  before they show, and stands in on a row whose per-barcode fetch fails. The
+  per-row fetch still runs, because only it knows the serving, and a preview
+  is never stored in `ProductCache` (a pick would log per 100 g). The primary
+  search appends `states_tags:"en:nutrition-facts-completed"` to `q` as a BARE
+  clause — joined with `AND` it returns zero hits for every query — and an
+  empty first page falls back to the legacy endpoint in case that ever moves.
+- **A food's figures are per SERVING and the serving is free text**, so
+  retyping it relabels without rescaling: "1.0g" at 5.6 kcal became "100" and
+  logged 6 kcal (the user, 2026-09-25). The food form and Edit Item keep the
+  serving the numbers describe and, when a new serving reads as a comparable
+  amount (`ServingRescale`: g/ml/oz/lb, a bracketed measure first, a bare
+  number borrows the old unit), show the result with a one-tap Rescale.
+  Never automatic — a new serving is as often a relabel as a resize. Serving
+  fields and every `ScannedProduct` strip emoji (`EmojiText`): the suggestion
+  bar offers 💯 for "100". Names keep theirs.
 - Text search can route to USDA FoodData Central instead (Settings → Online
   Database; user-supplied api.data.gov key, device-local). FDC rows carry
   `fdc:{fdcId}` in the barcode slot and arrive with nutrients inline (no lazy

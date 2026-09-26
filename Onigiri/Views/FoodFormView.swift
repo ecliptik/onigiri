@@ -68,6 +68,14 @@ struct FoodFormView: View {
         )
     }
     @State private var serving = ""
+    /// The serving the NUMBERS on this form describe — which stops being
+    /// `serving` the moment the serving is retyped. Kept so the form can
+    /// say what the new serving comes to and offer to rescale
+    /// (`ServingRescale`): a "1.0g" row corrected to "100" logged 6 kcal,
+    /// the form never having said what 100 would be (the user,
+    /// 2026-09-25). Re-anchored whenever the numbers are set — a prefill,
+    /// a rescale, or calories typed by hand for the serving on screen.
+    @State private var servingBasis = ""
     @State private var barcode: String?
     @State private var fatG: Double?
     @State private var saturatedFatG: Double?
@@ -317,10 +325,27 @@ struct FoodFormView: View {
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                             .focused($numberFieldFocused)
+                            // Calories set by any route are calories FOR
+                            // the serving on screen — a prefill and a
+                            // rescale re-anchor too, harmlessly, since
+                            // they set both together.
+                            .onChange(of: kcal) { _, _ in servingBasis = serving }
                     }
                     LabeledContent("Serving") {
                         TextField("e.g. 1 cup, 8 oz", text: $serving)
                             .multilineTextAlignment(.trailing)
+                            // Free text, so no number pad — but a measure,
+                            // never an emoji: one tap on the suggestion
+                            // bar turned "100" into 💯 here (the user,
+                            // 2026-09-25). Stripped as typed, pasted or
+                            // suggested (`EmojiText`).
+                            .onChange(of: serving) { _, typed in
+                                let clean = EmojiText.stripped(typed)
+                                if clean != typed { serving = clean }
+                            }
+                    }
+                    if let factor = rescaleFactor, let kcal {
+                        rescaleRow(factor: factor, kcal: kcal)
                     }
                 }
 
@@ -677,6 +702,7 @@ struct FoodFormView: View {
         kcal = food.kcal
         sodiumMg = food.sodiumMg
         serving = food.servingDescription
+        servingBasis = food.servingDescription
         barcode = food.barcode
         fatG = food.fatG
         saturatedFatG = food.saturatedFatG
@@ -855,12 +881,69 @@ struct FoodFormView: View {
         }
     }
 
+    // MARK: Serving rescale
+
+    /// What the numbers on the form would be multiplied by to describe
+    /// the serving now typed, when both servings read as comparable
+    /// amounts and differ.
+    private var rescaleFactor: Double? {
+        ServingRescale.factor(from: servingBasis, to: serving)
+    }
+
+    /// The result first, then the one tap that applies it. A row, not a
+    /// silent rescale: a retyped serving is as often a correction of the
+    /// label as a different amount, and only the person typing knows.
+    private func rescaleRow(factor: Double, kcal: Double) -> some View {
+        let target = ServingRescale.completed(serving, after: servingBasis)
+        return Button {
+            rescale(by: factor, to: target)
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Rescale to \(target)")
+                    Text("\(kcal.formatted(.number.precision(.fractionLength(0...1)))) kcal is for \(servingBasis)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text("\((kcal * factor).formatted(.number.precision(.fractionLength(0)))) kcal")
+                    .monospacedDigit()
+            }
+        }
+        .accessibilityHint("Multiplies every nutrient by the change in serving")
+        .accessibilityIdentifier("servingRescale")
+    }
+
+    /// Every figure on the form, by the same factor — a rescale that
+    /// moved the calories alone would log a food whose macros describe
+    /// a different amount.
+    private func rescale(by factor: Double, to target: String) {
+        func scaled(_ value: Double?) -> Double? { value.map { $0 * factor } }
+        kcal = scaled(kcal)
+        sodiumMg = scaled(sodiumMg)
+        fatG = scaled(fatG)
+        saturatedFatG = scaled(saturatedFatG)
+        transFatG = scaled(transFatG)
+        polyunsaturatedFatG = scaled(polyunsaturatedFatG)
+        monounsaturatedFatG = scaled(monounsaturatedFatG)
+        cholesterolMg = scaled(cholesterolMg)
+        carbsG = scaled(carbsG)
+        proteinG = scaled(proteinG)
+        fiberG = scaled(fiberG)
+        sugarG = scaled(sugarG)
+        caffeineMg = scaled(caffeineMg)
+        micros = micros.mapValues { $0 * factor }
+        serving = target
+        servingBasis = target
+    }
+
     private func apply(_ product: ScannedProduct) {
         name = product.name
         kcal = product.kcal
         sodiumMg = product.sodiumMg
         warnings = product.warnings
         serving = product.servingDescription
+        servingBasis = product.servingDescription
         barcode = product.barcode.isEmpty ? nil : product.barcode
         fatG = product.nutrients.fatG
         saturatedFatG = product.nutrients.saturatedFatG

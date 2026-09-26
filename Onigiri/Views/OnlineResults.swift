@@ -2,9 +2,13 @@ import SwiftUI
 import OnigiriKit
 
 /// Shared machinery for searching OpenFoodFacts from any screen: submit-
-/// triggered search, with the full product fetched lazily per visible row —
-/// the search index has no nutrition fields, and calories + serving on the
-/// row disambiguate same-named hits. The cached fetch is reused on pick.
+/// triggered search. Calories + serving on the row disambiguate same-named
+/// hits, so each visible row fetches its full product lazily; that fetch
+/// is what knows the serving, and a pick reuses it. The primary endpoint
+/// also returns a per-100 g PREVIEW with each hit (2026-09-25 — it always
+/// did; the request never asked), which weeds rows with no nutrition
+/// before they are shown and stands in on a row whose fetch fails —
+/// those rows used to render with no figure at all.
 @Observable
 @MainActor
 final class OnlineFoodSearch {
@@ -122,7 +126,7 @@ final class OnlineFoodSearch {
             // then never the merged list.
             await withTaskGroup(of: (isFDC: Bool, leg: Leg).self) { group in
                 group.addTask { (true, await self.fetchFDCLeg(query: query, page: 1, generation: generation)) }
-                group.addTask { (false, await self.fetchOFFLeg(query: query, page: 1)) }
+                group.addTask { (false, await self.fetchOFFLeg(query: query, page: 1, generation: generation)) }
                 for await (isFDC, leg) in group {
                     guard generation == searchGeneration else { return }
                     if isFDC { fdcHasMore = leg.fullPage } else { offHasMore = leg.fullPage }
@@ -189,16 +193,30 @@ final class OnlineFoodSearch {
     ) async -> (fdc: Leg, off: Leg) {
         let runOFF = mode != .fdc && offPage != nil
         let runFDC = fdcClient != nil && fdcPage != nil
-        async let offLeg: Leg = runOFF ? fetchOFFLeg(query: query, page: offPage ?? 1) : Leg()
+        async let offLeg: Leg = runOFF ? fetchOFFLeg(query: query, page: offPage ?? 1, generation: generation) : Leg()
         async let fdcLeg: Leg = runFDC ? fetchFDCLeg(query: query, page: fdcPage ?? 1, generation: generation) : Leg()
         return await (fdcLeg, offLeg)
     }
 
-    private func fetchOFFLeg(query: String, page: Int) async -> Leg {
+    private func fetchOFFLeg(query: String, page: Int, generation: Int) async -> Leg {
         var leg = Leg(ran: true)
         do {
-            leg.hits = try await client.search(query: query, limit: Self.pageSize, page: page)
-            leg.fullPage = leg.hits.count == Self.pageSize
+            let hits = try await client.search(query: query, limit: Self.pageSize, page: page)
+            // A superseded search must not seed — or weed — the new one.
+            guard generation == searchGeneration else { return leg }
+            // A full page is judged on what the SERVER sent, before the
+            // weeding below — or a page thinned by bad rows would read as
+            // the last one.
+            leg.fullPage = hits.count == Self.pageSize
+            // A hit whose preview has no calories, or whose calories the
+            // plausibility gate threw out ("Vienna beef", 14,000 kcal per
+            // 100 g), is weeded before it is shown — not fetched, shown
+            // blank, and removed (the user, 2026-09-25).
+            leg.hits = hits.filter { hit in
+                guard let preview = hit.product, preview.kcal == nil else { return true }
+                rejected.insert(hit.barcode)
+                return false
+            }
         } catch {
             leg.error = error
         }
@@ -422,6 +440,9 @@ final class OnlineFoodSearch {
             products[result.barcode] = product
             return product
         }
+        // The search's own per-100 g preview beats an empty product: it
+        // is real data, just not per serving.
+        if let preview = result.product { return preview }
         return ScannedProduct(
             barcode: result.barcode,
             name: result.brand.map { "\(result.name) (\($0))" } ?? result.name,
@@ -486,7 +507,10 @@ struct OnlineResultRow: View {
                 Spacer()
                 if search.fetchingCode == result.barcode {
                     ProgressView()
-                } else if let product = detail {
+                } else if let product = detail ?? result.product {
+                    // The full product once it lands; until then — or
+                    // if its fetch fails — the search's per-100 g
+                    // preview, so a row never renders with no figure.
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(product.kcal.map {
                             "\($0.formatted(.number.precision(.fractionLength(0)))) kcal"

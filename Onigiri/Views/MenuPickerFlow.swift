@@ -483,7 +483,9 @@ enum MenuLibrarySave {
         let label = request.label
         let food = Food(name: name, kcal: label.kcal ?? 0, sodiumMg: label.sodiumMg ?? 0)
         food.nutrients = label.nutrients
-        food.servingDescription = label.servingDescription ?? ""
+        // The confirm's serving can come straight off a page or a
+        // model, never through `ScannedProduct` — clean it on the way in.
+        food.servingDescription = EmojiText.stripped(label.servingDescription ?? "")
         food.aiGenerated = label.aiGenerated
         // Recency means LOGGED, never looked at (2026-08-14) — and this
         // runs only from the confirm handler, which a cancel never

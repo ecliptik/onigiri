@@ -640,6 +640,13 @@ struct ScanSheet: View {
                 }
                 TextField("Barcode", text: $manualCode)
                     .keyboardType(.numberPad)
+                    // Digits only: a number pad has no emoji key, but a
+                    // paste (or an iPad's full keyboard) can carry
+                    // anything, and a barcode is nothing but digits.
+                    .onChange(of: manualCode) { _, typed in
+                        let digits = typed.filter(\.isASCII).filter(\.isNumber)
+                        if digits != typed { manualCode = digits }
+                    }
                 Button("Look Up") {
                     onCode(manualCode)
                     dismiss()

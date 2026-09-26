@@ -1444,8 +1444,12 @@ Each cost a debugging session.
   logged 6 kcal (the user, 2026-09-25). The food form and Edit Item keep the
   serving the numbers describe and, when a new serving reads as a comparable
   amount (`ServingRescale`: g/ml/oz/lb, a bracketed measure first, a bare
-  number borrows the old unit), show the result with a one-tap Rescale.
-  Never automatic — a new serving is as often a relabel as a resize. Serving
+  number borrows the old unit), show the result with a one-tap "Update
+  nutrition" row — and a COMMIT with the mismatch still standing (Log, Save,
+  Save & Log) ASKS: update, keep, or cancel. The row alone was walked past
+  and logged 6 kcal the same evening. Never automatic — a new serving is as
+  often a relabel as a resize. Never the word "rescale" in UI copy: this app
+  has a weight scale (the user, 2026-09-25). Serving
   fields and every `ScannedProduct` strip emoji (`EmojiText`): the suggestion
   bar offers 💯 for "100". Names keep theirs.
 - Text search can route to USDA FoodData Central instead (Settings → Online

@@ -192,7 +192,7 @@ struct LogEntryEditor: View {
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Rescale to \(target)")
+                    Text("Update nutrition for \(target)")
                     Text("\(kcal.formatted(.number.precision(.fractionLength(0...1)))) kcal is for \(basis)")
                         .font(.caption)
                         .foregroundStyle(.secondary)

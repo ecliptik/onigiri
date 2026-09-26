@@ -76,6 +76,16 @@ struct FoodFormView: View {
     /// 2026-09-25). Re-anchored whenever the numbers are set — a prefill,
     /// a rescale, or calories typed by hand for the serving on screen.
     @State private var servingBasis = ""
+    /// A commit held while the form asks which the numbers are for —
+    /// the serving on screen, or the one they were entered against.
+    @State private var servingQuestion: ServingQuestion?
+
+    private struct ServingQuestion: Identifiable {
+        let id = UUID()
+        let factor: Double
+        let target: String
+        let commit: () -> Void
+    }
     @State private var barcode: String?
     @State private var fatG: Double?
     @State private var saturatedFatG: Double?
@@ -490,18 +500,20 @@ struct FoodFormView: View {
                 ToolbarItemGroup(placement: .confirmationAction) {
                     if food == nil {
                         Button(purpose == .logging ? "Log" : "Save") {
-                            afterNumberCommit { if purpose == .logging { logOnly() } else { saveOnly() } }
+                            afterNumberCommit {
+                                confirmingServing { if purpose == .logging { logOnly() } else { saveOnly() } }
+                            }
                         }
                         .keyboardShortcut("s", modifiers: .command)
                         .disabled(!canSaveOrCommit)
                         .recedesWithSheet(activeSheet != nil)
-                        Button("Save & Log") { afterNumberCommit(saveAndLog) }
+                        Button("Save & Log") { afterNumberCommit { confirmingServing(saveAndLog) } }
                             .fontWeight(.semibold)
                             .keyboardShortcut("s", modifiers: [.command, .shift])
                             .disabled(!canSaveOrCommit)
                             .recedesWithSheet(activeSheet != nil)
                     } else {
-                        Button("Save") { afterNumberCommit(save) }
+                        Button("Save") { afterNumberCommit { confirmingServing(save) } }
                             .keyboardShortcut("s", modifiers: .command)
                             .disabled(!canSaveOrCommit)
                             .recedesWithSheet(activeSheet != nil)
@@ -551,6 +563,32 @@ struct FoodFormView: View {
                     Button("Create New", role: .cancel) {}
                 } message: { _ in
                     Text("Edit keeps your saved values and attaches this barcode; Create New makes a separate food.")
+                }
+            }
+            // Its own background layer, for the reason the duplicate
+            // alert above has one.
+            .background {
+                Color.clear.alert(
+                    "Nutrition is for \(servingBasis)",
+                    isPresented: .init(
+                        get: { servingQuestion != nil },
+                        set: { if !$0 { servingQuestion = nil } }
+                    ),
+                    presenting: servingQuestion
+                ) { question in
+                    Button("Update to \(((kcal ?? 0) * question.factor).formatted(.number.precision(.fractionLength(0)))) kcal") {
+                        updateNutrition(by: question.factor, to: question.target)
+                        // Next turn: the commit reads the updated
+                        // fields, and may present the portion sheet —
+                        // which must not race the alert's dismissal.
+                        DispatchQueue.main.async { question.commit() }
+                    }
+                    Button("Keep \((kcal ?? 0).formatted(.number.precision(.fractionLength(0...1)))) kcal") {
+                        DispatchQueue.main.async { question.commit() }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: { question in
+                    Text("The serving now says \(question.target). Update the nutrition to match, or keep it as entered?")
                 }
             }
             .alert("Discard changes?", isPresented: $confirmDiscard) {
@@ -881,7 +919,21 @@ struct FoodFormView: View {
         }
     }
 
-    // MARK: Serving rescale
+    // MARK: Serving update
+
+    /// Runs `commit` — unless the numbers still describe the serving they
+    /// were entered against, in which case it asks first. Offering the
+    /// update as a row wasn't enough: Save & Log went straight past it
+    /// and logged 6 kcal under a serving of "100" (the user, 2026-09-25).
+    /// Asked, not assumed — "keep" is right when the serving was only
+    /// mislabelled.
+    private func confirmingServing(_ commit: @escaping () -> Void) {
+        guard kcal != nil, let factor = rescaleFactor else { return commit() }
+        servingQuestion = ServingQuestion(
+            factor: factor,
+            target: ServingRescale.completed(serving, after: servingBasis),
+            commit: commit)
+    }
 
     /// What the numbers on the form would be multiplied by to describe
     /// the serving now typed, when both servings read as comparable
@@ -891,16 +943,18 @@ struct FoodFormView: View {
     }
 
     /// The result first, then the one tap that applies it. A row, not a
-    /// silent rescale: a retyped serving is as often a correction of the
+    /// silent update: a retyped serving is as often a correction of the
     /// label as a different amount, and only the person typing knows.
+    /// "Update nutrition", never "rescale" — this app has a weight
+    /// SCALE, and the word read as one (the user, 2026-09-25).
     private func rescaleRow(factor: Double, kcal: Double) -> some View {
         let target = ServingRescale.completed(serving, after: servingBasis)
         return Button {
-            rescale(by: factor, to: target)
+            updateNutrition(by: factor, to: target)
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Rescale to \(target)")
+                    Text("Update nutrition for \(target)")
                     Text("\(kcal.formatted(.number.precision(.fractionLength(0...1)))) kcal is for \(servingBasis)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -914,10 +968,10 @@ struct FoodFormView: View {
         .accessibilityIdentifier("servingRescale")
     }
 
-    /// Every figure on the form, by the same factor — a rescale that
+    /// Every figure on the form, by the same factor — an update that
     /// moved the calories alone would log a food whose macros describe
     /// a different amount.
-    private func rescale(by factor: Double, to target: String) {
+    private func updateNutrition(by factor: Double, to target: String) {
         func scaled(_ value: Double?) -> Double? { value.map { $0 * factor } }
         kcal = scaled(kcal)
         sodiumMg = scaled(sodiumMg)

@@ -26,6 +26,12 @@ import OnigiriKit
 /// to "not stated" rather than logging a zero.
 struct LogEntryEditor: View {
     @Binding var label: ParsedLabel
+    /// The serving the entry's numbers describe, so a retyped serving can
+    /// say what it comes to and offer to update — the food form's rule
+    /// (`ServingRescale`, 2026-09-25). A BINDING, owned by the flow: this
+    /// screen is popped before Save or Log, and the flow must still know
+    /// the numbers and the serving disagree when one of those is tapped.
+    @Binding var servingBasis: String
 
     @AppStorage(SharedStore.sodiumUnitKey, store: SharedStore.defaults)
     private var sodiumUnitRaw = SharedStore.unitAutomatic
@@ -39,11 +45,6 @@ struct LogEntryEditor: View {
     @State private var mineralsExpanded = false
     @State private var vitaminsExpanded = false
     @FocusState private var numberFieldFocused: Bool
-    /// The serving the entry's numbers describe, so a retyped serving can
-    /// say what it comes to and offer to rescale — the food form's rule
-    /// (`ServingRescale`, 2026-09-25). Anchored on first appearance and
-    /// whenever calories are set.
-    @State private var servingBasis: String?
 
     var body: some View {
         Form {
@@ -56,12 +57,15 @@ struct LogEntryEditor: View {
                 LabeledContent("Serving") {
                     TextField("1 serving", text: servingText)
                         .multilineTextAlignment(.trailing)
+                        // UI tests find it by this: the screens beneath
+                        // the editor stay in the tree, so position lies.
+                        .accessibilityIdentifier("logEntryServing")
                 }
-                if let basis = servingBasis, let kcal = label.kcal,
-                   let factor = ServingRescale.factor(from: basis, to: label.servingDescription ?? "") {
-                    rescaleRow(factor: factor, kcal: kcal, basis: basis)
+                if let kcal = label.kcal,
+                   let factor = ServingRescale.factor(from: servingBasis, to: label.servingDescription ?? "") {
+                    rescaleRow(factor: factor, kcal: kcal, basis: servingBasis)
                 }
-                numberRow("Calories", value: number(\.kcal, clearing: .energy))
+                numberRow("Calories", value: number(\.kcal, clearing: .energy), id: "logEntryCalories")
             } footer: {
                 if label.aiGenerated {
                     // The estimate mark stays with the numbers, not with
@@ -118,9 +122,6 @@ struct LogEntryEditor: View {
         }
         .navigationTitle("Edit Item")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            if servingBasis == nil { servingBasis = label.servingDescription ?? "" }
-        }
         .onChange(of: label.kcal) { _, _ in servingBasis = label.servingDescription ?? "" }
         .scrollDismissesKeyboard(.interactively)
         .toolbar {
@@ -139,7 +140,7 @@ struct LogEntryEditor: View {
 
     // MARK: Rows
 
-    private func numberRow(_ title: String, value: Binding<Double?>) -> some View {
+    private func numberRow(_ title: String, value: Binding<Double?>, id: String? = nil) -> some View {
         LabeledContent(title) {
             // "—" rather than "0": a nutrient nobody published has no
             // value, and a zero placeholder invites logging one.
@@ -147,6 +148,7 @@ struct LogEntryEditor: View {
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.trailing)
                 .focused($numberFieldFocused)
+                .accessibilityIdentifier(id ?? "")
         }
     }
 

@@ -29,6 +29,9 @@ struct LogConfirmSheet: View {
     @Binding var label: ParsedLabel
     @Binding var category: FoodCategory
     @Binding var quantity: Double
+    /// The serving the numbers were read against — handed to the editor,
+    /// owned by the flow (`LogEntryEditor.servingBasis`).
+    @Binding var servingBasis: String
     /// Which of the confirm's three actions is running, if either — `nil`
     /// while idle. They share this one flag because only one can ever be
     /// in flight (every button disables together), and the reader only
@@ -140,7 +143,7 @@ struct LogConfirmSheet: View {
                 // ONE chevron in this card on purpose: two would read as
                 // two destinations.
                 NavigationLink {
-                    LogEntryEditor(label: $label)
+                    LogEntryEditor(label: $label, servingBasis: $servingBasis)
                 } label: {
                     Label("Edit Item", systemImage: "square.and.pencil")
                 }

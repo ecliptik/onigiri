@@ -90,6 +90,21 @@ struct MenuPickerFlow: View {
     /// The row `chosen` came from, so the list can mark what already
     /// went in. Nil for `initialPick`, which came from no row.
     @State private var chosenRowID: Int?
+    /// The serving `chosen`'s numbers describe — anchored when the item
+    /// arrives, moved by Edit Item's update or by typed calories. Here,
+    /// not in the editor, because Save and Log are tapped after the
+    /// editor has gone (`LogEntryEditor.servingBasis`).
+    @State private var servingBasis = ""
+    /// A commit held while the flow asks which serving the numbers are
+    /// for — the food form's question (2026-09-25).
+    @State private var servingQuestion: ServingQuestion?
+
+    private struct ServingQuestion: Identifiable {
+        let id = UUID()
+        let factor: Double
+        let target: String
+        let commit: (ParsedLabel) -> Void
+    }
     /// The in-flight `choose()` estimation, so Back can cancel it — an
     /// uncancelled one used to land after Back reset `phase` to
     /// `.picking` and force `.confirming` back open for the item the
@@ -148,11 +163,11 @@ struct MenuPickerFlow: View {
                         // ate it (the user, 2026-08-29) — and Save & Log
                         // does both in one tap, so Log itself never saves
                         // behind your back (the user, 2026-09-24).
-                        Button("Save") { commitSave(chosen) }
+                        Button("Save") { confirmingServing(chosen) { commitSave($0) } }
                             .disabled(busy != nil)
-                        Button("Log") { commit(chosen, saving: false) }
+                        Button("Log") { confirmingServing(chosen) { commit($0, saving: false) } }
                             .disabled(busy != nil)
-                        Button("Save & Log") { commit(chosen, saving: true) }
+                        Button("Save & Log") { confirmingServing(chosen) { commit($0, saving: true) } }
                             .fontWeight(.semibold)
                             .disabled(busy != nil)
                     }
@@ -189,6 +204,36 @@ struct MenuPickerFlow: View {
                 else { return }
                 label.name = Self.nameOrNil(MenuSourceName.applied(to: base, source: current))
                 chosen = label
+            }
+            // A background layer: this view already presents the source
+            // prompt, and two alerts on one view compete.
+            .background {
+                Color.clear.alert(
+                    "Nutrition is for \(servingBasis)",
+                    isPresented: .init(
+                        get: { servingQuestion != nil },
+                        set: { if !$0 { servingQuestion = nil } }
+                    ),
+                    presenting: servingQuestion
+                ) { question in
+                    let kcal = chosen?.kcal ?? 0
+                    Button("Update to \((kcal * question.factor).formatted(.number.precision(.fractionLength(0)))) kcal") {
+                        guard var label = chosen else { return }
+                        label.kcal = label.kcal.map { $0 * question.factor }
+                        label.sodiumMg = label.sodiumMg.map { $0 * question.factor }
+                        label.nutrients = label.nutrients.scaled(by: question.factor)
+                        label.servingDescription = question.target
+                        chosen = label
+                        servingBasis = question.target
+                        question.commit(label)
+                    }
+                    Button("Keep \(kcal.formatted(.number.precision(.fractionLength(0...1)))) kcal") {
+                        if let chosen { question.commit(chosen) }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: { question in
+                    Text("The serving now says \(question.target). Update the nutrition to match, or keep it as entered?")
+                }
             }
             .task {
                 guard !started else { return }
@@ -255,6 +300,7 @@ struct MenuPickerFlow: View {
                     label: confirmBinding(chosen),
                     category: $category,
                     quantity: $quantity,
+                    servingBasis: $servingBasis,
                     busy: busy,
                     failure: failure)
                     // The bar's title is blank here; this keeps the
@@ -364,6 +410,7 @@ struct MenuPickerFlow: View {
         // handing a stale pick to a .filling host) now would silently
         // override that.
         guard !Task.isCancelled else { return }
+        servingBasis = label.servingDescription ?? ""
         // AI off, or the model declined: hand over what the menu said and
         // nothing more. A half-filled form beats an invented number.
         switch completion {
@@ -378,6 +425,20 @@ struct MenuPickerFlow: View {
     }
 
     // MARK: Logging
+
+    /// Runs `commit` — unless Edit Item changed the serving and left the
+    /// numbers describing the old one, in which case it asks first: the
+    /// update row alone was walked past on the food form, and 6 kcal went
+    /// into Health under a serving of "100" (the user, 2026-09-25).
+    private func confirmingServing(_ label: ParsedLabel, _ commit: @escaping (ParsedLabel) -> Void) {
+        guard label.kcal != nil,
+              let factor = ServingRescale.factor(from: servingBasis, to: label.servingDescription ?? "")
+        else { return commit(label) }
+        servingQuestion = ServingQuestion(
+            factor: factor,
+            target: ServingRescale.completed(label.servingDescription ?? "", after: servingBasis),
+            commit: commit)
+    }
 
     /// Log, or Save & Log when `saving` — the one difference is whether
     /// the host also puts the dish in the library.

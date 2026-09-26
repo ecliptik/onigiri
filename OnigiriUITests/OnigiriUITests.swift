@@ -4570,6 +4570,95 @@ final class OnigiriUITests: XCTestCase {
         attachShot(named: "menu-fills-form")
     }
 
+    /// The confirm asks before logging numbers that describe a serving
+    /// Edit Item has since changed (MENU_LOOP=1, like the loop above).
+    /// On the food form, an offered update row was walked past and 6 kcal
+    /// went into Health under a serving of "100" (the user, 2026-09-25);
+    /// the editor here is POPPED before Log is tapped, so it can't ask —
+    /// the flow must, and this is the only thing that checks it does.
+    ///
+    /// The sample rows print no serving, so the test gives one: serving
+    /// "100 g", then a NEW calorie figure (typing the value already there
+    /// changes nothing, and so anchors nothing), then "200 g".
+    @MainActor
+    func testConfirmAsksWhenEditItemChangedTheServing() throws {
+        guard ProcessInfo.processInfo.environment["MENU_LOOP"] == "1" else {
+            throw XCTSkip("Set MENU_LOOP=1 to run the menu confirm tests")
+        }
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--seed-sample-data", "--menu-scan-sample"]
+        app.launch()
+        skipOnboardingIfPresent(in: app)
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        switchTab(in: app, to: "Add")
+        let logTitle = app.navigationBars["Log"]
+        if !logTitle.waitForExistence(timeout: 10) { switchTab(in: app, to: "Add") }
+        XCTAssertTrue(logTitle.waitForExistence(timeout: 10), "Log sheet should be up")
+        let scan = scanRow(in: app)
+        XCTAssertTrue(scan.waitForExistence(timeout: 5), "Scan row in the Log sheet")
+        scan.tap()
+        let sampleMenu = app.buttons["menuScanSample"]
+        XCTAssertTrue(sampleMenu.waitForExistence(timeout: 10), "Sample menu row")
+        sampleMenu.tap()
+        let bowl = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Sample Bowl'")).firstMatch
+        XCTAssertTrue(bowl.waitForExistence(timeout: 10), "Sample Bowl row")
+        bowl.tap()
+
+        let editButton = app.buttons["Edit Item"]
+        XCTAssertTrue(editButton.waitForExistence(timeout: 15), "The confirm, with Edit Item")
+        editButton.tap()
+        let editor = app.navigationBars["Edit Item"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 10), "The item editor should push")
+
+        /// Select All, then type over it. Deleting from "the end" is not
+        /// reliable here: in a trailing-aligned field a tap lands the
+        /// cursor wherever it lands, and "100 g" became "200 gg" — a
+        /// serving no rule can measure, so the run tested nothing.
+        func replace(_ field: XCUIElement, with text: String) {
+            field.tap()
+            if let current = field.value as? String, !current.isEmpty,
+               current != field.placeholderValue {
+                field.press(forDuration: 1.0)
+                let selectAll = app.menuItems["Select All"]
+                if selectAll.waitForExistence(timeout: 3) {
+                    selectAll.tap()
+                    field.typeText(XCUIKeyboardKey.delete.rawValue)
+                }
+            }
+            field.typeText(text)
+            XCTAssertEqual(field.value as? String, text, "the field reads exactly what was typed")
+        }
+        // By IDENTIFIER — never by value (a query on a field's value stops
+        // matching the moment it is cleared, and every use re-resolves),
+        // never by position (the screens beneath the editor stay in the
+        // tree: index 1 was the scan sheet's Barcode field).
+        let serving = app.textFields["logEntryServing"]
+        XCTAssertTrue(serving.waitForExistence(timeout: 5), "The editor's Serving field")
+        replace(serving, with: "100 g")
+        let calories = app.textFields["logEntryCalories"]
+        XCTAssertEqual(calories.value as? String, "540", "The editor's Calories field, reading 540")
+        replace(calories, with: "500")
+        replace(serving, with: "200 g")
+        XCTAssertTrue(app.buttons["servingRescale"].waitForExistence(timeout: 5),
+                      "The editor offers the update for the new serving")
+        attachShot(named: "confirm-serving-offer")
+
+        editor.buttons.firstMatch.tap()      // Back, to the confirm
+        XCTAssertTrue(editButton.waitForExistence(timeout: 10), "Back on the confirm")
+        app.buttons["Log"].firstMatch.tap()
+
+        let question = app.alerts["Nutrition is for 100 g"]
+        XCTAssertTrue(question.waitForExistence(timeout: 5),
+                      "Log must ask while the numbers describe the old serving")
+        attachShot(named: "confirm-serving-question")
+        question.buttons["Update to 1,000 kcal"].tap()
+        let note = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Logged'")).firstMatch
+        XCTAssertTrue(note.waitForExistence(timeout: 15), "The log went through after the update")
+    }
+
     /// Tab-bar animation probe (`TEST_RUNNER_TAB_PROBE=1`): drives the
     /// exact tap sequence behind the Calendar→Today Liquid Glass stall so
     /// it can be screen-recorded on a simulator (`simctl io recordVideo`)

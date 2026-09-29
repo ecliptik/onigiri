@@ -259,7 +259,6 @@ struct FoodFormView: View {
                         .accessibilityAddTraits(.isHeader)
                 }
         }
-        .toastHost()
     }
 
     /// The scanner, describe field and online search exist to FILL a

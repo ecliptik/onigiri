@@ -1865,6 +1865,64 @@ final class OnigiriUITests: XCTestCase {
         XCTAssertFalse(app.buttons["Cancel"].exists, "portion sheet stayed closed")
     }
 
+    /// The undo toast floats ABOVE the Log sheet's pinned bar, never on
+    /// it (the user, 2026-09-28: it "covers up the search bar"). The case
+    /// that bit is the keyboard up — the bar rides it, and a toast pinned
+    /// a fixed distance from the sheet's edge landed on the field and the
+    /// action pills. Asserted as geometry, because the toast and the
+    /// field both EXIST in either layout; only their frames tell them
+    /// apart.
+    @MainActor
+    func testUndoToastClearsTheDoorBar() throws {
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launchArguments = ["--seed-sample-data"]
+        app.launch()
+        skipOnboardingIfPresent(in: app)
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+        let addTab = app.tabBars.buttons["Add"]
+        let settled = Date().addingTimeInterval(90)
+        while !addTab.isHittable, Date() < settled {
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+
+        switchTab(in: app, to: "Add")
+        XCTAssertTrue(app.navigationBars["Log"].waitForExistence(timeout: 10),
+                      "Log sheet should be up")
+        let field = logSheetField(in: app)
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "door bar field")
+        field.tap()
+        field.typeText("Protein")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5),
+                      "keyboard up — the layout the toast collided with")
+
+        let plus = app.buttons["Log Protein shake"].firstMatch
+        XCTAssertTrue(plus.waitForExistence(timeout: 10), "matched row +")
+        plus.press(forDuration: 1.0)
+        // The ROOT host renders the same toast under the sheet, and a
+        // sheet doesn't take the screen beneath it out of the tree — so
+        // `firstMatch` measured that copy, 56pt off the bottom, and
+        // failed a correct layout. The sheet's copy is the HITTABLE one.
+        let toasts = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH 'Logged Protein shake'"))
+        XCTAssertTrue(toasts.firstMatch.waitForExistence(timeout: 8), "undo toast")
+        guard let toast = toasts.allElementsBoundByIndex.first(where: \.isHittable),
+              let undo = app.buttons.matching(identifier: "Undo")
+                .allElementsBoundByIndex.first(where: \.isHittable)
+        else { return XCTFail("the sheet's toast, with its Undo, is on top") }
+
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "undo-toast-over-door-bar"
+        shot.lifetime = .keepAlways
+        add(shot)
+        XCTAssertLessThanOrEqual(
+            max(toast.frame.maxY, undo.frame.maxY), field.frame.minY,
+            "toast \(toast.frame) / Undo \(undo.frame) must end above the field \(field.frame)"
+        )
+        XCTAssertTrue(field.isHittable, "the field stays reachable under a live toast")
+    }
+
     /// Reset All → restore round trip (opt-in via TEST_RUNNER_RESET_ROUNDTRIP=1;
     /// destroys the sim install's data): seed, flip the goal to Maintain,
     /// grow the water serving, Back Up Now, Reset All, verify stock, then

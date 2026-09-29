@@ -269,23 +269,58 @@ extension View {
     /// in hand the user chose pinned: the canvas under a short list is
     /// what every iOS bottom bar looks like over a short screen. Don't
     /// move it back into the list.
-    @ViewBuilder
+    ///
+    /// The bar also HOSTS ITS SHEET'S TOAST, floated just above itself
+    /// (the user, 2026-09-28: the undo toast "covers up the search
+    /// bar"). A host-level `toastHost()` sat a fixed 56pt off the
+    /// sheet's edge, and with the keyboard up the bar rides into exactly
+    /// that band — the toast landed on the field and the action pills.
+    /// Attaching the host INSIDE the bar's inset doesn't lift it: the
+    /// inset pads the list's scroll content, not an overlay's position
+    /// (measured on the 27.0 sim, toast 14pt into the field). So the bar
+    /// measures its own height and the toast clears that.
     func entryDoorBar<Bar: View>(
         isHidden: Bool, @ViewBuilder bar: @escaping () -> Bar
     ) -> some View {
+        modifier(EntryDoorBarHost(isHidden: isHidden, bar: bar))
+    }
+}
+
+private struct EntryDoorBarHost<Bar: View>: ViewModifier {
+    let isHidden: Bool
+    let bar: () -> Bar
+    @State private var barHeight: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        pinned(content)
+            .toastHost(clearance: barHeight + 8)
+    }
+
+    @ViewBuilder
+    private func pinned(_ content: Content) -> some View {
         if #available(iOS 26.0, *) {
-            self.safeAreaBar(edge: .bottom) {
-                if !isHidden { bar() }
+            content.safeAreaBar(edge: .bottom) {
+                if !isHidden { measured(bar()) }
             }
         } else {
-            self.safeAreaInset(edge: .bottom, spacing: 0) {
+            content.safeAreaInset(edge: .bottom, spacing: 0) {
                 if !isHidden {
-                    bar()
-                        .padding(.top, 6)
-                        .background(.bar)
+                    measured(
+                        bar()
+                            .padding(.top, 6)
+                            .background(.bar)
+                    )
                 }
             }
         }
+    }
+
+    private func measured(_ view: some View) -> some View {
+        view
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                barHeight = $0
+            }
+            .onDisappear { barHeight = 0 }
     }
 }
 

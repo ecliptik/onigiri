@@ -749,7 +749,6 @@ struct QuickLogSheet: View {
                 MealFormView(meal: meal)
             }
         }
-        .toastHost()
     }
 
     /// What to do about a query the library doesn't answer, named as the

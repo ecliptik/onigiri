@@ -119,9 +119,13 @@ final class ToastCenter {
 }
 
 extension View {
-    /// Attach once at the app root.
-    func toastHost() -> some View {
-        modifier(ToastHost())
+    /// Attach once at the app root, and once per sheet (a toast raised
+    /// under a sheet renders behind it). `clearance` is the gap under
+    /// the capsule — the root's 56 clears the tab bar. A sheet with a
+    /// pinned door bar doesn't call this: `entryDoorBar` hosts its
+    /// toast, because only the bar knows how tall it is.
+    func toastHost(clearance: CGFloat = 56) -> some View {
+        modifier(ToastHost(clearance: clearance))
     }
 }
 
@@ -138,6 +142,7 @@ private struct ToastChrome: ViewModifier {
 }
 
 private struct ToastHost: ViewModifier {
+    let clearance: CGFloat
     @State private var center = ToastCenter.shared
     /// Reduce Motion: the toast appears/disappears in place instead of
     /// sliding up from the bottom edge.
@@ -164,7 +169,7 @@ private struct ToastHost: ViewModifier {
                     .padding(.horizontal, 20)
                     .padding(.vertical, 14)
                     .modifier(ToastChrome())
-                    .padding(.bottom, 56)
+                    .padding(.bottom, clearance)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }

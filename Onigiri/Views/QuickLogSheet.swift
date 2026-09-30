@@ -956,7 +956,7 @@ struct QuickLogSheet: View {
     }
 
     /// In a sheet named "Log", tap = log: the row opens the portion
-    /// sheet (the + capsule keeps the fast paths — meals one-tap).
+    /// sheet (the + capsule: long press logs the default).
     /// Editing moved to a leading swipe; tap-to-edit in the middle of a
     /// logging flow was the one surprising row in the app.
     private func row(_ item: Item) -> some View {
@@ -974,25 +974,16 @@ struct QuickLogSheet: View {
             )
             LogButton(
                 name: item.name,
-                longPressName: item.isMeal ? "Custom portion" : "Log default portion"
+                longPressName: "Log default portion"
             ) {
-                if item.isMeal {
-                    log(item, quantity: 1, category: PortionTarget.category(from: item.category))
-                } else {
-                    // No bump: the sheet's confirm handler stamps
-                    // `PortionTarget.source` once something is logged.
-                    activeSheet = .portion(makePortionTarget(for: item))
-                }
+                // No bump: the sheet's confirm handler stamps
+                // `PortionTarget.source` once something is logged.
+                activeSheet = .portion(makePortionTarget(for: item))
             } onLongPress: {
-                // Each type's long press is the other's tap: meals get
-                // the portion sheet, foods skip it and log the default
-                // portion (matching the Foods screen). `log` bumps
-                // recency itself, so neither branch does it here.
-                if item.isMeal {
-                    activeSheet = .portion(makePortionTarget(for: item))
-                } else {
-                    log(item, quantity: 1, category: PortionTarget.category(from: item.category))
-                }
+                // Foods and meals behave alike: tap opens the portion
+                // sheet, long press logs the default. `log` bumps
+                // recency itself.
+                log(item, quantity: 1, category: PortionTarget.category(from: item.category))
             }
         }
         .contentShape(.rect)

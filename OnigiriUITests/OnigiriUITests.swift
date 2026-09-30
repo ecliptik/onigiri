@@ -1106,8 +1106,7 @@ final class OnigiriUITests: XCTestCase {
         // sheet behind it. Tapping it did nothing a screenshot could
         // show, and the tour had been failing here on an untouched tree
         // (found 2026-08-23). A food's + is the tap that opens the
-        // portion sheet; a meal's is its long press, and history's is
-        // neither.
+        // portion sheet, as does a meal's; history's opens neither.
         let eggsRow = app.buttons["Log Two eggs"].firstMatch
         for _ in 0..<6 where !eggsRow.isHittable { app.swipeUp() }
         XCTAssertTrue(eggsRow.isHittable, "The row to log has to be reachable")

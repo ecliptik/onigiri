@@ -277,11 +277,12 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   capture can CONTAIN (naming a below-the-fold row fails on the right
   screen), and it must not also be true of the screen BEHIND (a library row
   carries the same food name as its edit form).
-- In the Log sheet each type's long press is the other's tap: a FOOD's `+`
-  opens the portion sheet and its long press logs the default; a MEAL's is
-  the reverse. A HISTORY row has no library twin and no portion sheet at
-  all — the showcase tour spent an unknown stretch tapping one and
-  expecting a sheet (2026-08-23).
+- Foods and meals share one gesture pair (2026-09-30, the user): a row's
+  `+` TAPS into the portion sheet and LONG-PRESSES to log the default. They
+  used to be mirrored (a meal's tap logged), which made the same gesture
+  write to Health on one row and not the other. A HISTORY row has no library
+  twin and no portion sheet at all — the showcase tour spent an unknown
+  stretch tapping one and expecting a sheet (2026-08-23).
 - **The iOS 26 tab bar is absent from the accessibility tree** that
   `axe describe-ui` dumps, so external drivers can't tap it. XCUITest's
   `app.tabBars.buttons[name]` resolves it fine — use a UI test for anything

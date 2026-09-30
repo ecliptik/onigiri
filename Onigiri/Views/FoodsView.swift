@@ -506,16 +506,9 @@ struct FoodsView: View {
                 isMeal: true,
                 aiGenerated: meal.aiGenerated
             )
-            // Meals stay one-tap: their category rides along;
-            // long-press still offers portions.
-            LogButton(name: meal.name) {
-                markUsed(meal)
-                log(name: meal.name, kcal: meal.totalKcal,
-                    sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
-                    category: PortionTarget.category(from: meal.category),
-                    aiGenerated: meal.aiGenerated,
-                    mealItems: meal.loggedItems)
-            } onLongPress: {
+            // Same gestures as a food: tap opens the portion sheet,
+            // long press logs the default. The category rides along.
+            LogButton(name: meal.name, longPressName: "Log default portion") {
                 // No recency bump here: this only OPENS the portion
                 // sheet. Its confirm handler stamps `source`.
                 activeSheet = .portion(PortionTarget(
@@ -527,6 +520,13 @@ struct FoodsView: View {
                     mealItems: meal.loggedItems,
                     source: meal.persistentModelID
                 ))
+            } onLongPress: {
+                markUsed(meal)
+                log(name: meal.name, kcal: meal.totalKcal,
+                    sodiumMg: meal.totalSodiumMg, nutrients: meal.totalNutrients,
+                    category: PortionTarget.category(from: meal.category),
+                    aiGenerated: meal.aiGenerated,
+                    mealItems: meal.loggedItems)
             }
         }
         .contentShape(.rect)

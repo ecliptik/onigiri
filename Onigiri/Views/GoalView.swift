@@ -1478,6 +1478,11 @@ struct GoalView: View {
             case .stamped:
                 EmptyView()
             }
+            if let toGo = trendToGo(progress) {
+                Text(toGo)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.vertical, 2)
         // One spoken sentence instead of a label, a bar, and a caption.
@@ -1505,7 +1510,28 @@ struct GoalView: View {
         if progress.origin != .stamped {
             summary += ", since \(progress.startedAt.formatted(.dateTime.month(.wide).day()))"
         }
+        if let toGo = trendToGo(progress) {
+            summary += ". \(toGo)"
+        }
         return summary
+    }
+
+    /// "2.4 lb to go on your 7-day average." — what's left, said on the
+    /// basis the bar and the projection both measure from. Only when
+    /// that basis visibly differs from the "Current weight" row: a
+    /// morning a few tenths over the target sat under a forecast a week
+    /// out, with nothing saying the two read different weights (the
+    /// user, 2026-10-04). nil when they agree, when the basis fell back
+    /// to the raw reading anyway, or at the target.
+    private func trendToGo(_ progress: GoalProgress) -> String? {
+        guard weightBasis == .sevenDayAverage,
+              let raw = currentWeightLb,
+              abs(unit.fromLb(progress.currentLb) - unit.fromLb(raw)) >= 0.1
+        else { return nil }
+        let left = unit.fromLb(progress.currentLb - progress.targetLb)
+        guard left >= 0.05 else { return nil }
+        let amount = left.formatted(.number.precision(.fractionLength(0...1)))
+        return "\(amount) \(unit.symbol) to go on your 7-day average."
     }
 
     /// Copy the stored goal (or a blank slate) into the form fields.

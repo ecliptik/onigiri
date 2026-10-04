@@ -4214,6 +4214,53 @@ final class OnigiriUITests: XCTestCase {
         wait(for: [expectation(for: onToday, evaluatedWith: nextDay)], timeout: 10)
     }
 
+    /// Re-tapping Today while already home on today runs the Log master
+    /// toggle and returns to the top of the day (the user, 2026-10-04).
+    /// Both halves are asserted against a state that could only follow
+    /// from the tap: every group flips, and the Details caption — the
+    /// top of the summary — comes back into view after being scrolled
+    /// away, which a re-tap that only toggled would leave off screen.
+    @MainActor
+    func testTodayRetapTogglesLogAndScrollsToTop() throws {
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        // The seeded day expanded still fits one phone screen at the
+        // default text size, so nothing could scroll away; accessibility
+        // type makes the page tall enough for "back to the top" to mean
+        // something.
+        app.launchArguments = [
+            "--seed-sample-data",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityL",
+        ]
+        app.launch()
+        grantHealthAccess(in: app, timeout: 30)
+        grantHealthAccess(in: app, timeout: 10)
+
+        let collapsed = app.buttons.matching(collapsedSectionPredicate)
+        let expanded = app.buttons.matching(NSPredicate(format: "label ENDSWITH ', expanded'"))
+        XCTAssertTrue(collapsed.firstMatch.waitForExistence(timeout: 30),
+                      "Today's log groups should start collapsed")
+        let details = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH 'Details'")).firstMatch
+        XCTAssertTrue(details.waitForExistence(timeout: 10), "summary should render")
+
+        // Re-tap on today with everything shut: everything opens.
+        switchTab(in: app, to: "Today")
+        let allOpen = NSPredicate { _, _ in collapsed.count == 0 && expanded.count > 0 }
+        wait(for: [expectation(for: allOpen, evaluatedWith: app)], timeout: 5)
+
+        // Scroll the summary away; the re-tap must bring it back AND shut
+        // every group. Asserting it left first is what makes the return
+        // mean anything.
+        for _ in 0..<4 where details.isHittable { app.swipeUp() }
+        XCTAssertFalse(details.isHittable, "the expanded log should scroll the summary away")
+        switchTab(in: app, to: "Today")
+        let allShut = NSPredicate { _, _ in expanded.count == 0 && collapsed.count > 0 }
+        wait(for: [expectation(for: allShut, evaluatedWith: app)], timeout: 5)
+        wait(for: [expectation(for: NSPredicate(format: "isHittable == true"),
+                               evaluatedWith: details)], timeout: 5)
+    }
+
     /// Moving a log entry in time must be finishable and abandonable.
     ///
     /// The compact `DatePicker` this replaced opened a floating calendar

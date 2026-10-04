@@ -336,11 +336,12 @@ struct ContentView: View {
                     // The tab is called Today, so it goes to today. HOW it
                     // says so depends on whether a slide is under way.
                     //
-                    // A RE-TAP (already on Today) raises the same observed
-                    // `dayRequest` Calendar's "View day" raises, so it
-                    // shares that consumer — pops any pushed detail and
-                    // browses. Nothing is animating, so the body re-runs
-                    // the write costs are free.
+                    // A RE-TAP (already on Today) raises the observed
+                    // `todayRetapRequest`: Today pops any pushed detail and
+                    // browses home, or — already home on today — toggles
+                    // the log and scrolls to the top (the user,
+                    // 2026-10-04). Nothing is animating, so the body
+                    // re-runs the write costs are free.
                     //
                     // A SWITCH from another tab leaves an UNOBSERVED note
                     // instead (`todayTabTapped`), read by Today on appear
@@ -361,7 +362,7 @@ struct ContentView: View {
                     // turn is NOT the answer either: tried 2026-09-15, it
                     // produced a second selection commit ("flashes twice").
                     if selectedTab == .today {
-                        quickActions.dayRequest = Calendar.current.startOfDay(for: .now)
+                        quickActions.todayRetapRequest = .now
                     } else {
                         quickActions.todayTabTapped = true
                     }

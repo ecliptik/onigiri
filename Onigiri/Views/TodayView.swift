@@ -329,6 +329,9 @@ struct TodayView: View {
             .onChange(of: quickActions.dayRequest) { _, _ in
                 consumeQuickLogRequest()
             }
+            .onChange(of: quickActions.todayRetapRequest) { _, _ in
+                consumeTodayRetap(scrollProxy)
+            }
             // Day-paging is the nav-bar chevrons, by design (the user,
             // 2026-07-16: more discoverable, no false movement). The old
             // left/right SWIPE (a .simultaneousGesture DragGesture over
@@ -401,7 +404,7 @@ struct TodayView: View {
     /// The Today TAB was tapped while another tab was showing
     /// (`QuickActions.todayTabTapped`, set in ContentView's tab binding):
     /// browse home to today and pop any pushed detail — the landing a
-    /// re-tap or a Calendar "View day" gets through `dayRequest`, without
+    /// re-tap gets through `todayRetapRequest`, without
     /// the observed write that re-ran the TabView mid-slide (see the
     /// flag's own doc comment). On appear only: a tab switch always fires
     /// it, and by then the slide is the tab bar's business. Nothing here
@@ -416,6 +419,22 @@ struct TodayView: View {
         Task { await model.select(day: today) }
     }
 
+    /// The Today tab re-tapped while showing. Away from home (another
+    /// day, or a pushed detail) it goes home, as it always has; already
+    /// home it runs the Log master toggle and returns to the top of the
+    /// day — expanded or collapsed, the re-tap ends on the headline.
+    private func consumeTodayRetap(_ proxy: ScrollViewProxy) {
+        guard quickActions.todayRetapRequest != nil else { return }
+        quickActions.todayRetapRequest = nil
+        let today = Calendar.current.startOfDay(for: .now)
+        guard today == model.selectedDate, navPath.isEmpty else {
+            navPath.removeAll()
+            Task { await model.select(day: today) }
+            return
+        }
+        toggleLog(proxy) { _ in .dayTop }
+    }
+
     /// Present the quick-log sheet if an app-icon shortcut asked for it,
     /// and browse to a requested day (Calendar's "View day"). Checked on
     /// change, on appear, and on foregrounding: a request raised before
@@ -425,10 +444,10 @@ struct TodayView: View {
             quickActions.dayRequest = nil
             let kind = quickActions.quickLogRequest
             quickActions.quickLogRequest = nil
-            // A plain tap on the Today TAB stamps this same request even
-            // when already showing today with no sheet to open — the
-            // common case for every tab bounce, not just a real "browse
-            // back to today." Skip the whole cascade then: no navPath
+            // A request for the day already showing, with no sheet to
+            // open, changes nothing — the common case when this was also
+            // the Today tab's re-tap (it has its own request since
+            // 2026-10-04). Skip the whole cascade then: no navPath
             // reset, no Task, no model call. A real day jump (Calendar's
             // "View day", a widget deep link, or actually browsing back
             // first) still always runs. (2026-09-15; suspected of that
@@ -631,6 +650,45 @@ struct TodayView: View {
     /// miss (a lazy target below the fold wouldn't be in the tree yet).
     private enum ScrollTarget: Hashable {
         case dayTop, logHeader
+    }
+
+    /// The Log master toggle: any group open → collapse everything; all
+    /// closed → open everything (categories and water alike). Shared by
+    /// the "Log" title and a re-tap of the Today tab, which differ only
+    /// in where the viewport goes after (`scrollTarget`, nil for none).
+    private func toggleLog(
+        _ proxy: ScrollViewProxy,
+        scrollTarget: (_ expanding: Bool) -> ScrollTarget?
+    ) {
+        let anyExpanded = collapsedSections.count < FoodCategory.allCases.count
+            || !waterCollapsed
+        // .smooth, not the log's usual .snappy: this toggle pairs with a
+        // viewport glide below, and spring bounce on either half reads
+        // as stutter ("a little jerky", the user — device-tested).
+        withAnimation(reduceMotion ? nil : .smooth) {
+            if anyExpanded {
+                collapsedSections = Set(FoodCategory.allCases)
+                waterCollapsed = true
+            } else {
+                collapsedSections = []
+                waterCollapsed = false
+            }
+        }
+        guard let target = scrollTarget(!anyExpanded) else { return }
+        // The ~100 ms wait is load-bearing AND tuned: scrollTo in the
+        // same turn resolves before the render commit and clamps against
+        // the pre-toggle content height (lands nowhere, sim-verified
+        // twice) — but layout COMMITS on the next frame even while the
+        // animation plays, so just past the commit the target is exact
+        // and the glide overlaps the still-running expansion: one
+        // continuous motion, not expand-stop-scroll (350 ms felt like two
+        // beats on device).
+        Task {
+            try? await Task.sleep(for: .milliseconds(100))
+            withAnimation(reduceMotion ? nil : .smooth) {
+                proxy.scrollTo(target, anchor: .top)
+            }
+        }
     }
 
     /// The log and its trouble states — the second pane on regular width.
@@ -1215,46 +1273,15 @@ struct TodayView: View {
                 // collapse everything; all closed → open everything
                 // (categories and water alike).
                 Button {
-                    let anyExpanded = collapsedSections.count < FoodCategory.allCases.count
-                        || !waterCollapsed
-                    // .smooth, not the log's usual .snappy: this toggle
-                    // pairs with a viewport glide below, and spring
-                    // bounce on either half reads as stutter ("a little
-                    // jerky", the user — device-tested).
-                    withAnimation(reduceMotion ? nil : .smooth) {
-                        if anyExpanded {
-                            collapsedSections = Set(FoodCategory.allCases)
-                            waterCollapsed = true
-                        } else {
-                            collapsedSections = []
-                            waterCollapsed = false
-                        }
-                    }
                     // Follow the toggle with the viewport (the user:
                     // expanding used to leave the log below the fold,
                     // collapsing left the screen scrolled past it):
                     // expand pins the log to the top, collapse returns
                     // to the day headline. Compact only — on regular
                     // width the log pane already sits beside the summary.
-                    // The ~100 ms wait is load-bearing AND tuned: scrollTo
-                    // in the same turn resolves before the render commit
-                    // and clamps against the pre-toggle content height
-                    // (lands nowhere, sim-verified twice) — but layout
-                    // COMMITS on the next frame even while the animation
-                    // plays, so just past the commit the target is exact
-                    // and the glide overlaps the still-running expansion:
-                    // one continuous motion, not expand-stop-scroll (350 ms
-                    // felt like two beats on device).
-                    if hSizeClass != .regular {
-                        Task {
-                            try? await Task.sleep(for: .milliseconds(100))
-                            withAnimation(reduceMotion ? nil : .smooth) {
-                                proxy.scrollTo(
-                                    anyExpanded ? ScrollTarget.dayTop : ScrollTarget.logHeader,
-                                    anchor: .top
-                                )
-                            }
-                        }
+                    toggleLog(proxy) { expanding in
+                        guard hSizeClass != .regular else { return nil }
+                        return expanding ? .logHeader : .dayTop
                     }
                 } label: {
                     Text("Log")

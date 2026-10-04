@@ -39,6 +39,14 @@ final class QuickActions {
     /// (Calendar's "View day"), same consumable-Optional pattern.
     var dayRequest: Date?
 
+    /// The Today tab was tapped while Today was ALREADY showing. Today
+    /// goes home (today's date, no pushed detail) if it isn't there;
+    /// if it is, the tap toggles the log and scrolls to the top. Its own
+    /// request rather than `dayRequest`, which Calendar's "View day"
+    /// also raises — and viewing today from the Calendar must not
+    /// toggle anything.
+    var todayRetapRequest: Date?
+
     /// The Today TAB was tapped while another tab was showing: land on
     /// today's date (the same landing `dayRequest` gives, minus the
     /// request). NOT observed, on purpose — `@ObservationIgnored`, a plain
@@ -50,7 +58,7 @@ final class QuickActions {
     /// on the way to Today (plans/PLAN-tab-bar-jank.md, 2026-09-16; the
     /// first was Style.swift's idle blur). TodayView reads and clears it
     /// on appear, which a tab switch always fires; the re-tap case (no
-    /// slide) still goes through `dayRequest`. A Bool is fine here where
+    /// slide) goes through the observed `todayRetapRequest`. A Bool is fine here where
     /// the others need Optionals: nothing waits on it changing.
     @ObservationIgnored var todayTabTapped = false
 

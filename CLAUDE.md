@@ -596,6 +596,12 @@ Each cost a debugging session.
   PROGRAMMATIC selections assign the state directly and skip the proxy on
   purpose: the Add pill's bounce must not reset the browsed day, because the
   Log sheet it opens backfills into that day.
+  Already home on today, the re-tap runs the Log master toggle and scrolls
+  to the top (`todayRetapRequest`, the user 2026-10-04) — its own request,
+  not `dayRequest`, because Calendar's "View day" of today must not toggle
+  anything. `testTodayRetapTogglesLogAndScrollsToTop` runs at
+  accessibility type size: the seeded day fits one screen otherwise, and
+  the scroll assertion would have nothing to scroll.
 - **`.buttonStyle(.bordered)` on the LEADING `.cancellationAction` item of a
   toolbar renders as a ~36pt circle clipped to a text fragment ("Cancel" →
   "n"), and this has NOTHING to do with `sheetCardChrome()` or any custom

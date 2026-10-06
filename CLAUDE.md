@@ -200,6 +200,16 @@ TEST_RUNNER_ONIGIRI_AI_EVALS=1 xcodebuild -project Onigiri.xcodeproj \
   failure that isn't `unavailable`, run the pkill before anything else.
   One command, no sudo, and a healthy-looking listing is no evidence
   against it.
+- **A renewed profile can leave a device OUT, and only Xcode's GUI can put
+  it back** (2026-10-05). The watch's 7-day profile lapsed, the renewal
+  listed only the iPhone, and 18 install attempts of tunnel timeouts hid
+  the one real error (`0xe8008012`, "This provisioning profile cannot be
+  installed on this device"). An agent shell's xcodebuild cannot renew or
+  register (`No Accounts`, even with Xcode signed in), so the fix is the
+  user running the scheme on that device from Xcode (⌘R). `deploy-phone.sh`
+  now reads each build's embedded profiles before installing — expired or
+  device-missing stops the run and names the scheme; under `WARN_DAYS` (2)
+  it warns. Phone and watch profiles renew separately and drift apart.
 - `deploy-phone.sh` retries the WATCH install 12 times but the phone
   install is one-shot, so a phone-side tunnel timeout ends the whole
   script with the watch never attempted. Re-run it after the pkill.

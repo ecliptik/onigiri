@@ -29,6 +29,64 @@ if [[ -z "$DEVICE_NAME" ]]; then
   exit 1
 fi
 
+# Read the profiles a build EMBEDDED before installing it. A free-team
+# profile lasts 7 days, and a renewal can come back without a device in
+# it: on 2026-10-05 the watch's renewed profile listed only the iPhone,
+# and 18 install attempts went to tunnel timeouts that hid the one real
+# error (0xe8008012, "This provisioning profile cannot be installed on
+# this device"). Only Xcode's GUI can renew a profile or add a device —
+# xcodebuild from an agent shell answers "No Accounts" — so on either
+# fault this stops and says which scheme to run there.
+WARN_DAYS=${WARN_DAYS:-2}
+check_profiles() {
+  local app=$1 udid=$2 scheme=$3 dest=$4
+  local now=$(date +%s) bad="" f text name exp_iso exp left
+  for f in "$app"/**/embedded.mobileprovision(N); do
+    # The phone app embeds the watch app; its profiles are the watch's
+    # to answer for, against the watch's UDID.
+    [[ $f == "$app"/Watch/* ]] && continue
+    text=$(strings "$f")
+    name=$(print -r -- "$text" | awk '/<key>Name<\/key>/ { getline; print; exit }' \
+      | sed -E 's/.*<string>(.*)<\/string>.*/\1/; s/^iOS Team Provisioning Profile: //')
+    exp_iso=$(print -r -- "$text" | awk '/<key>ExpirationDate<\/key>/ { getline; print; exit }' \
+      | sed -E 's/.*<date>(.*)<\/date>.*/\1/')
+    exp=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$exp_iso" +%s)
+    left=$(( exp - now ))
+    if (( left <= 0 )); then
+      echo "  ✗ ${name}: expired $(date -r "$exp" '+%a %b %-d %H:%M')." >&2
+      bad=1
+    elif [[ -n "$udid" ]] && ! print -r -- "$text" \
+        | sed -n '/<key>ProvisionedDevices<\/key>/,/<\/array>/p' \
+        | grep -qi "<string>${udid}</string>"; then
+      echo "  ✗ ${name}: this device is not in the profile." >&2
+      bad=1
+    elif (( left < WARN_DAYS * 86400 )); then
+      echo "  ⚠ ${name}: expires $(date -r "$exp" '+%a %b %-d %H:%M') — renew in Xcode soon."
+    else
+      echo "  ${name}: valid until $(date -r "$exp" '+%a %b %-d %H:%M')."
+    fi
+  done
+  if [[ -n "$bad" ]]; then
+    echo "✗ Renew in Xcode: choose the ${scheme} scheme, pick ${dest} as the" >&2
+    echo "  destination, press ⌘R, then re-run this script." >&2
+    exit 1
+  fi
+}
+
+# The phone's hardware UDID, for the membership check. Blank (check
+# skipped) if devicectl can't name it — the install would say so anyway.
+phone_udid() {
+  local json=$(mktemp)
+  xcrun devicectl list devices --json-output "$json" >/dev/null 2>&1 || true
+  python3 - "$json" "$DEVICE_NAME" <<'PY' 2>/dev/null || true
+import json, sys
+devices = json.load(open(sys.argv[1]))["result"]["devices"]
+print(next((d["hardwareProperties"]["udid"] for d in devices
+            if d["deviceProperties"]["name"] == sys.argv[2]), ""))
+PY
+  rm -f "$json"
+}
+
 echo "→ Regenerating Xcode project"
 xcodegen generate
 
@@ -40,6 +98,8 @@ xcodebuild -project Onigiri.xcodeproj -scheme Onigiri \
   build
 
 APP=build/Build/Products/Debug-iphoneos/Onigiri.app
+echo "→ Checking the phone's provisioning profiles"
+check_profiles "$APP" "$(phone_udid)" Onigiri "your iPhone"
 echo "→ Installing on ${DEVICE_NAME}"
 xcrun devicectl device install app --device "${DEVICE_NAME}" "${APP}"
 
@@ -63,6 +123,9 @@ if [[ -n "$WATCH_BUILD_ID" && -n "$WATCH_INSTALL_ID" ]]; then
     -derivedDataPath build \
     -allowProvisioningUpdates \
     build
+  echo "→ Checking the watch's provisioning profiles"
+  check_profiles build/Build/Products/Debug-watchos/OnigiriWatch.app \
+    "$WATCH_BUILD_ID" OnigiriWatch "your watch"
   echo "→ Installing on the watch (early 4000/3002/IXRemote-6 errors are normal — retrying)"
   installed=""
   for attempt in {1..12}; do

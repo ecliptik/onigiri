@@ -321,6 +321,12 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+        # Simulator-only: sign locally with no team so device builds never
+        # register an App ID for the test runner (the free team gets 10 per
+        # 7 days).
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
     dependencies:
       - target: Onigiri
 
